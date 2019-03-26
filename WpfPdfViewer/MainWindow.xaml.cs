@@ -53,7 +53,27 @@ namespace WpfPdfViewer
                             await page.RenderToStreamAsync(strm);
                             //var enc = new PngBitmapEncoder();
                             //enc.Frames.Add(BitmapFrame.Create)
+                            bmi.BeginInit();
                             bmi.StreamSource = strm.AsStream();
+                            bmi.CacheOption = BitmapCacheOption.OnLoad;
+                            bmi.Rotation = Rotation.Rotate180;
+                            bmi.EndInit();
+                            var pdlg = new PrintDialog(); //https://stackoverflow.com/questions/1661995/printing-a-wpf-bitmapimage
+                            var res = pdlg.ShowDialog();
+                            if (res.HasValue && res.Value)
+                            {
+                                var sp = new StackPanel();
+                                var img = new Image()
+                                {
+                                    Source = bmi
+                                };
+                                sp.Children.Add(img);
+                                sp.Measure(new Size(pdlg.PrintableAreaWidth, pdlg.PrintableAreaHeight));
+                                sp.Arrange(new Rect(new Point(0, 0), sp.DesiredSize));
+                                pdlg.PrintVisual(sp, "test");
+
+                            }
+//                            var newPdf = new PdfDocument();
                         }
                     }
                     PdfPages.Add(bmi);

@@ -54,7 +54,7 @@ namespace MyPdfViewer
                     }
                     PdfPages.Add(bmi);
                 }
-                var y = "done";
+//                var y = "done";
                 //var sv =new ScrollViewer()
                 //{
 
