@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Printing;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -38,12 +39,16 @@ namespace WpfPdfViewer
             // https://blogs.windows.com/buildingapps/2017/01/25/calling-windows-10-apis-desktop-application/#RWYkd5C4WTeEybol.97
             try
             {
+                var titlePage = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\ulimatePopRockCFaceUp\Ultimate Pop Rock Fake Book.pdf";
+                var pdfSourceDoc = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\Ultimate Pop Rock Fake Book 1.pdf";
+
                 var dataFile = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Ragtime\Collections\The Music of James Scott001.pdf";
+                dataFile = titlePage;
                 StorageFile f = await StorageFile.GetFileFromPathAsync(dataFile);
                 var doc = await PdfDocument.LoadFromFileAsync(f);
                 var nPageCount = doc.PageCount;
-                nPageCount = 2;
-                for (uint i = 0; i < nPageCount; i++)
+                nPageCount = 1;
+                for (uint i = 0; i < 1; i++)
                 {
                     var bmi = new BitmapImage();
                     using (var page = doc.GetPage(i))
@@ -58,31 +63,71 @@ namespace WpfPdfViewer
                             bmi.CacheOption = BitmapCacheOption.OnLoad;
                             bmi.Rotation = Rotation.Rotate180;
                             bmi.EndInit();
-                            var pdlg = new PrintDialog(); //https://stackoverflow.com/questions/1661995/printing-a-wpf-bitmapimage
-                            var res = pdlg.ShowDialog();
-                            if (res.HasValue && res.Value)
-                            {
-                                var sp = new StackPanel();
-                                var img = new Image()
-                                {
-                                    Source = bmi
-                                };
-                                sp.Children.Add(img);
-                                sp.Measure(new Size(pdlg.PrintableAreaWidth, pdlg.PrintableAreaHeight));
-                                sp.Arrange(new Rect(new Point(0, 0), sp.DesiredSize));
-                                pdlg.PrintVisual(sp, "test");
 
-                            }
-//                            var newPdf = new PdfDocument();
+                            var flowdoc = new FlowDocument()
+                            {
+                                Name = "myname"
+                            };
+                            var table = new Table();
+                            var col = new TableColumn();
+                            table.Columns.Add(col);
+                            table.RowGroups.Add(new TableRowGroup());
+                            var row = new TableRow();
+                            table.RowGroups[0].Rows.Add(row);
+                            var cell = new TableCell();
+                            var para = new Paragraph(new Run("some text"));
+                            row.FontSize = 50;
+                            //cell.Blocks.Add(para);
+                            var img = new Image()
+                            {
+                                Source = bmi
+                            };
+                            var uictr = new BlockUIContainer(img);
+                            cell.Blocks.Add(uictr);
+                            row.Cells.Add(cell);
+                            flowdoc.Blocks.Add(table);
+                            this.Content = flowdoc;
+
+                            //var pdlg = new PrintDialog(); //https://stackoverflow.com/questions/1661995/printing-a-wpf-bitmapimage
+                            //var queueName = "Microsoft Print to PDF";
+                            //var pServer = new PrintServer();
+                            //var pqueues = pServer.GetPrintQueues(new[] { EnumeratedPrintQueueTypes.Local });
+                            //pdlg.PrintQueue = new PrintQueue(pServer, queueName);
+                            ////var para = new Paragraph(new Run("some text"));
+                            ////var flowdoc = new FlowDocument(para)
+                            ////{
+                            ////    Name = "myname"
+                            ////};
+                            ////IDocumentPaginatorSource idpSource = flowdoc;
+                            ////pdlg.PrintDocument(idpSource.DocumentPaginator, "testdesc");
+
+
+                            //var sp = new StackPanel();
+                            //var img = new Image()
+                            //{
+                            //    Source = bmi
+                            //};
+                            //sp.Children.Add(img);
+                            //sp.Measure(new Size(pdlg.PrintableAreaWidth, pdlg.PrintableAreaHeight));
+                            //sp.Arrange(new Rect(new Point(0, 0), sp.DesiredSize));
+                            //pdlg.PrintVisual(sp, "test");
+
+
+                            //var res = pdlg.ShowDialog();
+                            //if (res.HasValue && res.Value)
+                            //{
+
+                            //}
+                            //                            var newPdf = new PdfDocument();
                         }
                     }
                     PdfPages.Add(bmi);
                 }
-                var im = new Image()
-                {
-                    Source = PdfPages[0]
-                };
-                this.Content = im;
+                //var im = new Image()
+                //{
+                //    Source = PdfPages[0]
+                //};
+                //this.Content = im;
                 //var sv = new ScrollViewer();
                 //this.Content = sv;
                 //var ictrl = new ItemsControl();
