@@ -38,6 +38,11 @@ namespace WpfPdfViewer
         public uint CurrentPageNumber { get { return _CurrentPageNumber; } set { if (_CurrentPageNumber != value) { _CurrentPageNumber = value; OnMyPropertyChanged(); } } }
         private uint _MaxPageNumber = 1233;
         public uint MaxPageNumber { get { return _MaxPageNumber; } set { if (_MaxPageNumber != value) { _MaxPageNumber = value; OnMyPropertyChanged(); } } }
+
+        string PathCurrentMusicFolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic";
+        PdfDocument _currentPdfDocument = null;
+        uint numPagesPerView = 2;
+        public string FullPathCurrentPdfFile;
         public MainWindow()
         {
             InitializeComponent();
@@ -48,6 +53,7 @@ namespace WpfPdfViewer
             this.Left = Properties.Settings.Default.Position.Width;
             this.Closed += (o, e) =>
               {
+                  _currentPdfDocument = null;
                   Properties.Settings.Default.Position = new System.Drawing.Size((int)this.Left, (int)this.Top);
                   Properties.Settings.Default.Size = new System.Drawing.Size((int)this.ActualWidth, (int)this.ActualHeight);
                   Properties.Settings.Default.Save();
@@ -136,9 +142,10 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             try
             {
                 //                await ConvertADocAsync();
-                var pdfFile = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Ragtime\Collections\Best of Ragtime.pdf";
+                FullPathCurrentPdfFile = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Ragtime\Collections\Best of Ragtime.pdf";
+                await LoadPdfFileAsync(FullPathCurrentPdfFile);
                 // pdfFile = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
-                await ShowDocAsync(pdfFile, 22);
+                await ShowDocAsync(22);
             }
             catch (Exception ex)
             {
@@ -146,12 +153,76 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
         }
 
-        private async Task ShowDocAsync(string pdfFile, uint pageNo)
+        async void Navigate(bool forward)
         {
-            StorageFile f = await StorageFile.GetFileFromPathAsync(pdfFile);
+            var newPageNo = CurrentPageNumber;
+            if (forward)
+            {
+                newPageNo += numPagesPerView;
+            }
+            else
+            {
+                newPageNo -= numPagesPerView;
+            }
+            await ShowDocAsync(newPageNo);
+        }
+        void BtnPrevNext_Click(object sender, RoutedEventArgs e)
+        {
+            var forwardOrBack = sender is Button b && b.Name != "btnPrev";
+            Navigate(forwardOrBack);
+        }
+
+        private async void TxtPageNo_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (uint.TryParse(txtPageNo.Text, out var newpgno))
+            {
+                await ShowDocAsync(newpgno);
+            }
+        }
+        private void DpPage_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            var pos = e.GetPosition(this.dpPage);
+            var leftSide = pos.X < this.dpPage.ActualWidth / 2;
+            if (leftSide)
+            {
+                Navigate(forward: false);
+            }
+            else
+            {
+                Navigate(forward: true);
+            }
+        }
+
+        void BtnCloseDoc_Click(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+        private async Task LoadPdfFileAsync(string fullPathToPDFFile)
+        {
+            StorageFile f = await StorageFile.GetFileFromPathAsync(FullPathCurrentPdfFile);
             var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
+            if (pdfDoc.IsPasswordProtected)
+            {
+                this.dpPage.Children.Add(new TextBlock() { Text = $"Password Protected {FullPathCurrentPdfFile}" });
+            }
+            this._currentPdfDocument = pdfDoc;
+            this.MaxPageNumber = _currentPdfDocument.PageCount;
+            this.Title = $"MyPDFViewer {FullPathCurrentPdfFile}";
+        }
+
+        private async Task ShowDocAsync(uint pageNo)
+        {
+            if (pageNo < 0)
+            {
+                pageNo = 0;
+            }
+            if (pageNo >= MaxPageNumber)
+            {
+                pageNo = MaxPageNumber - numPagesPerView;
+            }
+            CurrentPageNumber = pageNo;
             this.CurrentPageNumber = pageNo;
-            this.MaxPageNumber = pdfDoc.PageCount;
             var dv = new DocumentViewer();
             var fd = new FixedDocument();
             dv.Document = fd;
@@ -159,11 +230,12 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             //            this.dpPage.Children.Add(fd);
 
             //                    this.Content = fixedPage;
-            for (uint i = 0; i < 2; i++)
+            var lstItems = new List<UIElement>();
+            for (uint i = 0; i < numPagesPerView; i++)
             {
                 if (pageNo + i < _MaxPageNumber)
                 {
-                    using (var pdfPage = pdfDoc.GetPage(pageNo + i))
+                    using (var pdfPage = _currentPdfDocument.GetPage(pageNo + i))
                     {
                         var bmi = new BitmapImage();
                         using (var strm = new InMemoryRandomAccessStream())
@@ -188,8 +260,18 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                                 Source = bmi
                             };
                             //                            img.Stretch = Stretch.Uniform;
-
-                            this.dpPage.Children.Add(img);
+                            if (numPagesPerView > 1)
+                            {
+                                if (i == 0)
+                                {
+                                    img.HorizontalAlignment = HorizontalAlignment.Right; // put lefthand page close to middle
+                                }
+                                else
+                                {
+                                    img.HorizontalAlignment = HorizontalAlignment.Left; // put righthand page close to middle
+                                }
+                            }
+                            lstItems.Add(img);
                             //                            this.Content = img;
                             //var fixedPage = new FixedPage();
                             //fixedPage.Height = rect.Height;
@@ -202,21 +284,34 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     }
                 }
             }
-        }
-        void BtnPrevNext_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is Button b && b.Name == "btnPrev")
+            this.dpPage.Children.Clear();
+            if (numPagesPerView > 1)
             {
-
+                var grid1 = new Grid();
+                //             gr.RowDefinitions.Add(New RowDefinition() With {.Height = CType((New GridLengthConverter()).ConvertFromString("Auto"), GridLength)})
+                for (int i = 0; i < numPagesPerView; i++)
+                {
+                    //                    grid1.ColumnDefinitions.Add(new ColumnDefinition() { Width = (GridLength)(new GridLengthConverter()).ConvertFromString("Auto") });
+                    grid1.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / numPagesPerView) });
+                }
+                for (int i = 0; i < numPagesPerView; i++)
+                {
+                    grid1.Children.Add(lstItems[i]);
+                    Grid.SetColumn(lstItems[i], i);
+                }
+                this.dpPage.Children.Add(grid1);
             }
             else
             {
-
+                foreach (var itm in lstItems)
+                {
+                    this.dpPage.Children.Add(itm);
+                }
             }
 
         }
 
-        async Task ConvertADocAsync()
+        async static Task<DocumentViewer> CombinePDFsToASinglePdfAsync()
         {
             var docvwr = new DocumentViewer();
 
@@ -236,11 +331,10 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             //var pqueues = pServer.GetPrintQueues(new[] { EnumeratedPrintQueueTypes.Local });
             //pdlg.PrintQueue = new PrintQueue(pServer, queueName);
             //pdlg.PrintDocument(idps.DocumentPaginator, "testprint");
-            this.Content = docvwr;
-
+            return docvwr;
         }
 
-        async Task<FixedDocument> ConvertMultiPdfToSingleAsync(string titlePage, Rotation rotationTitlePage, string vol1, Rotation rotation)
+        async static Task<FixedDocument> ConvertMultiPdfToSingleAsync(string titlePage, Rotation rotationTitlePage, string vol1, Rotation rotation)
         {
             var fixedDoc = new FixedDocument();
             if (!string.IsNullOrEmpty(titlePage) && File.Exists(titlePage))
@@ -279,7 +373,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             return fixedDoc;
         }
 
-        private async Task AddPageToDocAsync(FixedDocument fixedDoc, PdfPage page, Rotation rotation = Rotation.Rotate0)
+        private static async Task AddPageToDocAsync(FixedDocument fixedDoc, PdfPage page, Rotation rotation = Rotation.Rotate0)
         {
             var bmi = new BitmapImage();
             using (var strm = new InMemoryRandomAccessStream())
@@ -325,5 +419,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 //pdlg.PrintVisual(sp, "test");
             }
         }
+
     }
 }
