@@ -31,7 +31,7 @@ namespace WpfPdfViewer
             InitializeComponent();
             this.Loaded += MainWindow_LoadedAsync;
         }
-        public ObservableCollection<BitmapImage> PdfPages { get; set; } = new ObservableCollection<BitmapImage>();
+        //public ObservableCollection<BitmapImage> PdfPages { get; set; } = new ObservableCollection<BitmapImage>();
 
         private async void MainWindow_LoadedAsync(object sender, RoutedEventArgs e)
         {
@@ -42,10 +42,6 @@ namespace WpfPdfViewer
                 var docvwr = new DocumentViewer();
                 var fixedDoc = new FixedDocument();
                 docvwr.Document = fixedDoc;
-                //var flowdoc = new FlowDocument()
-                //{
-                //    Name = "myname"
-                //};
 
                 var titlePage = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\ulimatePopRockCFaceUp\Ultimate Pop Rock Fake Book.pdf";
                 var fTitle = await StorageFile.GetFileFromPathAsync(titlePage);
@@ -54,25 +50,37 @@ namespace WpfPdfViewer
                 var rect = pgTitle.Dimensions.ArtBox;
                 await AddPageToDoc(fixedDoc, pgTitle);
 
-                var pdfSourceDoc = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\Ultimate Pop Rock Fake Book 1.pdf";
+                var pdfDataFileOrig = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\Ultimate Pop Rock Fake Book 1.pdf";
                 var rotation = Rotation.Rotate180;
-                pdfSourceDoc = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Ragtime\Collections\The Music of James Scott001.pdf";
-                rotation = Rotation.Rotate0;
-                var dataFile = pdfSourceDoc;
-
-                StorageFile f = await StorageFile.GetFileFromPathAsync(dataFile);
-                var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
-                var nPageCount = pdfDoc.PageCount;
-                //                nPageCount = 6;
-
-                for (uint i = 70; i < nPageCount; i++)
+                //pdfSourceDoc = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Ragtime\Collections\The Music of James Scott001.pdf";
+                //rotation = Rotation.Rotate0;
+                var fDone = false;
+                int nVolNo = 1;
+                while (!fDone)
                 {
-                    using (var page = pdfDoc.GetPage(i))
+                    var pdfDataFileToUse = pdfDataFileOrig;
+                    StorageFile f = await StorageFile.GetFileFromPathAsync(pdfDataFileToUse);
+                    var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
+                    var nPageCount = pdfDoc.PageCount;
+                    for (uint i = 0; i < nPageCount; i++)
                     {
-                        await AddPageToDoc(fixedDoc, page, rotation);
+                        using (var page = pdfDoc.GetPage(i))
+                        {
+                            await AddPageToDoc(fixedDoc, page, rotation);
+                        }
                     }
-                    //                    PdfPages.Add(bmi);
+                    if (!pdfDataFileOrig.EndsWith("1.pdf"))
+                    {
+                        break;
+                    }
+                    nVolNo++;
+                    pdfDataFileToUse = pdfDataFileOrig.Replace("1.pdf", string.Empty) + nVolNo.ToString() + ".pdf";
+                    if (!File.Exists(pdfDataFileToUse))
+                    {
+                        break;
+                    }
                 }
+
                 this.Content = docvwr;
 
                 //flowdoc.PageHeight = rect.Height;
@@ -129,26 +137,10 @@ namespace WpfPdfViewer
                 bmi.Rotation = rotation;
                 bmi.EndInit();
 
-                var table = new Table();
-                table.BreakPageBefore = true;
-                //var col = new TableColumn();
-                //table.Columns.Add(col);
-                table.RowGroups.Add(new TableRowGroup());
-                var row = new TableRow();
-                table.RowGroups[0].Rows.Add(row);
-                var cell = new TableCell();
-
-                var para = new Paragraph(new Run("some text"));
-                row.FontSize = 50;
-                //cell.Blocks.Add(para);
                 var img = new Image()
                 {
                     Source = bmi
                 };
-                //var uictr = new BlockUIContainer(img);
-                ////uictr.BreakPageBefore = true;
-                //cell.Blocks.Add(uictr);
-                //row.Cells.Add(cell);
 
                 var fixedPage = new FixedPage();
                 fixedPage.Children.Add(img);
@@ -182,12 +174,6 @@ namespace WpfPdfViewer
                 //pdlg.PrintVisual(sp, "test");
 
 
-                //var res = pdlg.ShowDialog();
-                //if (res.HasValue && res.Value)
-                //{
-
-                //}
-                //                            var newPdf = new PdfDocument();
             }
         }
     }
