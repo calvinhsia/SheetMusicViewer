@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Printing;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -24,11 +26,22 @@ namespace WpfPdfViewer
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
-    public partial class MainWindow : Window
+    public partial class MainWindow : Window, INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler PropertyChanged;
+        public void OnMyPropertyChanged([CallerMemberName] string propertyName = "")
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        private uint _CurrentPageNumber = 12;
+        public uint CurrentPageNumber { get { return _CurrentPageNumber; } set { if (_CurrentPageNumber != value) { _CurrentPageNumber = value; OnMyPropertyChanged(); } } }
+        private uint _MaxPageNumber = 1233;
+        public uint MaxPageNumber { get { return _MaxPageNumber; } set { if (_MaxPageNumber != value) { _MaxPageNumber = value; OnMyPropertyChanged(); } } }
         public MainWindow()
         {
             InitializeComponent();
+            this.DataContext = this;
             this.Width = Properties.Settings.Default.Size.Width;
             this.Height = Properties.Settings.Default.Size.Height;
             this.Top = Properties.Settings.Default.Position.Height;
@@ -36,7 +49,7 @@ namespace WpfPdfViewer
             this.Closed += (o, e) =>
               {
                   Properties.Settings.Default.Position = new System.Drawing.Size((int)this.Left, (int)this.Top);
-                  Properties.Settings.Default.Size= new System.Drawing.Size((int)this.ActualWidth, (int)this.ActualHeight);
+                  Properties.Settings.Default.Size = new System.Drawing.Size((int)this.ActualWidth, (int)this.ActualHeight);
                   Properties.Settings.Default.Save();
                   /*
 0:000> k
@@ -123,7 +136,9 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             try
             {
                 //                await ConvertADocAsync();
-                await ShowDocAsync(@"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf", 44);
+                var pdfFile = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Ragtime\Collections\Best of Ragtime.pdf";
+                // pdfFile = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
+                await ShowDocAsync(pdfFile, 22);
             }
             catch (Exception ex)
             {
@@ -135,41 +150,68 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         {
             StorageFile f = await StorageFile.GetFileFromPathAsync(pdfFile);
             var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
-            var nPageCount = pdfDoc.PageCount;
-            using (var pdfPage = pdfDoc.GetPage(pageNo))
+            this.CurrentPageNumber = pageNo;
+            this.MaxPageNumber = pdfDoc.PageCount;
+            var dv = new DocumentViewer();
+            var fd = new FixedDocument();
+            dv.Document = fd;
+            //            this.Content = fd;
+            //            this.dpPage.Children.Add(fd);
+
+            //                    this.Content = fixedPage;
+            for (uint i = 0; i < 2; i++)
             {
-                var bmi = new BitmapImage();
-                using (var strm = new InMemoryRandomAccessStream())
+                if (pageNo + i < _MaxPageNumber)
                 {
-                    var rect = pdfPage.Dimensions.ArtBox;
-                    var renderOpts = new PdfPageRenderOptions()
+                    using (var pdfPage = pdfDoc.GetPage(pageNo + i))
                     {
-                        DestinationWidth = (uint)rect.Width,
-                        DestinationHeight = (uint)rect.Height,
-                    };
+                        var bmi = new BitmapImage();
+                        using (var strm = new InMemoryRandomAccessStream())
+                        {
+                            var rect = pdfPage.Dimensions.ArtBox;
+                            var renderOpts = new PdfPageRenderOptions()
+                            {
+                                DestinationWidth = (uint)rect.Height,
+                                DestinationHeight = (uint)rect.Width,
+                            };
 
-                    await pdfPage.RenderToStreamAsync(strm, renderOpts);
-                    //var enc = new PngBitmapEncoder();
-                    //enc.Frames.Add(BitmapFrame.Create)
-                    bmi.BeginInit();
-                    bmi.StreamSource = strm.AsStream();
-                    bmi.CacheOption = BitmapCacheOption.OnLoad;
-                    bmi.EndInit();
+                            await pdfPage.RenderToStreamAsync(strm, renderOpts);
+                            //var enc = new PngBitmapEncoder();
+                            //enc.Frames.Add(BitmapFrame.Create)
+                            bmi.BeginInit();
+                            bmi.StreamSource = strm.AsStream();
+                            bmi.CacheOption = BitmapCacheOption.OnLoad;
+                            bmi.EndInit();
 
-                    var img = new Image()
-                    {
-                        Source = bmi
-                    };
-                    img.Stretch = Stretch.Uniform;
+                            var img = new Image()
+                            {
+                                Source = bmi
+                            };
+                            //                            img.Stretch = Stretch.Uniform;
 
-                    var fixedPage = new FixedPage();
-                    fixedPage.Height = rect.Height;
-                    fixedPage.Width = rect.Width;
-                    fixedPage.Children.Add(img);
-                    //var pc = new PageContent();
-                    //pc.Child = fixedPage;
-                    this.Content = fixedPage;
+                            this.dpPage.Children.Add(img);
+                            //                            this.Content = img;
+                            //var fixedPage = new FixedPage();
+                            //fixedPage.Height = rect.Height;
+                            //fixedPage.Width = rect.Width;
+                            //fixedPage.Children.Add(img);
+                            //var pc = new PageContent();
+                            //pc.Child = fixedPage;
+                            //fd.Pages.Add(pc);
+                        }
+                    }
                 }
+            }
+        }
+        void BtnPrevNext_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button b && b.Name == "btnPrev")
+            {
+
+            }
+            else
+            {
+
             }
 
         }
@@ -194,7 +236,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             //var pqueues = pServer.GetPrintQueues(new[] { EnumeratedPrintQueueTypes.Local });
             //pdlg.PrintQueue = new PrintQueue(pServer, queueName);
             //pdlg.PrintDocument(idps.DocumentPaginator, "testprint");
-
             this.Content = docvwr;
 
         }
