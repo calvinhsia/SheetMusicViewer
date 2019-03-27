@@ -39,17 +39,20 @@ namespace WpfPdfViewer
             // https://blogs.windows.com/buildingapps/2017/01/25/calling-windows-10-apis-desktop-application/#RWYkd5C4WTeEybol.97
             try
             {
-                var flowdoc = new FlowDocument()
-                {
-                    Name = "myname"
-                };
+                var docvwr = new DocumentViewer();
+                var fixedDoc = new FixedDocument();
+                docvwr.Document = fixedDoc;
+                //var flowdoc = new FlowDocument()
+                //{
+                //    Name = "myname"
+                //};
 
                 var titlePage = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\ulimatePopRockCFaceUp\Ultimate Pop Rock Fake Book.pdf";
                 var fTitle = await StorageFile.GetFileFromPathAsync(titlePage);
                 var pdfDocTitle = await PdfDocument.LoadFromFileAsync(fTitle);
                 var pgTitle = pdfDocTitle.GetPage(0);
                 var rect = pgTitle.Dimensions.ArtBox;
-                await AddPageToDoc(flowdoc, pgTitle);
+                await AddPageToDoc(fixedDoc, pgTitle);
 
                 var pdfSourceDoc = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\Ultimate Pop Rock Fake Book 1.pdf";
                 var rotation = Rotation.Rotate180;
@@ -66,22 +69,22 @@ namespace WpfPdfViewer
                 {
                     using (var page = pdfDoc.GetPage(i))
                     {
-                        await AddPageToDoc(flowdoc, page, rotation);
+                        await AddPageToDoc(fixedDoc, page, rotation);
                     }
                     //                    PdfPages.Add(bmi);
                 }
-                this.Content = flowdoc;
+                this.Content = docvwr;
 
-                flowdoc.PageHeight = rect.Height;
-                flowdoc.PageWidth = rect.Width;
-                IDocumentPaginatorSource idps = flowdoc;
+                //flowdoc.PageHeight = rect.Height;
+                //flowdoc.PageWidth = rect.Width;
+                //IDocumentPaginatorSource idps = flowdoc;
 
-                var pdlg = new PrintDialog();
-                var queueName = "Microsoft Print to PDF";
-                var pServer = new PrintServer();
-                var pqueues = pServer.GetPrintQueues(new[] { EnumeratedPrintQueueTypes.Local });
-                pdlg.PrintQueue = new PrintQueue(pServer, queueName);
-                pdlg.PrintDocument(idps.DocumentPaginator, "testprint");
+                //var pdlg = new PrintDialog();
+                //var queueName = "Microsoft Print to PDF";
+                //var pServer = new PrintServer();
+                //var pqueues = pServer.GetPrintQueues(new[] { EnumeratedPrintQueueTypes.Local });
+                //pdlg.PrintQueue = new PrintQueue(pServer, queueName);
+                //pdlg.PrintDocument(idps.DocumentPaginator, "testprint");
 
                 //var im = new Image()
                 //{
@@ -105,7 +108,7 @@ namespace WpfPdfViewer
             }
         }
 
-        private async Task AddPageToDoc(FlowDocument flowdoc, PdfPage page, Rotation rotation = Rotation.Rotate0)
+        private async Task AddPageToDoc(FixedDocument fixedDoc, PdfPage page, Rotation rotation = Rotation.Rotate0)
         {
             var bmi = new BitmapImage();
             using (var strm = new InMemoryRandomAccessStream())
@@ -113,11 +116,11 @@ namespace WpfPdfViewer
                 var rect = page.Dimensions.ArtBox;
                 var renderOpts = new PdfPageRenderOptions()
                 {
-                    DestinationWidth = (uint)rect.Height*2,
-                    DestinationHeight = (uint)rect.Width*2,
+                    DestinationWidth = (uint)rect.Height,
+                    DestinationHeight = (uint)rect.Width,
                 };
 
-                await page.RenderToStreamAsync(strm, renderOpts);
+                await page.RenderToStreamAsync(strm);
                 //var enc = new PngBitmapEncoder();
                 //enc.Frames.Add(BitmapFrame.Create)
                 bmi.BeginInit();
@@ -142,11 +145,17 @@ namespace WpfPdfViewer
                 {
                     Source = bmi
                 };
-                var uictr = new BlockUIContainer(img);
-                //uictr.BreakPageBefore = true;
-                cell.Blocks.Add(uictr);
-                row.Cells.Add(cell);
-                flowdoc.Blocks.Add(table);
+                //var uictr = new BlockUIContainer(img);
+                ////uictr.BreakPageBefore = true;
+                //cell.Blocks.Add(uictr);
+                //row.Cells.Add(cell);
+
+                var fixedPage = new FixedPage();
+                fixedPage.Children.Add(img);
+                var pc = new PageContent();
+                pc.Child = fixedPage;
+
+                fixedDoc.Pages.Add(pc);
 
                 //var pdlg = new PrintDialog(); //https://stackoverflow.com/questions/1661995/printing-a-wpf-bitmapimage
                 //var queueName = "Microsoft Print to PDF";
