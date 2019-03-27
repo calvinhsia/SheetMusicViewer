@@ -85,14 +85,14 @@ namespace WpfPdfViewer
 
                 //flowdoc.PageHeight = rect.Height;
                 //flowdoc.PageWidth = rect.Width;
-                //IDocumentPaginatorSource idps = flowdoc;
+                IDocumentPaginatorSource idps = fixedDoc;
 
-                //var pdlg = new PrintDialog();
-                //var queueName = "Microsoft Print to PDF";
-                //var pServer = new PrintServer();
-                //var pqueues = pServer.GetPrintQueues(new[] { EnumeratedPrintQueueTypes.Local });
-                //pdlg.PrintQueue = new PrintQueue(pServer, queueName);
-                //pdlg.PrintDocument(idps.DocumentPaginator, "testprint");
+                var pdlg = new PrintDialog();
+                var queueName = "Microsoft Print to PDF";
+                var pServer = new PrintServer();
+                var pqueues = pServer.GetPrintQueues(new[] { EnumeratedPrintQueueTypes.Local });
+                pdlg.PrintQueue = new PrintQueue(pServer, queueName);
+                pdlg.PrintDocument(idps.DocumentPaginator, "testprint");
 
                 //var im = new Image()
                 //{
