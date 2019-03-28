@@ -9,21 +9,21 @@ namespace WpfPdfViewer
     /// The serialized info for a PDF is in a file with the exact same name as the PDF with the extension changed to ".bmk"
     /// </summary>
     [Serializable]
-    public class PdfFileData
+    public class PdfMetaData
     {
         [XmlIgnore]
         public string curFullPathFile;
 
-        public static PdfFileData CreatePdfFileData(string FullPathFile)
+        public static PdfMetaData CreatePdfFileData(string FullPathFile)
         {
-            PdfFileData pdfFileData = null;
+            PdfMetaData pdfFileData = null;
             var bmkFile = Path.ChangeExtension(FullPathFile, "bmk");
             if (File.Exists(bmkFile))
             {
-                var serializer = new XmlSerializer(typeof(PdfFileData));
+                var serializer = new XmlSerializer(typeof(PdfMetaData));
                 using (var sr = new StreamReader(bmkFile))
                 {
-                    pdfFileData = (PdfFileData)serializer.Deserialize(sr);
+                    pdfFileData = (PdfMetaData)serializer.Deserialize(sr);
                     pdfFileData.curFullPathFile = FullPathFile;
                     if (pdfFileData.HideThisPDFFile)
                     {
@@ -33,13 +33,13 @@ namespace WpfPdfViewer
             }
             else
             {
-                pdfFileData = new PdfFileData(FullPathFile);
+                pdfFileData = new PdfMetaData(FullPathFile);
             }
             return pdfFileData;
         }
-        public PdfFileData() { }
+        public PdfMetaData() { }
 
-        public static void SavePdfFileData(PdfFileData pdfFileData)
+        public static void SavePdfFileData(PdfMetaData pdfFileData)
         {
             var bm = new BookMark()
             {
@@ -49,7 +49,7 @@ namespace WpfPdfViewer
             var lstBms = new List<BookMark>();
             lstBms.Add(bm);
             pdfFileData.BookMarks = lstBms.ToArray();
-            var serializer = new XmlSerializer(typeof(PdfFileData));
+            var serializer = new XmlSerializer(typeof(PdfMetaData));
             var bmkFile = Path.ChangeExtension( pdfFileData.curFullPathFile, "bmk");
             using (var sw = new StreamWriter(bmkFile))
             {
@@ -57,7 +57,7 @@ namespace WpfPdfViewer
             }
         }
 
-        public PdfFileData(string curFullPathFile)
+        public PdfMetaData(string curFullPathFile)
         {
             this.curFullPathFile = curFullPathFile;
         }

@@ -78,7 +78,7 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="PdfFileData.cs" />
+    <Compile Include="PdfMetaData.cs" />
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
     </Compile>

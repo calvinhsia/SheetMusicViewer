@@ -34,22 +34,25 @@ namespace WpfPdfViewer
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
-        private uint _CurrentPageNumber = 12;
+        private uint _CurrentPageNumber = 1;
         public uint CurrentPageNumber { get { return _CurrentPageNumber; } set { if (_CurrentPageNumber != value) { _CurrentPageNumber = value; OnMyPropertyChanged(); } } }
-        private uint _MaxPageNumber = 1233;
+        private uint _MaxPageNumber = 1;
         public uint MaxPageNumber { get { return _MaxPageNumber; } set { if (_MaxPageNumber != value) { _MaxPageNumber = value; OnMyPropertyChanged(); } } }
 
         uint _SliderValue;
         public uint SliderValue { get { return _SliderValue; } set { if (_SliderValue != value) { _SliderValue = value; OnMyPropertyChanged(); } } }
 
-        string PathCurrentMusicFolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic";
-        List<PdfFileData> lstPdfFileData = new List<PdfFileData>();
-
-        PdfDocument _currentPdfDocument = null;
+        bool _fShow2Pages = true;
+        public bool Show2Pages { get { return _fShow2Pages; } set { _fShow2Pages = value; numPagesPerView = (value ? 2u : 1u); OnMyPropertyChanged(); } }
         uint numPagesPerView = 2;
 
-        PdfFileData currentPdfFileData = null;
-        public string FullPathCurrentPdfFile => currentPdfFileData?.curFullPathFile;
+        readonly string PathCurrentMusicFolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic";
+        readonly List<PdfMetaData> lstPdfFileData = new List<PdfMetaData>();
+
+        PdfDocument _currentPdfDocument = null;
+        PdfMetaData currentPdfMetaeData = null;
+
+        public string FullPathCurrentPdfFile => currentPdfMetaeData?.curFullPathFile;
         public MainWindow()
         {
             InitializeComponent();
@@ -64,6 +67,7 @@ namespace WpfPdfViewer
                   Properties.Settings.Default.Position = new System.Drawing.Size((int)this.Left, (int)this.Top);
                   Properties.Settings.Default.Size = new System.Drawing.Size((int)this.ActualWidth, (int)this.ActualHeight);
                   Properties.Settings.Default.Save();
+                  //todo save show2pages, pathcurrentmusicfolder, maximized, curpdfdoc,pageno
                   /*
 0:000> k
  # ChildEBP RetAddr  
@@ -148,9 +152,9 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             // https://blogs.windows.com/buildingapps/2017/01/25/calling-windows-10-apis-desktop-application/#RWYkd5C4WTeEybol.97
             try
             {
-                await LoadCurrentDataAsync(PathCurrentMusicFolder);
+                await LoadCurrentDataFromDiskAsync(PathCurrentMusicFolder);
                 //                await ConvertADocAsync();
-                currentPdfFileData = lstPdfFileData.Where(p => p.curFullPathFile.Contains("Best of Ragtime")).First();
+                currentPdfMetaeData = lstPdfFileData.Where(p => p.curFullPathFile.Contains("The Ultim")).First();
                 //                FullPathCurrentPdfFile = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Ragtime\Collections\Best of Ragtime.pdf";
                 await LoadPdfFileAsync(FullPathCurrentPdfFile);
                 // pdfFile = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
@@ -162,7 +166,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
         }
 
-        private async Task LoadCurrentDataAsync(string pathCurrentMusicFolder)
+        private async Task LoadCurrentDataFromDiskAsync(string pathCurrentMusicFolder)
         {
             if (!string.IsNullOrEmpty(PathCurrentMusicFolder) && Directory.Exists(PathCurrentMusicFolder))
             {
@@ -171,7 +175,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     recurDirs(pathCurrentMusicFolder);
                     bool TryAddFile(string curFullPathFile)
                     {
-                        var curPdfFileData = PdfFileData.CreatePdfFileData(curFullPathFile);
+                        var curPdfFileData = PdfMetaData.CreatePdfFileData(curFullPathFile);
                         if (curPdfFileData != null)
                         {
                             lstPdfFileData.Add(curPdfFileData);
@@ -212,6 +216,15 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 
         }
 
+        protected override async void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
+        {
+            base.OnRenderSizeChanged(sizeInfo);
+            if (_currentPdfDocument != null)
+            {
+                await ShowDocAsync(CurrentPageNumber);
+            }
+        }
+
         void BtnPrevNext_Click(object sender, RoutedEventArgs e)
         {
             var forwardOrBack = sender is Button b && b.Name != "btnPrev";
@@ -229,40 +242,44 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         {
             var pos = e.GetPosition(this.dpPage);
             var leftSide = pos.X < this.dpPage.ActualWidth / 2;
-            if (leftSide)
-            {
-                Navigate(forward: false);
-            }
-            else
-            {
-                Navigate(forward: true);
-            }
+            Navigate(forward: leftSide ? false : true);
         }
         private async void Slider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            var newpgno =(uint)( this.slider.Value * MaxPageNumber / 100);
-        //    await ShowDocAsync(newpgno);
+            await Task.Delay(1);
+            var newpgno = (uint)(this.slider.Value * MaxPageNumber / 100);
+            //    await ShowDocAsync(newpgno);
         }
-
 
         void BtnCloseDoc_Click(object sender, RoutedEventArgs e)
         {
-            PdfFileData.SavePdfFileData(currentPdfFileData);
-
-
+            CloseCurrentPdfFile();
+        }
+        void CloseCurrentPdfFile()
+        {
+            PdfMetaData.SavePdfFileData(currentPdfMetaeData);
+            _currentPdfDocument = null;
+            MaxPageNumber = 0;
+            CurrentPageNumber = 0;
+            ShowAndChooseNewMusic();
+        }
+        void ShowAndChooseNewMusic()
+        {
+            var win = new Window();
+            win.ShowDialog();
         }
 
-        private async Task LoadPdfFileAsync(string fullPathToPDFFile)
+        private async Task LoadPdfFileAsync(string fullPathToPdfFile)
         {
-            StorageFile f = await StorageFile.GetFileFromPathAsync(FullPathCurrentPdfFile);
+            StorageFile f = await StorageFile.GetFileFromPathAsync(fullPathToPdfFile);
             var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
             if (pdfDoc.IsPasswordProtected)
             {
-                this.dpPage.Children.Add(new TextBlock() { Text = $"Password Protected {FullPathCurrentPdfFile}" });
+                this.dpPage.Children.Add(new TextBlock() { Text = $"Password Protected {fullPathToPdfFile}" });
             }
             this._currentPdfDocument = pdfDoc;
             this.MaxPageNumber = _currentPdfDocument.PageCount;
-            this.Title = $"MyPDFViewer {FullPathCurrentPdfFile}";
+            this.Title = $"MyPDFViewer {fullPathToPdfFile}";
         }
 
         private async Task ShowDocAsync(uint pageNo)
@@ -401,7 +418,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 var fTitle = await StorageFile.GetFileFromPathAsync(titlePage);
                 var pdfDocTitle = await PdfDocument.LoadFromFileAsync(fTitle);
                 var pgTitle = pdfDocTitle.GetPage(0);
-                await AddPageToDocAsync(fixedDoc, pgTitle);
+                await AddPageToDocAsync(fixedDoc, pgTitle, rotationTitlePage);
             }
             var fDone = false;
             int nVolNo = 1;
@@ -462,8 +479,10 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 fixedPage.Children.Add(img);
                 fixedPage.Height = rect.Width;
                 fixedPage.Width = rect.Height;
-                var pc = new PageContent();
-                pc.Child = fixedPage;
+                var pc = new PageContent
+                {
+                    Child = fixedPage
+                };
 
                 fixedDoc.Pages.Add(pc);
 

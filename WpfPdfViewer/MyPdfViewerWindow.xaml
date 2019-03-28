@@ -20,6 +20,7 @@
             <Label Content="/" HorizontalAlignment="Left" Margin="10,0,10,0" VerticalAlignment="Top"/>
             <TextBox x:Name="txtMaxPageNo" HorizontalAlignment="Left" Margin="2,0,0,0" TextWrapping="Wrap" Text="{Binding MaxPageNumber}" VerticalAlignment="Top" IsReadOnly="True" />
             <Slider x:Name="slider" Width="200" Value="{Binding SliderValue}" Maximum="100" ValueChanged="Slider_ValueChanged" ></Slider>
+            <CheckBox ToolTip="Show 1 or 2 pages at a a time" IsChecked="{Binding Show2Pages}">Show2Pages</CheckBox>
         </StackPanel>
         <Button Content="X" HorizontalAlignment="Right" Margin="0,0,10,0" VerticalAlignment="Top" ToolTip="Close Current Document, to open another"  Click="BtnCloseDoc_Click" Height="22"/>
         <DockPanel Grid.Row="1" Name="dpPage" Background="#FF190808" MouseDown="DpPage_MouseDown">
