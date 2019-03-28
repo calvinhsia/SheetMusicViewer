@@ -26,7 +26,7 @@ namespace WpfPdfViewer
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
-    public partial class MainWindow : Window, INotifyPropertyChanged
+    public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler PropertyChanged;
         public void OnMyPropertyChanged([CallerMemberName] string propertyName = "")
@@ -50,10 +50,10 @@ namespace WpfPdfViewer
         readonly List<PdfMetaData> lstPdfFileData = new List<PdfMetaData>();
 
         PdfDocument _currentPdfDocument = null;
-        PdfMetaData currentPdfMetaeData = null;
+        PdfMetaData currentPdfMetaData = null;
 
-        public string FullPathCurrentPdfFile => currentPdfMetaeData?.curFullPathFile;
-        public MainWindow()
+        public string FullPathCurrentPdfFile => currentPdfMetaData?.curFullPathFile;
+        public PdfViewerWindow()
         {
             InitializeComponent();
             this.DataContext = this;
@@ -154,7 +154,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             {
                 await LoadCurrentDataFromDiskAsync(PathCurrentMusicFolder);
                 //                await ConvertADocAsync();
-                currentPdfMetaeData = lstPdfFileData.Where(p => p.curFullPathFile.Contains("The Ultim")).First();
+                currentPdfMetaData = lstPdfFileData.Where(p => p.curFullPathFile.Contains("The Ultim")).First();
                 //                FullPathCurrentPdfFile = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Ragtime\Collections\Best of Ragtime.pdf";
                 await LoadPdfFileAsync(FullPathCurrentPdfFile);
                 // pdfFile = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
@@ -257,10 +257,15 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         }
         void CloseCurrentPdfFile()
         {
-            PdfMetaData.SavePdfFileData(currentPdfMetaeData);
-            _currentPdfDocument = null;
-            MaxPageNumber = 0;
-            CurrentPageNumber = 0;
+            if (currentPdfMetaData != null)
+            {
+                PdfMetaData.SavePdfFileData(currentPdfMetaData);
+                _currentPdfDocument = null;
+                currentPdfMetaData = null;
+                MaxPageNumber = 0;
+                CurrentPageNumber = 0;
+                this.dpPage.Children.Clear();
+            }
             ShowAndChooseNewMusic();
         }
         void ShowAndChooseNewMusic()
@@ -284,6 +289,11 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 
         private async Task ShowDocAsync(uint pageNo)
         {
+            if (currentPdfMetaData == null)
+            {
+                this.dpPage.Children.Clear();
+                return;
+            }
             if (pageNo < 0)
             {
                 pageNo = 0;

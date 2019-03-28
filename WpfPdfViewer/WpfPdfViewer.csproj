@@ -64,7 +64,7 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
-    <Page Include="MyPdfViewerWindow.xaml">
+    <Page Include="PdfViewerWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
@@ -72,8 +72,8 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="MyPdfViewerWindow.xaml.cs">
-      <DependentUpon>MyPdfViewerWindow.xaml</DependentUpon>
+    <Compile Include="PdfViewerWindow.xaml.cs">
+      <DependentUpon>PdfViewerWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
   </ItemGroup>
