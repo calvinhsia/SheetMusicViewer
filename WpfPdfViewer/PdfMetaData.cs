@@ -43,11 +43,13 @@ namespace WpfPdfViewer
         {
             var bm = new BookMark()
             {
-                BookMarkName = "bmname",
-                BookMarkPageNo = 23
+                SongName = "SongName",
+                PageNo = 23
             };
-            var lstBms = new List<BookMark>();
-            lstBms.Add(bm);
+            var lstBms = new List<BookMark>
+            {
+                bm
+            };
             pdfFileData.BookMarks = lstBms.ToArray();
             var serializer = new XmlSerializer(typeof(PdfMetaData));
             var bmkFile = Path.ChangeExtension( pdfFileData.curFullPathFile, "bmk");
@@ -75,11 +77,13 @@ namespace WpfPdfViewer
     [Serializable]
     public class BookMark
     {
-        public string BookMarkName;
-        public uint BookMarkPageNo;
+        public string SongName;
+        public string Composer;
+        public string Date;
+        public uint PageNo;
         public override string ToString()
         {
-            return $"{BookMarkName} {BookMarkPageNo}";
+            return $"{SongName} {PageNo}";
         }
     }
 }

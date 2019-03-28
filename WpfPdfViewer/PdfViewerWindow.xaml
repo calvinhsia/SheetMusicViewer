@@ -7,13 +7,13 @@
         mc:Ignorable="d"
         Title="{Binding Title}"
         >
-    <Grid Margin="0,11,0,-11">
+    <Grid >
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
         </Grid.RowDefinitions>
         <StackPanel Orientation="Horizontal" Margin="0,2,0,4">
-            <Button  Content="BookMarks" ToolTip="Add current to BookMark or choose another BookMark" HorizontalAlignment="Left" Margin="10,0,0,0" VerticalAlignment="Top" Click="BtnBookMarks_Click"/>
+            <Button  Content="_BookMarks" ToolTip="Add current to BookMark/Favorites or choose another BookMark/Favorite" HorizontalAlignment="Left" Margin="10,-5,0,0" VerticalAlignment="Top" Click="BtnBookMarks_Click"/>
             <Button x:Name="btnPrev" Content="&lt;" HorizontalAlignment="Left" Margin="30,0,0,0" VerticalAlignment="Top" Click="BtnPrevNext_Click"/>
             <TextBox x:Name="txtPageNo" HorizontalAlignment="Left" Margin="5,0,5,0" TextWrapping="Wrap" Text="{Binding CurrentPageNumber}" VerticalAlignment="Top" LostFocus="TxtPageNo_LostFocus" />
             <Button x:Name="btnNext" Content="&gt;" HorizontalAlignment="Left" VerticalAlignment="Top" Click="BtnPrevNext_Click"/>
@@ -21,8 +21,8 @@
             <TextBox x:Name="txtMaxPageNo" HorizontalAlignment="Left" Margin="2,0,0,0" TextWrapping="Wrap" Text="{Binding MaxPageNumber}" VerticalAlignment="Top" IsReadOnly="True" />
             <Slider x:Name="slider" Width="200" Value="{Binding SliderValue}" Maximum="100" ValueChanged="Slider_ValueChanged" ></Slider>
             <CheckBox ToolTip="Show 1 or 2 pages at a a time" IsChecked="{Binding Show2Pages}">Show2Pages</CheckBox>
+            <Button Content="_Chooser" HorizontalAlignment="Right" Margin="10,0,00,0" VerticalAlignment="Top" ToolTip="Open another document"  Click="BtnChooser_Click" Height="22"/>
         </StackPanel>
-        <Button Content="X" HorizontalAlignment="Right" Margin="0,0,10,0" VerticalAlignment="Top" ToolTip="Close Current Document, to open another"  Click="BtnCloseDoc_Click" Height="22"/>
         <DockPanel Grid.Row="1" Name="dpPage" Background="#FF190808" MouseDown="DpPage_MouseDown">
         </DockPanel>
     </Grid>
