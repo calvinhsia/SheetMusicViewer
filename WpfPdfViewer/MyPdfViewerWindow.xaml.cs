@@ -39,10 +39,17 @@ namespace WpfPdfViewer
         private uint _MaxPageNumber = 1233;
         public uint MaxPageNumber { get { return _MaxPageNumber; } set { if (_MaxPageNumber != value) { _MaxPageNumber = value; OnMyPropertyChanged(); } } }
 
+        uint _SliderValue;
+        public uint SliderValue { get { return _SliderValue; } set { if (_SliderValue != value) { _SliderValue = value; OnMyPropertyChanged(); } } }
+
         string PathCurrentMusicFolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic";
+        List<PdfFileData> lstPdfFileData = new List<PdfFileData>();
+
         PdfDocument _currentPdfDocument = null;
         uint numPagesPerView = 2;
-        public string FullPathCurrentPdfFile;
+
+        PdfFileData currentPdfFileData = null;
+        public string FullPathCurrentPdfFile => currentPdfFileData?.curFullPathFile;
         public MainWindow()
         {
             InitializeComponent();
@@ -141,8 +148,10 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             // https://blogs.windows.com/buildingapps/2017/01/25/calling-windows-10-apis-desktop-application/#RWYkd5C4WTeEybol.97
             try
             {
+                await LoadCurrentDataAsync(PathCurrentMusicFolder);
                 //                await ConvertADocAsync();
-                FullPathCurrentPdfFile = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Ragtime\Collections\Best of Ragtime.pdf";
+                currentPdfFileData = lstPdfFileData.Where(p => p.curFullPathFile.Contains("Best of Ragtime")).First();
+                //                FullPathCurrentPdfFile = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Ragtime\Collections\Best of Ragtime.pdf";
                 await LoadPdfFileAsync(FullPathCurrentPdfFile);
                 // pdfFile = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
                 await ShowDocAsync(22);
@@ -150,6 +159,37 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             catch (Exception ex)
             {
                 this.Content = ex.ToString();
+            }
+        }
+
+        private async Task LoadCurrentDataAsync(string pathCurrentMusicFolder)
+        {
+            if (!string.IsNullOrEmpty(PathCurrentMusicFolder) && Directory.Exists(PathCurrentMusicFolder))
+            {
+                await Task.Run(() =>
+                {
+                    recurDirs(pathCurrentMusicFolder);
+                    bool TryAddFile(string curFullPathFile)
+                    {
+                        var curPdfFileData = PdfFileData.CreatePdfFileData(curFullPathFile);
+                        if (curPdfFileData != null)
+                        {
+                            lstPdfFileData.Add(curPdfFileData);
+                        }
+                        return true;
+                    }
+                    void recurDirs(string curPath)
+                    {
+                        foreach (var file in Directory.EnumerateFiles(curPath, "*.pdf"))
+                        {
+                            TryAddFile(file);
+                        }
+                        foreach (var dir in Directory.EnumerateDirectories(curPath))
+                        {
+                            recurDirs(dir);
+                        }
+                    }
+                });
             }
         }
 
@@ -166,6 +206,12 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
             await ShowDocAsync(newPageNo);
         }
+
+        void BtnBookMarks_Click(object sender, RoutedEventArgs e)
+        {
+
+        }
+
         void BtnPrevNext_Click(object sender, RoutedEventArgs e)
         {
             var forwardOrBack = sender is Button b && b.Name != "btnPrev";
@@ -192,9 +238,17 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 Navigate(forward: true);
             }
         }
+        private async void Slider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            var newpgno =(uint)( this.slider.Value * MaxPageNumber / 100);
+        //    await ShowDocAsync(newpgno);
+        }
+
 
         void BtnCloseDoc_Click(object sender, RoutedEventArgs e)
         {
+            PdfFileData.SavePdfFileData(currentPdfFileData);
+
 
         }
 
@@ -222,6 +276,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 pageNo = MaxPageNumber - numPagesPerView;
             }
             CurrentPageNumber = pageNo;
+            SliderValue = 100 * _CurrentPageNumber / _MaxPageNumber;
             this.CurrentPageNumber = pageNo;
             var dv = new DocumentViewer();
             var fd = new FixedDocument();
@@ -243,9 +298,14 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                             var rect = pdfPage.Dimensions.ArtBox;
                             var renderOpts = new PdfPageRenderOptions()
                             {
-                                DestinationWidth = (uint)rect.Height,
-                                DestinationHeight = (uint)rect.Width,
+                                DestinationWidth = (uint)rect.Width,
+                                DestinationHeight = (uint)rect.Height,
                             };
+                            if (pdfPage.Rotation != PdfPageRotation.Normal)
+                            {
+                                renderOpts.DestinationHeight = (uint)rect.Width;
+                                renderOpts.DestinationWidth = (uint)rect.Height;
+                            }
 
                             await pdfPage.RenderToStreamAsync(strm, renderOpts);
                             //var enc = new PngBitmapEncoder();
@@ -308,7 +368,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     this.dpPage.Children.Add(itm);
                 }
             }
-
         }
 
         async static Task<DocumentViewer> CombinePDFsToASinglePdfAsync()
@@ -419,6 +478,5 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 //pdlg.PrintVisual(sp, "test");
             }
         }
-
     }
 }
