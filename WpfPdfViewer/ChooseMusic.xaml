@@ -13,7 +13,7 @@
         </Grid.RowDefinitions>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,4">
             <Button Content="Cancel" Margin="10,0,00,0" ToolTip="Open another document"  Click="BtnCancel_Click" Height="22"/>
-            <Button Content="_OK" Margin="10,0,00,0" ToolTip="Open another document"  Click="BtnOk_Click" Height="22"/>
+            <Button Content="_OK" Margin="10,0,20,0" ToolTip="Open another document"  Click="BtnOk_Click" Height="22"/>
         </StackPanel>
         <DockPanel Grid.Row="1" Name="dpTview">
         </DockPanel>

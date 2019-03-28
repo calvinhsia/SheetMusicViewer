@@ -43,10 +43,10 @@ namespace WpfPdfViewer
         public int SliderValue { get { return _SliderValue; } set { if (_SliderValue != value) { _SliderValue = value; OnMyPropertyChanged(); } } }
 
         bool _fShow2Pages = true;
-        public bool Show2Pages { get { return _fShow2Pages; } set { _fShow2Pages = value; numPagesPerView = (value ? 2 : 1); OnMyPropertyChanged(); } }
-        int numPagesPerView = 2;
+        public bool Show2Pages { get { return _fShow2Pages; } set { _fShow2Pages = value; this.Dispatcher.InvokeAsync(async () => await ShowDocAsync(CurrentPageNumber)); OnMyPropertyChanged(); } }
+        int numPagesPerView => _fShow2Pages ? 2 : 1;
 
-        internal string PathCurrentMusicFolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic";
+        internal string RootMusicFolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic";
         internal readonly List<PdfMetaData> lstPdfMetaFileData = new List<PdfMetaData>();
 
         PdfDocument _currentPdfDocument = null;
@@ -57,17 +57,24 @@ namespace WpfPdfViewer
         {
             InitializeComponent();
             this.DataContext = this;
-            this.Width = Properties.Settings.Default.Size.Width;
-            this.Height = Properties.Settings.Default.Size.Height;
-            this.Top = Properties.Settings.Default.Position.Height;
-            this.Left = Properties.Settings.Default.Position.Width;
+            this.Width = Properties.Settings.Default.MainWindowSize.Width;
+            this.Height = Properties.Settings.Default.MainWindowSize.Height;
+            this.Top = Properties.Settings.Default.MainWindowPos.Height;
+            this.Left = Properties.Settings.Default.MainWindowPos.Width;
+            this.RootMusicFolder = Properties.Settings.Default.RootMusicFolder;
+            this.Show2Pages = Properties.Settings.Default.Show2Pages;
+
             this.Closed += (o, e) =>
               {
-                  _currentPdfDocument = null;
-                  Properties.Settings.Default.Position = new System.Drawing.Size((int)this.Left, (int)this.Top);
-                  Properties.Settings.Default.Size = new System.Drawing.Size((int)this.ActualWidth, (int)this.ActualHeight);
+                  Properties.Settings.Default.Show2Pages = Show2Pages;
+                  Properties.Settings.Default.RootMusicFolder = RootMusicFolder;
+                  Properties.Settings.Default.LastPDFOpen = FullPathCurrentPdfFile;
+                  Properties.Settings.Default.LastPDFPageNo = CurrentPageNumber;
+                  Properties.Settings.Default.MainWindowPos = new System.Drawing.Size((int)this.Left, (int)this.Top);
+                  Properties.Settings.Default.MainWindowSize = new System.Drawing.Size((int)this.ActualWidth, (int)this.ActualHeight);
+                  Properties.Settings.Default.MainWindowState = (int)this.WindowState;
                   Properties.Settings.Default.Save();
-                  //todo save show2pages, pathcurrentmusicfolder, maximized, curpdfdoc,pageno
+                  CloseCurrentPdfFile();
                   /*
 0:000> k
  # ChildEBP RetAddr  
@@ -152,13 +159,25 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             // https://blogs.windows.com/buildingapps/2017/01/25/calling-windows-10-apis-desktop-application/#RWYkd5C4WTeEybol.97
             try
             {
-                await LoadCurrentDataFromDiskAsync(PathCurrentMusicFolder);
-                //                await ConvertADocAsync();
-                currentPdfMetaData = lstPdfMetaFileData.Where(p => p.curFullPathFile.Contains("The Ultim")).First();
-                //                FullPathCurrentPdfFile = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Ragtime\Collections\Best of Ragtime.pdf";
-                await LoadPdfFileAsync(FullPathCurrentPdfFile);
-                // pdfFile = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
-                await ShowDocAsync(22);
+                this.WindowState = (WindowState)Properties.Settings.Default.MainWindowState;
+                var lastPdfOpen = Properties.Settings.Default.LastPDFOpen;
+                if (string.IsNullOrEmpty(RootMusicFolder) || string.IsNullOrEmpty(lastPdfOpen))
+                {
+                    if (!await ChooseMusic())
+                    {
+                        return;
+                    }
+                }
+                else
+                {
+                    await LoadCurrentDataFromDiskAsync(RootMusicFolder);
+                    currentPdfMetaData = lstPdfMetaFileData.Where(p => p.curFullPathFile == lastPdfOpen).FirstOrDefault();
+                    if (currentPdfMetaData != null)
+                    {
+                        await LoadPdfFileAsync(FullPathCurrentPdfFile);
+                        await ShowDocAsync(Properties.Settings.Default.LastPDFPageNo);
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -168,7 +187,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 
         private async Task LoadCurrentDataFromDiskAsync(string pathCurrentMusicFolder)
         {
-            if (!string.IsNullOrEmpty(PathCurrentMusicFolder) && Directory.Exists(PathCurrentMusicFolder))
+            if (!string.IsNullOrEmpty(RootMusicFolder) && Directory.Exists(RootMusicFolder))
             {
                 await Task.Run(() =>
                 {
@@ -244,24 +263,38 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             var leftSide = pos.X < this.dpPage.ActualWidth / 2;
             Navigate(forward: leftSide ? false : true);
         }
+        bool SliderChangedEnabled = true;
         private async void Slider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            await Task.Delay(1);
-            var newpgno = (int)(this.slider.Value * MaxPageNumber / 100);
-            //    await ShowDocAsync(newpgno);
+            if (SliderChangedEnabled)
+            {
+                SliderChangedEnabled = false;
+                await Task.Delay(1);
+                var newpgno = (int)(this.slider.Value * MaxPageNumber / 100);
+                await ShowDocAsync(newpgno);
+                SliderChangedEnabled = true;
+            }
         }
 
-        async void BtnChooser_Click(object sender, RoutedEventArgs e)
+        async Task<bool> ChooseMusic()
         {
             var win = new ChooseMusic();
             win.Initialize(this);
+            var retval = false;
             if (win.ShowDialog() == true)
             {
                 CloseCurrentPdfFile();
                 currentPdfMetaData = win.chosenPdfMetaData;
                 await LoadPdfFileAsync(FullPathCurrentPdfFile);
                 await ShowDocAsync(pageNo: 0);
+                retval = true;
             }
+            return retval;
+
+        }
+        async void BtnChooser_Click(object sender, RoutedEventArgs e)
+        {
+            await ChooseMusic();
         }
         void CloseCurrentPdfFile()
         {
@@ -304,8 +337,10 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             {
                 pageNo = MaxPageNumber - numPagesPerView;
             }
-            CurrentPageNumber = pageNo;
+            var saveSliderChangedEnable = SliderChangedEnabled;
+            SliderChangedEnabled = false;
             SliderValue = 100 * _CurrentPageNumber / _MaxPageNumber;
+            SliderChangedEnabled = saveSliderChangedEnable;
             this.CurrentPageNumber = pageNo;
             var dv = new DocumentViewer();
             var fd = new FixedDocument();

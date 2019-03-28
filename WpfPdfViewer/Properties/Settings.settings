@@ -2,11 +2,26 @@
 <SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="WpfPdfViewer.Properties" GeneratedClassName="Settings">
   <Profiles />
   <Settings>
-    <Setting Name="Position" Type="System.Drawing.Size" Scope="User">
+    <Setting Name="MainWindowPos" Type="System.Drawing.Size" Scope="User">
       <Value Profile="(Default)">0, 0</Value>
     </Setting>
-    <Setting Name="Size" Type="System.Drawing.Size" Scope="User">
+    <Setting Name="MainWindowSize" Type="System.Drawing.Size" Scope="User">
       <Value Profile="(Default)">1000, 800</Value>
+    </Setting>
+    <Setting Name="LastPDFOpen" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="LastPDFPageNo" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">0</Value>
+    </Setting>
+    <Setting Name="Show2Pages" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="RootMusicFolder" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="MainWindowState" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">0</Value>
     </Setting>
   </Settings>
 </SettingsFile>

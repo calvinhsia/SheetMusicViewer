@@ -30,6 +30,8 @@ namespace WpfPdfViewer
         internal void Initialize(PdfViewerWindow pdfViewerWindow)
         {
             this._pdfViewerWindow = pdfViewerWindow;
+            this.Top = pdfViewerWindow.Top;
+            this.Left = pdfViewerWindow.Left;
             this.Loaded += ChooseMusic_Loaded;
         }
 

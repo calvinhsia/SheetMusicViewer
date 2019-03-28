@@ -26,24 +26,84 @@ namespace WpfPdfViewer.Properties {
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("0, 0")]
-        public global::System.Drawing.Size Position {
+        public global::System.Drawing.Size MainWindowPos {
             get {
-                return ((global::System.Drawing.Size)(this["Position"]));
+                return ((global::System.Drawing.Size)(this["MainWindowPos"]));
             }
             set {
-                this["Position"] = value;
+                this["MainWindowPos"] = value;
             }
         }
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("1000, 800")]
-        public global::System.Drawing.Size Size {
+        public global::System.Drawing.Size MainWindowSize {
             get {
-                return ((global::System.Drawing.Size)(this["Size"]));
+                return ((global::System.Drawing.Size)(this["MainWindowSize"]));
             }
             set {
-                this["Size"] = value;
+                this["MainWindowSize"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string LastPDFOpen {
+            get {
+                return ((string)(this["LastPDFOpen"]));
+            }
+            set {
+                this["LastPDFOpen"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0")]
+        public int LastPDFPageNo {
+            get {
+                return ((int)(this["LastPDFPageNo"]));
+            }
+            set {
+                this["LastPDFPageNo"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool Show2Pages {
+            get {
+                return ((bool)(this["Show2Pages"]));
+            }
+            set {
+                this["Show2Pages"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string RootMusicFolder {
+            get {
+                return ((string)(this["RootMusicFolder"]));
+            }
+            set {
+                this["RootMusicFolder"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0")]
+        public int MainWindowState {
+            get {
+                return ((int)(this["MainWindowState"]));
+            }
+            set {
+                this["MainWindowState"] = value;
             }
         }
     }
