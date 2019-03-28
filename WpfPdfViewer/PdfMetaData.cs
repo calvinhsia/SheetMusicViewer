@@ -20,15 +20,24 @@ namespace WpfPdfViewer
             var bmkFile = Path.ChangeExtension(FullPathFile, "bmk");
             if (File.Exists(bmkFile))
             {
-                var serializer = new XmlSerializer(typeof(PdfMetaData));
-                using (var sr = new StreamReader(bmkFile))
+                try
                 {
-                    pdfFileData = (PdfMetaData)serializer.Deserialize(sr);
-                    pdfFileData.curFullPathFile = FullPathFile;
-                    if (pdfFileData.HideThisPDFFile)
+                    var serializer = new XmlSerializer(typeof(PdfMetaData));
+                    using (var sr = new StreamReader(bmkFile))
                     {
-                        pdfFileData = null;
+                        pdfFileData = (PdfMetaData)serializer.Deserialize(sr);
+                        pdfFileData.curFullPathFile = FullPathFile;
+                        if (pdfFileData.HideThisPDFFile)
+                        {
+                            pdfFileData = null;
+                        }
                     }
+                }
+                catch (Exception ex)
+                {
+                    System.Windows.Forms.MessageBox.Show($"{bmkFile}\r\n {ex.ToString()}", "Exception parsing Xml");
+                    // we don't want to delete the file because the user might have valuable bookmarks/favorites.
+                    // let the user have an opportunity to fix it.
                 }
             }
             else
@@ -64,9 +73,16 @@ namespace WpfPdfViewer
             this.curFullPathFile = curFullPathFile;
         }
         /// <summary>
+        /// the page no when this PDF was last opened
+        /// </summary>
+        public int LastPageNo;
+        /// <summary>
         /// Could be duplicate: a PDF might be part of an assembled volume
         /// </summary>
         public bool HideThisPDFFile;
+
+        /*Normal = 0,Rotate90 = 1,Rotate180 = 2,Rotate270 = 3*/
+        public int Rotation; 
         public BookMark[] BookMarks;
         public override string ToString()
         {

@@ -61,18 +61,6 @@ namespace WpfPdfViewer.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0")]
-        public int LastPDFPageNo {
-            get {
-                return ((int)(this["LastPDFPageNo"]));
-            }
-            set {
-                this["LastPDFPageNo"] = value;
-            }
-        }
-        
-        [global::System.Configuration.UserScopedSettingAttribute()]
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("False")]
         public bool Show2Pages {
             get {
