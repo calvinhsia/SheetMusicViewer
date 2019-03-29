@@ -348,16 +348,17 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                         {
                             Content = "Favorite",
                             Foreground = Brushes.Yellow,
+                            Tag = pageNo + i,
                             IsChecked = currentPdfMetaData.IsFavorite(pageNo + i),
                             HorizontalAlignment = (i == 0 ? HorizontalAlignment.Left : HorizontalAlignment.Right)
                         };
                         chkFav.Checked += (o, e) =>
                           {
-                              currentPdfMetaData.SetFavorite(pageNo + i, true);
+                              currentPdfMetaData.SetFavorite((int)chkFav.Tag, true);
                           };
                         chkFav.Unchecked += (o, e) =>
                         {
-                            currentPdfMetaData.SetFavorite(pageNo + i, false);
+                            currentPdfMetaData.SetFavorite((int)chkFav.Tag, false);
                         };
                         grid1.Children.Add(chkFav);
                         Grid.SetColumn(chkFav, i);
@@ -388,6 +389,30 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 this.dpPage.Children.Clear();
                 System.Windows.Forms.MessageBox.Show($"Exception showing {currentPdfMetaData.curFullPathFile}\r\n {ex.ToString()}");
                 CloseCurrentPdfFile();
+            }
+        }
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+        }
+        protected override void OnPreviewKeyUp(KeyEventArgs e)
+        {
+            base.OnPreviewKeyUp(e);
+            var elmWithFocus = Keyboard.FocusedElement;
+            if (!(elmWithFocus is TextBox))
+            {
+                switch(e.Key)
+                {
+                    case Key.Left:
+                        e.Handled = true;
+                        Navigate(forward: false);
+                        break;
+                    case Key.Right:
+                        Navigate(forward: true);
+                        e.Handled = true;
+                        break;
+                }
+
             }
         }
 
