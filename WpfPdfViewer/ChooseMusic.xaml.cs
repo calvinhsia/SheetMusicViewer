@@ -22,6 +22,17 @@ namespace WpfPdfViewer
     {
         PdfViewerWindow _pdfViewerWindow;
         TreeView _TreeView;
+        readonly List<FavoriteEntry> _lstFavoriteEntries = new List<FavoriteEntry>();
+        class FavoriteEntry
+        {
+            public Favorite _favorite;
+            public PdfMetaData _pdfMetadata;
+            public override string ToString()
+            {
+                return $"{_favorite} {_pdfMetadata}";
+            }
+        }
+
         public PdfMetaData chosenPdfMetaData = null;
         public ChooseMusic()
         {
@@ -33,22 +44,25 @@ namespace WpfPdfViewer
             this._pdfViewerWindow = pdfViewerWindow;
             this.Top = pdfViewerWindow.Top;
             this.Left = pdfViewerWindow.Left;
-            this.txtCurrentRootFolder.Text = _pdfViewerWindow.RootMusicFolder;
+            this.Height = pdfViewerWindow.Height;
+            this.txtCurrentRootFolder.Text = _pdfViewerWindow._RootMusicFolder;
             this.Loaded += ChooseMusic_Loaded;
 
         }
         async void BtnChangeMusicFolder_Click(object sender, RoutedEventArgs e)
         {
-            var d = new System.Windows.Forms.FolderBrowserDialog();
-            d.ShowNewFolderButton = false;
-            d.Description = "Choose a folder with PDF music files";
-            d.SelectedPath = this._pdfViewerWindow.RootMusicFolder;
+            var d = new System.Windows.Forms.FolderBrowserDialog
+            {
+                ShowNewFolderButton = false,
+                Description = "Choose a folder with PDF music files",
+                SelectedPath = this._pdfViewerWindow._RootMusicFolder
+            };
             var res = d.ShowDialog();
             if (res == System.Windows.Forms.DialogResult.OK)
             {
-                _pdfViewerWindow.RootMusicFolder = d.SelectedPath;
-                await _pdfViewerWindow.LoadPdfMetaDataFromDiskAsync();
-                this.txtCurrentRootFolder.Text = _pdfViewerWindow.RootMusicFolder;
+                _pdfViewerWindow._RootMusicFolder = d.SelectedPath;
+                await _pdfViewerWindow.LoadAllPdfMetaDataFromDiskAsync();
+                this.txtCurrentRootFolder.Text = _pdfViewerWindow._RootMusicFolder;
                 UpdateTreeView();
             }
         }
@@ -58,19 +72,48 @@ namespace WpfPdfViewer
             _TreeView = new TreeView();
             this.dpTview.Children.Clear();
             this.dpTview.Children.Add(_TreeView);
+
+            var tvitemFiles = new TreeViewItem()
+            {
+                Header = "Files"
+            };
+            _TreeView.Items.Add(tvitemFiles);
+
+            var tvitemFavorites = new TreeViewItem()
+            {
+                Header = "Favorites"
+            };
+            _TreeView.Items.Add(tvitemFavorites);
+
             foreach (var pdfMetaDataItem in
                 _pdfViewerWindow.
                 lstPdfMetaFileData.
                 OrderBy(p => System.IO.Path.GetFileNameWithoutExtension(p.curFullPathFile)))
             {
+                foreach (var fav in pdfMetaDataItem.lstFavorites)
+                {
+                    _lstFavoriteEntries.Add(new FavoriteEntry() { _favorite = fav, _pdfMetadata = pdfMetaDataItem });
+                }
                 var tvItem = new TreeViewItem()
                 {
                     Header = System.IO.Path.GetFileNameWithoutExtension(pdfMetaDataItem.curFullPathFile),
                     ToolTip = pdfMetaDataItem.curFullPathFile,
                     Tag = pdfMetaDataItem
                 };
-                _TreeView.Items.Add(tvItem);
+                tvitemFiles.Items.Add(tvItem);
             }
+
+            foreach (var favEntry in _lstFavoriteEntries)
+            {
+                var tvItem = new TreeViewItem()
+                {
+                    Header = $"{favEntry}",
+                    Tag = favEntry
+                };
+                tvitemFavorites.Items.Add(tvItem);
+            }
+            tvitemFavorites.IsExpanded = true;
+            tvitemFiles.IsExpanded = true;
             _TreeView.MouseDoubleClick += (o, e) =>
             {
                 BtnOk_Click(this, e);
@@ -92,7 +135,19 @@ namespace WpfPdfViewer
         {
             if (_TreeView.SelectedItem != null)
             {
-                chosenPdfMetaData = (PdfMetaData)((TreeViewItem)_TreeView.SelectedItem).Tag;
+                var tg = ((TreeViewItem)_TreeView.SelectedItem).Tag;
+                if (tg != null)
+                {
+                    if (tg is FavoriteEntry favoriteEntry)
+                    {
+                        chosenPdfMetaData = favoriteEntry._pdfMetadata;
+                        chosenPdfMetaData.LastPageNo = favoriteEntry._favorite.Pageno;
+                    }
+                    else
+                    {
+                        chosenPdfMetaData = (PdfMetaData)tg;
+                    }
+                }
             }
             this.DialogResult = true; // chosenPdfMetaData  can be null
             this.Close();

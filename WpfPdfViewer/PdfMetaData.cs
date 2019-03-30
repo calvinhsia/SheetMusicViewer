@@ -14,7 +14,36 @@ namespace WpfPdfViewer
     {
         [XmlIgnore]
         public string curFullPathFile;
-        private List<Favorite> lstFavorites;
+        [XmlIgnore]
+        public List<Favorite> lstFavorites;
+        /// <summary>
+        /// for continued PDF: e.g. file1.pdf, file2.pdf
+        /// </summary>
+        [XmlIgnore]
+        public PdfMetaData PriorPdfMetaData;
+        /// <summary>
+        /// for continued PDF: e.g. file1.pdf, file2.pdf
+        /// </summary>
+        [XmlIgnore]
+        public PdfMetaData SucceedingPdfMetaData;
+
+
+        /// <summary>
+        /// the page no when this PDF was last opened
+        /// </summary>
+        public int LastPageNo;
+        /// <summary>
+        /// Could be duplicate: a PDF might be part of an assembled volume
+        /// </summary>
+        public bool HideThisPDFFile;
+
+        /*Normal = 0,Rotate90 = 1,Rotate180 = 2,Rotate270 = 3*/
+        public int Rotation;
+        public BookMark[] BookMarks;
+        public Favorite[] Favorites;
+        public string Notes;
+
+
         public static PdfMetaData ReadPdfMetaData(string FullPathFile)
         {
             PdfMetaData pdfFileData = null;
@@ -43,11 +72,15 @@ namespace WpfPdfViewer
             }
             else
             {
-                pdfFileData = new PdfMetaData(FullPathFile);
+                pdfFileData = new PdfMetaData()
+                {
+                    curFullPathFile = FullPathFile
+                };
             }
             pdfFileData?.Initialize();
             return pdfFileData;
         }
+        public PdfMetaData() { }
 
         private void Initialize()
         {
@@ -57,8 +90,6 @@ namespace WpfPdfViewer
                 lstFavorites.AddRange(Favorites);
             }
         }
-
-        public PdfMetaData() { }
 
         public static void SavePdfFileData(PdfMetaData pdfFileData)
         {
@@ -81,29 +112,6 @@ namespace WpfPdfViewer
             }
         }
 
-        public PdfMetaData(string curFullPathFile)
-        {
-            this.curFullPathFile = curFullPathFile;
-        }
-        /// <summary>
-        /// the page no when this PDF was last opened
-        /// </summary>
-        public int LastPageNo;
-        /// <summary>
-        /// Could be duplicate: a PDF might be part of an assembled volume
-        /// </summary>
-        public bool HideThisPDFFile;
-
-        /*Normal = 0,Rotate90 = 1,Rotate180 = 2,Rotate270 = 3*/
-        public int Rotation;
-        public BookMark[] BookMarks;
-        public Favorite[] Favorites;
-        public string Notes;
-        public override string ToString()
-        {
-            return $"{Path.GetFileName(curFullPathFile)}";
-        }
-
         internal bool IsFavorite(int PageNo)
         {
             var isFav = false;
@@ -114,7 +122,7 @@ namespace WpfPdfViewer
             return isFav;
         }
 
-        internal void SetFavorite(int PageNo, bool IsFavorite)
+        internal void ToggleFavorite(int PageNo, bool IsFavorite)
         {
             for (int i = 0; i < lstFavorites.Count; i++)
             {
@@ -141,6 +149,10 @@ namespace WpfPdfViewer
 
             }
         }
+        public override string ToString()
+        {
+            return $"{Path.GetFileName(curFullPathFile)}";
+        }
     }
 
     [Serializable]
@@ -148,6 +160,10 @@ namespace WpfPdfViewer
     {
         public string FavoriteName;
         public int Pageno;
+        public override string ToString()
+        {
+            return $"{FavoriteName} {Pageno}".Trim();
+        }
     }
 
     [Serializable]
