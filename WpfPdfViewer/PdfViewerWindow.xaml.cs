@@ -35,12 +35,9 @@ namespace WpfPdfViewer
         }
 
         private int _CurrentPageNumber;
-        public int CurrentPageNumber { get { return _CurrentPageNumber; } set { if (_CurrentPageNumber != value) { _CurrentPageNumber = value; OnMyPropertyChanged(); } } }
+        public int CurrentPageNumber { get { return _CurrentPageNumber; } set { if (_CurrentPageNumber != value) { _CurrentPageNumber = value; this.Dispatcher.InvokeAsync(async () => await ShowPdfFileAsync(CurrentPageNumber)); OnMyPropertyChanged(); } } }
         private int _MaxPageNumber;
         public int MaxPageNumber { get { return _MaxPageNumber; } set { if (_MaxPageNumber != value) { _MaxPageNumber = value; OnMyPropertyChanged(); } } }
-
-        int _SliderValue;
-        public int SliderValue { get { return _SliderValue; } set { if (_SliderValue != value) { _SliderValue = value; OnMyPropertyChanged(); } } }
 
         bool _fShow2Pages = true;
         public bool Show2Pages { get { return _fShow2Pages; } set { _fShow2Pages = value; this.Dispatcher.InvokeAsync(async () => await ShowPdfFileAsync(CurrentPageNumber)); OnMyPropertyChanged(); } }
@@ -263,9 +260,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
             this._currentPdfDocument = pdfDoc;
             this.MaxPageNumber = (int)_currentPdfDocument.PageCount;
-            SliderChangedEnabled = false;
             this.slider.Maximum = this.MaxPageNumber;
-            SliderChangedEnabled = true;
             this.PdfUIEnabled = true;
             this.Title = $"MyPDFViewer {currentPdfMetaData.curFullPathFile}";
             if (PageNo == int.MaxValue)
@@ -308,18 +303,14 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
             try
             {
-                var saveSliderChangedEnable = SliderChangedEnabled;
                 this.CurrentPageNumber = pageNo;
-                var newSliderValue = _CurrentPageNumber;
-                if (newSliderValue != this.slider.Value) // rounding error for large PDFs
-                {
-                    SliderChangedEnabled = false;
-                    SliderValue = newSliderValue;
-                    SliderChangedEnabled = saveSliderChangedEnable;
-                }
-                var dv = new DocumentViewer();
-                var fd = new FixedDocument();
-                dv.Document = fd;
+                //var newSliderValue = _CurrentPageNumber;
+                //if (newSliderValue != this.slider.Value) // rounding error for large PDFs
+                //{
+                //    SliderChangedEnabled = false;
+                //    SliderValue = newSliderValue;
+                //    SliderChangedEnabled = saveSliderChangedEnable;
+                //}
                 //            this.Content = fd;
                 //            this.dpPage.Children.Add(fd);
 
@@ -497,13 +488,13 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             Navigate(forwardOrBack);
         }
 
-        private async void TxtPageNo_LostFocus(object sender, RoutedEventArgs e)
-        {
-            if (int.TryParse(txtPageNo.Text, out var newpgno))
-            {
-                await ShowPdfFileAsync(newpgno);
-            }
-        }
+        //private async void TxtPageNo_LostFocus(object sender, RoutedEventArgs e)
+        //{
+        //    if (int.TryParse(txtPageNo.Text, out var newpgno))
+        //    {
+        //        await ShowPdfFileAsync(newpgno);
+        //    }
+        //}
         private void DpPage_MouseDown(object sender, MouseButtonEventArgs e)
         {
             var pos = e.GetPosition(this.dpPage);
@@ -511,21 +502,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             Navigate(forward: leftSide ? false : true);
         }
 
-        bool SliderChangedEnabled = true;
-        private async void Slider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (SliderChangedEnabled)
-            {
-                var newpgno = (int)(this.slider.Value);
-                if (newpgno != CurrentPageNumber)
-                {
-                    SliderChangedEnabled = false;
-                    //                await Task.Delay(1);
-                    await ShowPdfFileAsync(newpgno);
-                    SliderChangedEnabled = true;
-                }
-            }
-        }
 
         async Task<bool> ChooseMusic()
         {
