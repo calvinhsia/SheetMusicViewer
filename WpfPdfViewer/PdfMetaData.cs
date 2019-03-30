@@ -27,7 +27,6 @@ namespace WpfPdfViewer
         [XmlIgnore]
         public PdfMetaData SucceedingPdfMetaData;
 
-
         /// <summary>
         /// the page no when this PDF was last opened
         /// </summary>

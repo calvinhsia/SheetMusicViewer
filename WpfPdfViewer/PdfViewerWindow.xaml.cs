@@ -23,9 +23,6 @@ using Windows.Storage.Streams;
 
 namespace WpfPdfViewer
 {
-    /// <summary>
-    /// Interaction logic for MainWindow.xaml
-    /// </summary>
     public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler PropertyChanged;
@@ -43,9 +40,6 @@ namespace WpfPdfViewer
         public bool Show2Pages { get { return _fShow2Pages; } set { _fShow2Pages = value; this.Dispatcher.InvokeAsync(async () => await ShowPdfFileAsync(CurrentPageNumber)); OnMyPropertyChanged(); } }
         internal int NumPagesPerView => _fShow2Pages ? 2 : 1;
 
-        /// <summary>
-        /// whether PDF specific UI is enabled. 
-        /// </summary>
         public bool PdfUIEnabled { get { return _currentPdfDocument != null; } set { OnMyPropertyChanged(); } }
 
         internal string _RootMusicFolder;
@@ -152,11 +146,9 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
               };
             this.Loaded += MainWindow_LoadedAsync;
         }
-        //public ObservableCollection<BitmapImage> PdfPages { get; set; } = new ObservableCollection<BitmapImage>();
 
         private async void MainWindow_LoadedAsync(object sender, RoutedEventArgs e)
         {
-            // https://blog.pieeatingninjas.be/2016/02/06/displaying-pdf-files-in-a-uwp-app/
             // https://blogs.windows.com/buildingapps/2017/01/25/calling-windows-10-apis-desktop-application/#RWYkd5C4WTeEybol.97
             try
             {
@@ -304,17 +296,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             try
             {
                 this.CurrentPageNumber = pageNo;
-                //var newSliderValue = _CurrentPageNumber;
-                //if (newSliderValue != this.slider.Value) // rounding error for large PDFs
-                //{
-                //    SliderChangedEnabled = false;
-                //    SliderValue = newSliderValue;
-                //    SliderChangedEnabled = saveSliderChangedEnable;
-                //}
-                //            this.Content = fd;
-                //            this.dpPage.Children.Add(fd);
-
-                //                    this.Content = fixedPage;
                 var lstItems = new List<UIElement>();
                 for (int i = 0; i < NumPagesPerView; i++)
                 {
@@ -376,48 +357,37 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     }
                 }
                 this.dpPage.Children.Clear();
-                if (NumPagesPerView > 0)
+                var grid1 = new Grid();
+                //             gr.RowDefinitions.Add(New RowDefinition() With {.Height = CType((New GridLengthConverter()).ConvertFromString("Auto"), GridLength)})
+                for (int i = 0; i < lstItems.Count; i++)
                 {
-                    var grid1 = new Grid();
-                    //             gr.RowDefinitions.Add(New RowDefinition() With {.Height = CType((New GridLengthConverter()).ConvertFromString("Auto"), GridLength)})
-                    for (int i = 0; i < lstItems.Count; i++)
-                    {
-                        //                    grid1.ColumnDefinitions.Add(new ColumnDefinition() { Width = (GridLength)(new GridLengthConverter()).ConvertFromString("Auto") });
-                        grid1.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
-                    }
-                    for (int i = 0; i < lstItems.Count; i++)
-                    {
-                        var chkFav = new CheckBox()
-                        {
-                            Content = "Favorite",
-                            Foreground = Brushes.Yellow,
-                            Tag = pageNo + i,
-                            IsChecked = currentPdfMetaData.IsFavorite(pageNo + i),
-                            HorizontalAlignment = (i == 0 ? HorizontalAlignment.Left : HorizontalAlignment.Right)
-                        };
-                        chkFav.Checked += (o, e) =>
-                          {
-                              currentPdfMetaData.ToggleFavorite((int)chkFav.Tag, true);
-                          };
-                        chkFav.Unchecked += (o, e) =>
-                        {
-                            currentPdfMetaData.ToggleFavorite((int)chkFav.Tag, false);
-                        };
-                        grid1.Children.Add(chkFav);
-                        Grid.SetColumn(chkFav, i);
-                        grid1.Children.Add(lstItems[i]);
-                        Grid.SetColumn(lstItems[i], i);
-                    }
-                    this.dpPage.Children.Add(grid1);
+                    //                    grid1.ColumnDefinitions.Add(new ColumnDefinition() { Width = (GridLength)(new GridLengthConverter()).ConvertFromString("Auto") });
+                    grid1.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
                 }
-                else
+                for (int i = 0; i < lstItems.Count; i++)
                 {
-                    foreach (var itm in lstItems)
+                    var chkFav = new CheckBox()
                     {
-                        this.dpPage.Children.Add(itm);
-                    }
+                        Content = "Favorite",
+                        Foreground = Brushes.Yellow,
+                        Tag = pageNo + i,
+                        IsChecked = currentPdfMetaData.IsFavorite(pageNo + i),
+                        HorizontalAlignment = (i == 0 ? HorizontalAlignment.Left : HorizontalAlignment.Right)
+                    };
+                    chkFav.Checked += (o, e) =>
+                      {
+                          currentPdfMetaData.ToggleFavorite((int)chkFav.Tag, true);
+                      };
+                    chkFav.Unchecked += (o, e) =>
+                    {
+                        currentPdfMetaData.ToggleFavorite((int)chkFav.Tag, false);
+                    };
+                    grid1.Children.Add(chkFav);
+                    Grid.SetColumn(chkFav, i);
+                    grid1.Children.Add(lstItems[i]);
+                    Grid.SetColumn(lstItems[i], i);
                 }
-
+                this.dpPage.Children.Add(grid1);
             }
             catch (Exception ex)
             {
@@ -444,7 +414,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                         e.Handled = true;
                         break;
                 }
-
             }
         }
 
