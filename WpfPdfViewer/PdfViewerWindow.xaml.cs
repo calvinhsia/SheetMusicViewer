@@ -319,6 +319,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             this._currentPdfDocument = pdfDoc;
             this.MaxPageNumber = (int)_currentPdfDocument.PageCount;
             this.slider.Maximum = this.MaxPageNumber;
+            this.slider.IsDirectionReversed = true;
             this.PdfUIEnabled = true;
             this.Title = $"MyPDFViewer {currentPdfMetaData.curFullPathFile}";
             if (PageNo == int.MaxValue)
@@ -564,10 +565,14 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             {
                 switch (e.Key)
                 {
+                    case Key.Up:
+                    case Key.PageUp:
                     case Key.Left:
                         e.Handled = true;
                         Navigate(forward: false);
                         break;
+                    case Key.Down:
+                    case Key.PageDown:
                     case Key.Right:
                         Navigate(forward: true);
                         e.Handled = true;
@@ -653,6 +658,10 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         async void BtnChooser_Click(object sender, RoutedEventArgs e)
         {
             await ChooseMusic();
+        }
+        void BtnQuit_Click(object sender, RoutedEventArgs e)
+        {
+            this.Close();
         }
         void CloseCurrentPdfFile()
         {
