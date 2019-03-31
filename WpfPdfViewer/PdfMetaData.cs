@@ -150,7 +150,7 @@ namespace WpfPdfViewer
         }
         public override string ToString()
         {
-            return $"{Path.GetFileName(curFullPathFile)}";
+            return $"{Path.GetFileName(curFullPathFile)} {LastPageNo}";
         }
     }
 

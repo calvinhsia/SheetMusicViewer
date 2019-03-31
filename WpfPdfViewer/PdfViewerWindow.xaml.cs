@@ -7,6 +7,7 @@ using System.Linq;
 using System.Printing;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -32,12 +33,25 @@ namespace WpfPdfViewer
         }
 
         private int _CurrentPageNumber;
-        public int CurrentPageNumber { get { return _CurrentPageNumber; } set { if (_CurrentPageNumber != value) { _CurrentPageNumber = value; this.Dispatcher.InvokeAsync(async () => await ShowPdfFileAsync(CurrentPageNumber, ClearCache:false)); OnMyPropertyChanged(); } } }
+        public int CurrentPageNumber
+        {
+            get { return _CurrentPageNumber; }
+            set
+            {
+                if (_CurrentPageNumber != value && currentPdfMetaData != null)
+                {
+                    _CurrentPageNumber = value;
+                    this.dpPage.Children.Clear();// force regen
+                    this.Dispatcher.InvokeAsync(async () => await ShowPageAsync(value, ClearCache: false));
+                    OnMyPropertyChanged();
+                }
+            }
+        }
         private int _MaxPageNumber;
         public int MaxPageNumber { get { return _MaxPageNumber; } set { if (_MaxPageNumber != value) { _MaxPageNumber = value; OnMyPropertyChanged(); } } }
 
         bool _fShow2Pages = true;
-        public bool Show2Pages { get { return _fShow2Pages; } set { _fShow2Pages = value; this.Dispatcher.InvokeAsync(async () => await ShowPdfFileAsync(CurrentPageNumber, ClearCache:true)); OnMyPropertyChanged(); } }
+        public bool Show2Pages { get { return _fShow2Pages; } set { _fShow2Pages = value; this.dpPage.Children.Clear(); this.Dispatcher.InvokeAsync(async () => await ShowPageAsync(CurrentPageNumber, ClearCache: true)); OnMyPropertyChanged(); } }
         internal int NumPagesPerView => _fShow2Pages ? 2 : 1;
 
         public bool PdfUIEnabled { get { return _currentPdfDocument != null; } set { OnMyPropertyChanged(); } }
@@ -47,12 +61,50 @@ namespace WpfPdfViewer
 
         PdfDocument _currentPdfDocument = null;
         PdfMetaData currentPdfMetaData = null;
-        readonly Dictionary<int, Grid> dictGridCache= new Dictionary<int, Grid>(); // for either show2pages, pageno ->grid. results in dupes if even, then odd number on show2pages
+        static PdfViewerWindow s_pdfViewerWindow;
+
+        class CacheEntry
+        {
+            public static CacheEntry AddCacheEntry(int PageNo)
+            {
+                var cacheEntry = new CacheEntry()
+                {
+                    pageNo = PageNo,
+                    age = currentCacheAge++
+                };
+                cacheEntry.task = s_pdfViewerWindow.CalculateGridForPageAync(cacheEntry);
+
+                int cacheSize = 500;
+                if (s_pdfViewerWindow.dictCache.Count > cacheSize)
+                {
+                    var lst = s_pdfViewerWindow.dictCache.Values.OrderBy(s => s.age).Take(s_pdfViewerWindow.dictCache.Count - cacheSize);
+                    foreach (var entry in lst)
+                    {
+                        s_pdfViewerWindow.dictCache.Remove(entry.pageNo);
+                    }
+                }
+                s_pdfViewerWindow.dictCache[PageNo] = cacheEntry;
+                return cacheEntry;
+            }
+            internal CancellationTokenSource cts = new CancellationTokenSource();
+            public int pageNo;
+            public Task<Grid> task;
+            public int age; // just a growing int
+            public override string ToString()
+            {
+                return $"{pageNo} age={age} IsComp={task.IsCompleted}";
+            }
+        }
+        static int currentCacheAge;
+        readonly Dictionary<int, CacheEntry> dictCache = new Dictionary<int, CacheEntry>(); // for either show2pages, pageno ->grid. results in dupes if even, then odd number on show2pages
 
         public string FullPathCurrentPdfFile => currentPdfMetaData?.curFullPathFile;
+
+
         public PdfViewerWindow()
         {
             InitializeComponent();
+            s_pdfViewerWindow = this;
             this.DataContext = this;
             this.Width = Properties.Settings.Default.MainWindowSize.Width;
             this.Height = Properties.Settings.Default.MainWindowSize.Height;
@@ -157,10 +209,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 var lastPdfOpen = Properties.Settings.Default.LastPDFOpen;
                 if (string.IsNullOrEmpty(_RootMusicFolder))
                 {
-                    if (!await ChooseMusic())
-                    {
-                        return;
-                    }
+                    await ChooseMusic();
                 }
                 else
                 {
@@ -168,7 +217,11 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     currentPdfMetaData = lstPdfMetaFileData.Where(p => p.curFullPathFile == lastPdfOpen).FirstOrDefault();
                     if (currentPdfMetaData != null)
                     {
-                        await LoadPdfFileAsync(currentPdfMetaData, currentPdfMetaData.LastPageNo);
+                        await LoadPdfFileAndShowAsync(currentPdfMetaData, currentPdfMetaData.LastPageNo);
+                    }
+                    else
+                    {
+                        await ChooseMusic();
                     }
                 }
             }
@@ -242,11 +295,9 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
         }
 
-        /// <summary>
-        /// load the PDF file from disk and show
-        /// </summary>
-        private async Task LoadPdfFileAsync(PdfMetaData pdfMetaData, int PageNo)
+        private async Task LoadPdfFileAndShowAsync(PdfMetaData pdfMetaData, int PageNo)
         {
+            CloseCurrentPdfFile();
             currentPdfMetaData = pdfMetaData;
             StorageFile f = await StorageFile.GetFileFromPathAsync(currentPdfMetaData.curFullPathFile);
             var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
@@ -263,7 +314,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             {
                 PageNo = MaxPageNumber - 1;
             }
-            await ShowPdfFileAsync(PageNo, ClearCache:true);
+            await ShowPageAsync(PageNo, ClearCache: true);
         }
 
         /// <summary>
@@ -271,15 +322,19 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         /// </summary>
         /// <param name="pageNo"></param>
         /// <param name="ClearCache"></param>
-        private async Task ShowPdfFileAsync(int pageNo, bool ClearCache)
+        private async Task ShowPageAsync(int pageNo, bool ClearCache)
         {
             if (ClearCache)
             {
-                dictGridCache.Clear();
+                dictCache.Clear();
             }
             if (currentPdfMetaData == null)
             {
                 this.dpPage.Children.Clear();
+                return;
+            }
+            if (pageNo == CurrentPageNumber && dpPage.Children.Count > 0)
+            {
                 return;
             }
             if (pageNo < 0)
@@ -287,7 +342,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 if (currentPdfMetaData.PriorPdfMetaData != null)
                 {
                     var prior = currentPdfMetaData.PriorPdfMetaData;
-                    await LoadPdfFileAsync(prior, int.MaxValue);
+                    await LoadPdfFileAndShowAsync(prior, int.MaxValue);
                     return;
                 }
                 pageNo = 0;
@@ -297,7 +352,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 if (currentPdfMetaData.SucceedingPdfMetaData != null)
                 {
                     var next = currentPdfMetaData.SucceedingPdfMetaData;
-                    await LoadPdfFileAsync(next, PageNo: 0);
+                    await LoadPdfFileAndShowAsync(next, PageNo: 0);
                     return;
                 }
                 pageNo = MaxPageNumber - NumPagesPerView;
@@ -309,12 +364,47 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             try
             {
                 this.CurrentPageNumber = pageNo;
-                if (!dictGridCache.TryGetValue(pageNo, out var grid))
+                // The user could have held down rt-arrow, advancing thru doc faster than we can render
+                // so we check for any prior tasks that have not completed and cancel them.
+                //var lstToDelete = new List<int>();
+                //foreach (var entry in dictCache.Values.Where(v => !v.task.IsCompleted))
+                //{
+                //    if (entry.pageNo != pageNo) // don't del the task getting the current pgno
+                //    {
+                //        lstToDelete.Add(entry.pageNo);
+                //        entry.cts.Cancel();
+                //    }
+                //}
+                //if (lstToDelete.Count > 0)
+                //{
+                //    foreach (var item in lstToDelete)
+                //    {
+                //        dictCache.Remove(item);
+                //    }
+                //}
+                if (!dictCache.TryGetValue(pageNo, out var cacheEntry) || cacheEntry.task.IsCanceled)
                 {
-                    grid = await CalculateGridForPage(pageNo);
-                    dictGridCache[pageNo] = grid;
+                    cacheEntry = CacheEntry.AddCacheEntry(pageNo);
+                }
+
+                if (pageNo + NumPagesPerView <= MaxPageNumber && !dictCache.ContainsKey(pageNo + NumPagesPerView))
+                {
+                    CacheEntry.AddCacheEntry(pageNo + NumPagesPerView);
+                }
+                if (pageNo - NumPagesPerView >= 0 && !dictCache.ContainsKey(pageNo - NumPagesPerView))
+                {
+                    CacheEntry.AddCacheEntry(pageNo - NumPagesPerView);
+                }
+                if (!cacheEntry.task.IsCompleted)
+                {
+                    await cacheEntry.task;
                 }
                 this.dpPage.Children.Clear();
+                if (cacheEntry.task.IsCanceled)
+                {
+                    dictCache.Remove(cacheEntry.pageNo);
+                }
+                var grid = cacheEntry.task.Result;
                 this.dpPage.Children.Add(grid);
             }
             catch (Exception ex)
@@ -325,12 +415,14 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
         }
 
-        async Task<Grid> CalculateGridForPage(int pageNo)
+        async Task<Grid> CalculateGridForPageAync(CacheEntry cacheEntry)
         {
             var grid = new Grid();
             var lstItems = new List<UIElement>();
+            var pageNo = cacheEntry.pageNo;
             for (int i = 0; i < NumPagesPerView; i++)
             {
+                cacheEntry.cts.Token.ThrowIfCancellationRequested();
                 if (pageNo + i < _MaxPageNumber)
                 {
                     using (var pdfPage = _currentPdfDocument.GetPage((uint)(pageNo + i)))
@@ -351,8 +443,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                             }
 
                             await pdfPage.RenderToStreamAsync(strm, renderOpts);
-                            //var enc = new PngBitmapEncoder();
-                            //enc.Frames.Add(BitmapFrame.Create)
+                            cacheEntry.cts.Token.ThrowIfCancellationRequested();
                             bmi.BeginInit();
                             bmi.StreamSource = strm.AsStream();
                             bmi.Rotation = (Rotation)currentPdfMetaData.Rotation;
@@ -434,7 +525,8 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         async void BtnRotate_Click(object sender, RoutedEventArgs e)
         {
             currentPdfMetaData.Rotation = (currentPdfMetaData.Rotation + 1) % 4;
-            await ShowPdfFileAsync(CurrentPageNumber, ClearCache:true);
+            this.dpPage.Children.Clear();
+            await ShowPageAsync(CurrentPageNumber, ClearCache: true);
         }
 
         async void Navigate(bool forward)
@@ -448,7 +540,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             {
                 newPageNo -= NumPagesPerView;
             }
-            await ShowPdfFileAsync(newPageNo, ClearCache:false);
+            await ShowPageAsync(newPageNo, ClearCache: false);
         }
 
         void BtnBookMarks_Click(object sender, RoutedEventArgs e)
@@ -461,7 +553,8 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             base.OnRenderSizeChanged(sizeInfo);
             if (_currentPdfDocument != null)
             {
-                await ShowPdfFileAsync(CurrentPageNumber, ClearCache:true);
+                this.dpPage.Children.Clear();
+                await ShowPageAsync(CurrentPageNumber, ClearCache: true);
             }
         }
 
@@ -493,11 +586,10 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             win.Initialize(this);
             if (win.ShowDialog() == true)
             {
-                CloseCurrentPdfFile();
                 currentPdfMetaData = win.chosenPdfMetaData;
                 if (currentPdfMetaData != null)
                 {
-                    await LoadPdfFileAsync(currentPdfMetaData, currentPdfMetaData.LastPageNo);
+                    await LoadPdfFileAndShowAsync(currentPdfMetaData, currentPdfMetaData.LastPageNo);
                     retval = true;
                 }
             }
@@ -512,6 +604,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         {
             if (currentPdfMetaData != null)
             {
+                dictCache.Clear();
                 currentPdfMetaData.LastPageNo = CurrentPageNumber;
                 PdfMetaData.SavePdfFileData(currentPdfMetaData);
                 _currentPdfDocument = null;
@@ -525,6 +618,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 
         async static Task<DocumentViewer> CombinePDFsToASinglePdfAsync()
         {
+            await CombinePDFsToASinglePdfAsync();// to quiet warning about unused func
             var docvwr = new DocumentViewer();
 
             //             //pdfSourceDoc = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Ragtime\Collections\The Music of James Scott001.pdf";
