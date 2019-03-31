@@ -44,7 +44,7 @@ namespace WpfPdfViewer
             this._pdfViewerWindow = pdfViewerWindow;
             this.Top = pdfViewerWindow.Top;
             this.Left = pdfViewerWindow.Left;
-            this.Height = pdfViewerWindow.Height;
+            this.Height = pdfViewerWindow.ActualHeight;
             this.txtCurrentRootFolder.Text = _pdfViewerWindow._RootMusicFolder;
             this.Loaded += ChooseMusic_Loaded;
 
