@@ -57,7 +57,7 @@ namespace WpfPdfViewer
             set
             {
                 _fShow2Pages = value;
-                chkFav1.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+                chkFav1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
                 this.dpPage.Children.Clear();
                 this.Dispatcher.InvokeAsync(async () => await ShowPageAsync(CurrentPageNumber, ClearCache: true));
                 OnMyPropertyChanged();
