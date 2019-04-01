@@ -12,6 +12,9 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using Windows.Data.Pdf;
+using Windows.Storage;
+using Windows.Storage.Streams;
 
 namespace WpfPdfViewer
 {
@@ -67,7 +70,7 @@ namespace WpfPdfViewer
             }
         }
 
-        void UpdateTreeView()
+        async void UpdateTreeView()
         {
             _TreeView = new TreeView();
             this.dpTview.Children.Clear();
@@ -94,13 +97,48 @@ namespace WpfPdfViewer
                 {
                     _lstFavoriteEntries.Add(new FavoriteEntry() { _favorite = fav, _pdfMetadata = pdfMetaDataItem });
                 }
-                var tvItem = new TreeViewItem()
+                if (pdfMetaDataItem.PriorPdfMetaData == null)
                 {
-                    Header = System.IO.Path.GetFileNameWithoutExtension(pdfMetaDataItem.curFullPathFile),
-                    ToolTip = pdfMetaDataItem.curFullPathFile,
-                    Tag = pdfMetaDataItem
-                };
-                tvitemFiles.Items.Add(tvItem);
+                    StorageFile f = await StorageFile.GetFileFromPathAsync(pdfMetaDataItem.curFullPathFile);
+                    var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
+                    var bmi = new BitmapImage();
+                    using (var page = pdfDoc.GetPage(0))
+                    {
+                        using (var strm = new InMemoryRandomAccessStream())
+                        {
+                            var rect = page.Dimensions.ArtBox;
+                            var renderOpts = new PdfPageRenderOptions()
+                            {
+                                DestinationWidth = (uint)50,
+                                DestinationHeight = (uint)80,
+                            };
+
+                            await page.RenderToStreamAsync(strm, renderOpts);
+                            //var enc = new PngBitmapEncoder();
+                            //enc.Frames.Add(BitmapFrame.Create)
+                            bmi.BeginInit();
+                            bmi.StreamSource = strm.AsStream();
+                            bmi.CacheOption = BitmapCacheOption.OnLoad;
+                            bmi.Rotation = (Rotation)pdfMetaDataItem.Rotation;
+                            bmi.EndInit();
+                        }
+                    }
+
+                    var tvItem = new TreeViewItem()
+                    {
+                        ToolTip = pdfMetaDataItem.curFullPathFile,
+                        Tag = pdfMetaDataItem
+                    };
+                    var img = new Image()
+                    {
+                        Source = bmi
+                    };
+                    var sp = new StackPanel() { Orientation = Orientation.Horizontal };
+                    sp.Children.Add(img);
+                    sp.Children.Add(new TextBlock() { Text = System.IO.Path.GetFileNameWithoutExtension(pdfMetaDataItem.curFullPathFile) });
+                    tvItem.Header = sp;
+                    tvitemFiles.Items.Add(tvItem);
+                }
             }
 
             foreach (var favEntry in _lstFavoriteEntries)
