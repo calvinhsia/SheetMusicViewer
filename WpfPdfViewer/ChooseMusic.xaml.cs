@@ -47,7 +47,7 @@ namespace WpfPdfViewer
             this.Height = pdfViewerWindow.ActualHeight;
             this.txtCurrentRootFolder.Text = _pdfViewerWindow._RootMusicFolder;
             this.Loaded += ChooseMusic_Loaded;
-
+            this.Owner = pdfViewerWindow;
         }
         async void BtnChangeMusicFolder_Click(object sender, RoutedEventArgs e)
         {

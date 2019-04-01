@@ -31,11 +31,11 @@
             <Button Content="_Quit"  Margin="0,20,00,0" VerticalAlignment="Top" ToolTip="Open another document"  Click="BtnQuit_Click"/>
         </StackPanel>
         <Grid Grid.Column="1" >
-            <Grid Grid.Row="0" Name="dpPage" Background="#FF190808" MouseDown="DpPage_MouseDown"/>
-            <Grid Grid.Row="0" Background="{x:Null}" Height="25" VerticalAlignment="Top">
-                <CheckBox Name ="chkFav0" Foreground="Yellow" Canvas.Left="0" HorizontalAlignment="Left" Content="Favorite" Checked="ChkFavToggled" Unchecked="ChkFavToggled" Focusable="False"/>
-                <TextBlock Name="txtBoxTitle" Foreground="Orange" HorizontalAlignment="Center" FontSize="20"/>
-                <CheckBox Name="chkFav1" Foreground="Yellow" Canvas.Left="800" HorizontalAlignment="Right" Content="Favorite" Checked="ChkFavToggled" Unchecked="ChkFavToggled" Focusable="False"/>
+            <Grid Name="dpPage" Background="#FF190808" MouseDown="DpPage_MouseDown"/>
+            <Grid Background="{x:Null}" Height="25" VerticalAlignment="Top">
+                <CheckBox Name ="chkFav0" Foreground="Yellow" HorizontalAlignment="Left" Content="Favorite" Checked="ChkFavToggled" Unchecked="ChkFavToggled" Focusable="False"/>
+                <TextBlock Name="txtBoxTitle"  Text="" Foreground="Orange" HorizontalAlignment="Center" FontSize="20"/>
+                <CheckBox Name="chkFav1" Foreground="Yellow" HorizontalAlignment="Right" Content="Favorite" Checked="ChkFavToggled" Unchecked="ChkFavToggled" Focusable="False"/>
             </Grid>
         </Grid>
 

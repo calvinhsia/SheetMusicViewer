@@ -678,6 +678,10 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     await LoadPdfFileAndShowAsync(currentPdfMetaData, currentPdfMetaData.LastPageNo);
                     retval = true;
                 }
+                else
+                {
+                    CloseCurrentPdfFile();
+                }
             }
             return retval;
 
@@ -692,6 +696,8 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         }
         void CloseCurrentPdfFile()
         {
+            this.dpPage.Children.Clear();
+            this.txtBoxTitle.Text = string.Empty;
             if (currentPdfMetaData != null)
             {
                 dictCache.Clear();
