@@ -10,8 +10,9 @@
     <Grid >
         <Grid Name="dpPage" Background="#FF190808" MouseDown="DpPage_MouseDown" Margin="0,0,0,0"/>
         <Grid Background="{x:Null}" Height="45" VerticalAlignment="Top">
-            <StackPanel Orientation="Vertical" Background="Green" Opacity=".5">
+            <StackPanel Orientation="Vertical" Background="LightBlue" Opacity=".5">
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,0">
+                    <CheckBox Name ="chkFav0" Foreground="Yellow" HorizontalAlignment="Left" Content="Favorite" Checked="ChkFavToggled" Unchecked="ChkFavToggled" Focusable="False" IsEnabled="{Binding PdfUIEnabled}" />
                     <Button x:Name="btnPrev" Content="&lt;" HorizontalAlignment="Left" Margin="30,0,0,0" VerticalAlignment="Top" Click="BtnPrevNext_Click" IsEnabled="{Binding PdfUIEnabled}"/>
                     <TextBox x:Name="txtPageNo" HorizontalAlignment="Left" Width="25" Margin="5,0,5,0" Text="{Binding CurrentPageNumber}" VerticalAlignment="Top" IsEnabled="{Binding PdfUIEnabled}" />
                     <Button x:Name="btnNext" Content="&gt;" HorizontalAlignment="Left" VerticalAlignment="Top" Click="BtnPrevNext_Click" IsEnabled="{Binding PdfUIEnabled}"/>
@@ -24,13 +25,14 @@
 
                     <Button Content="_Chooser" HorizontalAlignment="Right" Margin="10,0,00,0" VerticalAlignment="Top" ToolTip="Open another document"  Click="BtnChooser_Click"/>
                     <Button Content="_Quit"  Margin="10,0,00,0" VerticalAlignment="Top" ToolTip="Open another document"  Click="BtnQuit_Click"/>
+                    <TextBlock Name="txtBoxTitle"  Text="{Binding PdfTitle}" Foreground="DarkBlue" HorizontalAlignment="Center" FontSize="10"/>
+                    <CheckBox Name="chkFav1" Foreground="Yellow" HorizontalAlignment="Right" Content="Favorite" Checked="ChkFavToggled" Unchecked="ChkFavToggled" Focusable="False" IsEnabled="{Binding PdfUIEnabled}" />
                 </StackPanel>
+                <DockPanel>
+                    <TextBlock Name="txtDesc0" Text="{Binding Description0}"/>
+                    <TextBlock Name="txtDesc1" Text="{Binding Description1}" HorizontalAlignment="Right"/>
+                </DockPanel>
             </StackPanel>
-            <Grid Height="25" VerticalAlignment="Top" Margin="0,20,0,0">
-                <CheckBox Name ="chkFav0" Foreground="Yellow" HorizontalAlignment="Left" Content="Favorite" Checked="ChkFavToggled" Unchecked="ChkFavToggled" Focusable="False"/>
-                <TextBlock Name="txtBoxTitle"  Text="testtext" Foreground="DarkBlue" HorizontalAlignment="Center" FontSize="20"/>
-                <CheckBox Name="chkFav1" Foreground="Yellow" HorizontalAlignment="Right" Content="Favorite" Checked="ChkFavToggled" Unchecked="ChkFavToggled" Focusable="False"/>
-            </Grid>
         </Grid>
 
 

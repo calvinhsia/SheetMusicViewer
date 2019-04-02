@@ -50,6 +50,9 @@ namespace WpfPdfViewer
         private int _MaxPageNumber;
         public int MaxPageNumber { get { return _MaxPageNumber; } set { if (_MaxPageNumber != value) { _MaxPageNumber = value; OnMyPropertyChanged(); } } }
 
+        public string PdfTitle { get { return currentPdfMetaData?.curFullPathFile; } }
+        public string Description0 { get { return currentPdfMetaData?.GetDescription(CurrentPageNumber); } }
+        public string Description1 { get { return currentPdfMetaData?.GetDescription(CurrentPageNumber + 1); } }
         bool _fShow2Pages = true;
         public bool Show2Pages
         {
@@ -58,6 +61,7 @@ namespace WpfPdfViewer
             {
                 _fShow2Pages = value;
                 chkFav1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
+                txtDesc1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
                 this.dpPage.Children.Clear();
                 this.Dispatcher.InvokeAsync(async () => await ShowPageAsync(CurrentPageNumber, ClearCache: true));
                 OnMyPropertyChanged();
@@ -333,7 +337,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             this.slider.Maximum = this.MaxPageNumber;
             //this.slider.IsDirectionReversed = true;
             this.PdfUIEnabled = true;
-            this.txtBoxTitle.Text = $"{currentPdfMetaData?.curFullPathFile}";
+            OnMyPropertyChanged(nameof(PdfTitle));
             if (PageNo == int.MaxValue)
             {
                 PageNo = MaxPageNumber - 1;
@@ -414,9 +418,11 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     }
                     var grid = cacheEntry.task.Result;
                     this.dpPage.Children.Add(grid);
+                    OnMyPropertyChanged(nameof(Description0));
                     chkFav0.IsChecked = currentPdfMetaData.IsFavorite(pageNo);
                     if (NumPagesPerView > 1)
                     {
+                        OnMyPropertyChanged(nameof(Description1));
                         chkFav1.IsChecked = currentPdfMetaData.IsFavorite(pageNo + 1);
                     }
                 }
@@ -699,7 +705,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         void CloseCurrentPdfFile()
         {
             this.dpPage.Children.Clear();
-            this.txtBoxTitle.Text = string.Empty;
             if (currentPdfMetaData != null)
             {
                 dictCache.Clear();
@@ -711,6 +716,9 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 CurrentPageNumber = 0;
                 this.dpPage.Children.Clear();
             }
+            OnMyPropertyChanged(nameof(PdfTitle));
+            OnMyPropertyChanged(nameof(Description0));
+            OnMyPropertyChanged(nameof(Description1));
             this.PdfUIEnabled = false;
         }
 

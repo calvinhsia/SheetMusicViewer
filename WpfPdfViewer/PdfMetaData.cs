@@ -17,6 +17,9 @@ namespace WpfPdfViewer
         public string curFullPathFile;
         [XmlIgnore]
         public List<Favorite> lstFavorites;
+
+        [XmlIgnore]
+        public List<TOCEntry> lstTocEntries;
         /// <summary>
         /// for continued PDF: e.g. file1.pdf, file2.pdf. Forms a linked list
         /// </summary>
@@ -35,6 +38,16 @@ namespace WpfPdfViewer
 
         bool IsDirty = false;
         int initialLastPageNo;
+
+        internal string GetDescription(int currentPageNumber)
+        {
+            var str = string.Empty;
+            foreach (var ent in lstTocEntries.Where(e => e.PageNo == currentPageNumber))
+            {
+                str += ent+" ";
+            }
+            return str.Trim();
+        }
 
 
         /// <summary>
@@ -108,6 +121,11 @@ namespace WpfPdfViewer
             if (Favorites != null)
             {
                 lstFavorites.AddRange(Favorites);
+            }
+            lstTocEntries = new List<TOCEntry>();
+            if (TableOfContents != null)
+            {
+                lstTocEntries.AddRange(TableOfContents);
             }
         }
 
