@@ -94,7 +94,7 @@ namespace WpfPdfViewer
                     };
                     cacheEntry.task = s_pdfViewerWindow.CalculateGridForPageAync(cacheEntry);
 
-                    int cacheSize = 500;
+                    int cacheSize = 50;
                     if (s_pdfViewerWindow.dictCache.Count > cacheSize)
                     {
                         var lst = s_pdfViewerWindow.dictCache.Values.OrderBy(s => s.age).Take(s_pdfViewerWindow.dictCache.Count - cacheSize);
@@ -228,6 +228,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             {
                 this.WindowState = (WindowState)Properties.Settings.Default.MainWindowState;
                 this.WindowStyle = WindowStyle.None;
+                this.Title = "MyMusicViewer"; // for task bar
                 var lastPdfOpen = Properties.Settings.Default.LastPDFOpen;
                 if (string.IsNullOrEmpty(_RootMusicFolder))
                 {
@@ -236,10 +237,10 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 else
                 {
                     await LoadAllPdfMetaDataFromDiskAsync();
-                    currentPdfMetaData = lstPdfMetaFileData.Where(p => p.curFullPathFile == lastPdfOpen).FirstOrDefault();
-                    if (currentPdfMetaData != null)
+                    var lastPdfMetaData = lstPdfMetaFileData.Where(p => p.curFullPathFile == lastPdfOpen).FirstOrDefault();
+                    if (lastPdfMetaData != null)
                     {
-                        await LoadPdfFileAndShowAsync(currentPdfMetaData, currentPdfMetaData.LastPageNo);
+                        await LoadPdfFileAndShowAsync(lastPdfMetaData, lastPdfMetaData.LastPageNo);
                     }
                     else
                     {
@@ -330,7 +331,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             this._currentPdfDocument = pdfDoc;
             this.MaxPageNumber = (int)_currentPdfDocument.PageCount;
             this.slider.Maximum = this.MaxPageNumber;
-            this.slider.IsDirectionReversed = true;
+            //this.slider.IsDirectionReversed = true;
             this.PdfUIEnabled = true;
             this.txtBoxTitle.Text = $"{currentPdfMetaData?.curFullPathFile}";
             if (PageNo == int.MaxValue)
@@ -350,6 +351,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             if (ClearCache)
             {
                 dictCache.Clear();
+                currentCacheAge = 0;
             }
             if (currentPdfMetaData == null)
             {
@@ -426,7 +428,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     var lstToDelete = new List<int>();
                     foreach (var entry in dictCache.Values.Where(v => !v.task.IsCompleted))
                     {
-                        if (entry.pageNo != pageNo) // don't del the task getting the current pgno
+                        if (entry.pageNo != pageNo && currentCacheAge - entry.age > 5) // don't del the task getting the current pgno
                         {
                             lstToDelete.Add(entry.pageNo);
                             entry.cts.Cancel();
@@ -672,10 +674,10 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             win.Initialize(this);
             if (win.ShowDialog() == true)
             {
-                currentPdfMetaData = win.chosenPdfMetaData;
-                if (currentPdfMetaData != null)
+                var pdfMetaData = win.chosenPdfMetaData;
+                if (pdfMetaData != null)
                 {
-                    await LoadPdfFileAndShowAsync(currentPdfMetaData, currentPdfMetaData.LastPageNo);
+                    await LoadPdfFileAndShowAsync(pdfMetaData, pdfMetaData.LastPageNo);
                     retval = true;
                 }
                 else

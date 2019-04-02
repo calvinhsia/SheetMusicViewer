@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Xml;
 using System.Xml.Serialization;
 
 namespace WpfPdfViewer
@@ -17,12 +18,12 @@ namespace WpfPdfViewer
         [XmlIgnore]
         public List<Favorite> lstFavorites;
         /// <summary>
-        /// for continued PDF: e.g. file1.pdf, file2.pdf
+        /// for continued PDF: e.g. file1.pdf, file2.pdf. Forms a linked list
         /// </summary>
         [XmlIgnore]
         public PdfMetaData PriorPdfMetaData;
         /// <summary>
-        /// for continued PDF: e.g. file1.pdf, file2.pdf
+        /// for continued PDF: e.g. file1.pdf, file2.pdf. Forms a linked list
         /// </summary>
         [XmlIgnore]
         public PdfMetaData SucceedingPdfMetaData;
@@ -31,14 +32,33 @@ namespace WpfPdfViewer
         /// the page no when this PDF was last opened
         /// </summary>
         public int LastPageNo;
+
+        bool IsDirty = false;
+        int initialLastPageNo;
+
+
         /// <summary>
-        /// Could be duplicate: a PDF might be part of an assembled volume
+        /// The Table of contents of a songbook shows the scanned page numbers, which may not match the actual PDF page numbers (there could be a cover page scanned
+        /// or could be a multivolume set)
+        /// We want to keep the scabbed ORC TOC editing, cleanup, true and minimize required editing, so keep the original page numbers.
+        /// The scanned imported OCR TOC will show the physical page no, but not the actual PDF page no.
+        /// This value will map between the 2 so that the imported scanned TOC saved as XML will not need to be adjusted.
+        /// For 1st, 2nd, 3rd volumes, the offset from the actual scanned page number (as visible on the page) to the PDF page number
+        /// e.g. the very 1st volume might have a cover page, which is page 0. Viewing song Foobar might show page 44, but it's really PdfPage=45, 
+        /// so we set PageNumberOffset to 1
+        /// For vol 4 (PriorPdfMetaData != null), the 1st song "Please Mr Postman" might show page 403, but it's really PdfPage 0. So PageNumberOffset = 403
+        /// So the XML for the song will say 403 (same as scanned TOC), but the actual PDFpage no in vol 4 = (403 - PageNumberOffset == 0)
+        /// The next song "Poor Side Of Town" on page 404 ins on PdfPage 1. Toc = 404. diff == PageNumberOffset== 403
+        /// </summary>
+        public int PageNumberOffset; 
+        /// <summary>
+        /// Hide it so it doesn't show anywhere in the UI
         /// </summary>
         public bool HideThisPDFFile;
 
         /*Normal = 0,Rotate90 = 1,Rotate180 = 2,Rotate270 = 3*/
         public int Rotation;
-        public BookMark[] BookMarks;
+        public TOCEntry[] TableOfContents;
         public Favorite[] Favorites;
         public string Notes;
 
@@ -56,6 +76,7 @@ namespace WpfPdfViewer
                     {
                         pdfFileData = (PdfMetaData)serializer.Deserialize(sr);
                         pdfFileData.curFullPathFile = FullPathFile;
+                        pdfFileData.initialLastPageNo = pdfFileData.LastPageNo;
                         if (pdfFileData.HideThisPDFFile)
                         {
                             pdfFileData = null;
@@ -92,22 +113,61 @@ namespace WpfPdfViewer
 
         public static void SavePdfFileData(PdfMetaData pdfFileData)
         {
-            var bm = new BookMark()
+            //var fTsv = @"C:\Users\calvinh\Documents\Book1.txt";
+            //var lines = File.ReadAllLines(fTsv);
+            //var lstTocEntries = new List<TOCEntry>();
+            //foreach (var line in lines)
+            //{
+            //    var parts = line.Split("\t".ToArray());
+            //    var tocEntry = new TOCEntry()
+            //    {
+            //        PageNo =int.Parse( parts[0]),
+            //        SongName=parts[1],
+            //        Composer=parts[2],
+            //        Date=parts[3]
+            //    };
+            //    lstTocEntries.Add(tocEntry);
+            //}
+            //pdfFileData.TableOfContents = lstTocEntries.ToArray();
+
+            /*
+ <TableOfContents>
+  <TOCEntry>
+   <SongName>sample</SongName>
+   <PageNo>23</PageNo>
+  </TOCEntry>
+ </TableOfContents>
+             
+             */
+            //var bm = new TOCEntry()
+            //{
+            //    SongName = "sample",
+            //    PageNo = 23
+            //};
+            //var lstBms = new List<TOCEntry>
+            //{
+            //    bm
+            //};
+            //pdfFileData.TableOfContents = lstBms.ToArray();
+            if (pdfFileData.IsDirty || pdfFileData.initialLastPageNo != pdfFileData.LastPageNo)
             {
-                SongName = "SongName",
-                PageNo = 23
-            };
-            var lstBms = new List<BookMark>
-            {
-                bm
-            };
-            pdfFileData.BookMarks = lstBms.ToArray();
-            pdfFileData.Favorites = pdfFileData.lstFavorites.OrderBy(f => f.Pageno).ToArray();
-            var serializer = new XmlSerializer(typeof(PdfMetaData));
-            var bmkFile = Path.ChangeExtension(pdfFileData.curFullPathFile, "bmk");
-            using (var sw = new StreamWriter(bmkFile))
-            {
-                serializer.Serialize(sw, pdfFileData);
+                pdfFileData.Favorites = pdfFileData.lstFavorites.OrderBy(f => f.Pageno).ToArray();
+                var serializer = new XmlSerializer(typeof(PdfMetaData));
+                var settings = new XmlWriterSettings()
+                {
+                    Indent = true,
+                    IndentChars = " "
+                };
+                var bmkFile = Path.ChangeExtension(pdfFileData.curFullPathFile, "bmk");
+                if (File.Exists(bmkFile))
+                {
+                    File.Delete(bmkFile);
+                }
+                var strm = File.Create(bmkFile);
+                using (var w = XmlWriter.Create(strm, settings))
+                {
+                    serializer.Serialize(w, pdfFileData);
+                }
             }
         }
 
@@ -123,6 +183,7 @@ namespace WpfPdfViewer
 
         internal void ToggleFavorite(int PageNo, bool IsFavorite)
         {
+            this.IsDirty = true;
             for (int i = 0; i < lstFavorites.Count; i++)
             {
                 if (lstFavorites[i].Pageno == PageNo) // already in list of favs
@@ -165,8 +226,12 @@ namespace WpfPdfViewer
         }
     }
 
+
+    /// <summary>
+    /// Not really bookmark: Table of Contents Entry
+    /// </summary>
     [Serializable]
-    public class BookMark
+    public class TOCEntry
     {
         public string SongName;
         public string Composer;
@@ -175,7 +240,7 @@ namespace WpfPdfViewer
         public int PageNo;
         public override string ToString()
         {
-            return $"{SongName} {PageNo}";
+            return $"{PageNo} {SongName} {Composer} {Notes} {Date}";
         }
     }
 }

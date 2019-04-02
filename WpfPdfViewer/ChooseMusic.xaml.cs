@@ -45,12 +45,9 @@ namespace WpfPdfViewer
         internal void Initialize(PdfViewerWindow pdfViewerWindow)
         {
             this._pdfViewerWindow = pdfViewerWindow;
-            this.Top = pdfViewerWindow.Top;
-            this.Left = pdfViewerWindow.Left;
-            this.Height = pdfViewerWindow.ActualHeight;
-            this.txtCurrentRootFolder.Text = _pdfViewerWindow._RootMusicFolder;
+            this.WindowState = WindowState.Maximized;
             this.Loaded += ChooseMusic_Loaded;
-            this.Owner = pdfViewerWindow;
+//            this.Owner = pdfViewerWindow;
         }
         async void BtnChangeMusicFolder_Click(object sender, RoutedEventArgs e)
         {
@@ -167,6 +164,10 @@ namespace WpfPdfViewer
 
         private void ChooseMusic_Loaded(object sender, RoutedEventArgs e)
         {
+            //this.Top = this._pdfViewerWindow.Top;
+            //this.Left = this._pdfViewerWindow.Left;
+            //this.Height = this._pdfViewerWindow.ActualHeight;
+            this.txtCurrentRootFolder.Text = _pdfViewerWindow._RootMusicFolder;
             UpdateTreeView();
         }
         void BtnOk_Click(object sender, RoutedEventArgs e)

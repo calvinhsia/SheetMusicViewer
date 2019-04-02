@@ -8,36 +8,31 @@
         Title="{Binding Title}"
         >
     <Grid >
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
-        <StackPanel Orientation="Vertical" Margin="0,2,0,4">
-            <StackPanel Orientation="Horizontal" Margin="0,20,0,0"  >
-                <Button x:Name="btnPrev" Content="&lt;" HorizontalAlignment="Left" Margin="0,0,0,0" VerticalAlignment="Top" Click="BtnPrevNext_Click" IsEnabled="{Binding PdfUIEnabled}"/>
-                <TextBox x:Name="txtPageNo" HorizontalAlignment="Left" MaxWidth="33" Width ="33" MaxHeight="20" Margin="5,0,5,0" TextWrapping="Wrap" Text="{Binding CurrentPageNumber}" VerticalAlignment="Top" IsEnabled="{Binding PdfUIEnabled}" />
-                <Button x:Name="btnNext" Content="&gt;" HorizontalAlignment="Left" VerticalAlignment="Top" Click="BtnPrevNext_Click" IsEnabled="{Binding PdfUIEnabled}"/>
-            </StackPanel>
-            <StackPanel Orientation="Vertical">
-                <Label Content="of" HorizontalAlignment="Left" Margin="0,-3,0,0" VerticalAlignment="Top" IsEnabled="{Binding PdfUIEnabled}"/>
-                <TextBox x:Name="txtMaxPageNo" HorizontalAlignment="Left" Width="33"  Margin="2,0,10,0" Text="{Binding MaxPageNumber}" VerticalAlignment="Top" IsReadOnly="True" IsEnabled="{Binding PdfUIEnabled}" Background="#FFF9F3F3"/>
-            </StackPanel>
-            <Slider Orientation="Vertical" x:Name="slider" Height="100" Value="{Binding CurrentPageNumber,Delay=500}" Margin="30,20,00,0" Maximum="100" IsEnabled="{Binding PdfUIEnabled}" SmallChange="1"/>
-            <CheckBox x:Name="chk2Pages" ToolTip="Show 1 or 2 pages at a a time" IsChecked="{Binding Show2Pages}" Margin="0,20,0,0" Content="_2Pages" IsEnabled="{Binding PdfUIEnabled}"/>
-            <Button Content="_Rotate" Margin="0,20,0,0" ToolTip="rotate the document 90 degreess right"  Click="BtnRotate_Click" IsEnabled="{Binding PdfUIEnabled}"/>
-            <Button Content="Ù" Margin="0,20,0,0"  ToolTip="Add current to BookMark/Favorites or choose another BookMark/Favorite" Click="BtnBookMarks_Click" FontSize="14" FontFamily="Wingdings 2" Foreground="#FFFFFF00" />
+        <Grid Name="dpPage" Background="#FF190808" MouseDown="DpPage_MouseDown" Margin="0,0,0,0"/>
+        <Grid Background="{x:Null}" Height="45" VerticalAlignment="Top">
+            <StackPanel Orientation="Vertical" Background="Green" Opacity=".5">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,0">
+                    <Button x:Name="btnPrev" Content="&lt;" HorizontalAlignment="Left" Margin="30,0,0,0" VerticalAlignment="Top" Click="BtnPrevNext_Click" IsEnabled="{Binding PdfUIEnabled}"/>
+                    <TextBox x:Name="txtPageNo" HorizontalAlignment="Left" Width="25" Margin="5,0,5,0" Text="{Binding CurrentPageNumber}" VerticalAlignment="Top" IsEnabled="{Binding PdfUIEnabled}" />
+                    <Button x:Name="btnNext" Content="&gt;" HorizontalAlignment="Left" VerticalAlignment="Top" Click="BtnPrevNext_Click" IsEnabled="{Binding PdfUIEnabled}"/>
+                    <Label Content="of" HorizontalAlignment="Left" Margin="0,-3,0,0" VerticalAlignment="Top" IsEnabled="{Binding PdfUIEnabled}"/>
+                    <TextBox x:Name="txtMaxPageNo" HorizontalAlignment="Left" Margin="2,0,10,0" Text="{Binding MaxPageNumber}" VerticalAlignment="Top" IsReadOnly="True" IsEnabled="{Binding PdfUIEnabled}" Background="#FFF9F3F3"/>
+                    <Slider x:Name="slider" Width="200" Value="{Binding CurrentPageNumber,Delay=500}" Margin="0,0,10,0" Maximum="100" IsEnabled="{Binding PdfUIEnabled}" SmallChange="1"/>
+                    <CheckBox ToolTip="Show 1 or 2 pages at a a time" IsChecked="{Binding Show2Pages}" Margin="0,3,0,0" Content="Show_2Pages" IsEnabled="{Binding PdfUIEnabled}"/>
+                    <Button Content="_Rotate" HorizontalAlignment="Right" Margin="10,0,00,0" VerticalAlignment="Top" ToolTip="rotate the document 90 degreess right"  Click="BtnRotate_Click" IsEnabled="{Binding PdfUIEnabled}"/>
+                    <Button Content="Ù"  ToolTip="Add current to BookMark/Favorites or choose another BookMark/Favorite" HorizontalAlignment="Left" Margin="10,0,0,0" VerticalAlignment="Top" Click="BtnBookMarks_Click" FontSize="14" FontFamily="Wingdings 2" Foreground="#FFFFFF00" />
 
-            <Button Content="_Chooser"  Margin="0,20,00,0" VerticalAlignment="Top" ToolTip="Open another document"  Click="BtnChooser_Click"/>
-            <Button Content="_Quit"  Margin="0,20,00,0" VerticalAlignment="Top" ToolTip="Open another document"  Click="BtnQuit_Click"/>
-        </StackPanel>
-        <Grid Grid.Column="1" >
-            <Grid Name="dpPage" Background="#FF190808" MouseDown="DpPage_MouseDown"/>
-            <Grid Background="{x:Null}" Height="25" VerticalAlignment="Top">
+                    <Button Content="_Chooser" HorizontalAlignment="Right" Margin="10,0,00,0" VerticalAlignment="Top" ToolTip="Open another document"  Click="BtnChooser_Click"/>
+                    <Button Content="_Quit"  Margin="10,0,00,0" VerticalAlignment="Top" ToolTip="Open another document"  Click="BtnQuit_Click"/>
+                </StackPanel>
+            </StackPanel>
+            <Grid Height="25" VerticalAlignment="Top" Margin="0,20,0,0">
                 <CheckBox Name ="chkFav0" Foreground="Yellow" HorizontalAlignment="Left" Content="Favorite" Checked="ChkFavToggled" Unchecked="ChkFavToggled" Focusable="False"/>
-                <TextBlock Name="txtBoxTitle"  Text="" Foreground="Orange" HorizontalAlignment="Center" FontSize="20"/>
+                <TextBlock Name="txtBoxTitle"  Text="testtext" Foreground="DarkBlue" HorizontalAlignment="Center" FontSize="20"/>
                 <CheckBox Name="chkFav1" Foreground="Yellow" HorizontalAlignment="Right" Content="Favorite" Checked="ChkFavToggled" Unchecked="ChkFavToggled" Focusable="False"/>
             </Grid>
         </Grid>
+
 
     </Grid>
 </Window>
