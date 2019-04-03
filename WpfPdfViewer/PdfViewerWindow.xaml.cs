@@ -50,7 +50,7 @@ namespace WpfPdfViewer
         private int _MaxPageNumber;
         public int MaxPageNumber { get { return _MaxPageNumber; } set { if (_MaxPageNumber != value) { _MaxPageNumber = value; OnMyPropertyChanged(); } } }
 
-        public string PdfTitle { get { return currentPdfMetaData?.curFullPathFile; } }
+        public string PdfTitle { get { return currentPdfMetaData?.RelativeFileName; } }
         public string Description0 { get { return currentPdfMetaData?.GetDescription(CurrentPageNumber); } }
         public string Description1 { get { return currentPdfMetaData?.GetDescription(CurrentPageNumber + 1); } }
         bool _fShow2Pages = true;
@@ -76,7 +76,7 @@ namespace WpfPdfViewer
 
         PdfDocument _currentPdfDocument = null;
         PdfMetaData currentPdfMetaData = null;
-        static PdfViewerWindow s_pdfViewerWindow;
+        internal static PdfViewerWindow s_pdfViewerWindow;
 
         class CacheEntry
         {
@@ -123,7 +123,7 @@ namespace WpfPdfViewer
         static int currentCacheAge;
         readonly Dictionary<int, CacheEntry> dictCache = new Dictionary<int, CacheEntry>(); // for either show2pages, pageno ->grid. results in dupes if even, then odd number on show2pages
 
-        public string FullPathCurrentPdfFile => currentPdfMetaData?.curFullPathFile;
+        public string FullPathCurrentPdfFile => currentPdfMetaData?.FullPathFile;
 
 
         public PdfViewerWindow()
@@ -137,6 +137,7 @@ namespace WpfPdfViewer
             this.Left = Properties.Settings.Default.MainWindowPos.Width;
             this._RootMusicFolder = Properties.Settings.Default.RootMusicFolder;
             this.Show2Pages = Properties.Settings.Default.Show2Pages;
+            this.chkFullScreen.IsChecked = Properties.Settings.Default.IsFullScreen;
 
             this.Closed += (o, e) =>
               {
@@ -145,7 +146,7 @@ namespace WpfPdfViewer
                   Properties.Settings.Default.LastPDFOpen = FullPathCurrentPdfFile;
                   Properties.Settings.Default.MainWindowPos = new System.Drawing.Size((int)this.Left, (int)this.Top);
                   Properties.Settings.Default.MainWindowSize = new System.Drawing.Size((int)this.ActualWidth, (int)this.ActualHeight);
-                  Properties.Settings.Default.MainWindowState = (int)this.WindowState;
+                  Properties.Settings.Default.IsFullScreen = this.chkFullScreen.IsChecked == true;
                   Properties.Settings.Default.Save();
                   CloseCurrentPdfFile();
                   /*
@@ -230,8 +231,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             // https://blogs.windows.com/buildingapps/2017/01/25/calling-windows-10-apis-desktop-application/#RWYkd5C4WTeEybol.97
             try
             {
-                this.WindowState = (WindowState)Properties.Settings.Default.MainWindowState;
-                this.WindowStyle = WindowStyle.None;
+                this.ChkfullScreenToggled(this, new RoutedEventArgs() { RoutedEvent = (this.chkFullScreen.IsChecked == true ? CheckBox.CheckedEvent : CheckBox.UncheckedEvent) });
                 this.Title = "MyMusicViewer"; // for task bar
                 var lastPdfOpen = Properties.Settings.Default.LastPDFOpen;
                 if (string.IsNullOrEmpty(_RootMusicFolder))
@@ -241,7 +241,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 else
                 {
                     await LoadAllPdfMetaDataFromDiskAsync();
-                    var lastPdfMetaData = lstPdfMetaFileData.Where(p => p.curFullPathFile == lastPdfOpen).FirstOrDefault();
+                    var lastPdfMetaData = lstPdfMetaFileData.Where(p => p.FullPathFile == lastPdfOpen).FirstOrDefault();
                     if (lastPdfMetaData != null)
                     {
                         await LoadPdfFileAndShowAsync(lastPdfMetaData, lastPdfMetaData.LastPageNo);
@@ -326,11 +326,11 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         {
             CloseCurrentPdfFile();
             currentPdfMetaData = pdfMetaData;
-            StorageFile f = await StorageFile.GetFileFromPathAsync(currentPdfMetaData.curFullPathFile);
+            StorageFile f = await StorageFile.GetFileFromPathAsync(currentPdfMetaData.FullPathFile);
             var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
             if (pdfDoc.IsPasswordProtected)
             {
-                this.dpPage.Children.Add(new TextBlock() { Text = $"Password Protected {currentPdfMetaData.curFullPathFile}" });
+                this.dpPage.Children.Add(new TextBlock() { Text = $"Password Protected {currentPdfMetaData.FullPathFile}" });
             }
             this._currentPdfDocument = pdfDoc;
             this.MaxPageNumber = (int)_currentPdfDocument.PageCount;
@@ -454,7 +454,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             catch (Exception ex)
             {
                 this.dpPage.Children.Clear();
-                System.Windows.Forms.MessageBox.Show($"Exception showing {currentPdfMetaData.curFullPathFile}\r\n {ex.ToString()}");
+                System.Windows.Forms.MessageBox.Show($"Exception showing {currentPdfMetaData.FullPathFile}\r\n {ex.ToString()}");
                 CloseCurrentPdfFile();
             }
         }
@@ -613,7 +613,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             var pgno = CurrentPageNumber + (nameSender == "chkFav0" ? 0 : 1);
             var isChked = e.RoutedEvent.Name == "Checked";
             currentPdfMetaData.ToggleFavorite(pgno, isChked);
-
         }
 
         async void BtnRotate_Click(object sender, RoutedEventArgs e)
@@ -635,11 +634,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 newPageNo -= NumPagesPerView;
             }
             await ShowPageAsync(newPageNo, ClearCache: false);
-        }
-
-        void BtnBookMarks_Click(object sender, RoutedEventArgs e)
-        {
-
         }
 
         protected override async void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
@@ -831,6 +825,26 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 //sp.Measure(new Size(pdlg.PrintableAreaWidth, pdlg.PrintableAreaHeight));
                 //sp.Arrange(new Rect(new Point(0, 0), sp.DesiredSize));
                 //pdlg.PrintVisual(sp, "test");
+            }
+        }
+
+        private void Slider_TouchDown(object sender, TouchEventArgs e)
+        {
+            e.Handled = true;
+        }
+
+        private void ChkfullScreenToggled(object sender, RoutedEventArgs e)
+        {
+            if (e.RoutedEvent.Name == "Checked")
+            {
+                this.WindowState = WindowState.Maximized;
+                this.WindowStyle = WindowStyle.None;
+            }
+            else
+            {
+                //                this.WindowState = WindowState.Maximized;
+                this.WindowStyle = WindowStyle.SingleBorderWindow;
+                this.WindowState = WindowState.Normal;
             }
         }
     }

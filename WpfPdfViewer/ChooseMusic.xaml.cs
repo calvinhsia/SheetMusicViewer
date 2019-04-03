@@ -47,7 +47,7 @@ namespace WpfPdfViewer
             this._pdfViewerWindow = pdfViewerWindow;
             this.WindowState = WindowState.Maximized;
             this.Loaded += ChooseMusic_Loaded;
-//            this.Owner = pdfViewerWindow;
+            //            this.Owner = pdfViewerWindow;
         }
         async void BtnChangeMusicFolder_Click(object sender, RoutedEventArgs e)
         {
@@ -88,7 +88,7 @@ namespace WpfPdfViewer
             foreach (var pdfMetaDataItem in
                 _pdfViewerWindow.
                 lstPdfMetaFileData.
-                OrderBy(p => System.IO.Path.GetFileNameWithoutExtension(p.curFullPathFile)))
+                OrderBy(p => System.IO.Path.GetFileNameWithoutExtension(p.FullPathFile)))
             {
                 foreach (var fav in pdfMetaDataItem.lstFavorites)
                 {
@@ -96,34 +96,38 @@ namespace WpfPdfViewer
                 }
                 if (pdfMetaDataItem.PriorPdfMetaData == null)
                 {
-                    StorageFile f = await StorageFile.GetFileFromPathAsync(pdfMetaDataItem.curFullPathFile);
-                    var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
-                    var bmi = new BitmapImage();
-                    using (var page = pdfDoc.GetPage(0))
+                    var bmi = pdfMetaDataItem.bitmapImageCacheThumbnail;
+                    if (bmi == null)
                     {
-                        using (var strm = new InMemoryRandomAccessStream())
+                        StorageFile f = await StorageFile.GetFileFromPathAsync(pdfMetaDataItem.FullPathFile);
+                        var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
+                        bmi = new BitmapImage();
+                        using (var page = pdfDoc.GetPage(0))
                         {
-                            var rect = page.Dimensions.ArtBox;
-                            var renderOpts = new PdfPageRenderOptions()
+                            using (var strm = new InMemoryRandomAccessStream())
                             {
-                                DestinationWidth = (uint)50,
-                                DestinationHeight = (uint)80,
-                            };
-
-                            await page.RenderToStreamAsync(strm, renderOpts);
-                            //var enc = new PngBitmapEncoder();
-                            //enc.Frames.Add(BitmapFrame.Create)
-                            bmi.BeginInit();
-                            bmi.StreamSource = strm.AsStream();
-                            bmi.CacheOption = BitmapCacheOption.OnLoad;
-                            bmi.Rotation = (Rotation)pdfMetaDataItem.Rotation;
-                            bmi.EndInit();
+                                var rect = page.Dimensions.ArtBox;
+                                var renderOpts = new PdfPageRenderOptions()
+                                {
+                                    DestinationWidth = (uint)50,
+                                    DestinationHeight = (uint)80,
+                                };
+                                await page.RenderToStreamAsync(strm, renderOpts);
+                                //var enc = new PngBitmapEncoder();
+                                //enc.Frames.Add(BitmapFrame.Create)
+                                bmi.BeginInit();
+                                bmi.StreamSource = strm.AsStream();
+                                bmi.CacheOption = BitmapCacheOption.OnLoad;
+                                bmi.Rotation = (Rotation)pdfMetaDataItem.Rotation;
+                                bmi.EndInit();
+                            }
                         }
+                        pdfMetaDataItem.bitmapImageCacheThumbnail = bmi;
                     }
 
                     var tvItem = new TreeViewItem()
                     {
-                        ToolTip = pdfMetaDataItem.curFullPathFile,
+                        ToolTip = pdfMetaDataItem.FullPathFile,
                         Tag = pdfMetaDataItem
                     };
                     var img = new Image()
@@ -132,7 +136,7 @@ namespace WpfPdfViewer
                     };
                     var sp = new StackPanel() { Orientation = Orientation.Horizontal };
                     sp.Children.Add(img);
-                    sp.Children.Add(new TextBlock() { Text = System.IO.Path.GetFileNameWithoutExtension(pdfMetaDataItem.curFullPathFile) });
+                    sp.Children.Add(new TextBlock() { Text = pdfMetaDataItem.RelativeFileName });
                     tvItem.Header = sp;
                     tvitemFiles.Items.Add(tvItem);
                 }

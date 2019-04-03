@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Windows.Media.Imaging;
 using System.Xml;
 using System.Xml.Serialization;
 
@@ -14,7 +15,9 @@ namespace WpfPdfViewer
     public class PdfMetaData
     {
         [XmlIgnore]
-        public string curFullPathFile;
+        public string FullPathFile;
+        [XmlIgnore]
+        public string RelativeFileName => FullPathFile.Substring(PdfViewerWindow.s_pdfViewerWindow._RootMusicFolder.Length + 1);
         [XmlIgnore]
         public List<Favorite> lstFavorites;
 
@@ -44,7 +47,7 @@ namespace WpfPdfViewer
             var str = string.Empty;
             foreach (var ent in lstTocEntries.Where(e => e.PageNo == currentPageNumber))
             {
-                str += ent+" ";
+                str += ent + " ";
             }
             return str.Trim();
         }
@@ -63,7 +66,7 @@ namespace WpfPdfViewer
         /// So the XML for the song will say 403 (same as scanned TOC), but the actual PDFpage no in vol 4 = (403 - PageNumberOffset == 0)
         /// The next song "Poor Side Of Town" on page 404 ins on PdfPage 1. Toc = 404. diff == PageNumberOffset== 403
         /// </summary>
-        public int PageNumberOffset; 
+        public int PageNumberOffset;
         /// <summary>
         /// Hide it so it doesn't show anywhere in the UI
         /// </summary>
@@ -74,7 +77,7 @@ namespace WpfPdfViewer
         public TOCEntry[] TableOfContents;
         public Favorite[] Favorites;
         public string Notes;
-
+        internal BitmapImage bitmapImageCacheThumbnail;
 
         public static PdfMetaData ReadPdfMetaData(string FullPathFile)
         {
@@ -88,7 +91,7 @@ namespace WpfPdfViewer
                     using (var sr = new StreamReader(bmkFile))
                     {
                         pdfFileData = (PdfMetaData)serializer.Deserialize(sr);
-                        pdfFileData.curFullPathFile = FullPathFile;
+                        pdfFileData.FullPathFile = FullPathFile;
                         pdfFileData.initialLastPageNo = pdfFileData.LastPageNo;
                         if (pdfFileData.HideThisPDFFile)
                         {
@@ -107,7 +110,7 @@ namespace WpfPdfViewer
             {
                 pdfFileData = new PdfMetaData()
                 {
-                    curFullPathFile = FullPathFile
+                    FullPathFile = FullPathFile
                 };
             }
             pdfFileData?.Initialize();
@@ -176,7 +179,7 @@ namespace WpfPdfViewer
                     Indent = true,
                     IndentChars = " "
                 };
-                var bmkFile = Path.ChangeExtension(pdfFileData.curFullPathFile, "bmk");
+                var bmkFile = Path.ChangeExtension(pdfFileData.FullPathFile, "bmk");
                 if (File.Exists(bmkFile))
                 {
                     File.Delete(bmkFile);
@@ -192,7 +195,7 @@ namespace WpfPdfViewer
         internal bool IsFavorite(int PageNo)
         {
             var isFav = false;
-            if (lstFavorites.Where(f=>f.Pageno == PageNo).Any())
+            if (lstFavorites.Where(f => f.Pageno == PageNo).Any())
             {
                 isFav = true;
             }
@@ -229,7 +232,7 @@ namespace WpfPdfViewer
         }
         public override string ToString()
         {
-            return $"{Path.GetFileName(curFullPathFile)} {LastPageNo}";
+            return $"{Path.GetFileName(FullPathFile)} {LastPageNo}";
         }
     }
 

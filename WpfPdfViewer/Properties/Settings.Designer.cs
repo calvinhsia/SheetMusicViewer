@@ -85,13 +85,13 @@ namespace WpfPdfViewer.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0")]
-        public int MainWindowState {
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool IsFullScreen {
             get {
-                return ((int)(this["MainWindowState"]));
+                return ((bool)(this["IsFullScreen"]));
             }
             set {
-                this["MainWindowState"] = value;
+                this["IsFullScreen"] = value;
             }
         }
     }

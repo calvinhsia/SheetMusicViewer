@@ -18,14 +18,14 @@
                     <Button x:Name="btnNext" Content="&gt;" HorizontalAlignment="Left" VerticalAlignment="Top" Click="BtnPrevNext_Click" IsEnabled="{Binding PdfUIEnabled}"/>
                     <Label Content="of" HorizontalAlignment="Left" Margin="0,-3,0,0" VerticalAlignment="Top" IsEnabled="{Binding PdfUIEnabled}"/>
                     <TextBox x:Name="txtMaxPageNo" HorizontalAlignment="Left" Margin="2,0,10,0" Text="{Binding MaxPageNumber}" VerticalAlignment="Top" IsReadOnly="True" IsEnabled="{Binding PdfUIEnabled}" Background="#FFF9F3F3"/>
-                    <Slider x:Name="slider" Width="200" Value="{Binding CurrentPageNumber,Delay=500}" Margin="0,0,10,0" Maximum="100" IsEnabled="{Binding PdfUIEnabled}" SmallChange="1"/>
+                    <Slider x:Name="slider" Width="200" Value="{Binding CurrentPageNumber,Delay=500}" Margin="0,0,10,0" Maximum="100" IsEnabled="{Binding PdfUIEnabled}" SmallChange="1" IsManipulationEnabled="True" TouchDown="Slider_TouchDown"/>
                     <CheckBox ToolTip="Show 1 or 2 pages at a a time" IsChecked="{Binding Show2Pages}" Margin="0,3,0,0" Content="Show_2Pages" IsEnabled="{Binding PdfUIEnabled}"/>
                     <Button Content="_Rotate" HorizontalAlignment="Right" Margin="10,0,00,0" VerticalAlignment="Top" ToolTip="rotate the document 90 degreess right"  Click="BtnRotate_Click" IsEnabled="{Binding PdfUIEnabled}"/>
-                    <Button Content="Ù"  ToolTip="Add current to BookMark/Favorites or choose another BookMark/Favorite" HorizontalAlignment="Left" Margin="10,0,0,0" VerticalAlignment="Top" Click="BtnBookMarks_Click" FontSize="14" FontFamily="Wingdings 2" Foreground="#FFFFFF00" />
+                    <CheckBox x:Name="chkFullScreen" Content="Full Screen"  ToolTip="Full Screen" HorizontalAlignment="Left" Margin="10,0,0,0" Checked="ChkfullScreenToggled"  Unchecked="ChkfullScreenToggled" />
 
                     <Button Content="_Chooser" HorizontalAlignment="Right" Margin="10,0,00,0" VerticalAlignment="Top" ToolTip="Open another document"  Click="BtnChooser_Click"/>
                     <Button Content="_Quit"  Margin="10,0,00,0" VerticalAlignment="Top" ToolTip="Open another document"  Click="BtnQuit_Click"/>
-                    <TextBlock Name="txtBoxTitle"  Text="{Binding PdfTitle}" Foreground="DarkBlue" HorizontalAlignment="Center" FontSize="10"/>
+                    <TextBlock Name="txtBoxTitle"  Text="{Binding PdfTitle}" Foreground="DarkBlue" HorizontalAlignment="Center" FontSize="14"/>
                     <CheckBox Name="chkFav1" Foreground="Yellow" HorizontalAlignment="Right" Content="Favorite" Checked="ChkFavToggled" Unchecked="ChkFavToggled" Focusable="False" IsEnabled="{Binding PdfUIEnabled}" />
                 </StackPanel>
                 <DockPanel>
