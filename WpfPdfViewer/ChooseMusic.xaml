@@ -18,7 +18,37 @@
             <Button Content="Cancel" Margin="10,0,0,0" ToolTip="Open another document"  Click="BtnCancel_Click" Height="22" IsCancel="True"/>
             <Button Content="_OK" Margin="10,0,40,1" ToolTip="Open another document"  Click="BtnOk_Click" Height="22" IsDefault="True"/>
         </StackPanel>
-        <DockPanel Grid.Row="1" Name="dpTview">
+        <DockPanel Grid.Row="1">
+            <TabControl Name="tabControl">
+                <TabItem Header="_Books">
+                    <TabItem.Content>
+                        <DockPanel>
+                            <ListBox Name="lbBooks" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel IsItemsHost="True" Orientation="Horizontal" ItemHeight="475" ItemWidth="300"/><!--needs to be a little taller than the bmp for the title-->
+                                    </ItemsPanelTemplate>
+                                </ListBox.ItemsPanel>
+                            </ListBox>
+                        </DockPanel>
+                    </TabItem.Content>
+                </TabItem>
+                <TabItem Header="_Favorites">
+                    <TabItem.Content>
+                        <DockPanel Grid.Row="1" Name="dpTview"/>
+                    </TabItem.Content>
+                </TabItem>
+                <TabItem Header="_Query">
+                    <TabItem.Content>
+                        <DockPanel Grid.Row="1" Name="dpQuery"/>
+                    </TabItem.Content>
+                </TabItem>
+                <TabItem Header="_Playlists">
+                    <TabItem.Content>
+                        <DockPanel Grid.Row="1" Name="dpPlaylists"/>
+                    </TabItem.Content>
+                </TabItem>
+            </TabControl>
         </DockPanel>
 
     </Grid>

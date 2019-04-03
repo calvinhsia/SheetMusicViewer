@@ -5,6 +5,9 @@ using System.Linq;
 using System.Windows.Media.Imaging;
 using System.Xml;
 using System.Xml.Serialization;
+using Windows.Data.Pdf;
+using Windows.Storage;
+using Windows.Storage.Streams;
 
 namespace WpfPdfViewer
 {
@@ -18,11 +21,12 @@ namespace WpfPdfViewer
         public string FullPathFile;
         [XmlIgnore]
         public string RelativeFileName => FullPathFile.Substring(PdfViewerWindow.s_pdfViewerWindow._RootMusicFolder.Length + 1);
-        [XmlIgnore]
-        public List<Favorite> lstFavorites;
+        public List<Favorite> Favorites = new List<Favorite>();
+
+        public List<TOCEntry> lstTocEntries = new List<TOCEntry>();
 
         [XmlIgnore]
-        public List<TOCEntry> lstTocEntries;
+        public Dictionary<int, List<TOCEntry>> dictToc = new Dictionary<int, List<TOCEntry>>();
         /// <summary>
         /// for continued PDF: e.g. file1.pdf, file2.pdf. Forms a linked list
         /// </summary>
@@ -45,9 +49,16 @@ namespace WpfPdfViewer
         internal string GetDescription(int currentPageNumber)
         {
             var str = string.Empty;
-            foreach (var ent in lstTocEntries.Where(e => e.PageNo == currentPageNumber))
+            if (dictToc.TryGetValue(currentPageNumber, out var lstTocs))
             {
-                str += ent + " ";
+                foreach (var toce in lstTocs)
+                {
+                    str += toce + " ";
+                }
+            }
+            else
+            {
+                str = $"{currentPageNumber} {this}";
             }
             return str.Trim();
         }
@@ -74,10 +85,8 @@ namespace WpfPdfViewer
 
         /*Normal = 0,Rotate90 = 1,Rotate180 = 2,Rotate270 = 3*/
         public int Rotation;
-        public TOCEntry[] TableOfContents;
-        public Favorite[] Favorites;
         public string Notes;
-        internal BitmapImage bitmapImageCacheThumbnail;
+        private BitmapImage bitmapImageCache;
 
         public static PdfMetaData ReadPdfMetaData(string FullPathFile)
         {
@@ -120,16 +129,16 @@ namespace WpfPdfViewer
 
         private void Initialize()
         {
-            lstFavorites = new List<Favorite>();
-            if (Favorites != null)
+            foreach (var toc in lstTocEntries) // a page can have multiple songs
             {
-                lstFavorites.AddRange(Favorites);
+                if (!dictToc.TryGetValue(toc.PageNo, out var tocLst))
+                {
+                    tocLst = new List<TOCEntry>();
+                    dictToc[toc.PageNo] = tocLst;
+                }
+                tocLst.Add(toc);
             }
-            lstTocEntries = new List<TOCEntry>();
-            if (TableOfContents != null)
-            {
-                lstTocEntries.AddRange(TableOfContents);
-            }
+            //            lstTocEntries = null; // save memory
         }
 
         public static void SavePdfFileData(PdfMetaData pdfFileData)
@@ -172,7 +181,9 @@ namespace WpfPdfViewer
             //pdfFileData.TableOfContents = lstBms.ToArray();
             if (pdfFileData.IsDirty || pdfFileData.initialLastPageNo != pdfFileData.LastPageNo)
             {
-                pdfFileData.Favorites = pdfFileData.lstFavorites.OrderBy(f => f.Pageno).ToArray();
+                // we saved memory
+                //                pdfFileData.lstTocEntries = pdfFileData.dictToc.Values.ToList();
+
                 var serializer = new XmlSerializer(typeof(PdfMetaData));
                 var settings = new XmlWriterSettings()
                 {
@@ -184,18 +195,76 @@ namespace WpfPdfViewer
                 {
                     File.Delete(bmkFile);
                 }
-                var strm = File.Create(bmkFile);
-                using (var w = XmlWriter.Create(strm, settings))
+                using (var strm = File.Create(bmkFile))
                 {
-                    serializer.Serialize(w, pdfFileData);
+                    using (var w = XmlWriter.Create(strm, settings))
+                    {
+                        serializer.Serialize(w, pdfFileData);
+                    }
                 }
             }
+        }
+
+        /// <summary>
+        /// gets a thumbnail for the 1st page of a sequence of PDFs.
+        /// </summary>
+        /// <param name="size"></param>
+        /// <returns></returns>
+        public BitmapImage GetBitmapImageThumbnail()
+        {
+            var bmi = bitmapImageCache;
+            if (bmi == null)
+            {
+                var metadataFileHead = this;
+                while (metadataFileHead.PriorPdfMetaData != null)
+                {
+                    metadataFileHead = metadataFileHead.PriorPdfMetaData;
+                }
+                bmi = metadataFileHead.bitmapImageCache;
+                if (bmi == null)
+                {
+                    var tkGetStorageFileFromPath = StorageFile.GetFileFromPathAsync(metadataFileHead.FullPathFile);
+                    tkGetStorageFileFromPath.AsTask().Wait();
+                    var tkGetStorageFile = tkGetStorageFileFromPath.AsTask().Result;
+                    var tkGetPdfDocument = PdfDocument.LoadFromFileAsync(tkGetStorageFile);
+                    tkGetPdfDocument.AsTask().Wait();
+                    var pdfDoc = tkGetPdfDocument.AsTask().Result;
+
+                    //StorageFile f = await StorageFile.GetFileFromPathAsync(pdfMetaDataItem.FullPathFile);
+                    //var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
+                    bmi = new BitmapImage();
+                    using (var page = pdfDoc.GetPage(0))
+                    {
+                        using (var strm = new InMemoryRandomAccessStream())
+                        {
+                            var rect = page.Dimensions.ArtBox;
+                            var renderOpts = new PdfPageRenderOptions
+                            {
+                                DestinationWidth = (uint)300,
+                                DestinationHeight = (uint)450
+                            };
+
+                            var ttt = page.RenderToStreamAsync(strm, renderOpts);
+                            ttt.AsTask().Wait();
+                            //var enc = new PngBitmapEncoder();
+                            //enc.Frames.Add(BitmapFrame.Create)
+                            bmi.BeginInit();
+                            bmi.StreamSource = strm.AsStream();
+                            bmi.CacheOption = BitmapCacheOption.OnLoad;
+                            bmi.Rotation = (Rotation)metadataFileHead.Rotation;
+                            bmi.EndInit();
+                        }
+                    }
+                    metadataFileHead.bitmapImageCache = bmi;
+                }
+            }
+            return bmi;
         }
 
         internal bool IsFavorite(int PageNo)
         {
             var isFav = false;
-            if (lstFavorites.Where(f => f.Pageno == PageNo).Any())
+            if (Favorites.Where(f => f.Pageno == PageNo).Any())
             {
                 isFav = true;
             }
@@ -205,9 +274,9 @@ namespace WpfPdfViewer
         internal void ToggleFavorite(int PageNo, bool IsFavorite)
         {
             this.IsDirty = true;
-            for (int i = 0; i < lstFavorites.Count; i++)
+            for (int i = 0; i < Favorites.Count; i++)
             {
-                if (lstFavorites[i].Pageno == PageNo) // already in list of favs
+                if (Favorites[i].Pageno == PageNo) // already in list of favs
                 {
                     if (IsFavorite) // already set as favorite, do nothing
                     {
@@ -216,14 +285,14 @@ namespace WpfPdfViewer
                     else
                     {
                         // remove it
-                        lstFavorites.RemoveAt(i);
+                        Favorites.RemoveAt(i);
                     }
                     return;
                 }
             }
             if (IsFavorite)
             {
-                lstFavorites.Add(new Favorite()
+                Favorites.Add(new Favorite()
                 {
                     Pageno = PageNo
                 });
