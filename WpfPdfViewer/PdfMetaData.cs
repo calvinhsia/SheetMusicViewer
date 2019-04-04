@@ -127,10 +127,21 @@ namespace WpfPdfViewer
         }
         public PdfMetaData() { }
 
+        string RemoveQuotes(string str)
+        {
+            if (str.StartsWith("\"") && str.EndsWith("\""))
+            {
+                str = str.Replace("\"", string.Empty);
+            }
+            return str;
+        }
         private void Initialize()
         {
             foreach (var toc in lstTocEntries) // a page can have multiple songs
             {
+                toc.SongName = RemoveQuotes(toc.SongName);
+                toc.Date = RemoveQuotes(toc.Date);
+                toc.Composer = RemoveQuotes(toc.Composer);
                 if (!dictToc.TryGetValue(toc.PageNo, out var tocLst))
                 {
                     tocLst = new List<TOCEntry>();
@@ -203,6 +214,23 @@ namespace WpfPdfViewer
                     }
                 }
             }
+        }
+
+        internal int GetSongCount()
+        {
+            var pmetadataFile = this;
+            while (pmetadataFile.PriorPdfMetaData != null)
+            {
+                pmetadataFile = pmetadataFile.PriorPdfMetaData;
+            }
+            int nCnt = 0;
+            while (pmetadataFile != null)
+            {
+                nCnt += pmetadataFile.lstTocEntries.Count;
+                pmetadataFile = pmetadataFile.SucceedingPdfMetaData;
+            }
+            return nCnt;
+
         }
 
         /// <summary>
@@ -306,10 +334,22 @@ namespace WpfPdfViewer
     }
 
     [Serializable]
-    public class Favorite
+    public class Favorite: ICloneable
     {
         public string FavoriteName;
         public int Pageno;
+        [XmlIgnore]
+        public object Tag;
+
+        public object Clone()
+        {
+            return new Favorite()
+            {
+                FavoriteName = this.FavoriteName,
+                Pageno = this.Pageno
+            };
+        }
+
         public override string ToString()
         {
             return $"{FavoriteName} {Pageno}".Trim();
@@ -321,13 +361,28 @@ namespace WpfPdfViewer
     /// Not really bookmark: Table of Contents Entry
     /// </summary>
     [Serializable]
-    public class TOCEntry
+    public class TOCEntry: ICloneable
     {
         public string SongName;
         public string Composer;
         public string Notes;
         public string Date;
         public int PageNo;
+        [XmlIgnore]
+        public object Tag;
+
+        public object Clone()
+        {
+            return new TOCEntry()
+            {
+                SongName=this.SongName,
+                Composer=this.Composer,
+                Notes=this.Notes,
+                Date=this.Date,
+                PageNo=this.PageNo
+            };
+        }
+
         public override string ToString()
         {
             return $"{PageNo} {SongName} {Composer} {Notes} {Date}";

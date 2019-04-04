@@ -1,4 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using MemSpect;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -13,16 +16,7 @@ namespace WpfPdfViewer
     {
         PdfViewerWindow _pdfViewerWindow;
         TreeView _TreeView;
-        readonly List<FavoriteEntry> _lstFavoriteEntries = new List<FavoriteEntry>();
-        class FavoriteEntry
-        {
-            public Favorite _favorite;
-            public PdfMetaData _pdfMetadata;
-            public override string ToString()
-            {
-                return $"{_pdfMetadata.GetDescription(_favorite.Pageno)}";
-            }
-        }
+        readonly List<Favorite> _lstFavoriteEntries = new List<Favorite>();
 
         public PdfMetaData chosenPdfMetaData = null;
         public ChooseMusic()
@@ -48,19 +42,70 @@ namespace WpfPdfViewer
                     switch (tabItemHeaer)
                     {
                         case "_Books":
+                            FillBooksTab();
                             break;
                         case "_Favorites":
                             FillFavoritesTab();
                             break;
                         case "_Query":
+                            FillQueryTab();
                             break;
                         case "_Playlists":
                             break;
                     }
+                    et.Handled = true;
                 };
-            FillBooksTab();
+            FillBooksTab(); // fill the 1st tab
         }
 
+        private void FillQueryTab()
+        {
+            if (this.dpQuery.Children.Count == 0)
+            {
+                var uberToc = new List<TOCEntry>();
+                foreach (var pdfMetaDataItem in
+                    _pdfViewerWindow.
+                    lstPdfMetaFileData.
+                    OrderBy(p => p.RelativeFileName))
+                {
+                    foreach (var tentry in pdfMetaDataItem.lstTocEntries)
+                    {
+                        var t = (TOCEntry)tentry.Clone();
+                        t.Tag = pdfMetaDataItem;
+                        uberToc.Add(t);
+                    }
+                }
+                var q = from itm in uberToc
+                        select new
+                        {
+                            itm.SongName,
+                            itm.Composer,
+                            itm.Date,
+                            itm.Notes,
+                            itm.PageNo,
+                            ((PdfMetaData)itm.Tag).RelativeFileName,
+                            _TocEntry = itm
+                        };
+
+                var br = new Browse(q,
+                    fAllowHeaderClickSort: true,
+                    fAllowBrowFilter: true,
+                    ColWidths: new[] { 300, 300, 200, 200, 60, 500 });
+                br._BrowseList.SelectionChanged += (o, e) =>
+                  {
+                      e.Handled = true; // prevent bubbling SelectionChanged up to tabcontrol
+                  };
+                br._BrowseList.MouseDoubleClick += (o, e) =>
+                  {
+                      BtnOk_Click(o, e);
+                  };
+                br._BrowseList.KeyUp += (o, e) =>
+                 {
+                     BtnOk_Click(o, e);
+                 };
+                this.dpQuery.Children.Add(br);
+            }
+        }
 
         async void BtnChangeMusicFolder_Click(object sender, RoutedEventArgs e)
         {
@@ -73,26 +118,39 @@ namespace WpfPdfViewer
             var res = d.ShowDialog();
             if (res == System.Windows.Forms.DialogResult.OK)
             {
+                this.lbBooks.ItemsSource = null;
+                this.dpTview.Children.Clear();
+                this.dpQuery.Children.Clear();
+                this.dpPlaylists.Children.Clear();
+
                 _pdfViewerWindow._RootMusicFolder = d.SelectedPath;
-                await _pdfViewerWindow.LoadAllPdfMetaDataFromDiskAsync();
                 this.txtCurrentRootFolder.Text = _pdfViewerWindow._RootMusicFolder;
-                FillFavoritesTab();
+                this.tabControl.SelectedIndex = 0;
+                await _pdfViewerWindow.LoadAllPdfMetaDataFromDiskAsync();
+                FillBooksTab();
             }
         }
         private void FillBooksTab()
         {
-            this.lbBooks.MouseDoubleClick += (o, e) =>
+            if (this.lbBooks.ItemsSource == null)
+            {
+                this.lbBooks.MouseDoubleClick += (o, e) =>
               {
                   BtnOk_Click(o, e);
               };
-            this.lbBooks.KeyUp += (o, e) =>
-             {
-                 if (e.Key == Key.Return)
+                this.lbBooks.KeyUp += (o, e) =>
                  {
-                     BtnOk_Click(this, e);
-                 }
-             };
-            this.lbBooks.ItemsSource = BooksItemsSource();
+                     if (e.Key == Key.Return)
+                     {
+                         BtnOk_Click(this, e);
+                     }
+                 };
+                this.lbBooks.ItemsSource = BooksItemsSource();
+                this.lbBooks.SelectionChanged += (o, e) =>
+                 {
+                     e.Handled = true; // prevent bubbling SelectionChanged up to tabcontrol
+                 };
+            }
         }
 
         IEnumerable<UIElement> BooksItemsSource()
@@ -105,63 +163,70 @@ namespace WpfPdfViewer
             {
                 var sp = new StackPanel() { Orientation = Orientation.Vertical };
                 sp.Tag = pdfMetaDataItem;
-                sp.Children.Add(new Image() { Source = pdfMetaDataItem.GetBitmapImageThumbnail()});
+                sp.Children.Add(new Image() { Source = pdfMetaDataItem.GetBitmapImageThumbnail() });
                 sp.Children.Add(new TextBlock() { Text = pdfMetaDataItem.RelativeFileName });
+                sp.Children.Add(new TextBlock() { Text = $"#Songs={pdfMetaDataItem.GetSongCount()}" });
                 yield return sp;
             }
         }
 
         void FillFavoritesTab()
         {
-            _TreeView = new TreeView();
-            this.dpTview.Children.Clear();
-            this.dpTview.Children.Add(_TreeView);
-
-            var tvitemFavorites = new TreeViewItem()
+            if (this.dpTview.Children.Count == 0)
             {
-                Header = "Favorites"
-            };
-            _TreeView.Items.Add(tvitemFavorites);
+                _TreeView = new TreeView();
+                this.dpTview.Children.Clear();
+                this.dpTview.Children.Add(_TreeView);
 
-            foreach (var pdfMetaDataItem in
-                _pdfViewerWindow.
-                lstPdfMetaFileData.
-                OrderBy(p => p.RelativeFileName))
-            {
-                foreach (var fav in pdfMetaDataItem.Favorites)
+                var tvitemFavorites = new TreeViewItem()
                 {
-                    _lstFavoriteEntries.Add(new FavoriteEntry() { _favorite = fav, _pdfMetadata = pdfMetaDataItem });
-                }
-            }
-
-            foreach (var favEntry in _lstFavoriteEntries)
-            {
-                var sp = new StackPanel() { Orientation = Orientation.Horizontal };
-                sp.Children.Add(new Image() { Source = favEntry._pdfMetadata.GetBitmapImageThumbnail(), Height=80, Width=50 });
-                sp.Children.Add(new TextBlock() { Text = favEntry.ToString() });
-                var tvItem = new TreeViewItem()
-                {
-                    Header = sp,
-                    Tag = favEntry
+                    Header = "Favorites"
                 };
-                tvitemFavorites.Items.Add(tvItem);
-            }
-            tvitemFavorites.IsExpanded = true;
-            _TreeView.MouseDoubleClick += (o, e) =>
-            {
-                BtnOk_Click(this, e);
-            };
-            _TreeView.KeyUp += (o, e) =>
-            {
-                if (e.Key == Key.Return)
+                _TreeView.Items.Add(tvitemFavorites);
+
+                foreach (var pdfMetaDataItem in
+                    _pdfViewerWindow.
+                    lstPdfMetaFileData.
+                    OrderBy(p => p.RelativeFileName))
+                {
+                    foreach (var fav in pdfMetaDataItem.Favorites)
+                    {
+                        var faventry = (Favorite)fav.Clone();
+                        faventry.Tag = pdfMetaDataItem;
+                        _lstFavoriteEntries.Add(faventry);
+                    }
+                }
+
+                foreach (var favEntry in _lstFavoriteEntries)
+                {
+                    var sp = new StackPanel() { Orientation = Orientation.Horizontal };
+                    sp.Children.Add(new Image() { Source = ((PdfMetaData)favEntry.Tag).GetBitmapImageThumbnail(), Height = 80, Width = 50 });
+                    sp.Children.Add(new TextBlock() { Text = ((PdfMetaData)favEntry.Tag).GetDescription(favEntry.Pageno) });
+                    var tvItem = new TreeViewItem()
+                    {
+                        Header = sp,
+                        Tag = favEntry
+                    };
+                    tvitemFavorites.Items.Add(tvItem);
+                }
+                tvitemFavorites.IsExpanded = true;
+                _TreeView.MouseDoubleClick += (o, e) =>
                 {
                     BtnOk_Click(this, e);
-                }
-            };
+                };
+                _TreeView.KeyUp += (o, e) =>
+                {
+                    if (e.Key == Key.Return)
+                    {
+                        BtnOk_Click(this, e);
+                    }
+                };
+            }
         }
 
         void BtnOk_Click(object sender, RoutedEventArgs e)
         {
+            e.Handled = true;
             var tabItemHeaer = ((TabItem)(this.tabControl.SelectedItem)).Header as string;
             switch (tabItemHeaer)
             {
@@ -181,10 +246,10 @@ namespace WpfPdfViewer
                         var tg = ((TreeViewItem)_TreeView.SelectedItem).Tag;
                         if (tg != null)
                         {
-                            if (tg is FavoriteEntry favoriteEntry)
+                            if (tg is Favorite favoriteEntry)
                             {
-                                chosenPdfMetaData = favoriteEntry._pdfMetadata;
-                                chosenPdfMetaData.LastPageNo = favoriteEntry._favorite.Pageno;
+                                chosenPdfMetaData = (PdfMetaData)favoriteEntry.Tag;
+                                chosenPdfMetaData.LastPageNo = favoriteEntry.Pageno;
                             }
                             else
                             {
@@ -194,6 +259,15 @@ namespace WpfPdfViewer
                     }
                     break;
                 case "_Query":
+                    var br = (Browse)this.dpQuery.Children[0];
+                    var selitem = br._BrowseList.SelectedItem;
+                    if (selitem != null)
+                    {
+                        var tdescitem = TypeDescriptor.GetProperties(selitem)["_TocEntry"];
+                        var TocEntry = (TOCEntry)tdescitem.GetValue(selitem);
+                        chosenPdfMetaData = (PdfMetaData)TocEntry.Tag;
+                        chosenPdfMetaData.LastPageNo = TocEntry.PageNo;
+                    }
                     break;
                 case "_Playlists":
                     break;
@@ -203,6 +277,7 @@ namespace WpfPdfViewer
         }
         void BtnCancel_Click(object sender, RoutedEventArgs e)
         {
+            e.Handled = true;
             this.Close();
         }
     }
