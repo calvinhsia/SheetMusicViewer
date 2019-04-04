@@ -334,6 +334,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
             this._currentPdfDocument = pdfDoc;
             this.MaxPageNumber = (int)_currentPdfDocument.PageCount;
+            pdfMetaData.NumPages = this.MaxPageNumber; //store the # of pages for this particular doc.
             this.slider.Maximum = this.MaxPageNumber;
             //this.slider.IsDirectionReversed = true;
             this.PdfUIEnabled = true;

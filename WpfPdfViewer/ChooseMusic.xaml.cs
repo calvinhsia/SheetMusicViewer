@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -130,14 +131,50 @@ namespace WpfPdfViewer
                 FillBooksTab();
             }
         }
+        private readonly Stopwatch _doubleTapStopwatch = new Stopwatch();
+        private Point _lastTapLocation;
+
+        public static double GetDistanceBetweenPoints(Point p, Point q)
+        {
+            double a = p.X - q.X;
+            double b = p.Y - q.Y;
+            double distance = Math.Sqrt(a * a + b * b);
+            return distance;
+        }
+        private bool IsDoubleTap(TouchEventArgs e)
+        {
+            Point currentTapPosition = e.GetTouchPoint(this).Position;
+            bool tapsAreCloseInDistance = GetDistanceBetweenPoints(currentTapPosition, _lastTapLocation) < 40;
+            _lastTapLocation = currentTapPosition;
+
+            TimeSpan elapsed = _doubleTapStopwatch.Elapsed;
+            _doubleTapStopwatch.Restart();
+            bool tapsAreCloseInTime = (elapsed != TimeSpan.Zero && elapsed < TimeSpan.FromSeconds(0.7));
+
+            return tapsAreCloseInDistance && tapsAreCloseInTime;
+        }
         private void FillBooksTab()
         {
             if (this.lbBooks.ItemsSource == null)
             {
                 this.lbBooks.MouseDoubleClick += (o, e) =>
-              {
-                  BtnOk_Click(o, e);
-              };
+                  {
+                      BtnOk_Click(o, e);
+                  };
+                this.lbBooks.TouchDown += (o, e) =>
+                {
+                    if (IsDoubleTap(e))
+                    {
+                        BtnOk_Click(o, e);
+                    }
+                };
+                //this.lbBooks.TouchUp += (o, e) =>
+                // {
+                //     if (DateTime.Now- lastTouch > TimeSpan.FromMilliseconds(500))
+                //     {
+                //         BtnOk_Click(this, e);
+                //     }
+                // };
                 this.lbBooks.KeyUp += (o, e) =>
                  {
                      if (e.Key == Key.Return)
@@ -165,7 +202,7 @@ namespace WpfPdfViewer
                 sp.Tag = pdfMetaDataItem;
                 sp.Children.Add(new Image() { Source = pdfMetaDataItem.GetBitmapImageThumbnail() });
                 sp.Children.Add(new TextBlock() { Text = pdfMetaDataItem.RelativeFileName });
-                sp.Children.Add(new TextBlock() { Text = $"#Songs={pdfMetaDataItem.GetSongCount()}" });
+                sp.Children.Add(new TextBlock() { Text = $"#Songs={pdfMetaDataItem.GetSongCount()} @ Pages = {pdfMetaDataItem.GetTotalPageCount()}" });
                 yield return sp;
             }
         }

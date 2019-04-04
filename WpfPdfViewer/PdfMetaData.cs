@@ -42,6 +42,10 @@ namespace WpfPdfViewer
         /// the page no when this PDF was last opened
         /// </summary>
         public int LastPageNo;
+        /// <summary>
+        /// The num pages in this PDF file
+        /// </summary>
+        public int NumPages;
 
         bool IsDirty = false;
         int initialLastPageNo;
@@ -216,7 +220,31 @@ namespace WpfPdfViewer
             }
         }
 
-        internal int GetSongCount()
+        /// <summary>
+        /// Total page count across volume
+        /// </summary>
+        /// <returns></returns>
+        public int GetTotalPageCount()
+        {
+            var pmetadataFile = this;
+            while (pmetadataFile.PriorPdfMetaData != null)
+            {
+                pmetadataFile = pmetadataFile.PriorPdfMetaData;
+            }
+            int nCnt = 0;
+            while (pmetadataFile != null)
+            {
+                nCnt += pmetadataFile.NumPages;
+                pmetadataFile = pmetadataFile.SucceedingPdfMetaData;
+            }
+            return nCnt;
+        }
+
+        /// <summary>
+        /// Total song count across volume
+        /// </summary>
+        /// <returns></returns>
+        public int GetSongCount()
         {
             var pmetadataFile = this;
             while (pmetadataFile.PriorPdfMetaData != null)
@@ -230,7 +258,6 @@ namespace WpfPdfViewer
                 pmetadataFile = pmetadataFile.SucceedingPdfMetaData;
             }
             return nCnt;
-
         }
 
         /// <summary>
