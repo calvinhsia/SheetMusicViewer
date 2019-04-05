@@ -20,5 +20,8 @@
     <Setting Name="IsFullScreen" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">False</Value>
     </Setting>
+    <Setting Name="ChooseQueryTab" Type="System.String" Scope="User">
+      <Value Profile="(Default)">_Books</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

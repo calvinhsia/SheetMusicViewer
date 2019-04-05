@@ -94,5 +94,17 @@ namespace WpfPdfViewer.Properties {
                 this["IsFullScreen"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("_Books")]
+        public string ChooseQueryTab {
+            get {
+                return ((string)(this["ChooseQueryTab"]));
+            }
+            set {
+                this["ChooseQueryTab"] = value;
+            }
+        }
     }
 }

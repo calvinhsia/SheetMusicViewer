@@ -13,6 +13,7 @@
         </Grid.RowDefinitions>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,4">
             <Label Content="Current Path: " HorizontalAlignment="Left" Margin="0,-3,0,0" VerticalAlignment="Top" IsEnabled="{Binding PdfUIEnabled}"/>
+            <TextBlock Name="tbxTotals"/>
             <TextBox Name="txtCurrentRootFolder" Margin="2,0,10,0" TextWrapping="Wrap" VerticalAlignment="Top" IsReadOnly="True" />
             <Button Content="ChangeMusicFolder" Margin="10,0,0,0" ToolTip="Open another document"  Click="BtnChangeMusicFolder_Click" Height="22"/>
             <Button Content="Cancel" Margin="10,0,0,0" ToolTip="Open another document"  Click="BtnCancel_Click" Height="22" IsCancel="True"/>

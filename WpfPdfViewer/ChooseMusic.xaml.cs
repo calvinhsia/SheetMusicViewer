@@ -37,26 +37,57 @@ namespace WpfPdfViewer
             this.Left = _pdfViewerWindow.Left;
             this.WindowState = WindowState.Maximized;
             this.txtCurrentRootFolder.Text = _pdfViewerWindow._RootMusicFolder;
+            ActivateTab(string.Empty);
             this.tabControl.SelectionChanged += (o, et) =>
                 {
-                    var tabItemHeaer = ((TabItem)(this.tabControl.SelectedItem)).Header as string;
-                    switch (tabItemHeaer)
-                    {
-                        case "_Books":
-                            FillBooksTab();
-                            break;
-                        case "_Favorites":
-                            FillFavoritesTab();
-                            break;
-                        case "_Query":
-                            FillQueryTab();
-                            break;
-                        case "_Playlists":
-                            break;
-                    }
+                    var tabItemHeader = ((TabItem)(this.tabControl.SelectedItem)).Header as string;
+                    ActivateTab(tabItemHeader);
                     et.Handled = true;
                 };
-            FillBooksTab(); // fill the 1st tab
+        }
+
+        private void ActivateTab(string tabItemHeader)
+        {
+            if (string.IsNullOrEmpty(tabItemHeader))
+            {
+                tabItemHeader = Properties.Settings.Default.ChooseQueryTab;
+            }
+            
+            switch (tabItemHeader)
+            {
+                case "_Books":
+                    FillBooksTab();
+                    if (this.tabControl.SelectedIndex!= 0)
+                    {
+                        this.tabControl.SelectedIndex = 0;
+                    }
+                    else
+                    {
+                    }
+                    break;
+                case "_Favorites":
+                    FillFavoritesTab();
+                    if (this.tabControl.SelectedIndex != 1)
+                    {
+                        this.tabControl.SelectedIndex = 1;
+                    }
+                    else
+                    {
+                    }
+                    break;
+                case "_Query":
+                    FillQueryTab();
+                    if (this.tabControl.SelectedIndex != 2)
+                    {
+                        this.tabControl.SelectedIndex = 2;
+                    }
+                    else
+                    {
+                    }
+                    break;
+                case "_Playlists":
+                    break;
+            }
         }
 
         private void FillQueryTab()
@@ -128,7 +159,7 @@ namespace WpfPdfViewer
                 this.txtCurrentRootFolder.Text = _pdfViewerWindow._RootMusicFolder;
                 this.tabControl.SelectedIndex = 0;
                 await _pdfViewerWindow.LoadAllPdfMetaDataFromDiskAsync();
-                FillBooksTab();
+                ActivateTab(string.Empty);
             }
         }
         private readonly Stopwatch _doubleTapStopwatch = new Stopwatch();
@@ -149,7 +180,9 @@ namespace WpfPdfViewer
 
             TimeSpan elapsed = _doubleTapStopwatch.Elapsed;
             _doubleTapStopwatch.Restart();
-            bool tapsAreCloseInTime = (elapsed != TimeSpan.Zero && elapsed < TimeSpan.FromSeconds(0.7));
+            //var x = System.Windows.Forms.SystemInformation.DoubleClickSize; // 4, 4
+            //var y = System.Windows.Forms.SystemInformation.DoubleClickTime; // 700
+            bool tapsAreCloseInTime = (elapsed != TimeSpan.Zero && elapsed < TimeSpan.FromMilliseconds(700));
 
             return tapsAreCloseInDistance && tapsAreCloseInTime;
         }
@@ -157,6 +190,8 @@ namespace WpfPdfViewer
         {
             if (this.lbBooks.ItemsSource == null)
             {
+                this.tbxTotals.Text = $"Total #Books = {_pdfViewerWindow.lstPdfMetaFileData.Where(p=>p.PriorPdfMetaData==null).Count()} # Songs = {_pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.lstTocEntries.Count)}";
+
                 this.lbBooks.MouseDoubleClick += (o, e) =>
                   {
                       BtnOk_Click(o, e);
@@ -303,12 +338,13 @@ namespace WpfPdfViewer
                         var tdescitem = TypeDescriptor.GetProperties(selitem)["_TocEntry"];
                         var TocEntry = (TOCEntry)tdescitem.GetValue(selitem);
                         chosenPdfMetaData = (PdfMetaData)TocEntry.Tag;
-                        chosenPdfMetaData.LastPageNo = TocEntry.PageNo;
+                        chosenPdfMetaData.LastPageNo = TocEntry.PageNo + chosenPdfMetaData.PageNumberOffset;
                     }
                     break;
                 case "_Playlists":
                     break;
             }
+            Properties.Settings.Default.ChooseQueryTab = ((TabItem)(this.tabControl.SelectedItem)).Header as string;
             this.DialogResult = true; // chosenPdfMetaData  can be null
             this.Close();
         }

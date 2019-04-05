@@ -133,9 +133,12 @@ namespace WpfPdfViewer
 
         string RemoveQuotes(string str)
         {
-            if (str.StartsWith("\"") && str.EndsWith("\""))
+            if (!string.IsNullOrEmpty(str))
             {
-                str = str.Replace("\"", string.Empty);
+                if (str.StartsWith("\"") && str.EndsWith("\""))
+                {
+                    str = str.Replace("\"", string.Empty);
+                }
             }
             return str;
         }
@@ -194,6 +197,31 @@ namespace WpfPdfViewer
             //    bm
             //};
             //pdfFileData.TableOfContents = lstBms.ToArray();
+
+            //var ftxt = @"C:\t.txt";
+            //var lines = File.ReadAllLines(ftxt);
+            //var lstTocEntries = new List<TOCEntry>();
+            //foreach (var line in lines.Where(l => !string.IsNullOrEmpty(l)))
+            //{
+            //    var parts = line.Split("\t".ToArray());
+
+            //    var pageno = int.Parse(parts[0]);
+            //    var title = parts[1].Trim();
+            //    var yearRawStart = title.LastIndexOf('(');
+            //    var yearStr = title.Substring(yearRawStart).Replace("(", string.Empty).Replace(")", string.Empty);
+            //    title = title.Substring(0, yearRawStart).Trim();
+            //    var tocEntry = new TOCEntry()
+            //    {
+            //        PageNo = pageno,
+            //        SongName = title,
+            //        Composer="Scott Joplin",
+            //        Date = yearStr
+            //    };
+            //    lstTocEntries.Add(tocEntry);
+            //}
+            //pdfFileData.lstTocEntries = lstTocEntries;
+
+
             if (pdfFileData.IsDirty || pdfFileData.initialLastPageNo != pdfFileData.LastPageNo)
             {
                 // we saved memory
@@ -220,17 +248,22 @@ namespace WpfPdfViewer
             }
         }
 
-        /// <summary>
-        /// Total page count across volume
-        /// </summary>
-        /// <returns></returns>
-        public int GetTotalPageCount()
+        public PdfMetaData GetRootMetaData()
         {
             var pmetadataFile = this;
             while (pmetadataFile.PriorPdfMetaData != null)
             {
                 pmetadataFile = pmetadataFile.PriorPdfMetaData;
             }
+            return pmetadataFile;
+        }
+        /// <summary>
+        /// Total page count across volume
+        /// </summary>
+        /// <returns></returns>
+        public int GetTotalPageCount()
+        {
+            var pmetadataFile = this.GetRootMetaData();
             int nCnt = 0;
             while (pmetadataFile != null)
             {
@@ -246,11 +279,7 @@ namespace WpfPdfViewer
         /// <returns></returns>
         public int GetSongCount()
         {
-            var pmetadataFile = this;
-            while (pmetadataFile.PriorPdfMetaData != null)
-            {
-                pmetadataFile = pmetadataFile.PriorPdfMetaData;
-            }
+            var pmetadataFile = this.GetRootMetaData();
             int nCnt = 0;
             while (pmetadataFile != null)
             {
@@ -270,11 +299,7 @@ namespace WpfPdfViewer
             var bmi = bitmapImageCache;
             if (bmi == null)
             {
-                var metadataFileHead = this;
-                while (metadataFileHead.PriorPdfMetaData != null)
-                {
-                    metadataFileHead = metadataFileHead.PriorPdfMetaData;
-                }
+                var metadataFileHead = this.GetRootMetaData();
                 bmi = metadataFileHead.bitmapImageCache;
                 if (bmi == null)
                 {
