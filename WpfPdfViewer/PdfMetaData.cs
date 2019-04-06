@@ -91,40 +91,50 @@ namespace WpfPdfViewer
         /*Normal = 0,Rotate90 = 1,Rotate180 = 2,Rotate270 = 3*/
         public int Rotation;
         public string Notes;
+
+
+        [XmlIgnore]
         private BitmapImage bitmapImageCache;
 
-        //[XmlIgnore]
-        //public BitmapImage LargeIcon { get; set; }
+        [XmlIgnore]
+        [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        public byte[] ThumbNail
+        {
+            get
+            { // serialize
+                if (bitmapImageCache == null || PriorPdfMetaData != null )
+                {
+                    return null;
+                }
+                using (MemoryStream ms = new MemoryStream())
+                {
+                    var enc = new PngBitmapEncoder();
+                    enc.Frames.Add(BitmapFrame.Create(bitmapImageCache));
+                    enc.Save(ms);
+                    return ms.ToArray();
+                }
+            }
+            set
+            { // deserialize
+                if (value == null || PriorPdfMetaData != null)
+                {
+                    bitmapImageCache = null;
+                }
+                else
+                {
+                    using (MemoryStream ms = new MemoryStream(value))
+                    {
+                        var bmi = new BitmapImage();
+                        bmi.BeginInit();
+                        bmi.StreamSource = ms;
+                        bmi.EndInit();
+                        bitmapImageCache = bmi;
+//                        var enc = new PngBitmapDecoder(ms, BitmapCreateOptions.DelayCreation,BitmapCacheOption.Default);
 
-        //[XmlIgnore]
-        //[Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
-        //[XmlElement("LargeIcon")]
-        //public byte[] LargeIconSerialized
-        //{
-        //    get
-        //    { // serialize
-        //        if (LargeIcon == null) return null;
-        //        using (MemoryStream ms = new MemoryStream())
-        //        {
-        //            LargeIcon.Save(ms, ImageFormat.Bmp);
-        //            return ms.ToArray();
-        //        }
-        //    }
-        //    set
-        //    { // deserialize
-        //        if (value == null)
-        //        {
-        //            LargeIcon = null;
-        //        }
-        //        else
-        //        {
-        //            using (MemoryStream ms = new MemoryStream(value))
-        //            {
-        //                LargeIcon = new Bitmap(ms);
-        //            }
-        //        }
-        //    }
-        //}
+                    }
+                }
+            }
+        }
 
         public static PdfMetaData ReadPdfMetaData(string FullPathFile)
         {
@@ -232,28 +242,28 @@ namespace WpfPdfViewer
             //};
             //pdfFileData.TableOfContents = lstBms.ToArray();
 
-            //var ftxt = @"C:\t.txt";
-            //var lines = File.ReadAllLines(ftxt);
-            //var lstTocEntries = new List<TOCEntry>();
-            //foreach (var line in lines.Where(l => !string.IsNullOrEmpty(l)))
-            //{
-            //    var parts = line.Split("\t".ToArray());
+//            var ftxt = @"C:\t.txt";
+//            var lines = File.ReadAllLines(ftxt);
+//            var lstTocEntries = new List<TOCEntry>();
+//            foreach (var line in lines.Where(l => !string.IsNullOrEmpty(l)))
+//            {
+//                var parts = line.Split("\t".ToArray());
 
-            //    var pageno = int.Parse(parts[0]);
-            //    var title = parts[1].Trim();
-            //    var yearRawStart = title.LastIndexOf('(');
-            //    var yearStr = title.Substring(yearRawStart).Replace("(", string.Empty).Replace(")", string.Empty);
-            //    title = title.Substring(0, yearRawStart).Trim();
-            //    var tocEntry = new TOCEntry()
-            //    {
-            //        PageNo = pageno,
-            //        SongName = title,
-            //        Composer="Scott Joplin",
-            //        Date = yearStr
-            //    };
-            //    lstTocEntries.Add(tocEntry);
-            //}
-            //pdfFileData.lstTocEntries = lstTocEntries;
+//                var pageno = int.Parse(parts[0]);
+//                var title = parts[1].Trim();
+//                //var yearRawStart = title.LastIndexOf('(');
+//                //var yearStr = title.Substring(yearRawStart).Replace("(", string.Empty).Replace(")", string.Empty);
+////                title = title.Substring(0, yearRawStart).Trim();
+//                var tocEntry = new TOCEntry()
+//                {
+//                    PageNo = pageno,
+//                    SongName = title,
+//                    Composer = "Claude-Michel Schoenberg",
+//                    Date = "1980"
+//                };
+//                lstTocEntries.Add(tocEntry);
+//            }
+//            pdfFileData.lstTocEntries = lstTocEntries;
 
 
             if (pdfFileData.IsDirty || pdfFileData.initialLastPageNo != pdfFileData.LastPageNo)
