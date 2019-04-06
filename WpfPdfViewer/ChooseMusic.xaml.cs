@@ -102,9 +102,8 @@ namespace WpfPdfViewer
                 {
                     foreach (var tentry in pdfMetaDataItem.lstTocEntries)
                     {
-                        var t = (TOCEntry)tentry.Clone();
-                        t.Tag = pdfMetaDataItem;
-                        uberToc.Add(t);
+                        tentry.Tag = pdfMetaDataItem;
+                        uberToc.Add(tentry);
                     }
                 }
                 var q = from itm in uberToc
@@ -264,9 +263,8 @@ namespace WpfPdfViewer
                 {
                     foreach (var fav in pdfMetaDataItem.Favorites)
                     {
-                        var faventry = (Favorite)fav.Clone();
-                        faventry.Tag = pdfMetaDataItem;
-                        _lstFavoriteEntries.Add(faventry);
+                        fav.Tag = pdfMetaDataItem;
+                        _lstFavoriteEntries.Add(fav);
                     }
                 }
 
