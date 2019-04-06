@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyPdfViewer", "MyPdfViewer\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WpfPdfViewer", "WpfPdfViewer\WpfPdfViewer.csproj", "{95E4F137-ABD4-4875-9CF8-AA373EA0C80C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests", "Tests\Tests.csproj", "{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -69,6 +71,26 @@ Global
 		{95E4F137-ABD4-4875-9CF8-AA373EA0C80C}.Release|x64.Build.0 = Release|Any CPU
 		{95E4F137-ABD4-4875-9CF8-AA373EA0C80C}.Release|x86.ActiveCfg = Release|Any CPU
 		{95E4F137-ABD4-4875-9CF8-AA373EA0C80C}.Release|x86.Build.0 = Release|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Debug|ARM.ActiveCfg = Debug|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Debug|ARM.Build.0 = Debug|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Debug|x64.Build.0 = Debug|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Debug|x86.Build.0 = Debug|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Release|ARM.ActiveCfg = Release|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Release|ARM.Build.0 = Release|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Release|ARM64.Build.0 = Release|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Release|x64.ActiveCfg = Release|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Release|x64.Build.0 = Release|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Release|x86.ActiveCfg = Release|Any CPU
+		{321626E4-A6C0-4E1E-BFEB-615C9928CAF0}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -241,6 +241,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     if (lastPdfMetaData != null)
                     {
                         await LoadPdfFileAndShowAsync(lastPdfMetaData, lastPdfMetaData.LastPageNo);
+                        await GetAllBitMapImagesAsync();
                     }
                     else
                     {
@@ -315,6 +316,13 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                         }
                     }
                 });
+            }
+        }
+        async public Task GetAllBitMapImagesAsync()
+        {
+            foreach (var pdfmetadataitem in lstPdfMetaFileData)
+            {
+                await pdfmetadataitem.GetBitmapImageThumbnailAsync();
             }
         }
 
@@ -668,6 +676,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         async Task<bool> ChooseMusic()
         {
             var retval = false;
+            await GetAllBitMapImagesAsync();
             var win = new ChooseMusic();
             win.Initialize(this);
             if (win.ShowDialog() == true)

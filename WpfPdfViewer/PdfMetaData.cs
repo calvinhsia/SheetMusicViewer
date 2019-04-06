@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
 using System.Xml;
 using System.Xml.Serialization;
@@ -54,7 +55,8 @@ namespace WpfPdfViewer
         internal string GetDescription(int currentPageNumber)
         {
             var str = string.Empty;
-            if (dictToc.TryGetValue(currentPageNumber, out var lstTocs))
+            var tocPgNm = currentPageNumber + PageNumberOffset;
+            if (dictToc.TryGetValue(tocPgNm, out var lstTocs))
             {
                 foreach (var toce in lstTocs)
                 {
@@ -63,7 +65,7 @@ namespace WpfPdfViewer
             }
             else
             {
-                str = $"{currentPageNumber} {this}";
+                str = $"{tocPgNm} {this}";
             }
             return str.Trim();
         }
@@ -72,7 +74,7 @@ namespace WpfPdfViewer
         /// <summary>
         /// The Table of contents of a songbook shows the scanned page numbers, which may not match the actual PDF page numbers (there could be a cover page scanned
         /// or could be a multivolume set)
-        /// We want to keep the scabbed ORC TOC editing, cleanup, true and minimize required editing, so keep the original page numbers.
+        /// We want to keep the scanned ORC TOC editing, cleanup, true and minimize required editing, so keep the original page numbers.
         /// The scanned imported OCR TOC will show the physical page no, but not the actual PDF page no.
         /// This value will map between the 2 so that the imported scanned TOC saved as XML will not need to be adjusted.
         /// For 1st, 2nd, 3rd volumes, the offset from the actual scanned page number (as visible on the page) to the PDF page number
@@ -81,6 +83,12 @@ namespace WpfPdfViewer
         /// For vol 4 (PriorPdfMetaData != null), the 1st song "Please Mr Postman" might show page 403, but it's really PdfPage 0. So PageNumberOffset = 403
         /// So the XML for the song will say 403 (same as scanned TOC), but the actual PDFpage no in vol 4 = (403 - PageNumberOffset == 0)
         /// The next song "Poor Side Of Town" on page 404 ins on PdfPage 1. Toc = 404. diff == PageNumberOffset== 403
+        /// 
+        /// So there are 2 kinds of page numbers PDF PgNo and TOC PgNo, and PdfPgNo = TOCPgNo + PageNumberOffset
+        /// So what do we show in the Toolbar? probably best to show TOC pgNo. It matches the page numbers in the scan and is familiar to user.
+        /// However, that means the displayed Toolbar pageno couuld be negative: the 1st song might be on PDF page 1, with lots of intro material on prior pages.
+        /// The PDF page numbers are always 0->maxno -1. For a continued volume, max = Sum(max of all volumes)
+        /// so, the pgnos for all TOC entries and the dictToc are of type TocPgno.
         /// </summary>
         public int PageNumberOffset;
         /// <summary>
@@ -94,7 +102,7 @@ namespace WpfPdfViewer
 
 
         [XmlIgnore]
-        private BitmapImage bitmapImageCache;
+        internal BitmapImage bitmapImageCache;
 
         [XmlIgnore]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
@@ -102,7 +110,7 @@ namespace WpfPdfViewer
         {
             get
             { // serialize
-                if (bitmapImageCache == null || PriorPdfMetaData != null )
+                if (bitmapImageCache == null || PriorPdfMetaData != null)
                 {
                     return null;
                 }
@@ -129,17 +137,17 @@ namespace WpfPdfViewer
                         bmi.StreamSource = ms;
                         bmi.EndInit();
                         bitmapImageCache = bmi;
-//                        var enc = new PngBitmapDecoder(ms, BitmapCreateOptions.DelayCreation,BitmapCacheOption.Default);
+                        //                        var enc = new PngBitmapDecoder(ms, BitmapCreateOptions.DelayCreation,BitmapCacheOption.Default);
 
                     }
                 }
             }
         }
 
-        public static PdfMetaData ReadPdfMetaData(string FullPathFile)
+        public static PdfMetaData ReadPdfMetaData(string FullPathPdfFile)
         {
             PdfMetaData pdfFileData = null;
-            var bmkFile = Path.ChangeExtension(FullPathFile, "bmk");
+            var bmkFile = Path.ChangeExtension(FullPathPdfFile, "bmk");
             if (File.Exists(bmkFile))
             {
                 try
@@ -148,7 +156,7 @@ namespace WpfPdfViewer
                     using (var sr = new StreamReader(bmkFile))
                     {
                         pdfFileData = (PdfMetaData)serializer.Deserialize(sr);
-                        pdfFileData.FullPathFile = FullPathFile;
+                        pdfFileData.FullPathFile = FullPathPdfFile;
                         pdfFileData.initialLastPageNo = pdfFileData.LastPageNo;
                         if (pdfFileData.HideThisPDFFile)
                         {
@@ -167,7 +175,7 @@ namespace WpfPdfViewer
             {
                 pdfFileData = new PdfMetaData()
                 {
-                    FullPathFile = FullPathFile
+                    FullPathFile = FullPathPdfFile
                 };
             }
             pdfFileData?.Initialize();
@@ -205,22 +213,26 @@ namespace WpfPdfViewer
 
         public static void SavePdfFileData(PdfMetaData pdfFileData)
         {
-            //var fTsv = @"C:\Users\calvinh\Documents\Book1.txt";
+            //var fTsv = @"C:\t.txt";
             //var lines = File.ReadAllLines(fTsv);
             //var lstTocEntries = new List<TOCEntry>();
-            //foreach (var line in lines)
+            //foreach (var line in lines.Where(l=>!string.IsNullOrEmpty(l.Trim())))
             //{
-            //    var parts = line.Split("\t".ToArray());
+            //    var lastp = line.LastIndexOf("(");
+            //    var sname = line.Substring(0, lastp).Trim();
+            //    var year = line.Substring(lastp, 5).Replace("(", string.Empty).Replace(")", string.Empty);
+            //    var lastrp = line.LastIndexOf(")");
+            //    var pgno = int.Parse(line.Substring(lastrp + 1));
             //    var tocEntry = new TOCEntry()
             //    {
-            //        PageNo =int.Parse( parts[0]),
-            //        SongName=parts[1],
-            //        Composer=parts[2],
-            //        Date=parts[3]
+            //        PageNo = pgno,
+            //        SongName = sname,
+            //        Composer = "James Scott",
+            //        Date = year
             //    };
             //    lstTocEntries.Add(tocEntry);
             //}
-            //pdfFileData.TableOfContents = lstTocEntries.ToArray();
+            //pdfFileData.lstTocEntries = lstTocEntries;
 
             /*
  <TableOfContents>
@@ -242,28 +254,27 @@ namespace WpfPdfViewer
             //};
             //pdfFileData.TableOfContents = lstBms.ToArray();
 
-//            var ftxt = @"C:\t.txt";
-//            var lines = File.ReadAllLines(ftxt);
-//            var lstTocEntries = new List<TOCEntry>();
-//            foreach (var line in lines.Where(l => !string.IsNullOrEmpty(l)))
-//            {
-//                var parts = line.Split("\t".ToArray());
+            //var ftxt = @"C:\Users\calvinh\Documents\t.txt";
+            //var lines = File.ReadAllLines(ftxt);
+            //var lstTocEntries = new List<TOCEntry>();
+            //foreach (var line in lines.Where(l => !string.IsNullOrEmpty(l)))
+            //{
 
-//                var pageno = int.Parse(parts[0]);
-//                var title = parts[1].Trim();
-//                //var yearRawStart = title.LastIndexOf('(');
-//                //var yearStr = title.Substring(yearRawStart).Replace("(", string.Empty).Replace(")", string.Empty);
-////                title = title.Substring(0, yearRawStart).Trim();
-//                var tocEntry = new TOCEntry()
-//                {
-//                    PageNo = pageno,
-//                    SongName = title,
-//                    Composer = "Claude-Michel Schoenberg",
-//                    Date = "1980"
-//                };
-//                lstTocEntries.Add(tocEntry);
-//            }
-//            pdfFileData.lstTocEntries = lstTocEntries;
+            //    var space = line.IndexOf(" ");
+                
+            //    var pageno = int.Parse(line.Substring(0,space));
+            //    var title = line.Substring(space+1).Trim();
+            //    //var yearRawStart = title.LastIndexOf('(');
+            //    //var yearStr = title.Substring(yearRawStart).Replace("(", string.Empty).Replace(")", string.Empty);
+            //    //                title = title.Substring(0, yearRawStart).Trim();
+            //    var tocEntry = new TOCEntry()
+            //    {
+            //        PageNo = pageno,
+            //        SongName = title,
+            //    };
+            //    lstTocEntries.Add(tocEntry);
+            //}
+            //pdfFileData.lstTocEntries = lstTocEntries;
 
 
             if (pdfFileData.IsDirty || pdfFileData.initialLastPageNo != pdfFileData.LastPageNo)
@@ -332,27 +343,32 @@ namespace WpfPdfViewer
             }
             return nCnt;
         }
+        public BitmapImage GetBitmapImageThumbnail()
+        {
+            var bmi = bitmapImageCache;
+            if (bmi == null)
+            {
+                bmi = this.GetRootMetaData().bitmapImageCache;
+            }
+            return bmi;
+        }
 
         /// <summary>
         /// gets a thumbnail for the 1st page of a sequence of PDFs.
         /// </summary>
         /// <param name="size"></param>
         /// <returns></returns>
-        public BitmapImage GetBitmapImageThumbnail()
+        public async Task<BitmapImage> GetBitmapImageThumbnailAsync()
         {
-            var bmi = bitmapImageCache;
+            var bmi = bitmapImageCache; // first see if we have one 
             if (bmi == null)
             {
-                var metadataFileHead = this.GetRootMetaData();
+                var metadataFileHead = this.GetRootMetaData();// now see if root one has one
                 bmi = metadataFileHead.bitmapImageCache;
                 if (bmi == null)
                 {
-                    var tkGetStorageFileFromPath = StorageFile.GetFileFromPathAsync(metadataFileHead.FullPathFile);
-                    tkGetStorageFileFromPath.AsTask().Wait();
-                    var tkGetStorageFile = tkGetStorageFileFromPath.AsTask().Result;
-                    var tkGetPdfDocument = PdfDocument.LoadFromFileAsync(tkGetStorageFile);
-                    tkGetPdfDocument.AsTask().Wait();
-                    var pdfDoc = tkGetPdfDocument.AsTask().Result;
+                    var f = await StorageFile.GetFileFromPathAsync(metadataFileHead.FullPathFile);
+                    var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
 
                     //StorageFile f = await StorageFile.GetFileFromPathAsync(pdfMetaDataItem.FullPathFile);
                     //var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
@@ -368,8 +384,7 @@ namespace WpfPdfViewer
                                 DestinationHeight = (uint)225
                             };
 
-                            var ttt = page.RenderToStreamAsync(strm, renderOpts);
-                            ttt.AsTask().Wait();
+                            await page.RenderToStreamAsync(strm, renderOpts);
                             //var enc = new PngBitmapEncoder();
                             //enc.Frames.Add(BitmapFrame.Create)
                             bmi.BeginInit();
@@ -430,7 +445,7 @@ namespace WpfPdfViewer
     }
 
     [Serializable]
-    public class Favorite: ICloneable
+    public class Favorite : ICloneable
     {
         public string FavoriteName;
         public int Pageno;
@@ -457,7 +472,7 @@ namespace WpfPdfViewer
     /// Not really bookmark: Table of Contents Entry
     /// </summary>
     [Serializable]
-    public class TOCEntry: ICloneable
+    public class TOCEntry : ICloneable
     {
         public string SongName;
         public string Composer;
@@ -471,11 +486,11 @@ namespace WpfPdfViewer
         {
             return new TOCEntry()
             {
-                SongName=this.SongName,
-                Composer=this.Composer,
-                Notes=this.Notes,
-                Date=this.Date,
-                PageNo=this.PageNo
+                SongName = this.SongName,
+                Composer = this.Composer,
+                Notes = this.Notes,
+                Date = this.Date,
+                PageNo = this.PageNo
             };
         }
 

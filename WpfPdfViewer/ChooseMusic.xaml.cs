@@ -159,6 +159,7 @@ namespace WpfPdfViewer
                 this.txtCurrentRootFolder.Text = _pdfViewerWindow._RootMusicFolder;
                 this.tabControl.SelectedIndex = 0;
                 await _pdfViewerWindow.LoadAllPdfMetaDataFromDiskAsync();
+                await _pdfViewerWindow.GetAllBitMapImagesAsync();
                 ActivateTab(string.Empty);
             }
         }
