@@ -8,8 +8,8 @@
         Title="ChooseMusic" Height="450" Width="800">
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"></RowDefinition>
-            <RowDefinition Height="*"></RowDefinition>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,4">
             <Label Content="Current Path: " HorizontalAlignment="Left" Margin="0,-3,0,0" VerticalAlignment="Top" IsEnabled="{Binding PdfUIEnabled}"/>
@@ -27,7 +27,7 @@
                             <ListBox Name="lbBooks" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                                 <ListBox.ItemsPanel>
                                     <ItemsPanelTemplate>
-                                        <WrapPanel IsItemsHost="True" Orientation="Horizontal" ItemHeight="475" ItemWidth="300"/><!--needs to be a little taller than the bmp for the title-->
+                                        <WrapPanel IsItemsHost="True" Orientation="Horizontal" ItemHeight="255" ItemWidth="150"/><!--needs to be a little taller than the bmp for the title-->
                                     </ItemsPanelTemplate>
                                 </ListBox.ItemsPanel>
                             </ListBox>
@@ -51,6 +51,5 @@
                 </TabItem>
             </TabControl>
         </DockPanel>
-
     </Grid>
 </Window>

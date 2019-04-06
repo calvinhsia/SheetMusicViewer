@@ -38,13 +38,8 @@ namespace WpfPdfViewer
             get { return _CurrentPageNumber; }
             set
             {
-                if (_CurrentPageNumber != value && currentPdfMetaData != null)
-                {
-                    _CurrentPageNumber = value;
-                    this.dpPage.Children.Clear();// force regen
-                    this.Dispatcher.InvokeAsync(async () => await ShowPageAsync(value, ClearCache: false));
-                    OnMyPropertyChanged();
-                }
+                _CurrentPageNumber = value;
+                OnMyPropertyChanged();
             }
         }
         private int _MaxPageNumber;
@@ -65,9 +60,10 @@ namespace WpfPdfViewer
                 this.dpPage.Children.Clear();
                 this.Dispatcher.InvokeAsync(async () => await ShowPageAsync(CurrentPageNumber, ClearCache: true));
                 OnMyPropertyChanged();
+                OnMyPropertyChanged("NumPagesPerView");
             }
         }
-        internal int NumPagesPerView => _fShow2Pages ? 2 : 1;
+        public int NumPagesPerView => _fShow2Pages ? 2 : 1;
 
         public bool PdfUIEnabled { get { return _currentPdfDocument != null; } set { OnMyPropertyChanged(); } }
 
@@ -336,6 +332,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             this.MaxPageNumber = (int)_currentPdfDocument.PageCount;
             pdfMetaData.NumPages = this.MaxPageNumber; //store the # of pages for this particular doc.
             this.slider.Maximum = this.MaxPageNumber;
+            this.slider.LargeChange = Math.Max((int)(.1 * this.MaxPageNumber), 1); // 10%
             //this.slider.IsDirectionReversed = true;
             this.PdfUIEnabled = true;
             OnMyPropertyChanged(nameof(PdfTitle));
@@ -832,6 +829,27 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         private void Slider_TouchDown(object sender, TouchEventArgs e)
         {
             e.Handled = true;
+        }
+        private bool _sliderDragStarted;
+        void OnSliderThumbDragstarted(object sender, RoutedEventArgs e)
+        {
+            _sliderDragStarted = true;
+        }
+        void OnSliderThumbDragCompleted(object sender, RoutedEventArgs e)
+        {
+            _sliderDragStarted = false;
+            OnSliderValueChanged(sender, e);
+        }
+        void OnSliderValueChanged(object sender, RoutedEventArgs e)
+        {
+            if (!_sliderDragStarted)
+            {
+                if (currentPdfMetaData != null)
+                {
+                    this.dpPage.Children.Clear();// force regen
+                    this.Dispatcher.InvokeAsync(async () => await ShowPageAsync(CurrentPageNumber, ClearCache: false));
+                }
+            }
         }
 
         private void ChkfullScreenToggled(object sender, RoutedEventArgs e)

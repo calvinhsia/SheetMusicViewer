@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Windows.Media.Imaging;
@@ -91,6 +92,39 @@ namespace WpfPdfViewer
         public int Rotation;
         public string Notes;
         private BitmapImage bitmapImageCache;
+
+        //[XmlIgnore]
+        //public BitmapImage LargeIcon { get; set; }
+
+        //[XmlIgnore]
+        //[Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        //[XmlElement("LargeIcon")]
+        //public byte[] LargeIconSerialized
+        //{
+        //    get
+        //    { // serialize
+        //        if (LargeIcon == null) return null;
+        //        using (MemoryStream ms = new MemoryStream())
+        //        {
+        //            LargeIcon.Save(ms, ImageFormat.Bmp);
+        //            return ms.ToArray();
+        //        }
+        //    }
+        //    set
+        //    { // deserialize
+        //        if (value == null)
+        //        {
+        //            LargeIcon = null;
+        //        }
+        //        else
+        //        {
+        //            using (MemoryStream ms = new MemoryStream(value))
+        //            {
+        //                LargeIcon = new Bitmap(ms);
+        //            }
+        //        }
+        //    }
+        //}
 
         public static PdfMetaData ReadPdfMetaData(string FullPathFile)
         {
@@ -320,8 +354,8 @@ namespace WpfPdfViewer
                             var rect = page.Dimensions.ArtBox;
                             var renderOpts = new PdfPageRenderOptions
                             {
-                                DestinationWidth = (uint)300,
-                                DestinationHeight = (uint)450
+                                DestinationWidth = (uint)150,
+                                DestinationHeight = (uint)225
                             };
 
                             var ttt = page.RenderToStreamAsync(strm, renderOpts);
