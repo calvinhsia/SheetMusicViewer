@@ -132,7 +132,7 @@ namespace WpfPdfViewer
             this.Top = Properties.Settings.Default.MainWindowPos.Height;
             this.Left = Properties.Settings.Default.MainWindowPos.Width;
             this._RootMusicFolder = Properties.Settings.Default.RootMusicFolder;
-//            this._RootMusicFolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Jazz";
+            //            this._RootMusicFolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Jazz";
             this.Show2Pages = Properties.Settings.Default.Show2Pages;
             this.chkFullScreen.IsChecked = Properties.Settings.Default.IsFullScreen;
 
@@ -228,6 +228,11 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             // https://blogs.windows.com/buildingapps/2017/01/25/calling-windows-10-apis-desktop-application/#RWYkd5C4WTeEybol.97
             try
             {
+                //var folder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Pop";
+                //var pdfName = "150 of the Most Beautiful Songs Ever 0.pdf";
+                //var pathPdf = System.IO.Path.Combine(folder, pdfName);
+                //await CombinePDFsToASinglePdfAsync(pathPdf);
+                //return;
                 this.ChkfullScreenToggled(this, new RoutedEventArgs() { RoutedEvent = (this.chkFullScreen.IsChecked == true ? CheckBox.CheckedEvent : CheckBox.UncheckedEvent) });
                 this.Title = "MyMusicViewer"; // for task bar
                 var lastPdfOpen = Properties.Settings.Default.LastPDFOpen;
@@ -238,7 +243,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 else
                 {
                     await LoadAllPdfMetaDataFromDiskAsync();
-             //       MungeFavorites();
+                    MungeFavorites();
                     var lastPdfMetaData = lstPdfMetaFileData.Where(p => p.FullPathFile == lastPdfOpen).FirstOrDefault();
                     if (lastPdfMetaData != null)
                     {
@@ -327,8 +332,12 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             PdfMetaData pRoot = null;
             int nPageOffset = 0;
             var rootIsDirty = false;
-            foreach (var pdfMetaDataItem in lstPdfMetaFileData.Where(dd =>dd.FullPathFile.Contains("Broadway")))
+            foreach (var pdfMetaDataItem in lstPdfMetaFileData) //.Where(dd => dd.FullPathFile.Contains("Broadway")))
             {
+                if (pdfMetaDataItem.NumPages==0)
+                {
+                    "no pages?".ToString();
+                }
                 if (pdfMetaDataItem.PriorPdfMetaData == null) // it's a root
                 {
                     if (rootIsDirty)
@@ -342,7 +351,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 }
                 else
                 {
-                    if (pdfMetaDataItem.Favorites.Count>0)
+                    if (pdfMetaDataItem.Favorites.Count > 0)
                     {
                         foreach (var fav in pdfMetaDataItem.Favorites)
                         {
@@ -358,23 +367,26 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                         PdfMetaData.SavePdfFileData(pdfMetaDataItem);
                     }
                     nPageOffset += pdfMetaDataItem.NumPages;
-                    if (pdfMetaDataItem.lstTocEntries.Count>0 && pRoot.lstTocEntries.Count >0)
+                    if (pdfMetaDataItem.lstTocEntries.Count > 0 && pRoot.lstTocEntries.Count > 0)
                     {
                         "".ToString();
                     }
-                    if (pdfMetaDataItem.lstTocEntries.Count>0)
+                    if (pdfMetaDataItem.lstTocEntries.Count > 0)
                     {
-                        pRoot.lstTocEntries = pdfMetaDataItem.lstTocEntries;
+                        pRoot.lstTocEntries.AddRange( pdfMetaDataItem.lstTocEntries);
                         pdfMetaDataItem.lstTocEntries.Clear();
+                        pdfMetaDataItem.IsDirty = true;
                         PdfMetaData.SavePdfFileData(pdfMetaDataItem);
                         rootIsDirty = true;
-                        
                     }
-                   // pRoot.lstTocEntries = pdfMetaDataItem.lstTocEntries;
-                    //pdfMetaDataItem.lstTocEntries = null;
-//                    PdfMetaData.SavePdfFileData(pRoot);
                 }
             }
+            if (rootIsDirty)
+            {
+                pRoot.IsDirty = true;
+                PdfMetaData.SavePdfFileData(pRoot);
+            }
+
             "done".ToString();
         }
 
@@ -783,43 +795,43 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             this.PdfUIEnabled = false;
         }
 
-        async static Task<DocumentViewer> CombinePDFsToASinglePdfAsync()
+        async static Task<DocumentViewer> CombinePDFsToASinglePdfAsync(string pathPdf)
         {
-            await CombinePDFsToASinglePdfAsync();// to quiet warning about unused func
-            var docvwr = new DocumentViewer();
-
+//            await CombinePDFsToASinglePdfAsync();// to quiet warning about unused func
             //             //pdfSourceDoc = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Ragtime\Collections\The Music of James Scott001.pdf";
             //rotation = Rotation.Rotate0;
 
-            var fixedDoc = await ConvertMultiPdfToSingleAsync(
-                @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\Ultimate Pop Rock Fake Book.pdf",
-                Rotation.Rotate0,
-                @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\Ultimate Pop Rock Fake Book 1.pdf",
-                Rotation.Rotate180);
+            var fixedDoc = await ConvertMultiPdfToSingleAsync(pathPdf);
+            //var fixedDoc = await ConvertMultiPdfToSingleAsync(
+            //    @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\Ultimate Pop Rock Fake Book.pdf",
+            //    Rotation.Rotate0,
+            //    @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\Ultimate Pop Rock Fake Book 1.pdf",
+            //    Rotation.Rotate180);
+            var docvwr = new DocumentViewer();
             docvwr.Document = fixedDoc;
-            //IDocumentPaginatorSource idps = fixedDoc;
-            //var pdlg = new PrintDialog();
-            //var queueName = "Microsoft Print to PDF";
-            //var pServer = new PrintServer();
-            //var pqueues = pServer.GetPrintQueues(new[] { EnumeratedPrintQueueTypes.Local });
-            //pdlg.PrintQueue = new PrintQueue(pServer, queueName);
-            //pdlg.PrintDocument(idps.DocumentPaginator, "testprint");
+            IDocumentPaginatorSource idps = fixedDoc;
+            var pdlg = new PrintDialog();
+            var queueName = "Microsoft Print to PDF";
+            var pServer = new PrintServer();
+//            var pqueues = pServer.GetPrintQueues(new[] { EnumeratedPrintQueueTypes.Local });
+            pdlg.PrintQueue = new PrintQueue(pServer, queueName);
+            pdlg.PrintDocument(idps.DocumentPaginator, "testprint");
             return docvwr;
         }
 
-        async static Task<FixedDocument> ConvertMultiPdfToSingleAsync(string titlePage, Rotation rotationTitlePage, string vol1, Rotation rotation)
+        async static Task<FixedDocument> ConvertMultiPdfToSingleAsync(string vol0)
         {
             var fixedDoc = new FixedDocument();
-            if (!string.IsNullOrEmpty(titlePage) && File.Exists(titlePage))
-            {
-                var fTitle = await StorageFile.GetFileFromPathAsync(titlePage);
-                var pdfDocTitle = await PdfDocument.LoadFromFileAsync(fTitle);
-                var pgTitle = pdfDocTitle.GetPage(0);
-                await AddPageToDocAsync(fixedDoc, pgTitle, rotationTitlePage);
-            }
+            //if (!string.IsNullOrEmpty(titlePage) && File.Exists(titlePage))
+            //{
+            //    var fTitle = await StorageFile.GetFileFromPathAsync(titlePage);
+            //    var pdfDocTitle = await PdfDocument.LoadFromFileAsync(fTitle);
+            //    var pgTitle = pdfDocTitle.GetPage(0);
+            //    await AddPageToDocAsync(fixedDoc, pgTitle, rotationTitlePage);
+            //}
             var fDone = false;
-            int nVolNo = 1;
-            var pdfDataFileToUse = vol1;
+            int nVolNo = 0;
+            var pdfDataFileToUse = vol0;
             while (!fDone)
             {
                 StorageFile f = await StorageFile.GetFileFromPathAsync(pdfDataFileToUse);
@@ -829,15 +841,15 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 {
                     using (var page = pdfDoc.GetPage((uint)i))
                     {
-                        await AddPageToDocAsync(fixedDoc, page, rotation);
+                        await AddPageToDocAsync(fixedDoc, page, (nVolNo==0? Rotation.Rotate0 : Rotation.Rotate180));
                     }
                 }
-                if (!vol1.EndsWith("1.pdf"))
+                if (!vol0.EndsWith("0.pdf"))
                 {
                     break;
                 }
                 nVolNo++;
-                pdfDataFileToUse = vol1.Replace("1.pdf", string.Empty) + nVolNo.ToString() + ".pdf";
+                pdfDataFileToUse = vol0.Replace("0.pdf", string.Empty) + nVolNo.ToString() + ".pdf";
                 if (!File.Exists(pdfDataFileToUse))
                 {
                     break;

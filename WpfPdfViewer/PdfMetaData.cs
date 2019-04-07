@@ -101,8 +101,15 @@ namespace WpfPdfViewer
         internal string GetDescription(int currentPageNumber)
         {
             var str = string.Empty;
+            var pMetaDataItem = this;
+            while (pMetaDataItem.PriorPdfMetaData != null)
+            {
+                pMetaDataItem = PriorPdfMetaData;
+                currentPageNumber += pMetaDataItem.NumPages;
+            }
+
             var tocPgNm = currentPageNumber + PageNumberOffset;
-            if (dictToc.TryGetValue(tocPgNm, out var lstTocs))
+            if (pMetaDataItem.dictToc.TryGetValue(tocPgNm, out var lstTocs))
             {
                 foreach (var toce in lstTocs)
                 {
@@ -115,7 +122,6 @@ namespace WpfPdfViewer
             }
             return str.Trim();
         }
-
 
         public static PdfMetaData ReadPdfMetaData(string FullPathPdfFile)
         {
@@ -136,6 +142,10 @@ namespace WpfPdfViewer
                             pdfFileData = null;
                         }
                     }
+                    if (pdfFileData?.NumPages == 0)
+                    {
+                        pdfFileData.SetNumPages();
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -151,18 +161,25 @@ namespace WpfPdfViewer
                     FullPathFile = FullPathPdfFile
                 };
                 // For each one of the PDFs we need the MaxPage No for combining volumes
-                var tkf = StorageFile.GetFileFromPathAsync(FullPathPdfFile);
-                tkf.AsTask().Wait();
-                var tkpdfDoc = PdfDocument.LoadFromFileAsync(tkf.AsTask().Result).AsTask();
-                tkpdfDoc.Wait();
-                var pdfDoc = tkpdfDoc.Result;
-                pdfFileData.NumPages = (int)pdfDoc.PageCount;
-                pdfFileData.IsDirty = true;
-                SavePdfFileData(pdfFileData);
+                pdfFileData.SetNumPages();
             }
             pdfFileData?.Initialize();
             return pdfFileData;
         }
+
+        private int SetNumPages()
+        {
+            var tkf = StorageFile.GetFileFromPathAsync(this.FullPathFile);
+            tkf.AsTask().Wait();
+            var tkpdfDoc = PdfDocument.LoadFromFileAsync(tkf.AsTask().Result).AsTask();
+            tkpdfDoc.Wait();
+            var pdfDoc = tkpdfDoc.Result;
+            this.NumPages = (int)pdfDoc.PageCount;
+            this.IsDirty = true;
+            SavePdfFileData(this);
+            return this.NumPages;
+        }
+
         public PdfMetaData() { }
 
         string RemoveQuotes(string str)
@@ -359,7 +376,7 @@ namespace WpfPdfViewer
                             var rect = page.Dimensions.ArtBox;
                             var renderOpts = new PdfPageRenderOptions
                             {
-                                DestinationWidth = (uint)150,
+                                DestinationWidth = (uint)150, // match these with choose.xaml
                                 DestinationHeight = (uint)225
                             };
 
@@ -382,7 +399,13 @@ namespace WpfPdfViewer
         internal bool IsFavorite(int PageNo)
         {
             var isFav = false;
-            if (Favorites.Where(f => f.Pageno == PageNo).Any())
+            var pMetaDataItem = this;
+            while (pMetaDataItem.PriorPdfMetaData != null)
+            {
+                pMetaDataItem = PriorPdfMetaData;
+                PageNo += pMetaDataItem.NumPages;
+            }
+            if (pMetaDataItem.Favorites.Where(f => f.Pageno == PageNo).Any())
             {
                 isFav = true;
             }
@@ -392,9 +415,16 @@ namespace WpfPdfViewer
         internal void ToggleFavorite(int PageNo, bool IsFavorite)
         {
             this.IsDirty = true;
-            for (int i = 0; i < Favorites.Count; i++)
+            var pMetaDataItem = this;
+            while (pMetaDataItem.PriorPdfMetaData != null)
             {
-                if (Favorites[i].Pageno == PageNo) // already in list of favs
+                pMetaDataItem = PriorPdfMetaData;
+                PageNo += pMetaDataItem.NumPages;
+            }
+
+            for (int i = 0; i < pMetaDataItem.Favorites.Count; i++)
+            {
+                if (pMetaDataItem.Favorites[i].Pageno == PageNo) // already in list of favs
                 {
                     if (IsFavorite) // already set as favorite, do nothing
                     {
@@ -403,18 +433,17 @@ namespace WpfPdfViewer
                     else
                     {
                         // remove it
-                        Favorites.RemoveAt(i);
+                        pMetaDataItem.Favorites.RemoveAt(i);
                     }
                     return;
                 }
             }
             if (IsFavorite)
             {
-                Favorites.Add(new Favorite()
+                pMetaDataItem.Favorites.Add(new Favorite()
                 {
                     Pageno = PageNo
                 });
-
             }
         }
         public override string ToString()

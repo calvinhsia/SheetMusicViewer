@@ -190,7 +190,10 @@ namespace WpfPdfViewer
         {
             if (this.lbBooks.ItemsSource == null)
             {
-                this.tbxTotals.Text = $"Total #Books = {_pdfViewerWindow.lstPdfMetaFileData.Where(p=>p.PriorPdfMetaData==null).Count()} # Songs = {_pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.lstTocEntries.Count)}";
+                this.tbxTotals.Text = $@"Total #Books = {
+                    _pdfViewerWindow.lstPdfMetaFileData.Where(p=>p.PriorPdfMetaData==null).Count()} # Songs = {
+                    _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.lstTocEntries.Count)} # Pages = {
+                    _pdfViewerWindow.lstPdfMetaFileData.Sum(p=>p.NumPages)}";
 
                 this.lbBooks.MouseDoubleClick += (o, e) =>
                   {
