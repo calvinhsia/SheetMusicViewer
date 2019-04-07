@@ -63,7 +63,7 @@ namespace WpfPdfViewer
         /// </summary>
         public int NumPages;
 
-        bool IsDirty = false;
+        internal bool IsDirty = false;
         int initialLastPageNo;
 
         /// <summary>
@@ -150,6 +150,15 @@ namespace WpfPdfViewer
                 {
                     FullPathFile = FullPathPdfFile
                 };
+                // For each one of the PDFs we need the MaxPage No for combining volumes
+                var tkf = StorageFile.GetFileFromPathAsync(FullPathPdfFile);
+                tkf.AsTask().Wait();
+                var tkpdfDoc = PdfDocument.LoadFromFileAsync(tkf.AsTask().Result).AsTask();
+                tkpdfDoc.Wait();
+                var pdfDoc = tkpdfDoc.Result;
+                pdfFileData.NumPages = (int)pdfDoc.PageCount;
+                pdfFileData.IsDirty = true;
+                SavePdfFileData(pdfFileData);
             }
             pdfFileData?.Initialize();
             return pdfFileData;

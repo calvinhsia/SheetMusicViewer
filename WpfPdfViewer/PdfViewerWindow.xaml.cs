@@ -132,6 +132,7 @@ namespace WpfPdfViewer
             this.Top = Properties.Settings.Default.MainWindowPos.Height;
             this.Left = Properties.Settings.Default.MainWindowPos.Width;
             this._RootMusicFolder = Properties.Settings.Default.RootMusicFolder;
+//            this._RootMusicFolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Jazz";
             this.Show2Pages = Properties.Settings.Default.Show2Pages;
             this.chkFullScreen.IsChecked = Properties.Settings.Default.IsFullScreen;
 
@@ -237,6 +238,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 else
                 {
                     await LoadAllPdfMetaDataFromDiskAsync();
+             //       MungeFavorites();
                     var lastPdfMetaData = lstPdfMetaFileData.Where(p => p.FullPathFile == lastPdfOpen).FirstOrDefault();
                     if (lastPdfMetaData != null)
                     {
@@ -318,6 +320,64 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 });
             }
         }
+
+        private void MungeFavorites()
+        {
+            // transfter fav, toc to root
+            PdfMetaData pRoot = null;
+            int nPageOffset = 0;
+            var rootIsDirty = false;
+            foreach (var pdfMetaDataItem in lstPdfMetaFileData.Where(dd =>dd.FullPathFile.Contains("Broadway")))
+            {
+                if (pdfMetaDataItem.PriorPdfMetaData == null) // it's a root
+                {
+                    if (rootIsDirty)
+                    {
+                        pRoot.IsDirty = true;
+                        PdfMetaData.SavePdfFileData(pRoot);
+                    }
+                    rootIsDirty = false;
+                    pRoot = pdfMetaDataItem;
+                    nPageOffset = pRoot.NumPages;
+                }
+                else
+                {
+                    if (pdfMetaDataItem.Favorites.Count>0)
+                    {
+                        foreach (var fav in pdfMetaDataItem.Favorites)
+                        {
+                            pRoot.Favorites.Add(new Favorite()
+                            {
+                                Pageno = fav.Pageno + nPageOffset
+                            }
+                                );
+                            rootIsDirty = true;
+                        }
+                        pdfMetaDataItem.Favorites.Clear();
+                        pdfMetaDataItem.IsDirty = true;
+                        PdfMetaData.SavePdfFileData(pdfMetaDataItem);
+                    }
+                    nPageOffset += pdfMetaDataItem.NumPages;
+                    if (pdfMetaDataItem.lstTocEntries.Count>0 && pRoot.lstTocEntries.Count >0)
+                    {
+                        "".ToString();
+                    }
+                    if (pdfMetaDataItem.lstTocEntries.Count>0)
+                    {
+                        pRoot.lstTocEntries = pdfMetaDataItem.lstTocEntries;
+                        pdfMetaDataItem.lstTocEntries.Clear();
+                        PdfMetaData.SavePdfFileData(pdfMetaDataItem);
+                        rootIsDirty = true;
+                        
+                    }
+                   // pRoot.lstTocEntries = pdfMetaDataItem.lstTocEntries;
+                    //pdfMetaDataItem.lstTocEntries = null;
+//                    PdfMetaData.SavePdfFileData(pRoot);
+                }
+            }
+            "done".ToString();
+        }
+
         async public Task GetAllBitMapImagesAsync()
         {
             foreach (var pdfmetadataitem in lstPdfMetaFileData)
