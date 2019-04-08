@@ -44,8 +44,7 @@ namespace WpfPdfViewer
         }
         private int _MaxPageNumber;
         public int MaxPageNumber { get { return _MaxPageNumber; } set { if (_MaxPageNumber != value) { _MaxPageNumber = value; OnMyPropertyChanged(); } } }
-
-        public string PdfTitle { get { return currentPdfMetaData?.RelativeFileName; } }
+        public string PdfTitle { get { return currentPdfMetaData?.GetFullPathFile(volNo: 0, MakeRelative: true); } }
         public string Description0 { get { return currentPdfMetaData?.GetDescription(CurrentPageNumber); } }
         public string Description1 { get { return currentPdfMetaData?.GetDescription(CurrentPageNumber + 1); } }
         bool _fShow2Pages = true;
@@ -65,12 +64,11 @@ namespace WpfPdfViewer
         }
         public int NumPagesPerView => _fShow2Pages ? 2 : 1;
 
-        public bool PdfUIEnabled { get { return _currentPdfDocument != null; } set { OnMyPropertyChanged(); } }
+        public bool PdfUIEnabled { get { return currentPdfMetaData != null; } set { OnMyPropertyChanged(); } }
 
         internal string _RootMusicFolder;
-        internal readonly List<PdfMetaData> lstPdfMetaFileData = new List<PdfMetaData>();
+        internal List<PdfMetaData> lstPdfMetaFileData;
 
-        PdfDocument _currentPdfDocument = null;
         PdfMetaData currentPdfMetaData = null;
         internal static PdfViewerWindow s_pdfViewerWindow;
 
@@ -119,7 +117,7 @@ namespace WpfPdfViewer
         static int currentCacheAge;
         readonly Dictionary<int, CacheEntry> dictCache = new Dictionary<int, CacheEntry>(); // for either show2pages, pageno ->grid. results in dupes if even, then odd number on show2pages
 
-        public string FullPathCurrentPdfFile => currentPdfMetaData?.FullPathFile;
+        public string FullPathCurrentPdfFile => currentPdfMetaData?.GetFullPathFile(volNo: 0);
 
 
         public PdfViewerWindow()
@@ -133,7 +131,7 @@ namespace WpfPdfViewer
             this.Left = Properties.Settings.Default.MainWindowPos.Width;
             this._RootMusicFolder = Properties.Settings.Default.RootMusicFolder;
             //            this._RootMusicFolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Jazz";
-            this.Show2Pages = Properties.Settings.Default.Show2Pages;
+            this.Show2Pages = false;//xxxx Properties.Settings.Default.Show2Pages;
             this.chkFullScreen.IsChecked = Properties.Settings.Default.IsFullScreen;
 
             this.Closed += (o, e) =>
@@ -242,9 +240,8 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 }
                 else
                 {
-                    await LoadAllPdfMetaDataFromDiskAsync();
-                    MungeFavorites();
-                    var lastPdfMetaData = lstPdfMetaFileData.Where(p => p.FullPathFile == lastPdfOpen).FirstOrDefault();
+                    lstPdfMetaFileData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(_RootMusicFolder);
+                    var lastPdfMetaData = lstPdfMetaFileData.Where(p => p.GetFullPathFile(volNo: 0) == lastPdfOpen).FirstOrDefault();
                     if (lastPdfMetaData != null)
                     {
                         await LoadPdfFileAndShowAsync(lastPdfMetaData, lastPdfMetaData.LastPageNo);
@@ -262,133 +259,64 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
         }
 
-        internal async Task LoadAllPdfMetaDataFromDiskAsync()
-        {
-            if (!string.IsNullOrEmpty(_RootMusicFolder) && Directory.Exists(_RootMusicFolder))
-            {
-                var pathCurrentMusicFolder = _RootMusicFolder;
-                lstPdfMetaFileData.Clear();
-                await Task.Run(() =>
-                {
-                    recurDirs(pathCurrentMusicFolder);
-                    bool TryAddFile(string curFullPathFile)
-                    {
-                        var curPdfFileData = PdfMetaData.ReadPdfMetaData(curFullPathFile);
-                        if (curPdfFileData != null)
-                        {
-                            lstPdfMetaFileData.Add(curPdfFileData);
-                        }
-                        return true;
-                    }
-                    void recurDirs(string curPath)
-                    {
-                        var lastFile = string.Empty;
-                        foreach (var file in Directory.EnumerateFiles(curPath, "*.pdf").OrderBy(f => f)) // "file" is fullpath
-                        {
-                            if (TryAddFile(file) &&
-                                !string.IsNullOrEmpty(lastFile) &&
-                                System.IO.Path.GetDirectoryName(lastFile) == System.IO.Path.GetDirectoryName(file))
-                            {
-                                var isContinuation = false;
-                                // if the prior added file and this file differ by ony a single char, treat as continuation. E.g. file1.pdf, file2.pdf
-                                var justFnamelast = System.IO.Path.GetFileNameWithoutExtension(lastFile).Trim();
-                                var justfnameCurrent = System.IO.Path.GetFileNameWithoutExtension(file).Trim();
-                                if (justFnamelast.Length == justfnameCurrent.Length) // file1, file2
-                                {
-                                    if (justFnamelast.Substring(0, justFnamelast.Length - 1) ==
-                                       justfnameCurrent.Substring(0, justfnameCurrent.Length - 1))
-                                    {
-                                        isContinuation = true;
-                                    }
-                                }
-                                else
-                                {  // file, file2
-                                    if (justFnamelast == justfnameCurrent.Substring(0, justfnameCurrent.Length - 1))
-                                    {
-                                        isContinuation = true;
-                                    }
-                                }
-                                if (isContinuation)
-                                {
-                                    lstPdfMetaFileData[lstPdfMetaFileData.Count - 2].SucceedingPdfMetaData = lstPdfMetaFileData[lstPdfMetaFileData.Count - 1];
-                                    lstPdfMetaFileData[lstPdfMetaFileData.Count - 1].PriorPdfMetaData = lstPdfMetaFileData[lstPdfMetaFileData.Count - 2];
-                                }
-                            }
-
-                            lastFile = file;
-                        }
-                        foreach (var dir in Directory.EnumerateDirectories(curPath))
-                        {
-                            recurDirs(dir);
-                        }
-                    }
-                });
-            }
-        }
-
-        private void MungeFavorites()
-        {
-            // transfter fav, toc to root
-            PdfMetaData pRoot = null;
-            int nPageOffset = 0;
-            var rootIsDirty = false;
-            foreach (var pdfMetaDataItem in lstPdfMetaFileData) //.Where(dd => dd.FullPathFile.Contains("Broadway")))
-            {
-                if (pdfMetaDataItem.NumPages==0)
-                {
-                    "no pages?".ToString();
-                }
-                if (pdfMetaDataItem.PriorPdfMetaData == null) // it's a root
-                {
-                    if (rootIsDirty)
-                    {
-                        pRoot.IsDirty = true;
-                        PdfMetaData.SavePdfFileData(pRoot);
-                    }
-                    rootIsDirty = false;
-                    pRoot = pdfMetaDataItem;
-                    nPageOffset = pRoot.NumPages;
-                }
-                else
-                {
-                    if (pdfMetaDataItem.Favorites.Count > 0)
-                    {
-                        foreach (var fav in pdfMetaDataItem.Favorites)
-                        {
-                            pRoot.Favorites.Add(new Favorite()
-                            {
-                                Pageno = fav.Pageno + nPageOffset
-                            }
-                                );
-                            rootIsDirty = true;
-                        }
-                        pdfMetaDataItem.Favorites.Clear();
-                        pdfMetaDataItem.IsDirty = true;
-                        PdfMetaData.SavePdfFileData(pdfMetaDataItem);
-                    }
-                    nPageOffset += pdfMetaDataItem.NumPages;
-                    if (pdfMetaDataItem.lstTocEntries.Count > 0 && pRoot.lstTocEntries.Count > 0)
-                    {
-                        "".ToString();
-                    }
-                    if (pdfMetaDataItem.lstTocEntries.Count > 0)
-                    {
-                        pRoot.lstTocEntries.AddRange( pdfMetaDataItem.lstTocEntries);
-                        pdfMetaDataItem.lstTocEntries.Clear();
-                        pdfMetaDataItem.IsDirty = true;
-                        PdfMetaData.SavePdfFileData(pdfMetaDataItem);
-                        rootIsDirty = true;
-                    }
-                }
-            }
-            if (rootIsDirty)
-            {
-                pRoot.IsDirty = true;
-                PdfMetaData.SavePdfFileData(pRoot);
-            }
-
-            "done".ToString();
-        }
+        //private void MungeFavorites()
+        //{
+        //    // transfter fav, toc to root
+        //    PdfMetaData pRoot = null;
+        //    int nPageOffset = 0;
+        //    var rootIsDirty = false;
+        //    foreach (var pdfMetaDataItem in lstPdfMetaFileData) //.Where(dd => dd.FullPathFile.Contains("Broadway")))
+        //    {
+        //        if (pdfMetaDataItem.NumPagesInSet == 0)
+        //        {
+        //            "no pages?".ToString();
+        //        }
+        //        if (pdfMetaDataItem.PriorPdfMetaData == null) // it's a root
+        //        {
+        //            if (rootIsDirty)
+        //            {
+        //                PdfMetaData.SavePdfFileData(pRoot, ForceSave: true);
+        //            }
+        //            rootIsDirty = false;
+        //            pRoot = pdfMetaDataItem;
+        //            nPageOffset = pRoot.NumPagesInSet;
+        //        }
+        //        else
+        //        {
+        //            if (pdfMetaDataItem.Favorites.Count > 0)
+        //            {
+        //                foreach (var fav in pdfMetaDataItem.Favorites)
+        //                {
+        //                    pRoot.Favorites.Add(new Favorite()
+        //                    {
+        //                        Pageno = fav.Pageno + nPageOffset
+        //                    }
+        //                        );
+        //                    rootIsDirty = true;
+        //                }
+        //                pdfMetaDataItem.Favorites.Clear();
+        //                PdfMetaData.SavePdfFileData(pdfMetaDataItem, ForceSave: true);
+        //            }
+        //            nPageOffset += pdfMetaDataItem.NumPagesInSet;
+        //            if (pdfMetaDataItem.lstTocEntries.Count > 0 && pRoot.lstTocEntries.Count > 0)
+        //            {
+        //                "".ToString();
+        //            }
+        //            if (pdfMetaDataItem.lstTocEntries.Count > 0)
+        //            {
+        //                pRoot.lstTocEntries.AddRange(pdfMetaDataItem.lstTocEntries);
+        //                pdfMetaDataItem.lstTocEntries.Clear();
+        //                PdfMetaData.SavePdfFileData(pdfMetaDataItem, ForceSave: true);
+        //                rootIsDirty = true;
+        //            }
+        //        }
+        //    }
+        //    if (rootIsDirty)
+        //    {
+        //        PdfMetaData.SavePdfFileData(pRoot, ForceSave: true);
+        //    }
+        //    "done".ToString();
+        //}
 
         async public Task GetAllBitMapImagesAsync()
         {
@@ -402,16 +330,8 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         {
             CloseCurrentPdfFile();
             currentPdfMetaData = pdfMetaData;
-            StorageFile f = await StorageFile.GetFileFromPathAsync(currentPdfMetaData.FullPathFile);
-            var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
-            if (pdfDoc.IsPasswordProtected)
-            {
-                this.dpPage.Children.Add(new TextBlock() { Text = $"Password Protected {currentPdfMetaData.FullPathFile}" });
-            }
-            this._currentPdfDocument = pdfDoc;
-            this.MaxPageNumber = (int)_currentPdfDocument.PageCount;
-            pdfMetaData.NumPages = this.MaxPageNumber; //store the # of pages for this particular doc.
-            this.slider.Maximum = this.MaxPageNumber;
+            this.MaxPageNumber = (int)currentPdfMetaData.NumPagesInSet - 1;
+            this.slider.Maximum = this.MaxPageNumber - 1;
             this.slider.LargeChange = Math.Max((int)(.1 * this.MaxPageNumber), 1); // 10%
             //this.slider.IsDirectionReversed = true;
             this.PdfUIEnabled = true;
@@ -446,22 +366,10 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
             if (pageNo < 0)
             {
-                if (currentPdfMetaData.PriorPdfMetaData != null)
-                {
-                    var prior = currentPdfMetaData.PriorPdfMetaData;
-                    await LoadPdfFileAndShowAsync(prior, int.MaxValue);
-                    return;
-                }
                 pageNo = 0;
             }
             if (pageNo >= MaxPageNumber)
             {
-                if (currentPdfMetaData.SucceedingPdfMetaData != null)
-                {
-                    var next = currentPdfMetaData.SucceedingPdfMetaData;
-                    await LoadPdfFileAndShowAsync(next, PageNo: 0);
-                    return;
-                }
                 pageNo = MaxPageNumber - NumPagesPerView;
                 if (pageNo < 0)
                 {
@@ -527,12 +435,11 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     }
                     "asdf".ToString();
                 }
-
             }
             catch (Exception ex)
             {
                 this.dpPage.Children.Clear();
-                System.Windows.Forms.MessageBox.Show($"Exception showing {currentPdfMetaData.FullPathFile}\r\n {ex.ToString()}");
+                System.Windows.Forms.MessageBox.Show($"Exception showing {currentPdfMetaData.GetFullPathFileFromPageNo(pageNo)}\r\n {ex.ToString()}");
                 CloseCurrentPdfFile();
             }
         }
@@ -547,9 +454,11 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 for (int i = 0; i < NumPagesPerView; i++)
                 {
                     cacheEntry.cts.Token.ThrowIfCancellationRequested();
-                    if (pageNo + i < _MaxPageNumber)
+                    var pdfDoc = await currentPdfMetaData.GetPdfDocumentForPageno(pageNo + i);
+                    var pdfPgNo = currentPdfMetaData.GetPdfVolPageNo(pageNo + i);
+                    if (pdfPgNo < pdfDoc.PageCount)
                     {
-                        using (var pdfPage = _currentPdfDocument.GetPage((uint)(pageNo + i)))
+                        using (var pdfPage = pdfDoc.GetPage((uint)(pdfPgNo)))
                         {
                             var bmi = new BitmapImage();
                             using (var strm = new InMemoryRandomAccessStream())
@@ -570,7 +479,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                                 cacheEntry.cts.Token.ThrowIfCancellationRequested();
                                 bmi.BeginInit();
                                 bmi.StreamSource = strm.AsStream();
-                                bmi.Rotation = (Rotation)currentPdfMetaData.Rotation;
+                                bmi.Rotation = (Rotation)currentPdfMetaData.GetRotation(pageNo + i);
                                 bmi.CacheOption = BitmapCacheOption.OnLoad;
                                 bmi.EndInit();
 
@@ -695,7 +604,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 
         async void BtnRotate_Click(object sender, RoutedEventArgs e)
         {
-            currentPdfMetaData.Rotation = (currentPdfMetaData.Rotation + 1) % 4;
+            currentPdfMetaData.Rotate(CurrentPageNumber);
             this.dpPage.Children.Clear();
             await ShowPageAsync(CurrentPageNumber, ClearCache: true);
         }
@@ -717,7 +626,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         protected override async void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
         {
             base.OnRenderSizeChanged(sizeInfo);
-            if (_currentPdfDocument != null)
+            if (currentPdfMetaData != null)
             {
                 this.dpPage.Children.Clear();
                 await ShowPageAsync(CurrentPageNumber, ClearCache: true);
@@ -743,7 +652,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             var leftSide = pos.X < this.dpPage.ActualWidth / 2;
             Navigate(forward: leftSide ? false : true);
         }
-
 
         async Task<bool> ChooseMusic()
         {
@@ -783,7 +691,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 dictCache.Clear();
                 currentPdfMetaData.LastPageNo = CurrentPageNumber;
                 PdfMetaData.SavePdfFileData(currentPdfMetaData);
-                _currentPdfDocument = null;
                 currentPdfMetaData = null;
                 MaxPageNumber = 0;
                 CurrentPageNumber = 0;
@@ -797,7 +704,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 
         async static Task<DocumentViewer> CombinePDFsToASinglePdfAsync(string pathPdf)
         {
-//            await CombinePDFsToASinglePdfAsync();// to quiet warning about unused func
+            //            await CombinePDFsToASinglePdfAsync();// to quiet warning about unused func
             //             //pdfSourceDoc = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Ragtime\Collections\The Music of James Scott001.pdf";
             //rotation = Rotation.Rotate0;
 
@@ -807,13 +714,15 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             //    Rotation.Rotate0,
             //    @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\Ultimate Pop Rock Fake Book 1.pdf",
             //    Rotation.Rotate180);
-            var docvwr = new DocumentViewer();
-            docvwr.Document = fixedDoc;
+            var docvwr = new DocumentViewer
+            {
+                Document = fixedDoc
+            };
             IDocumentPaginatorSource idps = fixedDoc;
             var pdlg = new PrintDialog();
             var queueName = "Microsoft Print to PDF";
             var pServer = new PrintServer();
-//            var pqueues = pServer.GetPrintQueues(new[] { EnumeratedPrintQueueTypes.Local });
+            //            var pqueues = pServer.GetPrintQueues(new[] { EnumeratedPrintQueueTypes.Local });
             pdlg.PrintQueue = new PrintQueue(pServer, queueName);
             pdlg.PrintDocument(idps.DocumentPaginator, "testprint");
             return docvwr;
@@ -841,7 +750,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 {
                     using (var page = pdfDoc.GetPage((uint)i))
                     {
-                        await AddPageToDocAsync(fixedDoc, page, (nVolNo==0? Rotation.Rotate0 : Rotation.Rotate180));
+                        await AddPageToDocAsync(fixedDoc, page, (nVolNo == 0 ? Rotation.Rotate0 : Rotation.Rotate180));
                     }
                 }
                 if (!vol0.EndsWith("0.pdf"))

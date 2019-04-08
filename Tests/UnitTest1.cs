@@ -21,6 +21,28 @@ namespace Tests
         readonly string rootfolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic";
         //string testbmk = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.bmk";
         readonly string testPdf = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
+
+        [TestMethod]
+        [Ignore]
+        public async Task TestReadBmkData()
+        {
+            var rootfolder = @"C:\Bak\SheetMusic\Poptest";
+            rootfolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic";
+            var w = new WpfPdfViewer.PdfViewerWindow
+            {
+                _RootMusicFolder = rootfolder
+            };
+            var lstMetaData= await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
+            foreach(var pm in lstMetaData)
+            {
+                TestContext.WriteLine($"{pm.GetFullPathFile(volNo: 0)}");
+                foreach (var vol in pm.lstVolInfo)
+                {
+                    TestContext.WriteLine($"   {vol.ToString()}");
+                }
+            }
+        }
+
         [TestMethod]
         public void TestCreatePdfMetaData()
         {
@@ -35,7 +57,7 @@ namespace Tests
             {
                 _RootMusicFolder = rootfolder
             };
-            await w.LoadAllPdfMetaDataFromDiskAsync();
+            await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
             for (int i = 0; i < 11; i++)
             {
                 GetBMPs(w);
@@ -48,7 +70,7 @@ namespace Tests
             {
                 var bmi = pdfMetaData.GetBitmapImageThumbnailAsync();
                 pdfMetaData.bitmapImageCache = null;
-                TestContext.WriteLine($" {pdfMetaData} {bmi.PixelWidth} {bmi.PixelHeight}");
+//                TestContext.WriteLine($" {pdfMetaData} {bmi.PixelWidth} {bmi.PixelHeight}");
             }
             var classicalPdf = w.lstPdfMetaFileData[0];
             // with no renderoptions,wh=(794,1122), pixelHeight= (1589, 2245 )

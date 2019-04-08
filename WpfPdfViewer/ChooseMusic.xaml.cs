@@ -52,12 +52,12 @@ namespace WpfPdfViewer
             {
                 tabItemHeader = Properties.Settings.Default.ChooseQueryTab;
             }
-            
+
             switch (tabItemHeader)
             {
                 case "_Books":
                     FillBooksTab();
-                    if (this.tabControl.SelectedIndex!= 0)
+                    if (this.tabControl.SelectedIndex != 0)
                     {
                         this.tabControl.SelectedIndex = 0;
                     }
@@ -98,7 +98,7 @@ namespace WpfPdfViewer
                 foreach (var pdfMetaDataItem in
                     _pdfViewerWindow.
                     lstPdfMetaFileData.
-                    OrderBy(p => p.RelativeFileName))
+                    OrderBy(p => p.GetFullPathFile(volNo: 0, MakeRelative: true)))
                 {
                     foreach (var tentry in pdfMetaDataItem.lstTocEntries)
                     {
@@ -114,7 +114,7 @@ namespace WpfPdfViewer
                             itm.Date,
                             itm.Notes,
                             itm.PageNo,
-                            ((PdfMetaData)itm.Tag).RelativeFileName,
+                            FileName = ((PdfMetaData)itm.Tag).GetFullPathFile(volNo: 0, MakeRelative: true),
                             _TocEntry = itm
                         };
 
@@ -157,7 +157,7 @@ namespace WpfPdfViewer
                 _pdfViewerWindow._RootMusicFolder = d.SelectedPath;
                 this.txtCurrentRootFolder.Text = _pdfViewerWindow._RootMusicFolder;
                 this.tabControl.SelectedIndex = 0;
-                await _pdfViewerWindow.LoadAllPdfMetaDataFromDiskAsync();
+                _pdfViewerWindow.lstPdfMetaFileData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(_pdfViewerWindow._RootMusicFolder);
                 await _pdfViewerWindow.GetAllBitMapImagesAsync();
                 ActivateTab(string.Empty);
             }
@@ -191,9 +191,9 @@ namespace WpfPdfViewer
             if (this.lbBooks.ItemsSource == null)
             {
                 this.tbxTotals.Text = $@"Total #Books = {
-                    _pdfViewerWindow.lstPdfMetaFileData.Where(p=>p.PriorPdfMetaData==null).Count()} # Songs = {
+                    _pdfViewerWindow.lstPdfMetaFileData.Count()} # Songs = {
                     _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.lstTocEntries.Count)} # Pages = {
-                    _pdfViewerWindow.lstPdfMetaFileData.Sum(p=>p.NumPages)}";
+                    _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.NumPagesInSet)}";
 
                 this.lbBooks.MouseDoubleClick += (o, e) =>
                   {
@@ -233,13 +233,12 @@ namespace WpfPdfViewer
             foreach (var pdfMetaDataItem in
                 _pdfViewerWindow.
                 lstPdfMetaFileData.
-                Where(p => p.PriorPdfMetaData == null).
-                OrderBy(p => p.RelativeFileName))
+                OrderBy(p => p.GetFullPathFile(volNo: 0, MakeRelative: true)))
             {
                 var sp = new StackPanel() { Orientation = Orientation.Vertical };
                 sp.Tag = pdfMetaDataItem;
                 sp.Children.Add(new Image() { Source = pdfMetaDataItem.GetBitmapImageThumbnail() });
-                sp.Children.Add(new TextBlock() { Text = pdfMetaDataItem.RelativeFileName });
+                sp.Children.Add(new TextBlock() { Text = pdfMetaDataItem.GetFullPathFile(volNo: 0, MakeRelative: true) });
                 sp.Children.Add(new TextBlock() { Text = $"#Songs={pdfMetaDataItem.GetSongCount()} @ Pages = {pdfMetaDataItem.GetTotalPageCount()}" });
                 yield return sp;
             }
@@ -262,7 +261,7 @@ namespace WpfPdfViewer
                 foreach (var pdfMetaDataItem in
                     _pdfViewerWindow.
                     lstPdfMetaFileData.
-                    OrderBy(p => p.RelativeFileName))
+                    OrderBy(p => p.GetFullPathFile(volNo: 0, MakeRelative: true)))
                 {
                     foreach (var fav in pdfMetaDataItem.Favorites)
                     {
