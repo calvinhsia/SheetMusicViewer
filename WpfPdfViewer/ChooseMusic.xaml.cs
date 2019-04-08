@@ -29,13 +29,13 @@ namespace WpfPdfViewer
         {
             this._pdfViewerWindow = pdfViewerWindow;
             this.Loaded += ChooseMusic_Loaded;
+            this.Top = _pdfViewerWindow.Top;
+            this.Left = _pdfViewerWindow.Left;
+            this.WindowState = WindowState.Maximized;
             //            this.Owner = pdfViewerWindow;
         }
         private void ChooseMusic_Loaded(object sender, RoutedEventArgs e)
         {
-            this.Top = _pdfViewerWindow.Top;
-            this.Left = _pdfViewerWindow.Left;
-            this.WindowState = WindowState.Maximized;
             this.txtCurrentRootFolder.Text = _pdfViewerWindow._RootMusicFolder;
             ActivateTab(string.Empty);
             this.tabControl.SelectionChanged += (o, et) =>
@@ -193,7 +193,8 @@ namespace WpfPdfViewer
                 this.tbxTotals.Text = $@"Total #Books = {
                     _pdfViewerWindow.lstPdfMetaFileData.Count()} # Songs = {
                     _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.lstTocEntries.Count)} # Pages = {
-                    _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.NumPagesInSet)}";
+                    _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.NumPagesInSet)} #Fav={
+                    _pdfViewerWindow.lstPdfMetaFileData.Sum(p=>p.Favorites.Count)}";
 
                 this.lbBooks.MouseDoubleClick += (o, e) =>
                   {
@@ -239,7 +240,9 @@ namespace WpfPdfViewer
                 sp.Tag = pdfMetaDataItem;
                 sp.Children.Add(new Image() { Source = pdfMetaDataItem.GetBitmapImageThumbnail() });
                 sp.Children.Add(new TextBlock() { Text = pdfMetaDataItem.GetFullPathFile(volNo: 0, MakeRelative: true) });
-                sp.Children.Add(new TextBlock() { Text = $"#Songs={pdfMetaDataItem.GetSongCount()} @ Pages = {pdfMetaDataItem.GetTotalPageCount()}" });
+                sp.Children.Add(new TextBlock() {
+                    Text = $"#Sngs={pdfMetaDataItem.GetSongCount()} Pg={pdfMetaDataItem.GetTotalPageCount()} Fav={pdfMetaDataItem.Favorites.Count}"
+                });
                 yield return sp;
             }
         }

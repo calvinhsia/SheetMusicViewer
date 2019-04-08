@@ -330,8 +330,9 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         {
             CloseCurrentPdfFile();
             currentPdfMetaData = pdfMetaData;
+            currentPdfMetaData.InitializeListPdfDocuments();
             this.MaxPageNumber = (int)currentPdfMetaData.NumPagesInSet - 1;
-            this.slider.Maximum = this.MaxPageNumber - 1;
+            this.slider.Maximum = this.MaxPageNumber;
             this.slider.LargeChange = Math.Max((int)(.1 * this.MaxPageNumber), 1); // 10%
             //this.slider.IsDirectionReversed = true;
             this.PdfUIEnabled = true;
@@ -368,9 +369,9 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             {
                 pageNo = 0;
             }
-            if (pageNo >= MaxPageNumber)
+            if (pageNo > MaxPageNumber)
             {
-                pageNo = MaxPageNumber - NumPagesPerView;
+                pageNo = pageNo - NumPagesPerView;
                 if (pageNo < 0)
                 {
                     pageNo = 0;
@@ -456,7 +457,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     cacheEntry.cts.Token.ThrowIfCancellationRequested();
                     var pdfDoc = await currentPdfMetaData.GetPdfDocumentForPageno(pageNo + i);
                     var pdfPgNo = currentPdfMetaData.GetPdfVolPageNo(pageNo + i);
-                    if (pdfPgNo < pdfDoc.PageCount)
+                    if (pdfDoc!=null && pdfPgNo < pdfDoc.PageCount)
                     {
                         using (var pdfPage = pdfDoc.GetPage((uint)(pdfPgNo)))
                         {
@@ -689,6 +690,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             if (currentPdfMetaData != null)
             {
                 dictCache.Clear();
+                currentPdfMetaData.lstPdfDocuments.Clear();
                 currentPdfMetaData.LastPageNo = CurrentPageNumber;
                 PdfMetaData.SavePdfFileData(currentPdfMetaData);
                 currentPdfMetaData = null;

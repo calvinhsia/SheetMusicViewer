@@ -382,22 +382,16 @@ namespace WpfPdfViewer
                 }
                 tocLst.Add(toc);
             }
+        }
+        public void InitializeListPdfDocuments()
+        {
             lstPdfDocuments.Clear();
             var pageNo = 0;
             for (int volNo = 0; volNo < lstVolInfo.Count; volNo++)
             {
-
-                //                var t = Task<PdfDocument>.Factory.cr
                 var task = new Task<PdfDocument>((pg) =>
                 {
                     PdfDocument pdfDoc = null;
-                    //var pathPdfFileVol = GetFullPathFileFromPageNo(pageNo);
-                    //StorageFile f = await StorageFile.GetFileFromPathAsync(pathPdfFileVol);
-                    //pdfDoc = await PdfDocument.LoadFromFileAsync(f);
-                    //if (pdfDoc.IsPasswordProtected)
-                    //{
-                    //    //    this.dpPage.Children.Add(new TextBlock() { Text = $"Password Protected {pathPdfFileVol}" });
-                    //}
                     pdfDoc = GetPdfDocumentAsync((int)pg).GetAwaiter().GetResult();
                     return pdfDoc;
                 }, pageNo);
@@ -405,22 +399,26 @@ namespace WpfPdfViewer
                 this.lstPdfDocuments.Add(task);
             }
         }
+
         public async Task<PdfDocument> GetPdfDocumentForPageno(int pageNo)
         {
-            var volno = GetVolNumFromPageNum(pageNo);
-            var res = lstPdfDocuments[volno];
-            if (res.Status == TaskStatus.Created)
-            {
-                res.Start();
-            }
             PdfDocument pdfDoc = null;
-            if (res.IsCompleted)
+            if (pageNo < NumPagesInSet)
             {
-                pdfDoc = res.Result;
-            }
-            else
-            {
-                pdfDoc = await res;
+                var volno = GetVolNumFromPageNum(pageNo);
+                var res = lstPdfDocuments[volno];
+                if (res.Status == TaskStatus.Created)
+                {
+                    res.Start();
+                }
+                if (res.IsCompleted)
+                {
+                    pdfDoc = res.Result;
+                }
+                else
+                {
+                    pdfDoc = await res;
+                }
             }
             return pdfDoc;
         }
@@ -446,11 +444,11 @@ namespace WpfPdfViewer
             //    var parts = line.Split("\t".ToArray());
             //    var tocEntry = new TOCEntry()
             //    {
-            //        PageNo = int.Parse( parts[1].Trim()),
+            //        PageNo = int.Parse(parts[2].Trim()),
             //        SongName = parts[0].Trim(),
-            //        Composer = parts[2].Trim(),
-            //        Notes=parts[3].Trim(),
-            //        Date = parts[4].Trim().Replace(".",string.Empty)
+            //        Composer = parts[1].Trim(),
+            //        //Notes = parts[3].Trim(),
+            //        //Date = parts[4].Trim().Replace(".", string.Empty)
             //    };
             //    lstTocEntries.Add(tocEntry);
             //}
