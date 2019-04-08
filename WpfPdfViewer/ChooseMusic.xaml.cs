@@ -157,6 +157,7 @@ namespace WpfPdfViewer
                 _pdfViewerWindow._RootMusicFolder = d.SelectedPath;
                 this.txtCurrentRootFolder.Text = _pdfViewerWindow._RootMusicFolder;
                 this.tabControl.SelectedIndex = 0;
+                _pdfViewerWindow.lstPdfMetaFileData.Clear(); // release mem
                 _pdfViewerWindow.lstPdfMetaFileData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(_pdfViewerWindow._RootMusicFolder);
                 await _pdfViewerWindow.GetAllBitMapImagesAsync();
                 ActivateTab(string.Empty);
@@ -342,7 +343,7 @@ namespace WpfPdfViewer
                         var tdescitem = TypeDescriptor.GetProperties(selitem)["_TocEntry"];
                         var TocEntry = (TOCEntry)tdescitem.GetValue(selitem);
                         chosenPdfMetaData = (PdfMetaData)TocEntry.Tag;
-                        chosenPdfMetaData.LastPageNo = TocEntry.PageNo + chosenPdfMetaData.PageNumberOffset;
+                        chosenPdfMetaData.LastPageNo = TocEntry.PageNo - chosenPdfMetaData.PageNumberOffset;
                     }
                     break;
                 case "_Playlists":

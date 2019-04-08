@@ -26,7 +26,7 @@ namespace Tests
         [Ignore]
         public async Task TestReadBmkData()
         {
-            var rootfolder = @"C:\Bak\SheetMusic\Poptest";
+            var //rootfolder = @"C:\Bak\SheetMusic\Poptest";
             rootfolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic";
             var w = new WpfPdfViewer.PdfViewerWindow
             {
@@ -72,7 +72,7 @@ namespace Tests
                 pdfMetaData.bitmapImageCache = null;
 //                TestContext.WriteLine($" {pdfMetaData} {bmi.PixelWidth} {bmi.PixelHeight}");
             }
-            var classicalPdf = w.lstPdfMetaFileData[0];
+            //var classicalPdf = w.lstPdfMetaFileData[0];
             // with no renderoptions,wh=(794,1122), pixelHeight= (1589, 2245 )
             // with renderops = 150,225 wh= (225,150), pixelhw = (300, 450), dpix = dpiy = 192
             //            var bmi = classicalPdf.GetBitmapImageThumbnail();

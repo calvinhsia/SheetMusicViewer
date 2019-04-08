@@ -117,7 +117,6 @@ namespace WpfPdfViewer
         static int currentCacheAge;
         readonly Dictionary<int, CacheEntry> dictCache = new Dictionary<int, CacheEntry>(); // for either show2pages, pageno ->grid. results in dupes if even, then odd number on show2pages
 
-        public string FullPathCurrentPdfFile => currentPdfMetaData?.GetFullPathFile(volNo: 0);
 
 
         public PdfViewerWindow()
@@ -138,7 +137,7 @@ namespace WpfPdfViewer
               {
                   Properties.Settings.Default.Show2Pages = Show2Pages;
                   Properties.Settings.Default.RootMusicFolder = _RootMusicFolder;
-                  Properties.Settings.Default.LastPDFOpen = FullPathCurrentPdfFile;
+                  Properties.Settings.Default.LastPDFOpen = currentPdfMetaData?.GetFullPathFile(volNo: 0, MakeRelative: true);
                   Properties.Settings.Default.MainWindowPos = new System.Drawing.Size((int)this.Left, (int)this.Top);
                   Properties.Settings.Default.MainWindowSize = new System.Drawing.Size((int)this.ActualWidth, (int)this.ActualHeight);
                   Properties.Settings.Default.IsFullScreen = this.chkFullScreen.IsChecked == true;
@@ -241,7 +240,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 else
                 {
                     lstPdfMetaFileData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(_RootMusicFolder);
-                    var lastPdfMetaData = lstPdfMetaFileData.Where(p => p.GetFullPathFile(volNo: 0) == lastPdfOpen).FirstOrDefault();
+                    var lastPdfMetaData = lstPdfMetaFileData.Where(p => p.GetFullPathFile(volNo: 0, MakeRelative: true) == lastPdfOpen).FirstOrDefault();
                     if (lastPdfMetaData != null)
                     {
                         await LoadPdfFileAndShowAsync(lastPdfMetaData, lastPdfMetaData.LastPageNo);
@@ -371,7 +370,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
             if (pageNo > MaxPageNumber)
             {
-                pageNo = pageNo - NumPagesPerView;
+                pageNo -= NumPagesPerView;
                 if (pageNo < 0)
                 {
                     pageNo = 0;
@@ -457,7 +456,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     cacheEntry.cts.Token.ThrowIfCancellationRequested();
                     var pdfDoc = await currentPdfMetaData.GetPdfDocumentForPageno(pageNo + i);
                     var pdfPgNo = currentPdfMetaData.GetPdfVolPageNo(pageNo + i);
-                    if (pdfDoc!=null && pdfPgNo < pdfDoc.PageCount)
+                    if (pdfDoc != null && pdfPgNo < pdfDoc.PageCount)
                     {
                         using (var pdfPage = pdfDoc.GetPage((uint)(pdfPgNo)))
                         {
@@ -706,7 +705,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 
         async static Task<DocumentViewer> CombinePDFsToASinglePdfAsync(string pathPdf)
         {
-            //            await CombinePDFsToASinglePdfAsync();// to quiet warning about unused func
+            await CombinePDFsToASinglePdfAsync("to quiet warning about unused func");
             //             //pdfSourceDoc = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Ragtime\Collections\The Music of James Scott001.pdf";
             //rotation = Rotation.Rotate0;
 

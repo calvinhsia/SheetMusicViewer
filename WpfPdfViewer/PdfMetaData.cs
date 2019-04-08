@@ -36,50 +36,6 @@ namespace WpfPdfViewer
     public class PdfMetaData
     {
         private string _FullPathRootFile;
-        public string GetFullPathFile(int volNo, bool MakeRelative = false)
-        {
-            var retval = _FullPathRootFile;
-            if (_FullPathRootFile.EndsWith("0.pdf"))
-            {
-                retval = retval.Replace("0.pdf", string.Empty) + volNo.ToString() + ".pdf";
-            }
-            if (MakeRelative)
-            {
-                retval = retval?.Substring(PdfViewerWindow.s_pdfViewerWindow._RootMusicFolder.Length + 1);
-            }
-            return retval;
-        }
-        public string GetFullPathFileFromPageNo(int pageNo)
-        {
-            var retval = _FullPathRootFile;
-            if (_FullPathRootFile.EndsWith("0.pdf"))
-            {
-                var volNo = GetVolNumFromPageNum(pageNo);
-                retval = retval.Replace("0.pdf", string.Empty) + volNo.ToString() + ".pdf";
-            }
-            else if (_FullPathRootFile.EndsWith("1.pdf"))
-            {
-                var volNo = GetVolNumFromPageNum(pageNo) + 1;
-                retval = retval.Replace("1.pdf", string.Empty) + volNo.ToString() + ".pdf";
-            }
-            return retval;
-        }
-
-        private int GetVolNumFromPageNum(int pageNo)
-        {
-            var volno = 0;
-            var pSum = 0;
-            foreach (var vol in lstVolInfo)
-            {
-                pSum += vol.NPagesInThisVolume;
-                if (pageNo < pSum)
-                {
-                    break;
-                }
-                volno++;
-            }
-            return volno;
-        }
 
         /// <summary>
         /// num pages in all volumes of set
@@ -98,9 +54,9 @@ namespace WpfPdfViewer
         int initialLastPageNo;
 
         /// <summary>
-        /// The Table of contents of a songbook shows the scanned page numbers, which may not match the actual PDF page numbers (there could be a cover page scanned
-        /// or could be a multivolume set)
-        /// We want to keep the scanned ORC TOC editing, cleanup, true and minimize required editing, so keep the original page numbers.
+        /// The Table of contents of a songbook shows the scanned physical page numbers, which may not match the actual PDF page numbers (there could be a cover page scanned
+        /// or could be a multivolume set, or 30 pages of intro, and then page 1 has the 1st song)
+        /// We want to keep the scanned OCR TOC editing, cleanup, true and minimize required editing, so keep the original page numbers.
         /// The scanned imported OCR TOC will show the physical page no, but not the actual PDF page no.
         /// This value will map between the 2 so that the imported scanned TOC saved as XML will not need to be adjusted.
         /// For 1st, 2nd, 3rd volumes, the offset from the actual scanned page number (as visible on the page) to the PDF page number
@@ -138,7 +94,7 @@ namespace WpfPdfViewer
         public List<Task<PdfDocument>> lstPdfDocuments = new List<Task<PdfDocument>>();
 
         [XmlIgnore] // can't serialize dictionaries
-        public Dictionary<int, List<TOCEntry>> dictToc = new Dictionary<int, List<TOCEntry>>();
+        public SortedList<int, List<TOCEntry>> dictToc = new SortedList<int, List<TOCEntry>>();
 
         [XmlIgnore]
         internal BitmapImage bitmapImageCache;
@@ -148,7 +104,17 @@ namespace WpfPdfViewer
             var pMetaDataItem = this;
 
             var tocPgNm = currentPageNumber + PageNumberOffset;
-            if (pMetaDataItem.dictToc.TryGetValue(tocPgNm, out var lstTocs))
+            if (!pMetaDataItem.dictToc.TryGetValue(tocPgNm, out var lstTocs))
+            {
+                // find the 1st one beyond, then go back 1
+                var ndxclosest = pMetaDataItem.dictToc.Keys.FindIndexOfFirstGTorEQTo(tocPgNm);
+                if (ndxclosest > 0 && ndxclosest <= pMetaDataItem.dictToc.Count)
+                {
+                    var key = pMetaDataItem.dictToc.Keys[ndxclosest - 1];
+                    lstTocs = pMetaDataItem.dictToc[key];
+                }
+            }
+            if (lstTocs != null)
             {
                 foreach (var toce in lstTocs)
                 {
@@ -160,6 +126,57 @@ namespace WpfPdfViewer
                 str = $"{tocPgNm} {this}";
             }
             return str.Trim();
+        }
+        public string GetFullPathFile(int volNo, bool MakeRelative = false)
+        {
+            var retval = _FullPathRootFile;
+            if (_FullPathRootFile.EndsWith("0.pdf"))
+            {
+                retval = retval.Replace("0.pdf", string.Empty) + volNo.ToString() + ".pdf";
+            }
+            if (MakeRelative)
+            {
+                if (retval != null)
+                {
+                    retval = retval.Substring(PdfViewerWindow.s_pdfViewerWindow._RootMusicFolder.Length + 1).Replace(".pdf",string.Empty);
+                    if (retval.EndsWith("0"))
+                    {
+                        retval = retval.Substring(0, retval.Length - 2);
+                    }
+                }
+            }
+            return retval;
+        }
+        public string GetFullPathFileFromPageNo(int pageNo)
+        {
+            var retval = _FullPathRootFile;
+            if (_FullPathRootFile.EndsWith("0.pdf"))
+            {
+                var volNo = GetVolNumFromPageNum(pageNo);
+                retval = retval.Replace("0.pdf", string.Empty) + volNo.ToString() + ".pdf";
+            }
+            else if (_FullPathRootFile.EndsWith("1.pdf"))
+            {
+                var volNo = GetVolNumFromPageNum(pageNo) + 1;
+                retval = retval.Replace("1.pdf", string.Empty) + volNo.ToString() + ".pdf";
+            }
+            return retval;
+        }
+
+        private int GetVolNumFromPageNum(int pageNo)
+        {
+            var volno = 0;
+            var pSum = 0;
+            foreach (var vol in lstVolInfo)
+            {
+                pSum += vol.NPagesInThisVolume;
+                if (pageNo < pSum)
+                {
+                    break;
+                }
+                volno++;
+            }
+            return volno;
         }
 
         internal static async Task<List<PdfMetaData>> LoadAllPdfMetaDataFromDiskAsync(string _RootMusicFolder)
@@ -175,10 +192,6 @@ namespace WpfPdfViewer
                     recurDirs(pathCurrentMusicFolder);
                     bool TryAddFile(string curFullPathFile)
                     {
-                        if (curFullPathFile.Contains("James Sco"))
-                        {
-                            "asdf".ToString();
-                        }
                         curPdfFileData = PdfMetaData.ReadPdfMetaData(curFullPathFile);
                         if (curPdfFileData != null)
                         {
@@ -292,10 +305,6 @@ namespace WpfPdfViewer
             var bmkFile = Path.ChangeExtension(FullPathPdfFile, "bmk");
             if (File.Exists(bmkFile))
             {
-                if (FullPathPdfFile.Contains("James Sco"))
-                {
-                    "asdf".ToArray();
-                }
                 try
                 {
                     var serializer = new XmlSerializer(typeof(PdfMetaData));
@@ -314,7 +323,7 @@ namespace WpfPdfViewer
                             {
                                 pdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
                                 {
-                                    NPagesInThisVolume = getNumPages(FullPathPdfFile),
+                                    NPagesInThisVolume = GetNumPagesInPdf(FullPathPdfFile),
                                     Rotation = 0
                                 });
                             }
@@ -336,7 +345,7 @@ namespace WpfPdfViewer
                 };
                 pdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
                 {
-                    NPagesInThisVolume = getNumPages(FullPathPdfFile),
+                    NPagesInThisVolume = GetNumPagesInPdf(FullPathPdfFile),
                     Rotation = 0
                 });
             }
@@ -344,29 +353,6 @@ namespace WpfPdfViewer
             return pdfFileData;
         }
 
-        private static int getNumPages(string FullPathFile)
-        {
-            var tkf = StorageFile.GetFileFromPathAsync(FullPathFile);
-            tkf.AsTask().Wait();
-            var tkpdfDoc = PdfDocument.LoadFromFileAsync(tkf.AsTask().Result).AsTask();
-            tkpdfDoc.Wait();
-            var pdfDoc = tkpdfDoc.Result;
-            return (int)pdfDoc.PageCount;
-        }
-
-        public PdfMetaData() { }
-
-        string RemoveQuotes(string str)
-        {
-            if (!string.IsNullOrEmpty(str))
-            {
-                if (str.StartsWith("\"") && str.EndsWith("\""))
-                {
-                    str = str.Replace("\"", string.Empty);
-                }
-            }
-            return str;
-        }
         private void Initialize()
         {
             dictToc.Clear();
@@ -400,6 +386,28 @@ namespace WpfPdfViewer
             }
         }
 
+        private static int GetNumPagesInPdf(string FullPathFile)
+        {
+            var tkf = StorageFile.GetFileFromPathAsync(FullPathFile);
+            tkf.AsTask().Wait();
+            var tkpdfDoc = PdfDocument.LoadFromFileAsync(tkf.AsTask().Result).AsTask();
+            tkpdfDoc.Wait();
+            var pdfDoc = tkpdfDoc.Result;
+            return (int)pdfDoc.PageCount;
+        }
+
+        string RemoveQuotes(string str)
+        {
+            if (!string.IsNullOrEmpty(str))
+            {
+                if (str.StartsWith("\"") && str.EndsWith("\""))
+                {
+                    str = str.Replace("\"", string.Empty);
+                }
+            }
+            return str;
+        }
+
         public async Task<PdfDocument> GetPdfDocumentForPageno(int pageNo)
         {
             PdfDocument pdfDoc = null;
@@ -424,10 +432,9 @@ namespace WpfPdfViewer
         }
         internal async Task<PdfDocument> GetPdfDocumentAsync(int pageNo)
         {
-            PdfDocument pdfDoc = null;
             var pathPdfFileVol = GetFullPathFileFromPageNo(pageNo);
             StorageFile f = await StorageFile.GetFileFromPathAsync(pathPdfFileVol);
-            pdfDoc = await PdfDocument.LoadFromFileAsync(f);
+            var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
             if (pdfDoc.IsPasswordProtected)
             {
                 //    this.dpPage.Children.Add(new TextBlock() { Text = $"Password Protected {pathPdfFileVol}" });
@@ -670,10 +677,6 @@ namespace WpfPdfViewer
             return res;
         }
 
-        public override string ToString()
-        {
-            return $"{Path.GetFileNameWithoutExtension(_FullPathRootFile)}";
-        }
 
         internal Rotation GetRotation(int pgNo)
         {
@@ -686,6 +689,10 @@ namespace WpfPdfViewer
             var vol = GetVolNumFromPageNum(pgNo);
             this.IsDirty = true;
             lstVolInfo[vol].Rotation = (lstVolInfo[vol].Rotation + 1) % 4;
+        }
+        public override string ToString()
+        {
+            return $"{Path.GetFileNameWithoutExtension(_FullPathRootFile)} Vol={lstVolInfo.Count} Toc={lstTocEntries.Count} Fav={Favorites.Count}";
         }
     }
     [Serializable]
