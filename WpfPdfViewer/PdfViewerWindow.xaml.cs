@@ -330,6 +330,15 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             CloseCurrentPdfFile();
             currentPdfMetaData = pdfMetaData;
             currentPdfMetaData.InitializeListPdfDocuments();
+            if (currentPdfMetaData.lstTocEntries.Count > 0)
+            {
+                // if there are TOC entries, we want the scrollbar, page num displays to be in TOC units.
+                // That means if a TOC song says page 2, but there are 45 pages of intro in book, the minimum pg will be -45. (pageNumberOffset=-45)
+                // If the max will be the largest TOC number, and the last song is several pages, we won't be able to see those several pages.
+                // so we need to go beyond.
+
+
+            }
             this.MaxPageNumber = (int)currentPdfMetaData.NumPagesInSet - 1;
             this.slider.Maximum = this.MaxPageNumber;
             this.slider.LargeChange = Math.Max((int)(.1 * this.MaxPageNumber), 1); // 10%

@@ -58,14 +58,10 @@ namespace WpfPdfViewer
         /// or could be a multivolume set, or 30 pages of intro, and then page 1 has the 1st song)
         /// We want to keep the scanned OCR TOC editing, cleanup, true and minimize required editing, so keep the original page numbers.
         /// The scanned imported OCR TOC will show the physical page no, but not the actual PDF page no.
-        /// This value will map between the 2 so that the imported scanned TOC saved as XML will not need to be adjusted.
+        /// This value will map between the each so that the imported scanned TOC saved as XML will not need to be adjusted.
         /// For 1st, 2nd, 3rd volumes, the offset from the actual scanned page number (as visible on the page) to the PDF page number
-        /// e.g. the very 1st volume might have a cover page, which is page 0. Viewing song Foobar might show page 44, but it's really PdfPage=45, 
-        /// so we set PageNumberOffset to 1
-        /// For vol 4 (PriorPdfMetaData != null), the 1st song "Please Mr Postman" might show page 403, but it's really PdfPage 0. So PageNumberOffset = 403
-        /// So the XML for the song will say 403 (same as scanned TOC), but the actual PDFpage no in vol 4 = (403 - PageNumberOffset == 0)
-        /// The next song "Poor Side Of Town" on page 404 ins on PdfPage 1. Toc = 404. diff == PageNumberOffset== 403
-        /// 
+        /// e.g. the very 1st volume might have a cover page, which is page 0 and 44 pages of intro. Viewing song "The Crush Collision March" might show page 4, but it's really PdfPage=49, 
+        /// so we set PageNumberOffset to -45
         /// So there are 2 kinds of page numbers PDF PgNo and TOC PgNo, and PdfPgNo = TOCPgNo + PageNumberOffset
         /// So what do we show in the Toolbar? probably best to show TOC pgNo. It matches the page numbers in the scan and is familiar to user.
         /// However, that means the displayed Toolbar pageno couuld be negative: the 1st song might be on PDF page 1, with lots of intro material on prior pages.
@@ -118,7 +114,8 @@ namespace WpfPdfViewer
             {
                 foreach (var toce in lstTocs)
                 {
-                    str += toce + " ";
+                    var val = $"{currentPageNumber} {toce.SongName} {toce.Composer} {toce.Date} {toce.Notes}".Trim();
+                    str += val + " ";
                 }
             }
             else
@@ -763,7 +760,7 @@ namespace WpfPdfViewer
 
         public override string ToString()
         {
-            return $"{PageNo} {SongName} {Composer} {Notes} {Date}";
+            return $"{PageNo} {SongName} {Composer} {Notes} {Date}".Trim();
         }
     }
 }
