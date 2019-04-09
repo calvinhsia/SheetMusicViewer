@@ -99,7 +99,7 @@ namespace WpfPdfViewer
             var str = string.Empty;
             var pMetaDataItem = this;
 
-            var tocPgNm = currentPageNumber + PageNumberOffset;
+            var tocPgNm = currentPageNumber;
             if (!pMetaDataItem.dictToc.TryGetValue(tocPgNm, out var lstTocs))
             {
                 // find the 1st one beyond, then go back 1
@@ -135,8 +135,8 @@ namespace WpfPdfViewer
             {
                 if (retval != null)
                 {
-                    retval = retval.Substring(PdfViewerWindow.s_pdfViewerWindow._RootMusicFolder.Length + 1).Replace(".pdf",string.Empty);
-                    if (retval.EndsWith("0"))
+                    retval = retval.Substring(PdfViewerWindow.s_pdfViewerWindow._RootMusicFolder.Length + 1).Replace(".pdf", string.Empty);
+                    if (retval.EndsWith("0") || retval.EndsWith("1"))
                     {
                         retval = retval.Substring(0, retval.Length - 2);
                     }
@@ -154,16 +154,28 @@ namespace WpfPdfViewer
             }
             else if (_FullPathRootFile.EndsWith("1.pdf"))
             {
-                var volNo = GetVolNumFromPageNum(pageNo) + 1;
+                var volNo = GetVolNumFromPageNum(pageNo) + 1; // no page 0, so 1 based
                 retval = retval.Replace("1.pdf", string.Empty) + volNo.ToString() + ".pdf";
             }
+            else if (this.lstVolInfo.Count > 0) //there's more than 1 entry
+            {
+                var volNo = GetVolNumFromPageNum(pageNo);
+                if (volNo==0)
+                {
+                }
+                else
+                {
+                    retval = retval.Replace(".pdf", string.Empty) + volNo.ToString() + ".pdf";
+                }
+            }
+            Debug.Assert(File.Exists(retval));
             return retval;
         }
 
         private int GetVolNumFromPageNum(int pageNo)
         {
             var volno = 0;
-            var pSum = 0;
+            var pSum = PageNumberOffset;
             foreach (var vol in lstVolInfo)
             {
                 pSum += vol.NPagesInThisVolume;
@@ -206,8 +218,13 @@ namespace WpfPdfViewer
                     {
                         var lastFile = string.Empty;
                         var pgOffset = 0;
+                        int nContinuations = 0;
                         foreach (var file in Directory.EnumerateFiles(curPath, "*.pdf").OrderBy(f => f))//.Where(f=>f.Contains("Miser"))) // "file" is fullpath
                         {
+                            if (file.Contains("Redisc"))
+                            {
+                                "".ToString();
+                            }
                             var isContinuation = false;
                             if (!string.IsNullOrEmpty(lastFile) &&
                                 System.IO.Path.GetDirectoryName(lastFile) == System.IO.Path.GetDirectoryName(file))
@@ -233,15 +250,24 @@ namespace WpfPdfViewer
                             }
                             if (isContinuation)
                             {
-                                //// add to current
-                                //if (curPdfFileData != null)
-                                //{
-                                //    curPdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
-                                //    {
-                                //        NPagesInThisVolume = getNumPages(file),
-                                //        Rotation = (int)Rotation.Rotate180
-                                //    });
-                                //}
+                                // add to current
+                                if (curPdfFileData != null && curPdfFileData.IsDirty) // dirty: we're creating a new one
+                                {
+                                    nContinuations++;
+                                    var newvolInfo = new PdfVolumeInfo()
+                                    {
+                                        NPagesInThisVolume = GetNumPagesInPdf(file),
+                                    };
+                                    if (newvolInfo.NPagesInThisVolume != 1)
+                                    {
+                                        newvolInfo.Rotation = (int)Rotation.Rotate180;
+                                    }
+                                    else
+                                    {
+                                        newvolInfo.Rotation = (int)Rotation.Rotate0;  // assume if single page, it's upside up
+                                    }
+                                    curPdfFileData.lstVolInfo.Add(newvolInfo);
+                                }
                                 //var bmkToDel = Path.ChangeExtension(file, "bmk");
                                 //if (File.Exists(bmkToDel))
                                 //{
@@ -274,6 +300,15 @@ namespace WpfPdfViewer
                                 //    PdfMetaData.SavePdfFileData(curPdfFileData, ForceSave: true);
                                 //    curPdfFileData = null;
                                 //}
+                                if (curPdfFileData?.IsDirty == true)
+                                {
+                                    if (curPdfFileData.lstVolInfo.Count != nContinuations+1) // +1 for root
+                                    {
+                                        "adf".ToString();
+                                    }
+                                    SavePdfFileData(curPdfFileData);
+                                }
+                                nContinuations = 0;
                                 TryAddFile(file);
                                 if (curPdfFileData != null)
                                 {
@@ -324,6 +359,11 @@ namespace WpfPdfViewer
                                     Rotation = 0
                                 });
                             }
+
+                            if (pdfFileData.LastPageNo < pdfFileData.PageNumberOffset) // make sure lastpageno is in range
+                            {
+                                pdfFileData.LastPageNo = pdfFileData.PageNumberOffset;
+                            }
                         }
                     }
                 }
@@ -338,7 +378,8 @@ namespace WpfPdfViewer
             {
                 pdfFileData = new PdfMetaData()
                 {
-                    _FullPathRootFile = FullPathPdfFile
+                    _FullPathRootFile = FullPathPdfFile,
+                    IsDirty = true
                 };
                 pdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
                 {
@@ -369,7 +410,7 @@ namespace WpfPdfViewer
         public void InitializeListPdfDocuments()
         {
             lstPdfDocuments.Clear();
-            var pageNo = 0;
+            var pageNo = PageNumberOffset;
             for (int volNo = 0; volNo < lstVolInfo.Count; volNo++)
             {
                 var task = new Task<PdfDocument>((pg) =>
@@ -405,27 +446,39 @@ namespace WpfPdfViewer
             return str;
         }
 
-        public async Task<PdfDocument> GetPdfDocumentForPageno(int pageNo)
+        public async Task<(PdfDocument pdfDoc, int pdfPgno)> GetPdfDocumentForPageno(int pageNo)
         {
             PdfDocument pdfDoc = null;
-            if (pageNo < NumPagesInSet)
+            var pdfPgNo = 0;
+            if (pageNo < NumPagesInSet + PageNumberOffset)
             {
                 var volno = GetVolNumFromPageNum(pageNo);
-                var res = lstPdfDocuments[volno];
-                if (res.Status == TaskStatus.Created)
+                var pdfDocTask = lstPdfDocuments[volno];
+                if (pdfDocTask.Status == TaskStatus.Created)
                 {
-                    res.Start();
+                    pdfDocTask.Start();
                 }
-                if (res.IsCompleted)
+                if (pdfDocTask.IsCompleted)
                 {
-                    pdfDoc = res.Result;
+                    pdfDoc = pdfDocTask.Result;
                 }
                 else
                 {
-                    pdfDoc = await res;
+                    pdfDoc = await pdfDocTask;
+                }
+                pdfPgNo = GetPdfVolPageNo(pageNo);
+                int GetPdfVolPageNo(int Pgno)
+                {
+                    var res = Pgno - PageNumberOffset;
+                    for (int i = 0; i < volno; i++)
+                    {
+                        res -= lstVolInfo[i].NPagesInThisVolume;
+                    }
+                    Debug.Assert(res >= 0, "page must be >=0");
+                    return res;
                 }
             }
-            return pdfDoc;
+            return (pdfDoc, pdfPgNo);
         }
         internal async Task<PdfDocument> GetPdfDocumentAsync(int pageNo)
         {
@@ -615,7 +668,7 @@ namespace WpfPdfViewer
                         bmi.BeginInit();
                         bmi.StreamSource = strm.AsStream();
                         bmi.CacheOption = BitmapCacheOption.OnLoad;
-                        bmi.Rotation = (Rotation)GetRotation(pgNo: 0);
+                        bmi.Rotation = (Rotation)GetRotation(pgNo: PageNumberOffset);
                         bmi.EndInit();
                     }
                 }
@@ -662,17 +715,17 @@ namespace WpfPdfViewer
             }
         }
 
-        public int GetPdfVolPageNo(int Pgno)
-        {
-            var res = Pgno;
-            var volno = GetVolNumFromPageNum(Pgno);
-            for (int i = 0; i < volno; i++)
-            {
-                res -= lstVolInfo[i].NPagesInThisVolume;
-            }
-            Debug.Assert(res >= 0, "page must be >=0");
-            return res;
-        }
+        //public int GetPdfVolPageNo(int Pgno)
+        //{
+        //    var res = Pgno;
+        //    var volno = GetVolNumFromPageNum(Pgno);
+        //    for (int i = 0; i < volno; i++)
+        //    {
+        //        res -= lstVolInfo[i].NPagesInThisVolume;
+        //    }
+        //    Debug.Assert(res >= 0, "page must be >=0");
+        //    return res;
+        //}
 
 
         internal Rotation GetRotation(int pgNo)

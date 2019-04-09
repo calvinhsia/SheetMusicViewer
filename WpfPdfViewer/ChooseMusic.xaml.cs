@@ -343,7 +343,7 @@ namespace WpfPdfViewer
                         var tdescitem = TypeDescriptor.GetProperties(selitem)["_TocEntry"];
                         var TocEntry = (TOCEntry)tdescitem.GetValue(selitem);
                         chosenPdfMetaData = (PdfMetaData)TocEntry.Tag;
-                        chosenPdfMetaData.LastPageNo = TocEntry.PageNo - chosenPdfMetaData.PageNumberOffset;
+                        chosenPdfMetaData.LastPageNo = TocEntry.PageNo;
                     }
                     break;
                 case "_Playlists":

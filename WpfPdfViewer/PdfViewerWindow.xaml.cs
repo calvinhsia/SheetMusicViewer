@@ -339,16 +339,13 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 
 
             }
-            this.MaxPageNumber = (int)currentPdfMetaData.NumPagesInSet - 1;
+            this.slider.Minimum = currentPdfMetaData.PageNumberOffset;
+            this.MaxPageNumber = (int)currentPdfMetaData.NumPagesInSet - 1 + currentPdfMetaData.PageNumberOffset;
             this.slider.Maximum = this.MaxPageNumber;
-            this.slider.LargeChange = Math.Max((int)(.1 * this.MaxPageNumber), 1); // 10%
+            this.slider.LargeChange = Math.Max((int)(.1 * (this.MaxPageNumber - this.slider.Minimum)), 1); // 10%
             //this.slider.IsDirectionReversed = true;
             this.PdfUIEnabled = true;
             OnMyPropertyChanged(nameof(PdfTitle));
-            if (PageNo == int.MaxValue)
-            {
-                PageNo = MaxPageNumber - 1;
-            }
             await ShowPageAsync(PageNo, ClearCache: true);
         }
 
@@ -373,16 +370,16 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             {
                 return;
             }
-            if (pageNo < 0)
+            if (pageNo < this.slider.Minimum)
             {
-                pageNo = 0;
+                pageNo = (int)this.slider.Minimum;
             }
             if (pageNo > MaxPageNumber)
             {
                 pageNo -= NumPagesPerView;
                 if (pageNo < 0)
                 {
-                    pageNo = 0;
+                    pageNo = (int)this.slider.Minimum;
                 }
             }
             try
@@ -396,7 +393,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 {
                     CacheEntry.TryAddCacheEntry(pageNo + NumPagesPerView);
                 }
-                if (pageNo - NumPagesPerView >= 0 && !dictCache.ContainsKey(pageNo - NumPagesPerView))
+                if (pageNo - NumPagesPerView >= this.slider.Minimum && !dictCache.ContainsKey(pageNo - NumPagesPerView))
                 {
                     CacheEntry.TryAddCacheEntry(pageNo - NumPagesPerView);
                 }
@@ -442,7 +439,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                             dictCache.Remove(item);
                         }
                     }
-                    "asdf".ToString();
                 }
             }
             catch (Exception ex)
@@ -463,11 +459,11 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 for (int i = 0; i < NumPagesPerView; i++)
                 {
                     cacheEntry.cts.Token.ThrowIfCancellationRequested();
-                    var pdfDoc = await currentPdfMetaData.GetPdfDocumentForPageno(pageNo + i);
-                    var pdfPgNo = currentPdfMetaData.GetPdfVolPageNo(pageNo + i);
-                    if (pdfDoc != null && pdfPgNo < pdfDoc.PageCount)
+                    var (pdfDoc, pdfPgno) = await currentPdfMetaData.GetPdfDocumentForPageno(pageNo + i);
+//                    var pdfPgNo = currentPdfMetaData.GetPdfVolPageNo(pageNo + i);
+                    if (pdfDoc != null && pdfPgno>=0 && pdfPgno < pdfDoc.PageCount)
                     {
-                        using (var pdfPage = pdfDoc.GetPage((uint)(pdfPgNo)))
+                        using (var pdfPage = pdfDoc.GetPage((uint)(pdfPgno)))
                         {
                             var bmi = new BitmapImage();
                             using (var strm = new InMemoryRandomAccessStream())
