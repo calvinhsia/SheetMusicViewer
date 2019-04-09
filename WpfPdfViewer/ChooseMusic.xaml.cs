@@ -240,7 +240,10 @@ namespace WpfPdfViewer
                 var sp = new StackPanel() { Orientation = Orientation.Vertical };
                 sp.Tag = pdfMetaDataItem;
                 sp.Children.Add(new Image() { Source = pdfMetaDataItem.GetBitmapImageThumbnail() });
-                sp.Children.Add(new TextBlock() { Text = pdfMetaDataItem.GetFullPathFile(volNo: 0, MakeRelative: true) });
+                sp.Children.Add(new TextBlock() {
+                    Text = pdfMetaDataItem.GetFullPathFile(volNo: 0, MakeRelative: true),
+                    ToolTip = pdfMetaDataItem.GetFullPathFile(volNo: 0)
+                });
                 sp.Children.Add(new TextBlock() {
                     Text = $"#Sngs={pdfMetaDataItem.GetSongCount()} Pg={pdfMetaDataItem.GetTotalPageCount()} Fav={pdfMetaDataItem.Favorites.Count}"
                 });

@@ -493,24 +493,24 @@ namespace WpfPdfViewer
         }
         public static void SavePdfFileData(PdfMetaData pdfFileData, bool ForceSave = false)
         {
-            //var fTsv = @"C:\Users\calvinh\Documents\t.txt";
-            //var lines = File.ReadAllLines(fTsv);
-            //var lstTocEntries = new List<TOCEntry>();
-            //foreach (var line in lines.Where(l => !string.IsNullOrEmpty(l.Trim())))
-            //{
-            //    var parts = line.Split("\t".ToArray());
-            //    var tocEntry = new TOCEntry()
-            //    {
-            //        PageNo = int.Parse(parts[2].Trim()),
-            //        SongName = parts[0].Trim(),
-            //        Composer = parts[1].Trim(),
-            //        //Notes = parts[3].Trim(),
-            //        //Date = parts[4].Trim().Replace(".", string.Empty)
-            //    };
-            //    lstTocEntries.Add(tocEntry);
-            //}
-            //pdfFileData.lstTocEntries = lstTocEntries;
-
+//            var fTsv = @"C:\Users\calvinh\Documents\t.txt";
+//            var lines = File.ReadAllLines(fTsv);
+//            var lstTocEntries = new List<TOCEntry>();
+//            foreach (var line in lines.Where(l => !string.IsNullOrEmpty(l.Trim())))
+//            {
+//                var parts = line.Split("\t".ToArray());
+//                var tocEntry = new TOCEntry()
+//                {
+//                    PageNo = int.Parse(parts[1].Trim()),
+//                    SongName = parts[0].Trim(),
+////                    Composer = parts[1].Trim(),
+//                    //Notes = parts[3].Trim(),
+//                    //Date = parts[4].Trim().Replace(".", string.Empty)
+//                };
+//                lstTocEntries.Add(tocEntry);
+//            }
+//            pdfFileData.lstTocEntries = lstTocEntries;
+//            pdfFileData.Initialize();
             /*
  <TableOfContents>
   <TOCEntry>
