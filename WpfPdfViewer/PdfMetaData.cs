@@ -147,7 +147,7 @@ namespace WpfPdfViewer
             else if (this.lstVolInfo.Count > 0) //there's more than 1 entry
             {
                 var volNo = GetVolNumFromPageNum(pageNo);
-                if (volNo==0)
+                if (volNo == 0)
                 {
                 }
                 else
@@ -185,6 +185,7 @@ namespace WpfPdfViewer
                 await Task.Run(() =>
                 {
                     PdfMetaData curPdfFileData = null;
+                    int nContinuations = 0;
                     recurDirs(pathCurrentMusicFolder);
                     bool TryAddFile(string curFullPathFile)
                     {
@@ -201,14 +202,37 @@ namespace WpfPdfViewer
                         }
                         return true;
                     }
+                    void SaveMetaData()
+                    {
+                        if (curPdfFileData != null)
+                        {
+                            if (curPdfFileData.lstTocEntries.Count == 0 && curPdfFileData.NumPagesInSet < 7)
+                            {
+                                curPdfFileData.lstTocEntries.Add(new TOCEntry()
+                                {
+                                    SongName = Path.GetFileNameWithoutExtension(curPdfFileData._FullPathRootFile)
+                                });
+                                curPdfFileData.IsDirty = true;
+                            }
+                        }
+                        if (curPdfFileData?.IsDirty == true)
+                        {
+                            if (curPdfFileData.lstVolInfo.Count != nContinuations + 1) // +1 for root
+                            {
+                                "adf".ToString();
+                            }
+                            SavePdfFileData(curPdfFileData);
+                        }
+                        nContinuations = 0;
+                    }
                     void recurDirs(string curPath)
                     {
                         var lastFile = string.Empty;
                         var pgOffset = 0;
-                        int nContinuations = 0;
+                        nContinuations = 0;
                         foreach (var file in Directory.EnumerateFiles(curPath, "*.pdf").OrderBy(f => f))//.Where(f=>f.Contains("Miser"))) // "file" is fullpath
                         {
-                            if (file.Contains("Redisc"))
+                            if (file.Contains("Princess"))
                             {
                                 "".ToString();
                             }
@@ -255,47 +279,10 @@ namespace WpfPdfViewer
                                     }
                                     curPdfFileData.lstVolInfo.Add(newvolInfo);
                                 }
-                                //var bmkToDel = Path.ChangeExtension(file, "bmk");
-                                //if (File.Exists(bmkToDel))
-                                //{
-                                //    //var subVolMetaData = ReadPdfMetaData(file);
-                                //    //if (subVolMetaData.lstTocEntries.Count > 0)
-                                //    //{
-                                //    //    "hadtoc?".ToString();
-                                //    //    curPdfFileData.lstTocEntries.AddRange(subVolMetaData.lstTocEntries);
-                                //    //    subVolMetaData.lstTocEntries.Clear();
-                                //    //}
-                                //    //if (subVolMetaData.Favorites.Count > 0)
-                                //    //{
-                                //    //    "had fav?".ToString();
-                                //    //    foreach (var fav in subVolMetaData.Favorites)
-                                //    //    {
-                                //    //        curPdfFileData.Favorites.Add(new Favorite()
-                                //    //        {
-                                //    //            Pageno = fav.Pageno + pgOffset
-                                //    //        });
-                                //    //    }
-                                //    //    subVolMetaData.Favorites.Clear();
-                                //    //}
-                                //    File.Delete(bmkToDel);
-                                //}
                             }
                             else
                             {
-                                //if (curPdfFileData != null)
-                                //{
-                                //    PdfMetaData.SavePdfFileData(curPdfFileData, ForceSave: true);
-                                //    curPdfFileData = null;
-                                //}
-                                if (curPdfFileData?.IsDirty == true)
-                                {
-                                    if (curPdfFileData.lstVolInfo.Count != nContinuations+1) // +1 for root
-                                    {
-                                        "adf".ToString();
-                                    }
-                                    SavePdfFileData(curPdfFileData);
-                                }
-                                nContinuations = 0;
+                                SaveMetaData();
                                 TryAddFile(file);
                                 if (curPdfFileData != null)
                                 {
@@ -304,6 +291,7 @@ namespace WpfPdfViewer
                             }
                             lastFile = file;
                         }
+                        SaveMetaData();
                         //if (curPdfFileData != null)
                         //{
                         //    PdfMetaData.SavePdfFileData(curPdfFileData, ForceSave: true);

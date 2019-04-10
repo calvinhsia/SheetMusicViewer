@@ -187,10 +187,11 @@ namespace WpfPdfViewer
 
             return tapsAreCloseInDistance && tapsAreCloseInTime;
         }
-        private void FillBooksTab()
+        private async void FillBooksTab()
         {
             if (this.lbBooks.ItemsSource == null)
             {
+                await _pdfViewerWindow.GetAllBitMapImagesAsync();
                 this.tbxTotals.Text = $@"Total #Books = {
                     _pdfViewerWindow.lstPdfMetaFileData.Count()} # Songs = {
                     _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.lstTocEntries.Count)} # Pages = {

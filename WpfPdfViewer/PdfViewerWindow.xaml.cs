@@ -244,6 +244,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 else
                 {
                     lstPdfMetaFileData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(_RootMusicFolder);
+                    this.btnChooser.IsEnabled = true;
                     var lastPdfMetaData = lstPdfMetaFileData.Where(p => p.GetFullPathFile(volNo: 0, MakeRelative: true) == lastPdfOpen).FirstOrDefault();
                     if (lastPdfMetaData != null)
                     {
@@ -649,7 +650,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         async Task<bool> ChooseMusic()
         {
             var retval = false;
-            await GetAllBitMapImagesAsync();
+            this.btnChooser.IsEnabled = false;
             var win = new ChooseMusic();
             win.Initialize(this);
             if (win.ShowDialog() == true)
@@ -665,6 +666,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     CloseCurrentPdfFile();
                 }
             }
+            this.btnChooser.IsEnabled = true;
             return retval;
 
         }
