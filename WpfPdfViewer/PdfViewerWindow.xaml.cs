@@ -33,6 +33,10 @@ namespace WpfPdfViewer
         }
 
         private int _CurrentPageNumber;
+        /// <summary>
+        /// This is the page number. it ranges from <see cref="PdfMetaData.PageNumberOffset"/> to  <see cref="PdfMetaData.NumPagesInSet"/> + <see cref="PdfMetaData.PageNumberOffset"/> -1
+        /// If PageNumberOffset is 0, it ranges from 0 to <see cref="PdfMetaData.PageNumberOffset"/> -1
+        /// </summary>
         public int CurrentPageNumber
         {
             get { return _CurrentPageNumber; }
@@ -69,10 +73,10 @@ namespace WpfPdfViewer
         internal string _RootMusicFolder;
         internal List<PdfMetaData> lstPdfMetaFileData;
 
-        PdfMetaData currentPdfMetaData = null;
+        internal PdfMetaData currentPdfMetaData = null;
         internal static PdfViewerWindow s_pdfViewerWindow;
 
-        class CacheEntry
+        internal class CacheEntry
         {
             /// <summary>
             /// add an item to cache. If already there, return it, else create new one
@@ -325,20 +329,11 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
         }
 
-        private async Task LoadPdfFileAndShowAsync(PdfMetaData pdfMetaData, int PageNo)
+        internal async Task LoadPdfFileAndShowAsync(PdfMetaData pdfMetaData, int PageNo)
         {
             CloseCurrentPdfFile();
             currentPdfMetaData = pdfMetaData;
             currentPdfMetaData.InitializeListPdfDocuments();
-            if (currentPdfMetaData.lstTocEntries.Count > 0)
-            {
-                // if there are TOC entries, we want the scrollbar, page num displays to be in TOC units.
-                // That means if a TOC song says page 2, but there are 45 pages of intro in book, the minimum pg will be -45. (pageNumberOffset=-45)
-                // If the max will be the largest TOC number, and the last song is several pages, we won't be able to see those several pages.
-                // so we need to go beyond.
-
-
-            }
             this.slider.Minimum = currentPdfMetaData.PageNumberOffset;
             this.MaxPageNumber = (int)currentPdfMetaData.NumPagesInSet - 1 + currentPdfMetaData.PageNumberOffset;
             this.slider.Maximum = this.MaxPageNumber;
@@ -354,7 +349,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         /// </summary>
         /// <param name="pageNo"></param>
         /// <param name="ClearCache"></param>
-        private async Task ShowPageAsync(int pageNo, bool ClearCache)
+        internal async Task ShowPageAsync(int pageNo, bool ClearCache)
         {
             if (ClearCache)
             {
@@ -644,13 +639,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             Navigate(forwardOrBack);
         }
 
-        //private async void TxtPageNo_LostFocus(object sender, RoutedEventArgs e)
-        //{
-        //    if (int.TryParse(txtPageNo.Text, out var newpgno))
-        //    {
-        //        await ShowPdfFileAsync(newpgno);
-        //    }
-        //}
         private void DpPage_MouseDown(object sender, MouseButtonEventArgs e)
         {
             var pos = e.GetPosition(this.dpPage);
@@ -694,7 +682,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             if (currentPdfMetaData != null)
             {
                 dictCache.Clear();
-                currentPdfMetaData.lstPdfDocuments.Clear();
                 currentPdfMetaData.LastPageNo = CurrentPageNumber;
                 PdfMetaData.SavePdfFileData(currentPdfMetaData);
                 currentPdfMetaData = null;

@@ -56,17 +56,13 @@ namespace WpfPdfViewer
         /// <summary>
         /// The Table of contents of a songbook shows the scanned physical page numbers, which may not match the actual PDF page numbers (there could be a cover page scanned
         /// or could be a multivolume set, or 30 pages of intro, and then page 1 has the 1st song)
-        /// We want to keep the scanned OCR TOC editing, cleanup, true and minimize required editing, so keep the original page numbers.
-        /// The scanned imported OCR TOC will show the physical page no, but not the actual PDF page no.
+        /// Also, each scanned page might have the physical page # printed on it. 
+        /// We want to keep the scanned OCR TOC editing, cleanup, true and minimize required editing. This means the page no displayed in the UI is the same as the page # on the scanned page
         /// This value will map between the each so that the imported scanned TOC saved as XML will not need to be adjusted.
         /// For 1st, 2nd, 3rd volumes, the offset from the actual scanned page number (as visible on the page) to the PDF page number
         /// e.g. the very 1st volume might have a cover page, which is page 0 and 44 pages of intro. Viewing song "The Crush Collision March" might show page 4, but it's really PdfPage=49, 
         /// so we set PageNumberOffset to -45
-        /// So there are 2 kinds of page numbers PDF PgNo and TOC PgNo, and PdfPgNo = TOCPgNo + PageNumberOffset
-        /// So what do we show in the Toolbar? probably best to show TOC pgNo. It matches the page numbers in the scan and is familiar to user.
-        /// However, that means the displayed Toolbar pageno couuld be negative: the 1st song might be on PDF page 1, with lots of intro material on prior pages.
-        /// The PDF page numbers are always 0->maxno -1. For a continued volume, max = Sum(max of all volumes)
-        /// so, the pgnos for all TOC entries and the dictToc are of type TocPgno.
+        /// Another way to think about it: find a page with a printed page no on it. Let's say it's page 3. Count back to the 1st PDF page (probably the book cover)<see cref="PageNumberOffset"/> is the count
         /// </summary>
         public int PageNumberOffset;
         /// <summary>
@@ -79,15 +75,6 @@ namespace WpfPdfViewer
         public List<Favorite> Favorites = new List<Favorite>();
 
         public List<TOCEntry> lstTocEntries = new List<TOCEntry>();
-
-        /// <summary>
-        /// the current volume being displayed
-        /// </summary>
-        [XmlIgnore]
-        public int VolumeCurrent;
-
-        [XmlIgnore]
-        public List<Task<PdfDocument>> lstPdfDocuments = new List<Task<PdfDocument>>();
 
         [XmlIgnore] // can't serialize dictionaries
         public SortedList<int, List<TOCEntry>> dictToc = new SortedList<int, List<TOCEntry>>();
@@ -409,7 +396,6 @@ namespace WpfPdfViewer
         }
         public void InitializeListPdfDocuments()
         {
-            lstPdfDocuments.Clear();
             var pageNo = PageNumberOffset;
             for (int volNo = 0; volNo < lstVolInfo.Count; volNo++)
             {
@@ -420,7 +406,7 @@ namespace WpfPdfViewer
                     return pdfDoc;
                 }, pageNo);
                 pageNo += lstVolInfo[volNo].NPagesInThisVolume;
-                this.lstPdfDocuments.Add(task);
+                lstVolInfo[volNo].TaskPdfDocument = task;
             }
         }
 
@@ -453,7 +439,7 @@ namespace WpfPdfViewer
             if (pageNo < NumPagesInSet + PageNumberOffset)
             {
                 var volno = GetVolNumFromPageNum(pageNo);
-                var pdfDocTask = lstPdfDocuments[volno];
+                var pdfDocTask = lstVolInfo[volno].TaskPdfDocument;
                 if (pdfDocTask.Status == TaskStatus.Created)
                 {
                     pdfDocTask.Start();
@@ -493,24 +479,25 @@ namespace WpfPdfViewer
         }
         public static void SavePdfFileData(PdfMetaData pdfFileData, bool ForceSave = false)
         {
-//            var fTsv = @"C:\Users\calvinh\Documents\t.txt";
-//            var lines = File.ReadAllLines(fTsv);
-//            var lstTocEntries = new List<TOCEntry>();
-//            foreach (var line in lines.Where(l => !string.IsNullOrEmpty(l.Trim())))
-//            {
-//                var parts = line.Split("\t".ToArray());
-//                var tocEntry = new TOCEntry()
-//                {
-//                    PageNo = int.Parse(parts[1].Trim()),
-//                    SongName = parts[0].Trim(),
-////                    Composer = parts[1].Trim(),
-//                    //Notes = parts[3].Trim(),
-//                    //Date = parts[4].Trim().Replace(".", string.Empty)
-//                };
-//                lstTocEntries.Add(tocEntry);
-//            }
-//            pdfFileData.lstTocEntries = lstTocEntries;
-//            pdfFileData.Initialize();
+            //var fTsv = @"C:\Users\calvinh\Documents\t.txt";
+            //var lines = File.ReadAllLines(fTsv);
+            //var lstTocEntries = new List<TOCEntry>();
+            //foreach (var line in lines.Where(l => !string.IsNullOrEmpty(l.Trim())))
+            //{
+            //    var parts = line.Split("\t".ToArray());
+            //    var tocEntry = new TOCEntry()
+            //    {
+            //        PageNo = int.Parse(parts[0].Trim()),
+            //        SongName = parts[1].Trim(),
+            //        Notes=parts[2].Trim(),
+            //                            Composer = parts[3].Trim(),
+            //        //Notes = parts[3].Trim(),
+            //        //Date = parts[4].Trim().Replace(".", string.Empty)
+            //    };
+            //    lstTocEntries.Add(tocEntry);
+            //}
+            //pdfFileData.lstTocEntries = lstTocEntries;
+            //pdfFileData.Initialize();
             /*
  <TableOfContents>
   <TOCEntry>
@@ -553,6 +540,7 @@ namespace WpfPdfViewer
             //}
             //pdfFileData.lstTocEntries = lstTocEntries;
 
+            pdfFileData.InitializeListPdfDocuments(); // reinit list to clear out results to save mem
 
             if (pdfFileData.IsDirty || ForceSave || pdfFileData.initialLastPageNo != pdfFileData.LastPageNo)
             {
@@ -755,6 +743,9 @@ namespace WpfPdfViewer
         public int NPagesInThisVolume;
         /*Normal = 0,Rotate90 = 1,Rotate180 = 2,Rotate270 = 3*/
         public int Rotation;
+        [XmlIgnore]
+        public Task<PdfDocument> TaskPdfDocument;
+
         public override string ToString()
         {
             return $"{NPagesInThisVolume} {Rotation}";
