@@ -19,7 +19,7 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
-            <StackPanel Orientation="Horizontal" Background="AliceBlue" Opacity=".5" Margin="0,8,146.5,8" Grid.RowSpan="2">
+            <StackPanel Orientation="Horizontal" Background="AliceBlue" Opacity=".5" Grid.RowSpan="2">
                 <CheckBox Name ="chkFav0" Foreground="Lime" HorizontalAlignment="Left" Content="Favorite" Checked="ChkFavToggled" Unchecked="ChkFavToggled" Focusable="False" IsEnabled="{Binding PdfUIEnabled}" />
                 <CheckBox ToolTip="Show 1 or 2 pages at a a time" IsChecked="{Binding Show2Pages}" Margin="0,3,0,0" Content="Show_2Pages" IsEnabled="{Binding PdfUIEnabled}"/>
                 <Button Content="_Rotate" HorizontalAlignment="Right" Margin="10,0,00,0" VerticalAlignment="Top" ToolTip="rotate the document 90 degreess right"  Click="BtnRotate_Click" IsEnabled="{Binding PdfUIEnabled}"/>
@@ -36,7 +36,6 @@
             <DockPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Background="AliceBlue" Opacity=".5">
                 <Slider x:Name="slider"  
                             Value="{Binding CurrentPageNumber}" 
-                            Margin="5,0,0,0" 
                             Maximum="100" 
                             IsEnabled="{Binding PdfUIEnabled}" 
                             SmallChange="{Binding NumPagesPerView}" 
@@ -52,6 +51,7 @@
             </DockPanel>
             <DockPanel Grid.Row="0" Grid.Column="2" Background="AliceBlue" Opacity=".5">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Background="AliceBlue" Opacity=".5">
+                    <Image Height="20" Width="16" Margin="0,0,20,0" Source="{Binding ImgThumb}"/>
                     <Button Content="_Quit"  Margin="0,0,20,0" Click="BtnQuit_Click"/>
                     <CheckBox Name="chkFav1" Foreground="Lime" Content="Favorite" Checked="ChkFavToggled" Unchecked="ChkFavToggled" Focusable="False" IsEnabled="{Binding PdfUIEnabled}" />
                 </StackPanel>

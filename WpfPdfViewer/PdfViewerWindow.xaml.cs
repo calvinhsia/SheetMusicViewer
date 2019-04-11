@@ -49,6 +49,8 @@ namespace WpfPdfViewer
         private int _MaxPageNumber;
         public int MaxPageNumber { get { return _MaxPageNumber; } set { if (_MaxPageNumber != value) { _MaxPageNumber = value; OnMyPropertyChanged(); } } }
         public string PdfTitle { get { return currentPdfMetaData?.GetFullPathFile(volNo: 0, MakeRelative: true); } }
+
+        public BitmapImage ImgThumb { get { return currentPdfMetaData?.GetBitmapImageThumbnail(); } }
         public string Description0 { get { return currentPdfMetaData?.GetDescription(CurrentPageNumber); } }
         public string Description1 { get { return currentPdfMetaData?.GetDescription(CurrentPageNumber + 1); } }
         bool _fShow2Pages = true;
@@ -249,7 +251,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     if (lastPdfMetaData != null)
                     {
                         await LoadPdfFileAndShowAsync(lastPdfMetaData, lastPdfMetaData.LastPageNo);
-                        await GetAllBitMapImagesAsync();
+                        await GetAllBitMapImagesAsync(); // while showing a doc, we can get the bmps
                     }
                     else
                     {
@@ -342,6 +344,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             //this.slider.IsDirectionReversed = true;
             this.PdfUIEnabled = true;
             OnMyPropertyChanged(nameof(PdfTitle));
+            OnMyPropertyChanged(nameof(ImgThumb));
             await ShowPageAsync(PageNo, ClearCache: true);
         }
 
