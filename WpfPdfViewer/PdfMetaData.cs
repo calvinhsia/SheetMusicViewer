@@ -15,22 +15,10 @@ using Windows.Storage.Streams;
 
 namespace WpfPdfViewer
 {
-    ///// <summary>
-    ///// Represents a currently open set of PDFs (all of the same title)
-    ///// A set consists of multiple PDFs, all with names ending in "0.pdf", "1.pdf", etc.
-    ///// </summary>
-    //public class PdfOpenStatus
-    //{
-    //    PdfMetaData pdfMetaDataRoot;
-    //    int volumeNo;
-    //}
-
     /// <summary>
-    /// The serialized info for a PDF is in a file with the exact same name as the PDF with the extension changed to ".bmk"
+    /// The serialized info for a PDF is in a file with the same name as the PDF with the extension changed to ".bmk"
     /// Some PDFs are a series of scanned docs, numbered, e.g. 0,1,2,3...
-    /// Some of these members will be stored in the "root" volume, while others will be per each file.
-    /// only those members indicated, are stored in the "root"
-    /// When reading the data in, any fav, toc in non-root will be moved to root.
+    /// There will be a single .bmk for all volumes of a multi volume set series.
     /// </summary>
     [Serializable]
     public class PdfMetaData
@@ -46,7 +34,6 @@ namespace WpfPdfViewer
         public List<PdfVolumeInfo> lstVolInfo = new List<PdfVolumeInfo>();
         /// <summary>
         /// the page no when this PDF was last opened
-        /// stored in root
         /// </summary>
         public int LastPageNo;
 
@@ -81,12 +68,18 @@ namespace WpfPdfViewer
 
         [XmlIgnore]
         internal BitmapImage bitmapImageCache;
-        internal string GetDescription(int currentPageNumber)
+        /// <summary>
+        /// Get a description of the page. If the page isn't in the TOC, it might be the 2nd page of a multi-page song
+        /// so find the nearest TOC entry before it.
+        /// </summary>
+        /// <param name="pageNo"></param>
+        /// <returns></returns>
+        public string GetDescription(int pageNo)
         {
             var str = string.Empty;
             var pMetaDataItem = this;
 
-            var tocPgNm = currentPageNumber;
+            var tocPgNm = pageNo;
             if (!pMetaDataItem.dictToc.TryGetValue(tocPgNm, out var lstTocs))
             {
                 // find the 1st one beyond, then go back 1
@@ -101,7 +94,7 @@ namespace WpfPdfViewer
             {
                 foreach (var toce in lstTocs)
                 {
-                    var val = $"{currentPageNumber} {toce.SongName} {toce.Composer} {toce.Date} {toce.Notes}".Trim();
+                    var val = $"{pageNo} {toce.SongName} {toce.Composer} {toce.Date} {toce.Notes}".Trim();
                     str += val + " ";
                 }
             }
@@ -202,10 +195,11 @@ namespace WpfPdfViewer
                         }
                         return true;
                     }
-                    void SaveMetaData()
+                    void SaveMetaData() // if we created a new one or modified it (added volumes), save it
                     {
                         if (curPdfFileData != null)
                         {
+                            // for single songs: if no TOC and # pages < 7, create a new TOC entry with 1 song: same as file name
                             if (curPdfFileData.lstTocEntries.Count == 0 && curPdfFileData.NumPagesInSet < 7)
                             {
                                 curPdfFileData.lstTocEntries.Add(new TOCEntry()
@@ -292,10 +286,6 @@ namespace WpfPdfViewer
                             lastFile = file;
                         }
                         SaveMetaData();
-                        //if (curPdfFileData != null)
-                        //{
-                        //    PdfMetaData.SavePdfFileData(curPdfFileData, ForceSave: true);
-                        //}
                         foreach (var dir in Directory.EnumerateDirectories(curPath))
                         {
                             recurDirs(dir);
@@ -326,18 +316,18 @@ namespace WpfPdfViewer
                         }
                         else
                         {
-                            if (pdfFileData.lstVolInfo.Count == 0) // import old data
+                            if (pdfFileData.lstVolInfo.Count == 0) // There should be at least one for each PDF in a series. If no series, there should be 1 for itself.
                             {
                                 pdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
                                 {
                                     NPagesInThisVolume = GetNumPagesInPdf(FullPathPdfFile),
                                     Rotation = 0
                                 });
+                                pdfFileData.IsDirty = true;
                             }
-
-                            if (pdfFileData.LastPageNo < pdfFileData.PageNumberOffset) // make sure lastpageno is in range
+                            if (pdfFileData.LastPageNo < pdfFileData.PageNumberOffset || pdfFileData.LastPageNo >= pdfFileData.NumPagesInSet - 1 + pdfFileData.PageNumberOffset) // make sure lastpageno is in range
                             {
-                                pdfFileData.LastPageNo = pdfFileData.PageNumberOffset;
+                                pdfFileData.LastPageNo = pdfFileData.PageNumberOffset; // go to first page
                             }
                         }
                     }
@@ -362,11 +352,11 @@ namespace WpfPdfViewer
                     Rotation = 0
                 });
             }
-            pdfFileData?.Initialize();
+            pdfFileData?.InitializeDictToc();
             return pdfFileData;
         }
 
-        private void Initialize()
+        private void InitializeDictToc()
         {
             dictToc.Clear();
             foreach (var toc in lstTocEntries) // a page can have multiple songs
@@ -467,25 +457,25 @@ namespace WpfPdfViewer
         }
         public static void SavePdfFileData(PdfMetaData pdfFileData, bool ForceSave = false)
         {
-//            var fTsv = @"C:\Users\calvinh\Documents\t.txt";
-//            var lines = File.ReadAllLines(fTsv);
-//            var lstTocEntries = new List<TOCEntry>();
-//            pdfFileData.IsDirty = true;
-//            foreach (var line in lines.Where(l => !string.IsNullOrEmpty(l.Trim())))
-//            {
-//                var parts = line.Split("\t".ToArray());
-//                var tocEntry = new TOCEntry()
-//                {
-//                    SongName = parts[0].Trim(),
-//                    PageNo = int.Parse(parts[2].Trim()),
-//                    Composer = "Hans Zimmer",
-////                    Date = parts[3].Trim().Replace(".", string.Empty),
-//                    Notes = parts[1].Trim(),
-//                };
-//                lstTocEntries.Add(tocEntry);
-//            }
-//            pdfFileData.lstTocEntries = lstTocEntries;
-//            pdfFileData.Initialize();
+            //            var fTsv = @"C:\Users\calvinh\Documents\t.txt";
+            //            var lines = File.ReadAllLines(fTsv);
+            //            var lstTocEntries = new List<TOCEntry>();
+            //            pdfFileData.IsDirty = true;
+            //            foreach (var line in lines.Where(l => !string.IsNullOrEmpty(l.Trim())))
+            //            {
+            //                var parts = line.Split("\t".ToArray());
+            //                var tocEntry = new TOCEntry()
+            //                {
+            //                    SongName = parts[0].Trim(),
+            //                    PageNo = int.Parse(parts[2].Trim()),
+            //                    Composer = "Hans Zimmer",
+            ////                    Date = parts[3].Trim().Replace(".", string.Empty),
+            //                    Notes = parts[1].Trim(),
+            //                };
+            //                lstTocEntries.Add(tocEntry);
+            //            }
+            //            pdfFileData.lstTocEntries = lstTocEntries;
+            //            pdfFileData.Initialize();
             /*
  <TableOfContents>
   <TOCEntry>
