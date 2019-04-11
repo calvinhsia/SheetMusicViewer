@@ -12,10 +12,9 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,4">
+            <Label Content="Music Folder Path:" HorizontalAlignment="Left" Margin="0,-3,0,0" VerticalAlignment="Top" IsEnabled="{Binding PdfUIEnabled}" ToolTip="You can choose a different path to a root folder which contains PDF music files"/>
+            <ComboBox Name="cboRootFolder" Margin="2,0,10,0" VerticalAlignment="Top" IsReadOnly="True" SelectionChanged="CboRootFolder_SelectionChanged" PreviewKeyDown="CboRootFolder_PreviewKeyDown" />
             <TextBlock Name="tbxTotals"/>
-            <Label Content="Current Path: " HorizontalAlignment="Left" Margin="0,-3,0,0" VerticalAlignment="Top" IsEnabled="{Binding PdfUIEnabled}"/>
-            <TextBox Name="txtCurrentRootFolder" Margin="2,0,10,0" TextWrapping="Wrap" VerticalAlignment="Top" IsReadOnly="True" />
-            <Button Content="_ChangeMusicFolder" Margin="10,0,0,0" ToolTip="Open another document"  Click="BtnChangeMusicFolder_Click" Height="22"/>
             <Button Content="Cancel" Margin="10,0,0,0" ToolTip="Open another document"  Click="BtnCancel_Click" Height="22" IsCancel="True"/>
             <Button Content="_OK" Margin="10,0,40,1" ToolTip="Open another document"  Click="BtnOk_Click" Height="22" Width="50" IsDefault="True"/>
         </StackPanel>

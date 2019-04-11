@@ -14,14 +14,14 @@
     <Setting Name="Show2Pages" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">False</Value>
     </Setting>
-    <Setting Name="RootMusicFolder" Type="System.String" Scope="User">
-      <Value Profile="(Default)" />
-    </Setting>
     <Setting Name="IsFullScreen" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">False</Value>
     </Setting>
     <Setting Name="ChooseQueryTab" Type="System.String" Scope="User">
       <Value Profile="(Default)">_Books</Value>
+    </Setting>
+    <Setting Name="RootFolderMRU" Type="System.Collections.Specialized.StringCollection" Scope="User">
+      <Value Profile="(Default)" />
     </Setting>
   </Settings>
 </SettingsFile>

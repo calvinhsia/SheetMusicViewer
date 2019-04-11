@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
@@ -17,6 +18,7 @@ namespace WpfPdfViewer
     /// </summary>
     public partial class ChooseMusic : Window
     {
+        public const string NewFolderDialogString = "New...";
         PdfViewerWindow _pdfViewerWindow;
         TreeView _TreeView;
         readonly List<Favorite> _lstFavoriteEntries = new List<Favorite>();
@@ -38,7 +40,26 @@ namespace WpfPdfViewer
         }
         private void ChooseMusic_Loaded(object sender, RoutedEventArgs e)
         {
-            this.txtCurrentRootFolder.Text = _pdfViewerWindow._RootMusicFolder;
+            var mruRootFolderItems = Properties.Settings.Default.RootFolderMRU;
+            CboEnableSelectionChange = false;
+            if (!string.IsNullOrEmpty(_pdfViewerWindow._RootMusicFolder))
+            {
+                this.cboRootFolder.Items.Add(new ComboBoxItem() { Content = _pdfViewerWindow._RootMusicFolder });
+            }
+            if (mruRootFolderItems != null && mruRootFolderItems.Count > 0)
+            {
+                foreach (var itm in mruRootFolderItems)
+                {
+                    if (!string.IsNullOrEmpty( _pdfViewerWindow._RootMusicFolder) && itm != _pdfViewerWindow._RootMusicFolder)
+                    {
+                        this.cboRootFolder.Items.Add(new ComboBoxItem() { Content = itm });
+                    }
+                }
+            }
+            this.cboRootFolder.Items.Add(new ComboBoxItem() { Content = NewFolderDialogString });
+            this.cboRootFolder.SelectedIndex = 0;
+            CboEnableSelectionChange = true;
+            //            this.cboRootFolder.SelectedIndex = 0;
             ActivateTab(string.Empty);
             this.tabControl.SelectionChanged += (o, et) =>
                 {
@@ -46,6 +67,135 @@ namespace WpfPdfViewer
                     ActivateTab(tabItemHeader);
                     et.Handled = true;
                 };
+        }
+
+        private void CboRootFolder_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (sender is ComboBox cbo && cbo.IsDropDownOpen && e.Key == Key.Delete)
+            {
+                if (cbo.Items.Count > 0) // can't delete the NewFolderDialog at the end
+                {
+                    foreach (ComboBoxItem itm in cbo.Items)
+                    {
+                        if (itm.IsHighlighted && (string)itm.Content != NewFolderDialogString)
+                        {
+                            CboEnableSelectionChange = false;
+                            cbo.Items.Remove(itm);
+                            CboEnableSelectionChange = true;
+                            break;
+                        }
+                    }
+                }
+                e.Handled = true;
+            }
+        }
+
+        bool CboEnableSelectionChange = true;
+        private async void CboRootFolder_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (CboEnableSelectionChange)
+            {
+                if (this.cboRootFolder.SelectedItem != null)
+                {
+                    var path = (string)((ComboBoxItem)this.cboRootFolder.SelectedItem).Content;
+                    if (path == NewFolderDialogString)
+                    {
+                        var d = new System.Windows.Forms.FolderBrowserDialog
+                        {
+                            ShowNewFolderButton = false,
+                            Description = "Choose a root folder with PDF music files",
+                            SelectedPath = this._pdfViewerWindow._RootMusicFolder
+                        };
+                        var res = d.ShowDialog();
+                        if (res == System.Windows.Forms.DialogResult.OK)
+                        {
+                            CboEnableSelectionChange = false;
+                            this.cboRootFolder.Items.Insert(0, new ComboBoxItem() { Content = d.SelectedPath });
+                            this.cboRootFolder.SelectedIndex = 0;
+                            CboEnableSelectionChange = true;
+                            await ChangeRootFolderAsync(d.SelectedPath);
+                        }
+                        else
+                        {
+                            CboEnableSelectionChange = false;
+                            this.cboRootFolder.SelectedIndex = 0;
+                            CboEnableSelectionChange = true;
+                        }
+                    }
+                    else
+                    {
+                        await ChangeRootFolderAsync(path);
+                    }
+                }
+            }
+        }
+
+        private async Task ChangeRootFolderAsync(string selectedPath)
+        {
+            this.lbBooks.ItemsSource = null;
+            this.dpTview.Children.Clear();
+            this.dpQuery.Children.Clear();
+            this.dpPlaylists.Children.Clear();
+
+            var col = new StringCollection
+                {
+                    selectedPath
+                };
+
+            foreach (ComboBoxItem itm in this.cboRootFolder.Items)
+            {
+                var str = (string)itm.Content;
+                if (!col.Contains(str) && str != NewFolderDialogString)
+                {
+                    col.Add((string)itm.Content);
+                }
+            }
+            Properties.Settings.Default.RootFolderMRU = col;
+            Properties.Settings.Default.Save();
+            // now that we have the col in MRU order, we want to rearrange the cbo.items in same order
+            CboEnableSelectionChange = false;
+            this.cboRootFolder.Items.Clear();
+            foreach (var itm in col)
+            {
+                this.cboRootFolder.Items.Add(new ComboBoxItem() { Content = itm });
+            }
+            this.cboRootFolder.Items.Add(new ComboBoxItem() { Content = NewFolderDialogString });
+            this.cboRootFolder.SelectedIndex = 0;
+            CboEnableSelectionChange = true;
+
+
+            _pdfViewerWindow._RootMusicFolder = selectedPath;
+            //            this.cboRootFolder.Text = _pdfViewerWindow._RootMusicFolder;
+            this.tabControl.SelectedIndex = 0;
+            _pdfViewerWindow.CloseCurrentPdfFile();
+            _pdfViewerWindow.lstPdfMetaFileData.Clear(); // release mem
+            _pdfViewerWindow.lstPdfMetaFileData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(selectedPath);
+            ActivateTab(string.Empty);
+        }
+
+        private readonly Stopwatch _doubleTapStopwatch = new Stopwatch();
+        private Point _lastTapLocation;
+
+        public static double GetDistanceBetweenPoints(Point p, Point q)
+        {
+            double a = p.X - q.X;
+            double b = p.Y - q.Y;
+            double distance = Math.Sqrt(a * a + b * b);
+            return distance;
+        }
+        private bool IsDoubleTap(TouchEventArgs e)
+        {
+            Point currentTapPosition = e.GetTouchPoint(this).Position;
+            bool tapsAreCloseInDistance = GetDistanceBetweenPoints(currentTapPosition, _lastTapLocation) < 40;
+            _lastTapLocation = currentTapPosition;
+
+            TimeSpan elapsed = _doubleTapStopwatch.Elapsed;
+            _doubleTapStopwatch.Restart();
+            //var x = System.Windows.Forms.SystemInformation.DoubleClickSize; // 4, 4
+            //var y = System.Windows.Forms.SystemInformation.DoubleClickTime; // 700
+            bool tapsAreCloseInTime = (elapsed != TimeSpan.Zero && elapsed < TimeSpan.FromMilliseconds(700));
+
+            return tapsAreCloseInDistance && tapsAreCloseInTime;
         }
 
         private void ActivateTab(string tabItemHeader)
@@ -94,7 +244,7 @@ namespace WpfPdfViewer
 
         private void FillQueryTab()
         {
-            if (this.dpQuery.Children.Count == 0)
+            if (this.dpQuery.Children.Count == 0 && _pdfViewerWindow.lstPdfMetaFileData != null)
             {
                 var uberToc = new List<TOCEntry>();
                 foreach (var pdfMetaDataItem in
@@ -125,78 +275,26 @@ namespace WpfPdfViewer
                     fAllowBrowFilter: true,
                     ColWidths: new[] { 300, 300, 200, 200, 60, 500 });
                 br._BrowseList.SelectionChanged += (o, e) =>
-                  {
-                      e.Handled = true; // prevent bubbling SelectionChanged up to tabcontrol
-                  };
+                {
+                    e.Handled = true; // prevent bubbling SelectionChanged up to tabcontrol
+                };
                 br._BrowseList.MouseDoubleClick += (o, e) =>
-                  {
-                      BtnOk_Click(o, e);
-                  };
+                {
+                    BtnOk_Click(o, e);
+                };
                 br._BrowseList.KeyUp += (o, e) =>
-                 {
-                     BtnOk_Click(o, e);
-                 };
+                {
+                    BtnOk_Click(o, e);
+                };
                 this.dpQuery.Children.Add(br);
             }
         }
 
-        async void BtnChangeMusicFolder_Click(object sender, RoutedEventArgs e)
-        {
-            var d = new System.Windows.Forms.FolderBrowserDialog
-            {
-                ShowNewFolderButton = false,
-                Description = "Choose a folder with PDF music files",
-                SelectedPath = this._pdfViewerWindow._RootMusicFolder
-            };
-            var res = d.ShowDialog();
-            if (res == System.Windows.Forms.DialogResult.OK)
-            {
-                this.lbBooks.ItemsSource = null;
-                this.dpTview.Children.Clear();
-                this.dpQuery.Children.Clear();
-                this.dpPlaylists.Children.Clear();
 
-                _pdfViewerWindow._RootMusicFolder = d.SelectedPath;
-                this.txtCurrentRootFolder.Text = _pdfViewerWindow._RootMusicFolder;
-                this.tabControl.SelectedIndex = 0;
-                _pdfViewerWindow.lstPdfMetaFileData.Clear(); // release mem
-                _pdfViewerWindow.lstPdfMetaFileData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(_pdfViewerWindow._RootMusicFolder);
-                ActivateTab(string.Empty);
-            }
-        }
-        private readonly Stopwatch _doubleTapStopwatch = new Stopwatch();
-        private Point _lastTapLocation;
-
-        public static double GetDistanceBetweenPoints(Point p, Point q)
-        {
-            double a = p.X - q.X;
-            double b = p.Y - q.Y;
-            double distance = Math.Sqrt(a * a + b * b);
-            return distance;
-        }
-        private bool IsDoubleTap(TouchEventArgs e)
-        {
-            Point currentTapPosition = e.GetTouchPoint(this).Position;
-            bool tapsAreCloseInDistance = GetDistanceBetweenPoints(currentTapPosition, _lastTapLocation) < 40;
-            _lastTapLocation = currentTapPosition;
-
-            TimeSpan elapsed = _doubleTapStopwatch.Elapsed;
-            _doubleTapStopwatch.Restart();
-            //var x = System.Windows.Forms.SystemInformation.DoubleClickSize; // 4, 4
-            //var y = System.Windows.Forms.SystemInformation.DoubleClickTime; // 700
-            bool tapsAreCloseInTime = (elapsed != TimeSpan.Zero && elapsed < TimeSpan.FromMilliseconds(700));
-
-            return tapsAreCloseInDistance && tapsAreCloseInTime;
-        }
         private async void FillBooksTab()
         {
             if (this.lbBooks.ItemsSource == null)
             {
-                this.tbxTotals.Text = $@"Total #Books = {
-                    _pdfViewerWindow.lstPdfMetaFileData.Count()} # Songs = {
-                    _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.lstTocEntries.Count)} # Pages = {
-                    _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.NumPagesInSet)} #Fav={
-                    _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.Favorites.Count)}";
 
                 this.lbBooks.MouseDoubleClick += (o, e) =>
                   {
@@ -227,6 +325,11 @@ namespace WpfPdfViewer
                 {
                     e.Handled = true; // prevent bubbling SelectionChanged up to tabcontrol
                 };
+                this.tbxTotals.Text = $@"Total #Books = {
+                    _pdfViewerWindow.lstPdfMetaFileData.Count()} # Songs = {
+                    _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.lstTocEntries.Count):n0} # Pages = {
+                    _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.NumPagesInSet):n0} #Fav={
+                    _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.Favorites.Count):n0}";
                 var lst = new ObservableCollection<UIElement>();
                 this.lbBooks.ItemsSource = lst;
                 foreach (var pdfMetaDataItem in
@@ -266,43 +369,45 @@ namespace WpfPdfViewer
                     Header = "Favorites"
                 };
                 _TreeView.Items.Add(tvitemFavorites);
-
-                foreach (var pdfMetaDataItem in
-                    _pdfViewerWindow.
-                    lstPdfMetaFileData.
-                    OrderBy(p => p.GetFullPathFile(volNo: 0, MakeRelative: true)))
+                if (_pdfViewerWindow.lstPdfMetaFileData != null)
                 {
-                    foreach (var fav in pdfMetaDataItem.Favorites)
+                    foreach (var pdfMetaDataItem in
+                        _pdfViewerWindow.
+                        lstPdfMetaFileData.
+                        OrderBy(p => p.GetFullPathFile(volNo: 0, MakeRelative: true)))
                     {
-                        fav.Tag = pdfMetaDataItem;
-                        _lstFavoriteEntries.Add(fav);
+                        foreach (var fav in pdfMetaDataItem.Favorites)
+                        {
+                            fav.Tag = pdfMetaDataItem;
+                            _lstFavoriteEntries.Add(fav);
+                        }
                     }
-                }
 
-                foreach (var favEntry in _lstFavoriteEntries)
-                {
-                    var sp = new StackPanel() { Orientation = Orientation.Horizontal };
-                    sp.Children.Add(new Image() { Source = await ((PdfMetaData)favEntry.Tag).GetBitmapImageThumbnailAsync(), Height = 80, Width = 50 });
-                    sp.Children.Add(new TextBlock() { Text = ((PdfMetaData)favEntry.Tag).GetDescription(favEntry.Pageno) });
-                    var tvItem = new TreeViewItem()
+                    foreach (var favEntry in _lstFavoriteEntries)
                     {
-                        Header = sp,
-                        Tag = favEntry
-                    };
-                    tvitemFavorites.Items.Add(tvItem);
-                }
-                tvitemFavorites.IsExpanded = true;
-                _TreeView.MouseDoubleClick += (o, e) =>
-                {
-                    BtnOk_Click(this, e);
-                };
-                _TreeView.KeyUp += (o, e) =>
-                {
-                    if (e.Key == Key.Return)
+                        var sp = new StackPanel() { Orientation = Orientation.Horizontal };
+                        sp.Children.Add(new Image() { Source = await ((PdfMetaData)favEntry.Tag).GetBitmapImageThumbnailAsync(), Height = 80, Width = 50 });
+                        sp.Children.Add(new TextBlock() { Text = ((PdfMetaData)favEntry.Tag).GetDescription(favEntry.Pageno) });
+                        var tvItem = new TreeViewItem()
+                        {
+                            Header = sp,
+                            Tag = favEntry
+                        };
+                        tvitemFavorites.Items.Add(tvItem);
+                    }
+                    tvitemFavorites.IsExpanded = true;
+                    _TreeView.MouseDoubleClick += (o, e) =>
                     {
                         BtnOk_Click(this, e);
-                    }
-                };
+                    };
+                    _TreeView.KeyUp += (o, e) =>
+                    {
+                        if (e.Key == Key.Return)
+                        {
+                            BtnOk_Click(this, e);
+                        }
+                    };
+                }
             }
         }
 
@@ -363,5 +468,6 @@ namespace WpfPdfViewer
             e.Handled = true;
             this.Close();
         }
+
     }
 }

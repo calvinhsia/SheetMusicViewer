@@ -73,7 +73,7 @@ namespace WpfPdfViewer
         public bool PdfUIEnabled { get { return currentPdfMetaData != null; } set { OnMyPropertyChanged(); } }
 
         internal string _RootMusicFolder;
-        internal List<PdfMetaData> lstPdfMetaFileData;
+        internal List<PdfMetaData> lstPdfMetaFileData = new List<PdfMetaData>();
 
         internal PdfMetaData currentPdfMetaData = null;
         internal static PdfViewerWindow s_pdfViewerWindow;
@@ -134,7 +134,12 @@ namespace WpfPdfViewer
             this.Height = Properties.Settings.Default.MainWindowSize.Height;
             this.Top = Properties.Settings.Default.MainWindowPos.Height;
             this.Left = Properties.Settings.Default.MainWindowPos.Width;
-            this._RootMusicFolder = Properties.Settings.Default.RootMusicFolder;
+//            Properties.Settings.Default.RootFolderMRU = null; //xxxx
+            var mruRootFolder = Properties.Settings.Default.RootFolderMRU;
+            if (mruRootFolder != null && mruRootFolder.Count > 0)
+            {
+                this._RootMusicFolder = Properties.Settings.Default.RootFolderMRU[0];
+            }
             //            this._RootMusicFolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Jazz";
             this.Show2Pages = false;//xxxx Properties.Settings.Default.Show2Pages;
             this.chkFullScreen.IsChecked = Properties.Settings.Default.IsFullScreen;
@@ -142,7 +147,6 @@ namespace WpfPdfViewer
             this.Closed += (o, e) =>
               {
                   Properties.Settings.Default.Show2Pages = Show2Pages;
-                  Properties.Settings.Default.RootMusicFolder = _RootMusicFolder;
                   Properties.Settings.Default.LastPDFOpen = currentPdfMetaData?.GetFullPathFile(volNo: 0, MakeRelative: true);
                   Properties.Settings.Default.MainWindowPos = new System.Drawing.Size((int)this.Left, (int)this.Top);
                   Properties.Settings.Default.MainWindowSize = new System.Drawing.Size((int)this.ActualWidth, (int)this.ActualHeight);
@@ -681,7 +685,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         {
             this.Close();
         }
-        void CloseCurrentPdfFile()
+        internal void CloseCurrentPdfFile()
         {
             this.dpPage.Children.Clear();
             if (currentPdfMetaData != null)

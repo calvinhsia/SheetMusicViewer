@@ -175,11 +175,11 @@ namespace WpfPdfViewer
             {
                 var pathCurrentMusicFolder = _RootMusicFolder;
                 lstPdfMetaFileData.Clear();
-                await Task.Run(() =>
+                await Task.Run(async () =>
                 {
                     PdfMetaData curPdfFileData = null;
                     int nContinuations = 0;
-                    recurDirs(pathCurrentMusicFolder);
+                    await recurDirsAsync(pathCurrentMusicFolder);
                     bool TryAddFile(string curFullPathFile)
                     {
                         curPdfFileData = PdfMetaData.ReadPdfMetaData(curFullPathFile);
@@ -219,7 +219,7 @@ namespace WpfPdfViewer
                         }
                         nContinuations = 0;
                     }
-                    void recurDirs(string curPath)
+                    async Task recurDirsAsync(string curPath)
                     {
                         var lastFile = string.Empty;
                         var pgOffset = 0;
@@ -261,7 +261,7 @@ namespace WpfPdfViewer
                                     nContinuations++;
                                     var newvolInfo = new PdfVolumeInfo()
                                     {
-                                        NPagesInThisVolume = GetNumPagesInPdf(file),
+                                        NPagesInThisVolume = (int)(await GetPdfDocumentForFileAsync(file)).PageCount,
                                     };
                                     if (newvolInfo.NPagesInThisVolume != 1)
                                     {
@@ -288,7 +288,7 @@ namespace WpfPdfViewer
                         SaveMetaData();
                         foreach (var dir in Directory.EnumerateDirectories(curPath))
                         {
-                            recurDirs(dir);
+                            await recurDirsAsync(dir);
                         }
                     }
                 });
@@ -444,9 +444,13 @@ namespace WpfPdfViewer
             }
             return (pdfDoc, pdfPgNo);
         }
-        internal async Task<PdfDocument> GetPdfDocumentAsync(int pageNo)
+        public async Task<PdfDocument> GetPdfDocumentAsync(int pageNo)
         {
             var pathPdfFileVol = GetFullPathFileFromPageNo(pageNo);
+            return await GetPdfDocumentForFileAsync(pathPdfFileVol);
+        }
+        public static async Task<PdfDocument> GetPdfDocumentForFileAsync(string pathPdfFileVol)
+        {
             StorageFile f = await StorageFile.GetFileFromPathAsync(pathPdfFileVol);
             var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
             if (pdfDoc.IsPasswordProtected)
@@ -455,6 +459,7 @@ namespace WpfPdfViewer
             }
             return pdfDoc;
         }
+
         public static void SavePdfFileData(PdfMetaData pdfFileData, bool ForceSave = false)
         {
             //            var fTsv = @"C:\Users\calvinh\Documents\t.txt";
@@ -611,11 +616,9 @@ namespace WpfPdfViewer
             var bmi = bitmapImageCache; // first see if we have one 
             if (bmi == null)
             {
-                var f = await StorageFile.GetFileFromPathAsync(GetFullPathFile(volNo: 0));
-                var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
-
-                //StorageFile f = await StorageFile.GetFileFromPathAsync(pdfMetaDataItem.FullPathFile);
-                //var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
+                var pdfDoc = await GetPdfDocumentForFileAsync(GetFullPathFile(volNo: 0));
+                var pgcnt = pdfDoc.PageCount;
+                Debug.Assert(pgcnt > 0);
                 bmi = new BitmapImage();
                 using (var page = pdfDoc.GetPage(0))
                 {
