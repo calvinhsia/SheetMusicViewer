@@ -25,7 +25,7 @@
                 <Button Content="_Rotate" HorizontalAlignment="Right" Margin="10,0,00,0" VerticalAlignment="Top" ToolTip="rotate the document 90 degreess right"  Click="BtnRotate_Click" IsEnabled="{Binding PdfUIEnabled}"/>
                 <CheckBox x:Name="chkFullScreen" Content="_Full Screen"  ToolTip="Full Screen" HorizontalAlignment="Left" Margin="10,0,0,0" Checked="ChkfullScreenToggled"  Unchecked="ChkfullScreenToggled" />
 
-                <Button Name="btnChooser" Content="_Chooser" IsEnabled="False" HorizontalAlignment="Right" Margin="10,0,00,0" VerticalAlignment="Top" ToolTip="Open another document"  Click="BtnChooser_Click"/>
+                <Button Name="btnChooser" Content="_Chooser" IsEnabled="False" HorizontalAlignment="Right" Margin="10,0,00,0" VerticalAlignment="Top" ToolTip="Open another document, query songs, etc"  Click="BtnChooser_Click"/>
                 <TextBlock Name="txtBoxTitle"  Text="{Binding PdfTitle}" Foreground="DarkBlue" HorizontalAlignment="Center" FontSize="14"/>
                 <Button x:Name="btnPrev" Content="&lt;" HorizontalAlignment="Left" Margin="30,0,0,0" VerticalAlignment="Top" Click="BtnPrevNext_Click" IsEnabled="{Binding PdfUIEnabled}"/>
                 <TextBox x:Name="txtPageNo" HorizontalAlignment="Left" Width="25" Margin="5,0,5,0" Text="{Binding CurrentPageNumber}" VerticalAlignment="Top" IsEnabled="{Binding PdfUIEnabled}" />

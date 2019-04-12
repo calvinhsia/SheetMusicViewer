@@ -179,12 +179,12 @@ namespace WpfPdfViewer
                     PdfMetaData curPdfFileData = null;
                     int nContinuations = 0;
                     await recurDirsAsync(pathCurrentMusicFolder);
-                    bool TryAddFile(string curFullPathFile)
+                    async Task<bool> TryAddFileAsync(string curFullPathFile)
                     {
                         var retval = false;
                         try
                         {
-                            curPdfFileData = PdfMetaData.ReadPdfMetaData(curFullPathFile);
+                            curPdfFileData = await PdfMetaData.ReadPdfMetaDataAsync(curFullPathFile);
                             if (curPdfFileData != null)
                             {
                                 lstPdfMetaFileData.Add(curPdfFileData);
@@ -278,7 +278,7 @@ namespace WpfPdfViewer
                             else
                             {
                                 SaveMetaData();
-                                TryAddFile(file);
+                                await TryAddFileAsync(file);
                                 if (curPdfFileData != null)
                                 {
                                     pgOffset = curPdfFileData.lstVolInfo[0].NPagesInThisVolume;
@@ -297,7 +297,7 @@ namespace WpfPdfViewer
             return lstPdfMetaFileData;
         }
 
-        public static PdfMetaData ReadPdfMetaData(string FullPathPdfFile)
+        public static async Task<PdfMetaData> ReadPdfMetaDataAsync(string FullPathPdfFile)
         {
             PdfMetaData pdfFileData = null;
             var bmkFile = Path.ChangeExtension(FullPathPdfFile, "bmk");
@@ -319,9 +319,10 @@ namespace WpfPdfViewer
                         {
                             if (pdfFileData.lstVolInfo.Count == 0) // There should be at least one for each PDF in a series. If no series, there should be 1 for itself.
                             {
+                                var doc = await GetPdfDocumentForFileAsync(FullPathPdfFile);
                                 pdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
                                 {
-                                    NPagesInThisVolume = GetNumPagesInPdf(FullPathPdfFile),
+                                    NPagesInThisVolume = (int)doc.PageCount,
                                     Rotation = 0
                                 });
                                 pdfFileData.IsDirty = true;
@@ -347,9 +348,10 @@ namespace WpfPdfViewer
                     _FullPathRootFile = FullPathPdfFile,
                     IsDirty = true
                 };
+                var doc = await GetPdfDocumentForFileAsync(FullPathPdfFile);
                 pdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
                 {
-                    NPagesInThisVolume = GetNumPagesInPdf(FullPathPdfFile),
+                    NPagesInThisVolume = (int)doc.PageCount,
                     Rotation = 0
                 });
             }

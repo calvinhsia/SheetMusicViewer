@@ -102,7 +102,7 @@ namespace Tests
         [TestMethod]
         public void TestCreatePdfMetaData()
         {
-            var pdfData = PdfMetaData.ReadPdfMetaData(testPdf);
+            var pdfData = PdfMetaData.ReadPdfMetaDataAsync(testPdf);
             TestContext.WriteLine($"pdfdata = {pdfData}");
         }
 
