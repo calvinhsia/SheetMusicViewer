@@ -269,65 +269,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
         }
 
-        //private void MungeFavorites()
-        //{
-        //    // transfter fav, toc to root
-        //    PdfMetaData pRoot = null;
-        //    int nPageOffset = 0;
-        //    var rootIsDirty = false;
-        //    foreach (var pdfMetaDataItem in lstPdfMetaFileData) //.Where(dd => dd.FullPathFile.Contains("Broadway")))
-        //    {
-        //        if (pdfMetaDataItem.NumPagesInSet == 0)
-        //        {
-        //            "no pages?".ToString();
-        //        }
-        //        if (pdfMetaDataItem.PriorPdfMetaData == null) // it's a root
-        //        {
-        //            if (rootIsDirty)
-        //            {
-        //                PdfMetaData.SavePdfFileData(pRoot, ForceSave: true);
-        //            }
-        //            rootIsDirty = false;
-        //            pRoot = pdfMetaDataItem;
-        //            nPageOffset = pRoot.NumPagesInSet;
-        //        }
-        //        else
-        //        {
-        //            if (pdfMetaDataItem.Favorites.Count > 0)
-        //            {
-        //                foreach (var fav in pdfMetaDataItem.Favorites)
-        //                {
-        //                    pRoot.Favorites.Add(new Favorite()
-        //                    {
-        //                        Pageno = fav.Pageno + nPageOffset
-        //                    }
-        //                        );
-        //                    rootIsDirty = true;
-        //                }
-        //                pdfMetaDataItem.Favorites.Clear();
-        //                PdfMetaData.SavePdfFileData(pdfMetaDataItem, ForceSave: true);
-        //            }
-        //            nPageOffset += pdfMetaDataItem.NumPagesInSet;
-        //            if (pdfMetaDataItem.lstTocEntries.Count > 0 && pRoot.lstTocEntries.Count > 0)
-        //            {
-        //                "".ToString();
-        //            }
-        //            if (pdfMetaDataItem.lstTocEntries.Count > 0)
-        //            {
-        //                pRoot.lstTocEntries.AddRange(pdfMetaDataItem.lstTocEntries);
-        //                pdfMetaDataItem.lstTocEntries.Clear();
-        //                PdfMetaData.SavePdfFileData(pdfMetaDataItem, ForceSave: true);
-        //                rootIsDirty = true;
-        //            }
-        //        }
-        //    }
-        //    if (rootIsDirty)
-        //    {
-        //        PdfMetaData.SavePdfFileData(pRoot, ForceSave: true);
-        //    }
-        //    "done".ToString();
-        //}
-
         async public Task GetAllBitMapImagesAsync()
         {
             foreach (var pdfmetadataitem in lstPdfMetaFileData)
@@ -584,6 +525,13 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             {
                 switch (e.Key)
                 {
+                    case Key.System: // alt
+                        if (e.SystemKey== Key.E)
+                        {
+                            ImgThumb_MouseDown(this, null);
+                            e.Handled = true;
+                        }
+                        break;
                     case Key.Up:
                     case Key.PageUp:
                     case Key.Left:
@@ -857,13 +805,18 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 this.WindowState = WindowState.Normal;
             }
         }
-
+        bool IsShowingMetaDataForm = false;
         private void ImgThumb_MouseDown(object sender, MouseButtonEventArgs e)
         {
-            var w = new MetaDataForm(this);
-            if (w.ShowDialog() ==  true)
+            if (!IsShowingMetaDataForm && currentPdfMetaData != null)
             {
+                IsShowingMetaDataForm = true;
+                var w = new MetaDataForm(this);
+                if (w.ShowDialog() == true)
+                {
 
+                }
+                IsShowingMetaDataForm = false;
             }
 
         }

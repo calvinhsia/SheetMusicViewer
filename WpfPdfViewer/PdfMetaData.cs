@@ -41,15 +41,14 @@ namespace WpfPdfViewer
         int initialLastPageNo;
 
         /// <summary>
-        /// The Table of contents of a songbook shows the scanned physical page numbers, which may not match the actual PDF page numbers (there could be a cover page scanned
-        /// or could be a multivolume set, or 30 pages of intro, and then page 1 has the 1st song)
+        /// The Table of contents of a songbook shows the physical page numbers, which may not match the actual PDF page numbers (there could be a cover page scanned or could be a multivolume set, or 30 pages of intro, and then page 1 has the 1st song)
         /// Also, each scanned page might have the physical page # printed on it. 
-        /// We want to keep the scanned OCR TOC editing, cleanup, true and minimize required editing. This means the page no displayed in the UI is the same as the page # on the scanned page
-        /// This value will map between the each so that the imported scanned TOC saved as XML will not need to be adjusted.
+        /// We want to keep the scanned OCR TOC true and minimize required editing. This means the page no displayed in the UI is the same as the page # on the scanned page
+        /// PageNumberOffset will map between each so that the imported scanned TOC saved as XML will not need to be adjusted.
         /// For 1st, 2nd, 3rd volumes, the offset from the actual scanned page number (as visible on the page) to the PDF page number
         /// e.g. the very 1st volume might have a cover page, which is page 0 and 44 pages of intro. Viewing song "The Crush Collision March" might show page 4, but it's really PdfPage=49, 
         /// so we set PageNumberOffset to -45
-        /// Another way to think about it: find a page with a printed page no on it. Let's say it's page 3. Count back to the 1st PDF page (probably the book cover)<see cref="PageNumberOffset"/> is the count
+        /// Another way to think about it: find a page with a printed page no on it, e.g. page 3. Count back to the 1st PDF page (probably the book cover) PageNumberOffset is the resulting count
         /// </summary>
         public int PageNumberOffset;
         /// <summary>
@@ -63,7 +62,7 @@ namespace WpfPdfViewer
 
         public List<TOCEntry> lstTocEntries = new List<TOCEntry>();
 
-        [XmlIgnore] // can't serialize dictionaries
+        [XmlIgnore] // can't serialize dictionaries.Could be multiple TOCEntries for a single page Page #=> List<TOCEntry>
         public SortedList<int, List<TOCEntry>> dictToc = new SortedList<int, List<TOCEntry>>();
 
         [XmlIgnore]
@@ -188,12 +187,6 @@ namespace WpfPdfViewer
                             curPdfFileData = PdfMetaData.ReadPdfMetaData(curFullPathFile);
                             if (curPdfFileData != null)
                             {
-                                //curPdfFileData.lstVolInfo.Clear();
-                                //curPdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
-                                //{
-                                //    NPagesInThisVolume = getNumPages(curFullPathFile),
-                                //    Rotation = (int)Rotation.Rotate180
-                                //});
                                 lstPdfMetaFileData.Add(curPdfFileData);
                             }
                             retval =true;
@@ -263,13 +256,13 @@ namespace WpfPdfViewer
                             }
                             if (isContinuation)
                             {
+                                nContinuations++;
                                 // add to current
                                 if (curPdfFileData != null && curPdfFileData.IsDirty) // dirty: we're creating a new one
                                 {
-                                    nContinuations++;
                                     var newvolInfo = new PdfVolumeInfo()
                                     {
-                                        NPagesInThisVolume = (int)(await GetPdfDocumentForFileAsync(file)).PageCount,
+                                        NPagesInThisVolume = (int)(await GetPdfDocumentForFileAsync(file)).PageCount
                                     };
                                     if (newvolInfo.NPagesInThisVolume != 1)
                                     {
@@ -364,7 +357,7 @@ namespace WpfPdfViewer
             return pdfFileData;
         }
 
-        private void InitializeDictToc()
+        public void InitializeDictToc()
         {
             dictToc.Clear();
             foreach (var toc in lstTocEntries) // a page can have multiple songs
@@ -396,15 +389,15 @@ namespace WpfPdfViewer
             }
         }
 
-        private static int GetNumPagesInPdf(string FullPathFile)
-        {
-            var tkf = StorageFile.GetFileFromPathAsync(FullPathFile);
-            tkf.AsTask().Wait();
-            var tkpdfDoc = PdfDocument.LoadFromFileAsync(tkf.AsTask().Result).AsTask();
-            tkpdfDoc.Wait();
-            var pdfDoc = tkpdfDoc.Result;
-            return (int)pdfDoc.PageCount;
-        }
+        //private static int GetNumPagesInPdf(string FullPathFile)
+        //{
+        //    var tkf = StorageFile.GetFileFromPathAsync(FullPathFile);
+        //    tkf.AsTask().Wait();
+        //    var tkpdfDoc = PdfDocument.LoadFromFileAsync(tkf.AsTask().Result).AsTask();
+        //    tkpdfDoc.Wait();
+        //    var pdfDoc = tkpdfDoc.Result;
+        //    return (int)pdfDoc.PageCount;
+        //}
 
         string RemoveQuotes(string str)
         {
@@ -470,67 +463,6 @@ namespace WpfPdfViewer
 
         public static void SavePdfFileData(PdfMetaData pdfFileData, bool ForceSave = false)
         {
-            //            var fTsv = @"C:\Users\calvinh\Documents\t.txt";
-            //            var lines = File.ReadAllLines(fTsv);
-            //            var lstTocEntries = new List<TOCEntry>();
-            //            pdfFileData.IsDirty = true;
-            //            foreach (var line in lines.Where(l => !string.IsNullOrEmpty(l.Trim())))
-            //            {
-            //                var parts = line.Split("\t".ToArray());
-            //                var tocEntry = new TOCEntry()
-            //                {
-            //                    SongName = parts[0].Trim(),
-            //                    PageNo = int.Parse(parts[2].Trim()),
-            //                    Composer = "Hans Zimmer",
-            ////                    Date = parts[3].Trim().Replace(".", string.Empty),
-            //                    Notes = parts[1].Trim(),
-            //                };
-            //                lstTocEntries.Add(tocEntry);
-            //            }
-            //            pdfFileData.lstTocEntries = lstTocEntries;
-            //            pdfFileData.Initialize();
-            /*
- <TableOfContents>
-  <TOCEntry>
-   <SongName>sample</SongName>
-   <PageNo>23</PageNo>
-  </TOCEntry>
- </TableOfContents>
-             
-             */
-            //var bm = new TOCEntry()
-            //{
-            //    SongName = "sample",
-            //    PageNo = 23
-            //};
-            //var lstBms = new List<TOCEntry>
-            //{
-            //    bm
-            //};
-            //pdfFileData.TableOfContents = lstBms.ToArray();
-
-            //var ftxt = @"C:\Users\calvinh\Documents\t.txt";
-            //var lines = File.ReadAllLines(ftxt);
-            //var lstTocEntries = new List<TOCEntry>();
-            //foreach (var line in lines.Where(l => !string.IsNullOrEmpty(l)))
-            //{
-
-            //    var space = line.IndexOf(" ");
-
-            //    var pageno = int.Parse(line.Substring(0,space));
-            //    var title = line.Substring(space+1).Trim();
-            //    //var yearRawStart = title.LastIndexOf('(');
-            //    //var yearStr = title.Substring(yearRawStart).Replace("(", string.Empty).Replace(")", string.Empty);
-            //    //                title = title.Substring(0, yearRawStart).Trim();
-            //    var tocEntry = new TOCEntry()
-            //    {
-            //        PageNo = pageno,
-            //        SongName = title,
-            //    };
-            //    lstTocEntries.Add(tocEntry);
-            //}
-            //pdfFileData.lstTocEntries = lstTocEntries;
-
             pdfFileData.InitializeListPdfDocuments(); // reinit list to clear out results to save mem
 
             if (pdfFileData.IsDirty || ForceSave || pdfFileData.initialLastPageNo != pdfFileData.LastPageNo)
@@ -744,7 +676,7 @@ namespace WpfPdfViewer
 
         public override string ToString()
         {
-            return $"{NPagesInThisVolume} {Rotation}";
+            return $"#Pgs={NPagesInThisVolume,4} Rotation={(Rotation)Rotation}";
         }
     }
 
@@ -800,7 +732,7 @@ namespace WpfPdfViewer
 
         public override string ToString()
         {
-            return $"{PageNo} {SongName} {Composer} {Notes} {Date}".Trim();
+            return $"{PageNo} {SongName} {Composer} {Date} {Notes}".Trim();
         }
     }
 }

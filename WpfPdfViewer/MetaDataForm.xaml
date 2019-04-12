@@ -5,23 +5,81 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:WpfPdfViewer"
         mc:Ignorable="d"
-        Title="MetaDataForm" Height="450" Width="800">
+        Title="MetaDataForm" Height="450" Width="800" Loaded="Window_Loaded">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,4">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
             <Image Height="200" Width="150" Margin="0,0,20,0" Source="{Binding ImgThumb}"/>
-            <TextBox Width="100" Text="{Binding ElementName=listView, Path=SelectedItem.SongName}" />
-            <Button Content="Cancel" Margin="10,0,0,0" ToolTip="Open another document"  Click="BtnCancel_Click" Height="22" IsCancel="True"/>
-            <Button Content="_OK" Margin="10,0,40,1" ToolTip="Open another document"  Click="BtnOk_Click" Height="22" Width="50" IsDefault="True"/>
-        </StackPanel>
+            <StackPanel Orientation="Vertical" Grid.Column="1" Grid.ColumnSpan="2">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,4" Height="25" VerticalAlignment="Top">
+                    <Label Content="PageNumberOffset"/>
+                    <TextBox Text="{Binding PageNumberOffset}" Width="30" TextChanged="TbxNumeric_TextChanged" Margin="0,3,0,-3">
+                        <TextBox.ToolTip>
+                            <StackPanel>
+                                <TextBlock>The Table of contents of a songbook shows the physical page numbers, which may not match the actual PDF page numbers (there could be a cover page scanned or could be a multivolume set, or 30 pages of intro, and then page 1 has the 1st song)</TextBlock>
+                                <TextBlock>Also, each scanned page might have the physical page # printed on it.</TextBlock>
+                                <TextBlock>We want to keep the scanned OCR TOC true and minimize required editing. This means the page no displayed in the UI is the same as the page # on the scanned page</TextBlock>
+                                <TextBlock>PageNumberOffset will map between each so that the imported scanned TOC saved as XML will not need to be adjusted.</TextBlock>
+                                <TextBlock>For 1st, 2nd, 3rd volumes, the offset from the actual scanned page number (as visible on the page) to the PDF page number</TextBlock>
+                                <TextBlock>e.g. the very 1st volume might have a cover page, which is page 0 and 44 pages of intro. Viewing song "The Crush Collision March" might show page 4, but it's really PdfPage=49,</TextBlock>
+                                <TextBlock>so we set PageNumberOffset to -45</TextBlock>
+                                <TextBlock>Another way to think about it: find a page with a printed page no on it, e.g. page 3. Count back to the 1st PDF page (probably the book cover) PageNumberOffset is the resulting count</TextBlock>
+                            </StackPanel>
+                        </TextBox.ToolTip>
+                    </TextBox>
+                    <Button Content="Clear TOC" Margin="10,0,0,0" ToolTip="Clear the TOC table" Click="BtnClearTOC_Click"/>
+                    <Button Content="_Import from clipboard" Margin="10,0,0,0" ToolTip="Import from clipboard tab separted values (e.g. copy multi columns from Excel). &#10;Column order= PageNo,Songname, Composer, Date, Notes. Empty columns are fine. Will append to existing data" Click="BtnImport_Click" />
+                    <Button Content="_Export to clipboard" Margin="10,0,0,0" ToolTip="Export to clipboard" Click="BtnExport_Click" />
+                    <Button Content="_Cancel" Margin="10,0,0,0" ToolTip="Discard all changes"  Click="BtnCancel_Click" IsCancel="True"/>
+                    <Button Content="_Save" Margin="10,0,40,1" ToolTip="Save all changes"  Click="BtnSave_Click" Width="50" IsDefault="True"/>
+                </StackPanel>
+                <Grid Grid.Column="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Label Content="Notes" ToolTip="Notes for entire collection of volumes" />
+                            <TextBox Text="{Binding DocNotes}" Width="200"/>
+
+                        </StackPanel>
+                        <Label Content="VolInfo" />
+                        <ListView Width="250" ItemsSource="{Binding LstVolInfo}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Vertical" Grid.Column="1">
+                        <Label Content="PageNo" HorizontalContentAlignment="Right" Height="25"/>
+                        <Label Content="SongName" HorizontalContentAlignment="Right" Height="25"/>
+                        <Label Content="Composer" HorizontalContentAlignment="Right" Height="25"/>
+                        <Label Content="Date" HorizontalContentAlignment="Right" Height="25"/>
+                        <Label Content="Notes" HorizontalContentAlignment="Right" Height="25"/>
+
+                    </StackPanel>
+                    <StackPanel Orientation="Vertical" Grid.Column="2">
+                        <TextBox Width="100" Text="{Binding ElementName=lvTOC, Path=SelectedItem.PageNo}" HorizontalAlignment="Left"  Height="25" TextChanged="TbxNumeric_TextChanged"/>
+                        <TextBox Width="300" Text="{Binding ElementName=lvTOC, Path=SelectedItem.SongName}" HorizontalAlignment="Left"  Height="25"/>
+                        <TextBox Width="300" Text="{Binding ElementName=lvTOC, Path=SelectedItem.Composer}" HorizontalAlignment="Left"  Height="25"/>
+                        <TextBox Width="300" Text="{Binding ElementName=lvTOC, Path=SelectedItem.Date}" HorizontalAlignment="Left"  Height="25"/>
+                        <TextBox Width="300" Text="{Binding ElementName=lvTOC, Path=SelectedItem.Notes}" HorizontalAlignment="Left"  Height="25"/>
+                    </StackPanel>
+
+                </Grid>
+            </StackPanel>
+        </Grid>
         <DockPanel Grid.Row="1">
-            <ListView x:Name="listView" ItemsSource="{Binding LstTOC}" IsSynchronizedWithCurrentItem="True" >
+            <ListView x:Name="lvTOC" ItemsSource="{Binding LstTOC}" IsSynchronizedWithCurrentItem="False" >
                 <ListView.View>
                     <GridView>
-                        <GridViewColumn Header="SongName">
+                        <!--<GridViewColumn Header="SongName">
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
                                     <TextBox Text="{Binding SongName}" />
@@ -34,9 +92,12 @@
                                     <TextBox Text="{Binding Composer}" />
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
-                        </GridViewColumn>
+                        </GridViewColumn>-->
+                        <GridViewColumn Header="PageNo" DisplayMemberBinding="{Binding PageNo}"/>
                         <GridViewColumn Header="SongName" DisplayMemberBinding="{Binding SongName}"/>
                         <GridViewColumn Header="Composer" DisplayMemberBinding="{Binding Path=Composer}"/>
+                        <GridViewColumn Header="Date" DisplayMemberBinding="{Binding Path=Date}"/>
+                        <GridViewColumn Header="Notes" DisplayMemberBinding="{Binding Path=Notes}"/>
 
                     </GridView>
 

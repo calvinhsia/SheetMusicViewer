@@ -105,5 +105,29 @@ namespace WpfPdfViewer.Properties {
                 this["RootFolderMRU"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0, 0")]
+        public global::System.Drawing.Size EditWindowPos {
+            get {
+                return ((global::System.Drawing.Size)(this["EditWindowPos"]));
+            }
+            set {
+                this["EditWindowPos"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("1000, 800")]
+        public global::System.Drawing.Size EditWindowSize {
+            get {
+                return ((global::System.Drawing.Size)(this["EditWindowSize"]));
+            }
+            set {
+                this["EditWindowSize"] = value;
+            }
+        }
     }
 }

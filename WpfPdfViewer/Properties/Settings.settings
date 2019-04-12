@@ -23,5 +23,11 @@
     <Setting Name="RootFolderMRU" Type="System.Collections.Specialized.StringCollection" Scope="User">
       <Value Profile="(Default)" />
     </Setting>
+    <Setting Name="EditWindowPos" Type="System.Drawing.Size" Scope="User">
+      <Value Profile="(Default)">0, 0</Value>
+    </Setting>
+    <Setting Name="EditWindowSize" Type="System.Drawing.Size" Scope="User">
+      <Value Profile="(Default)">1000, 800</Value>
+    </Setting>
   </Settings>
 </SettingsFile>
