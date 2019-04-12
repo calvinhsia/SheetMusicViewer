@@ -53,8 +53,16 @@ namespace WpfPdfViewer
                 }
             }
             this.cboRootFolder.Items.Add(new ComboBoxItem() { Content = NewFolderDialogString });
-            this.cboRootFolder.SelectedIndex = 0;
-            CboEnableSelectionChange = true;
+            if (this.cboRootFolder.Items.Count==1)
+            {
+                CboEnableSelectionChange = true;
+                this.cboRootFolder.SelectedIndex = 0;
+            }
+            else
+            {
+                this.cboRootFolder.SelectedIndex = 0;
+                CboEnableSelectionChange = true;
+            }
             //            this.cboRootFolder.SelectedIndex = 0;
             ActivateTab(string.Empty);
             this.tabControl.SelectionChanged += (o, et) =>

@@ -182,18 +182,26 @@ namespace WpfPdfViewer
                     await recurDirsAsync(pathCurrentMusicFolder);
                     bool TryAddFile(string curFullPathFile)
                     {
-                        curPdfFileData = PdfMetaData.ReadPdfMetaData(curFullPathFile);
-                        if (curPdfFileData != null)
+                        var retval = false;
+                        try
                         {
-                            //curPdfFileData.lstVolInfo.Clear();
-                            //curPdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
-                            //{
-                            //    NPagesInThisVolume = getNumPages(curFullPathFile),
-                            //    Rotation = (int)Rotation.Rotate180
-                            //});
-                            lstPdfMetaFileData.Add(curPdfFileData);
+                            curPdfFileData = PdfMetaData.ReadPdfMetaData(curFullPathFile);
+                            if (curPdfFileData != null)
+                            {
+                                //curPdfFileData.lstVolInfo.Clear();
+                                //curPdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
+                                //{
+                                //    NPagesInThisVolume = getNumPages(curFullPathFile),
+                                //    Rotation = (int)Rotation.Rotate180
+                                //});
+                                lstPdfMetaFileData.Add(curPdfFileData);
+                            }
+                            retval =true;
                         }
-                        return true;
+                        catch (Exception)
+                        {
+                        }
+                        return retval;
                     }
                     void SaveMetaData() // if we created a new one or modified it (added volumes), save it
                     {
