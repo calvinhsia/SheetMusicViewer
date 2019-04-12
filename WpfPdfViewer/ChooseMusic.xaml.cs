@@ -19,25 +19,21 @@ namespace WpfPdfViewer
     public partial class ChooseMusic : Window
     {
         public const string NewFolderDialogString = "New...";
-        PdfViewerWindow _pdfViewerWindow;
+        readonly PdfViewerWindow _pdfViewerWindow;
         TreeView _TreeView;
         readonly List<Favorite> _lstFavoriteEntries = new List<Favorite>();
 
         public PdfMetaData chosenPdfMetaData = null;
-        public ChooseMusic()
+        public ChooseMusic(PdfViewerWindow pdfViewerWindow)
         {
             InitializeComponent();
-        }
-
-        internal void Initialize(PdfViewerWindow pdfViewerWindow)
-        {
             this._pdfViewerWindow = pdfViewerWindow;
             this.Loaded += ChooseMusic_Loaded;
             this.Top = _pdfViewerWindow.Top;
             this.Left = _pdfViewerWindow.Left;
             this.WindowState = WindowState.Maximized;
-            //            this.Owner = pdfViewerWindow;
         }
+
         private void ChooseMusic_Loaded(object sender, RoutedEventArgs e)
         {
             var mruRootFolderItems = Properties.Settings.Default.RootFolderMRU;

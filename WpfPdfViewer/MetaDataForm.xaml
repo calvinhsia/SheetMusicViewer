@@ -1,0 +1,48 @@
+﻿<Window x:Class="WpfPdfViewer.MetaDataForm"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:WpfPdfViewer"
+        mc:Ignorable="d"
+        Title="MetaDataForm" Height="450" Width="800">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,4">
+            <Image Height="200" Width="150" Margin="0,0,20,0" Source="{Binding ImgThumb}"/>
+            <TextBox Width="100" Text="{Binding ElementName=listView, Path=SelectedItem.SongName}" />
+            <Button Content="Cancel" Margin="10,0,0,0" ToolTip="Open another document"  Click="BtnCancel_Click" Height="22" IsCancel="True"/>
+            <Button Content="_OK" Margin="10,0,40,1" ToolTip="Open another document"  Click="BtnOk_Click" Height="22" Width="50" IsDefault="True"/>
+        </StackPanel>
+        <DockPanel Grid.Row="1">
+            <ListView x:Name="listView" ItemsSource="{Binding LstTOC}" IsSynchronizedWithCurrentItem="True" >
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn Header="SongName">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox Text="{Binding SongName}" />
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="Composer">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox Text="{Binding Composer}" />
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="SongName" DisplayMemberBinding="{Binding SongName}"/>
+                        <GridViewColumn Header="Composer" DisplayMemberBinding="{Binding Path=Composer}"/>
+
+                    </GridView>
+
+                </ListView.View>
+            </ListView>
+        </DockPanel>
+
+    </Grid>
+</Window>

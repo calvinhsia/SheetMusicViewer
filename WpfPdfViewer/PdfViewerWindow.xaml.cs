@@ -50,7 +50,7 @@ namespace WpfPdfViewer
         public int MaxPageNumber { get { return _MaxPageNumber; } set { if (_MaxPageNumber != value) { _MaxPageNumber = value; OnMyPropertyChanged(); } } }
         public string PdfTitle { get { return currentPdfMetaData?.GetFullPathFile(volNo: 0, MakeRelative: true); } }
 
-        public BitmapImage ImgThumb { get { return currentPdfMetaData?.GetBitmapImageThumbnail(); } }
+        public BitmapImage ImgThumbImage { get { return currentPdfMetaData?.GetBitmapImageThumbnail(); } }
         public string Description0 { get { return currentPdfMetaData?.GetDescription(CurrentPageNumber); } }
         public string Description1 { get { return currentPdfMetaData?.GetDescription(CurrentPageNumber + 1); } }
         bool _fShow2Pages = true;
@@ -348,7 +348,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             //this.slider.IsDirectionReversed = true;
             this.PdfUIEnabled = true;
             OnMyPropertyChanged(nameof(PdfTitle));
-            OnMyPropertyChanged(nameof(ImgThumb));
+            OnMyPropertyChanged(nameof(ImgThumbImage));
             await ShowPageAsync(PageNo, ClearCache: true);
         }
 
@@ -658,8 +658,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         {
             var retval = false;
             this.btnChooser.IsEnabled = false;
-            var win = new ChooseMusic();
-            win.Initialize(this);
+            var win = new ChooseMusic(this);
             if (win.ShowDialog() == true)
             {
                 var pdfMetaData = win.chosenPdfMetaData;
@@ -857,6 +856,16 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 this.WindowStyle = WindowStyle.SingleBorderWindow;
                 this.WindowState = WindowState.Normal;
             }
+        }
+
+        private void ImgThumb_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            var w = new MetaDataForm(this);
+            if (w.ShowDialog() ==  true)
+            {
+
+            }
+
         }
     }
 }

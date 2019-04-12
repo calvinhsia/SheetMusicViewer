@@ -642,6 +642,13 @@ namespace WpfPdfViewer
                     }
                 }
                 bitmapImageCache = bmi;
+                if (PdfViewerWindow.s_pdfViewerWindow.currentPdfMetaData?._FullPathRootFile == _FullPathRootFile)
+                {
+                    if (PdfViewerWindow.s_pdfViewerWindow.ImgThumbImage != null)
+                    {
+                        PdfViewerWindow.s_pdfViewerWindow.OnMyPropertyChanged(nameof(PdfViewerWindow.ImgThumbImage));
+                    }
+                }
             }
             return bmi;
         }
@@ -736,8 +743,8 @@ namespace WpfPdfViewer
     [Serializable]
     public class Favorite : ICloneable
     {
-        public string FavoriteName;
-        public int Pageno;
+        public string FavoriteName { get; set; }
+        public int Pageno { get; set; }
         [XmlIgnore]
         public object Tag;
 
@@ -763,11 +770,11 @@ namespace WpfPdfViewer
     [Serializable]
     public class TOCEntry : ICloneable
     {
-        public string SongName;
-        public string Composer;
-        public string Notes;
-        public string Date;
-        public int PageNo;
+        public string SongName { get; set; }
+        public string Composer { get; set; }
+        public string Notes { get; set; }
+        public string Date { get; set; }
+        public int PageNo { get; set; }
         [XmlIgnore]
         public object Tag;
 

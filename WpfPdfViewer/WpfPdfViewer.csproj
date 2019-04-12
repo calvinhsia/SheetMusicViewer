@@ -80,6 +80,10 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
+    <Page Include="MetaDataForm.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="PdfViewerWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -92,6 +96,9 @@
       <DependentUpon>ChooseMusic.xaml</DependentUpon>
     </Compile>
     <Compile Include="ExtensionMethods.cs" />
+    <Compile Include="MetaDataForm.xaml.cs">
+      <DependentUpon>MetaDataForm.xaml</DependentUpon>
+    </Compile>
     <Compile Include="PdfViewerWindow.xaml.cs">
       <DependentUpon>PdfViewerWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
