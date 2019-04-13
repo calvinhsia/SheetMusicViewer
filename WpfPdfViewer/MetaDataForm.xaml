@@ -65,11 +65,11 @@
 
                     </StackPanel>
                     <StackPanel Orientation="Vertical" Grid.Column="2">
-                        <TextBox Width="100" Text="{Binding ElementName=lvTOC, Path=SelectedItem.PageNo}" HorizontalAlignment="Left"  Height="25" TextChanged="TbxNumeric_TextChanged"/>
-                        <TextBox Width="300" Text="{Binding ElementName=lvTOC, Path=SelectedItem.SongName}" HorizontalAlignment="Left"  Height="25"/>
-                        <TextBox Width="300" Text="{Binding ElementName=lvTOC, Path=SelectedItem.Composer}" HorizontalAlignment="Left"  Height="25"/>
-                        <TextBox Width="300" Text="{Binding ElementName=lvTOC, Path=SelectedItem.Date}" HorizontalAlignment="Left"  Height="25"/>
-                        <TextBox Width="300" Text="{Binding ElementName=lvTOC, Path=SelectedItem.Notes}" HorizontalAlignment="Left"  Height="25"/>
+                        <TextBox Width="50" Text="{Binding ElementName=lvTOC, Path=SelectedItem.PageNo}" HorizontalAlignment="Left"  Height="25" TextChanged="TbxNumeric_TextChanged"/>
+                        <TextBox Width="400" Text="{Binding ElementName=lvTOC, Path=SelectedItem.SongName}" HorizontalAlignment="Left"  Height="25"/>
+                        <TextBox Width="400" Text="{Binding ElementName=lvTOC, Path=SelectedItem.Composer}" HorizontalAlignment="Left"  Height="25"/>
+                        <TextBox Width="400" Text="{Binding ElementName=lvTOC, Path=SelectedItem.Date}" HorizontalAlignment="Left"  Height="25"/>
+                        <TextBox Width="400" Text="{Binding ElementName=lvTOC, Path=SelectedItem.Notes}" HorizontalAlignment="Left"  Height="25"/>
                     </StackPanel>
 
                 </Grid>

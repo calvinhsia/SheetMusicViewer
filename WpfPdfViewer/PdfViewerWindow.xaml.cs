@@ -528,8 +528,8 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     case Key.System: // alt
                         if (e.SystemKey== Key.E)
                         {
-                            ImgThumb_MouseDown(this, null);
-                            e.Handled = true;
+                            //ImgThumb_MouseDown(this, null);
+                            //e.Handled = true;
                         }
                         break;
                     case Key.Up:
@@ -806,7 +806,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
         }
         bool IsShowingMetaDataForm = false;
-        private void ImgThumb_MouseDown(object sender, MouseButtonEventArgs e)
+        private void ImgThumb_MouseDown(object sender, RoutedEventArgs e)
         {
             if (!IsShowingMetaDataForm && currentPdfMetaData != null)
             {

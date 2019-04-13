@@ -46,14 +46,14 @@ namespace WpfPdfViewer
             {
                 foreach (var itm in mruRootFolderItems)
                 {
-                    if (!string.IsNullOrEmpty( _pdfViewerWindow._RootMusicFolder) && itm != _pdfViewerWindow._RootMusicFolder)
+                    if (!string.IsNullOrEmpty(_pdfViewerWindow._RootMusicFolder) && itm != _pdfViewerWindow._RootMusicFolder)
                     {
                         this.cboRootFolder.Items.Add(new ComboBoxItem() { Content = itm });
                     }
                 }
             }
             this.cboRootFolder.Items.Add(new ComboBoxItem() { Content = NewFolderDialogString });
-            if (this.cboRootFolder.Items.Count==1)
+            if (this.cboRootFolder.Items.Count == 1)
             {
                 CboEnableSelectionChange = true;
                 this.cboRootFolder.SelectedIndex = 0;
@@ -306,9 +306,12 @@ namespace WpfPdfViewer
                   };
                 this.lbBooks.TouchDown += (o, e) =>
                 {
-                    if (IsDoubleTap(e))
+                    if (this.lbBooks.SelectedIndex >= 0)
                     {
-                        BtnOk_Click(o, e);
+                        if (IsDoubleTap(e))
+                        {
+                            BtnOk_Click(o, e);
+                        }
                     }
                 };
                 //this.lbBooks.TouchUp += (o, e) =>
