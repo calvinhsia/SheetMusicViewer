@@ -43,8 +43,11 @@ namespace WpfPdfViewer
         {
             InitializeComponent();
             this._pdfViewerWindow = pdfViewerWindow;
-            var lst = pdfViewerWindow.currentPdfMetaData.lstTocEntries.OrderBy(e => e.PageNo).ToList();
-            this.LstTOC = new ObservableCollection<TOCEntry>(lst);
+            LstTOC = new ObservableCollection<TOCEntry>();
+            foreach (var itm in pdfViewerWindow.currentPdfMetaData.lstTocEntries.OrderBy(p => p.PageNo))
+            {
+                LstTOC.Add((TOCEntry)itm.Clone());
+            }
             LstVolInfo = new List<string>();
             int volno = 0;
             Array.ForEach<PdfVolumeInfo>(pdfViewerWindow.currentPdfMetaData.lstVolInfo.ToArray(), (p => LstVolInfo.Add($"Vol={volno++} {p}")));

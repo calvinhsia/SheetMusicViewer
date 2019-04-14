@@ -77,9 +77,21 @@
         </Grid>
         <DockPanel Grid.Row="1">
             <ListView x:Name="lvTOC" ItemsSource="{Binding LstTOC}" IsSynchronizedWithCurrentItem="False" >
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    </Style>
+                </ListView.ItemContainerStyle>
                 <ListView.View>
                     <GridView>
-                        <!--<GridViewColumn Header="SongName">
+                        <GridViewColumn Header="PageNo">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox Text="{Binding PageNo}" />
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="SongName">
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
                                     <TextBox Text="{Binding SongName}" />
@@ -92,12 +104,26 @@
                                     <TextBox Text="{Binding Composer}" />
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
-                        </GridViewColumn>-->
-                        <GridViewColumn Header="PageNo" DisplayMemberBinding="{Binding PageNo}"/>
+                        </GridViewColumn>
+                        <GridViewColumn Header="Date">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox Text="{Binding Date}" />
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="Notes">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox Text="{Binding Notes}" />
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <!--<GridViewColumn Header="PageNo" DisplayMemberBinding="{Binding PageNo}"/>
                         <GridViewColumn Header="SongName" DisplayMemberBinding="{Binding SongName}"/>
                         <GridViewColumn Header="Composer" DisplayMemberBinding="{Binding Path=Composer}"/>
                         <GridViewColumn Header="Date" DisplayMemberBinding="{Binding Path=Date}"/>
-                        <GridViewColumn Header="Notes" DisplayMemberBinding="{Binding Path=Notes}"/>
+                        <GridViewColumn Header="Notes" DisplayMemberBinding="{Binding Path=Notes}"/>-->
 
                     </GridView>
 

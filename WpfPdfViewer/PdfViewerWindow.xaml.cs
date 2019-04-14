@@ -806,7 +806,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
         }
         bool IsShowingMetaDataForm = false;
-        private void ImgThumb_MouseDown(object sender, RoutedEventArgs e)
+        private void ImgThumb_Click(object sender, RoutedEventArgs e)
         {
             if (!IsShowingMetaDataForm && currentPdfMetaData != null)
             {
@@ -818,7 +818,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 }
                 IsShowingMetaDataForm = false;
             }
-
-        }
+}
     }
 }
