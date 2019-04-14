@@ -37,7 +37,7 @@ namespace WpfPdfViewer
         private void ChooseMusic_Loaded(object sender, RoutedEventArgs e)
         {
             var mruRootFolderItems = Properties.Settings.Default.RootFolderMRU;
-            CboEnableSelectionChange = false;
+            CboEnableCboSelectionChange = false;
             if (!string.IsNullOrEmpty(_pdfViewerWindow._RootMusicFolder))
             {
                 this.cboRootFolder.Items.Add(new ComboBoxItem() { Content = _pdfViewerWindow._RootMusicFolder });
@@ -55,13 +55,13 @@ namespace WpfPdfViewer
             this.cboRootFolder.Items.Add(new ComboBoxItem() { Content = NewFolderDialogString });
             if (this.cboRootFolder.Items.Count == 1)
             {
-                CboEnableSelectionChange = true;
+                CboEnableCboSelectionChange = true;
                 this.cboRootFolder.SelectedIndex = 0;
             }
             else
             {
                 this.cboRootFolder.SelectedIndex = 0;
-                CboEnableSelectionChange = true;
+                CboEnableCboSelectionChange = true;
             }
             //            this.cboRootFolder.SelectedIndex = 0;
             ActivateTab(string.Empty);
@@ -83,9 +83,9 @@ namespace WpfPdfViewer
                     {
                         if (itm.IsHighlighted && (string)itm.Content != NewFolderDialogString)
                         {
-                            CboEnableSelectionChange = false;
+                            CboEnableCboSelectionChange = false;
                             cbo.Items.Remove(itm);
-                            CboEnableSelectionChange = true;
+                            CboEnableCboSelectionChange = true;
                             break;
                         }
                     }
@@ -94,10 +94,10 @@ namespace WpfPdfViewer
             }
         }
 
-        bool CboEnableSelectionChange = true;
+        bool CboEnableCboSelectionChange = true;
         private async void CboRootFolder_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (CboEnableSelectionChange)
+            if (CboEnableCboSelectionChange)
             {
                 if (this.cboRootFolder.SelectedItem != null)
                 {
@@ -113,17 +113,17 @@ namespace WpfPdfViewer
                         var res = d.ShowDialog();
                         if (res == System.Windows.Forms.DialogResult.OK)
                         {
-                            CboEnableSelectionChange = false;
+                            CboEnableCboSelectionChange = false;
                             this.cboRootFolder.Items.Insert(0, new ComboBoxItem() { Content = d.SelectedPath });
                             this.cboRootFolder.SelectedIndex = 0;
-                            CboEnableSelectionChange = true;
+                            CboEnableCboSelectionChange = true;
                             await ChangeRootFolderAsync(d.SelectedPath);
                         }
                         else
                         {
-                            CboEnableSelectionChange = false;
+                            CboEnableCboSelectionChange = false;
                             this.cboRootFolder.SelectedIndex = 0;
-                            CboEnableSelectionChange = true;
+                            CboEnableCboSelectionChange = true;
                         }
                     }
                     else
@@ -136,10 +136,6 @@ namespace WpfPdfViewer
 
         private async Task ChangeRootFolderAsync(string selectedPath)
         {
-            this.lbBooks.ItemsSource = null;
-            this.dpTview.Children.Clear();
-            this.dpQuery.Children.Clear();
-            this.dpPlaylists.Children.Clear();
 
             var col = new StringCollection
                 {
@@ -157,7 +153,7 @@ namespace WpfPdfViewer
             Properties.Settings.Default.RootFolderMRU = col;
             Properties.Settings.Default.Save();
             // now that we have the col in MRU order, we want to rearrange the cbo.items in same order
-            CboEnableSelectionChange = false;
+            CboEnableCboSelectionChange = false;
             this.cboRootFolder.Items.Clear();
             foreach (var itm in col)
             {
@@ -165,7 +161,7 @@ namespace WpfPdfViewer
             }
             this.cboRootFolder.Items.Add(new ComboBoxItem() { Content = NewFolderDialogString });
             this.cboRootFolder.SelectedIndex = 0;
-            CboEnableSelectionChange = true;
+            CboEnableCboSelectionChange = true;
 
 
             _pdfViewerWindow._RootMusicFolder = selectedPath;
@@ -174,6 +170,10 @@ namespace WpfPdfViewer
             _pdfViewerWindow.CloseCurrentPdfFile();
             _pdfViewerWindow.lstPdfMetaFileData.Clear(); // release mem
             _pdfViewerWindow.lstPdfMetaFileData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(selectedPath);
+            this.lbBooks.ItemsSource = null;
+            this.dpTview.Children.Clear();
+            this.dpQuery.Children.Clear();
+            this.dpPlaylists.Children.Clear();
             ActivateTab(string.Empty);
         }
 

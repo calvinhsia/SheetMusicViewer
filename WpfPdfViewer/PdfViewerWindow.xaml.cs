@@ -134,7 +134,6 @@ namespace WpfPdfViewer
             this.Height = Properties.Settings.Default.MainWindowSize.Height;
             this.Top = Properties.Settings.Default.MainWindowPos.Height;
             this.Left = Properties.Settings.Default.MainWindowPos.Width;
-//            Properties.Settings.Default.RootFolderMRU = null; //xxxx
             var mruRootFolder = Properties.Settings.Default.RootFolderMRU;
             if (mruRootFolder != null && mruRootFolder.Count > 0)
             {
@@ -460,53 +459,15 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     //                    var x = new RowDefinition() { Height = new GridLength(0, GridUnitType.Star) };
                     grid.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto });
                     grid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(1, GridUnitType.Star) });
-
-                    //var chkFav = new CheckBox()
-                    //{
-                    //    Content = "Favorite",
-                    //    Foreground = Brushes.Yellow,
-                    //    Tag = pageNo,
-                    //    IsChecked = currentPdfMetaData.IsFavorite(pageNo),
-                    //    HorizontalAlignment = HorizontalAlignment.Right
-                    //};
-                    //chkFav.Checked += (o, e) =>
-                    //{
-                    //    currentPdfMetaData.ToggleFavorite((int)chkFav.Tag, true);
-                    //};
-                    //chkFav.Unchecked += (o, e) =>
-                    //{
-                    //    currentPdfMetaData.ToggleFavorite((int)chkFav.Tag, false);
-                    //};
-                    //grid.Children.Add(chkFav);
-                    //Grid.SetRow(chkFav, 0);
                     grid.Children.Add(lstItems[0]);
                     Grid.SetRow(lstItems[0], 1);
                 }
                 else
                 {
-                    //                    grid1.ColumnDefinitions.Add(new ColumnDefinition() { Width = (GridLength)(new GridLengthConverter()).ConvertFromString("Auto") });
                     grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
                     grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
                     for (int i = 0; i < lstItems.Count; i++)
                     {
-                        //var chkFav = new CheckBox()
-                        //{
-                        //    Content = "Favorite",
-                        //    Foreground = Brushes.Yellow,
-                        //    Tag = pageNo + i,
-                        //    IsChecked = currentPdfMetaData.IsFavorite(pageNo + i),
-                        //    HorizontalAlignment = (i == 0 ? HorizontalAlignment.Left : HorizontalAlignment.Right)
-                        //};
-                        //chkFav.Checked += (o, e) =>
-                        //{
-                        //    currentPdfMetaData.ToggleFavorite((int)chkFav.Tag, true);
-                        //};
-                        //chkFav.Unchecked += (o, e) =>
-                        //{
-                        //    currentPdfMetaData.ToggleFavorite((int)chkFav.Tag, false);
-                        //};
-                        //grid.Children.Add(chkFav);
-                        //Grid.SetColumn(chkFav, i);
                         grid.Children.Add(lstItems[i]);
                         Grid.SetColumn(lstItems[i], i);
                     }
