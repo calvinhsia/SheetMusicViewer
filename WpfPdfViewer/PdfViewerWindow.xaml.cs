@@ -338,10 +338,10 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 //{
                 //    cacheEntryCurrentPage = CacheEntry.TryAddCacheEntry(pageNo);
                 //}
-                for (int i = -NumPagesPerView; i <= NumPagesPerView; i++) // lookahead,lookbehind cache
+                for (int i = -NumPagesPerView; i <= NumPagesPerView + 1; i++) // lookahead,lookbehind cache
                 {
                     var val = CacheEntry.TryAddCacheEntry(pageNo + i);
-                    switch(i)
+                    switch (i)
                     {
                         case 0:
                             cacheEntryCurrentPage = val;
@@ -351,7 +351,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                             break;
                     }
                 }
-                if (this.CurrentPageNumber == pageNo) // user might have typed ahead
+                if (this.CurrentPageNumber == pageNo && cacheEntryCurrentPage != null) // user might have typed ahead
                 {
                     this.dpPage.Children.Clear();
                     if (cacheEntryCurrentPage.task.IsCanceled)
@@ -429,6 +429,10 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 
         async Task<BitmapImage> CalculateBitMapImageForPageAsync(CacheEntry cacheEntry)
         {
+            if (cacheEntry.pageNo== currentPdfMetaData.PageNumberOffset)
+            {
+                return currentPdfMetaData.bitmapImageCache;
+            }
             var bmi = new BitmapImage();
             cacheEntry.cts.Token.ThrowIfCancellationRequested();
             var (pdfDoc, pdfPgno) = await currentPdfMetaData.GetPdfDocumentForPageno(cacheEntry.pageNo);
@@ -462,92 +466,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             return bmi;
         }
 
-        async Task<Grid> CalculateGridForPageAync(CacheEntry cacheEntry)
-        {
-            var grid = new Grid();
-            var lstItems = new List<UIElement>();
-            var pageNo = cacheEntry.pageNo;
-            try
-            {
-                for (int i = 0; i < NumPagesPerView; i++)
-                {
-                    cacheEntry.cts.Token.ThrowIfCancellationRequested();
-                    var (pdfDoc, pdfPgno) = await currentPdfMetaData.GetPdfDocumentForPageno(pageNo + i);
-                    //                    var pdfPgNo = currentPdfMetaData.GetPdfVolPageNo(pageNo + i);
-                    if (pdfDoc != null && pdfPgno >= 0 && pdfPgno < pdfDoc.PageCount)
-                    {
-                        using (var pdfPage = pdfDoc.GetPage((uint)(pdfPgno)))
-                        {
-                            var bmi = new BitmapImage();
-                            using (var strm = new InMemoryRandomAccessStream())
-                            {
-                                var rect = pdfPage.Dimensions.ArtBox;
-                                var renderOpts = new PdfPageRenderOptions()
-                                {
-                                    DestinationWidth = (uint)rect.Width,
-                                    DestinationHeight = (uint)rect.Height,
-                                };
-                                if (pdfPage.Rotation != PdfPageRotation.Normal)
-                                {
-                                    renderOpts.DestinationHeight = (uint)rect.Width;
-                                    renderOpts.DestinationWidth = (uint)rect.Height;
-                                }
-
-                                await pdfPage.RenderToStreamAsync(strm, renderOpts);
-                                cacheEntry.cts.Token.ThrowIfCancellationRequested();
-                                bmi.BeginInit();
-                                bmi.StreamSource = strm.AsStream();
-                                bmi.Rotation = (Rotation)currentPdfMetaData.GetRotation(pageNo + i);
-                                bmi.CacheOption = BitmapCacheOption.OnLoad;
-                                bmi.EndInit();
-
-                                var img = new Image()
-                                {
-                                    Source = bmi
-                                };
-                                //                            img.Stretch = Stretch.Uniform;
-                                if (NumPagesPerView > 1)
-                                {
-                                    if (i == 0)
-                                    {
-                                        img.HorizontalAlignment = HorizontalAlignment.Right; // put lefthand page close to middle
-                                    }
-                                    else
-                                    {
-                                        img.HorizontalAlignment = HorizontalAlignment.Left; // put righthand page close to middle
-                                    }
-                                }
-                                lstItems.Add(img);
-                            }
-                        }
-                    }
-                }
-                if (lstItems.Count == 1)
-                {
-                    //grid.RowDefinitions.Add(new RowDefinition() { Height = (GridLength)new GridLengthConverter().ConvertFromString("Auto") });
-                    //grid.RowDefinitions.Add(new RowDefinition() { Height = (GridLength)new GridLengthConverter().ConvertFromString("*") });
-                    //                    var x = new RowDefinition() { Height = new GridLength(0, GridUnitType.Star) };
-                    grid.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto });
-                    grid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(1, GridUnitType.Star) });
-                    grid.Children.Add(lstItems[0]);
-                    Grid.SetRow(lstItems[0], 1);
-                }
-                else
-                {
-                    grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
-                    grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
-                    for (int i = 0; i < lstItems.Count; i++)
-                    {
-                        grid.Children.Add(lstItems[i]);
-                        Grid.SetColumn(lstItems[i], i);
-                    }
-                }
-            }
-            catch (OperationCanceledException) // includes TaskCanceledException
-            {
-            }
-            return grid;
-        }
         protected override void OnPreviewKeyDown(KeyEventArgs e)
         {
             base.OnPreviewKeyDown(e);
@@ -567,12 +485,12 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     case Key.PageUp:
                     case Key.Left:
                         e.Handled = true;
-                        Navigate(forward: false);
+                        Navigate(-NumPagesPerView);
                         break;
                     case Key.Down:
                     case Key.PageDown:
                     case Key.Right:
-                        Navigate(forward: true);
+                        Navigate(NumPagesPerView);
                         e.Handled = true;
                         break;
                 }
@@ -581,9 +499,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         private void ChkFavToggled(object sender, RoutedEventArgs e)
         {
             var nameSender = ((CheckBox)sender).Name;
-            // e.RoutedEvent.Name == "Checked", "Unchecked"
-            // ((CheckBox)sender).Name == "chkFav0"
-            //    currentPdfMetaData.ToggleFavorite((int)chkFav.Tag, true);
             var pgno = CurrentPageNumber + (nameSender == "chkFav0" ? 0 : 1);
             var isChked = e.RoutedEvent.Name == "Checked";
             currentPdfMetaData.ToggleFavorite(pgno, isChked);
@@ -596,17 +511,9 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             await ShowPageAsync(CurrentPageNumber, ClearCache: true);
         }
 
-        async void Navigate(bool forward)
+        async void Navigate(int delta)
         {
-            var newPageNo = CurrentPageNumber;
-            if (forward)
-            {
-                newPageNo += NumPagesPerView;
-            }
-            else
-            {
-                newPageNo -= NumPagesPerView;
-            }
+            var newPageNo = CurrentPageNumber + delta;
             await ShowPageAsync(newPageNo, ClearCache: false);
         }
 
@@ -622,15 +529,28 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 
         void BtnPrevNext_Click(object sender, RoutedEventArgs e)
         {
-            var forwardOrBack = sender is Button b && b.Name != "btnPrev";
-            Navigate(forwardOrBack);
+            var delta = (sender is Button b && b.Name != "btnPrev") ? NumPagesPerView : -NumPagesPerView;
+            Navigate(delta);
         }
 
         private void DpPage_MouseDown(object sender, MouseButtonEventArgs e)
         {
             var pos = e.GetPosition(this.dpPage);
+            var delta = NumPagesPerView;
+            if (NumPagesPerView > 1)
+            {
+                var distToMiddle = Math.Abs(this.dpPage.ActualWidth / 2 - pos.X);
+                if (distToMiddle < this.dpPage.ActualWidth / 4)
+                {
+                    delta = 1;
+                }
+            }
             var leftSide = pos.X < this.dpPage.ActualWidth / 2;
-            Navigate(forward: leftSide ? false : true);
+            if (leftSide)
+            {
+                delta = -delta;
+            }
+            Navigate(delta);
         }
 
         async Task<bool> ChooseMusic()

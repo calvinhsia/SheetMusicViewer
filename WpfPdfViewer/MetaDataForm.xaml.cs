@@ -28,7 +28,7 @@ namespace WpfPdfViewer
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
-        public BitmapImage ImgThumb { get { return _pdfViewerWindow?.currentPdfMetaData?.GetBitmapImageThumbnail(); } }
+        public BitmapImage ImgThumb { get { return _pdfViewerWindow.currentPdfMetaData?.GetBitmapImageThumbnail(); } }
 
         public int PageNumberOffset { get; set; }
         public List<string> LstVolInfo { get; set; }
@@ -73,8 +73,7 @@ namespace WpfPdfViewer
 
         private void BtnSave_Click(object sender, RoutedEventArgs e)
         {
-            _pdfViewerWindow.currentPdfMetaData.lstTocEntries = LstTOC.ToList();
-            _pdfViewerWindow.currentPdfMetaData.InitializeDictToc();
+            _pdfViewerWindow.currentPdfMetaData.InitializeDictToc(LstTOC.ToList());
             _pdfViewerWindow.currentPdfMetaData.Notes = DocNotes?.Trim();
             _pdfViewerWindow.currentPdfMetaData.PageNumberOffset = PageNumberOffset;
             PdfMetaData.SavePdfFileData(_pdfViewerWindow.currentPdfMetaData, ForceSave: true);

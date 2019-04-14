@@ -64,6 +64,8 @@ namespace WpfPdfViewer
 
         [XmlIgnore] // can't serialize dictionaries.Could be multiple TOCEntries for a single page Page #=> List<TOCEntry>
         public SortedList<int, List<TOCEntry>> dictToc = new SortedList<int, List<TOCEntry>>();
+        [XmlIgnore]
+        public SortedList<int, Favorite> dictFav = new SortedList<int, Favorite>();
 
         [XmlIgnore]
         internal BitmapImage bitmapImageCache;
@@ -331,6 +333,7 @@ namespace WpfPdfViewer
                             {
                                 pdfFileData.LastPageNo = pdfFileData.PageNumberOffset; // go to first page
                             }
+                            pdfFileData.Favorites = pdfFileData.dictFav.Values.ToList();
                         }
                     }
                 }
@@ -355,12 +358,14 @@ namespace WpfPdfViewer
                     Rotation = 0
                 });
             }
-            pdfFileData?.InitializeDictToc();
+            pdfFileData?.InitializeDictToc(pdfFileData?.lstTocEntries);
+            pdfFileData?.InitializeFavList();
             return pdfFileData;
         }
 
-        public void InitializeDictToc()
+        public void InitializeDictToc(List<TOCEntry> lstTocEntries)
         {
+            this.lstTocEntries = lstTocEntries;
             dictToc.Clear();
             foreach (var toc in lstTocEntries) // a page can have multiple songs
             {
@@ -374,6 +379,16 @@ namespace WpfPdfViewer
                 }
                 tocLst.Add(toc);
             }
+        }
+
+        public void InitializeFavList()
+        {
+            dictFav.Clear();
+            foreach (var fav in Favorites)
+            {
+                dictFav[fav.Pageno] = fav;
+            }
+            Favorites.Clear(); // save memory
         }
         public void InitializeListPdfDocuments()
         {
@@ -469,27 +484,13 @@ namespace WpfPdfViewer
 
             if (pdfFileData.IsDirty || ForceSave || pdfFileData.initialLastPageNo != pdfFileData.LastPageNo)
             {
-                // we saved memory
-                //                pdfFileData.lstTocEntries = pdfFileData.dictToc.Values.ToList();
-                //// got dup favs: remove dupes
-                //var dictFav = new HashSet<int>();
-                //foreach (var fav in pdfFileData.Favorites.OrderBy(p => p.Pageno))
-                //{
-                //    dictFav.Add(fav.Pageno);
-                //}
-                //pdfFileData.Favorites.Clear();
-                //foreach (var f in dictFav)
-                //{
-                //    pdfFileData.Favorites.Add(new Favorite() { Pageno = f });
-                //}
-                //                pdfFileData.Favorites = pdfFileData.Favorites.Distinct().OrderBy(p=>p.Pageno).ToList();
-
                 var serializer = new XmlSerializer(typeof(PdfMetaData));
                 var settings = new XmlWriterSettings()
                 {
                     Indent = true,
                     IndentChars = " "
                 };
+                pdfFileData.Favorites = pdfFileData.dictFav.Values.ToList();
                 var bmkFile = Path.ChangeExtension(pdfFileData._FullPathRootFile, "bmk");
                 if (File.Exists(bmkFile))
                 {
@@ -598,7 +599,7 @@ namespace WpfPdfViewer
         internal bool IsFavorite(int PageNo)
         {
             var isFav = false;
-            if (Favorites.Where(f => f.Pageno == PageNo).Any())
+            if (dictFav.ContainsKey(PageNo))
             {
                 isFav = true;
             }
@@ -608,28 +609,21 @@ namespace WpfPdfViewer
         internal void ToggleFavorite(int PageNo, bool IsFavorite)
         {
             this.IsDirty = true;
-            for (int i = 0; i < Favorites.Count; i++)
-            {
-                if (Favorites[i].Pageno == PageNo) // already in list of favs
-                {
-                    if (IsFavorite) // already set as favorite, do nothing
-                    {
-
-                    }
-                    else
-                    {
-                        // remove it
-                        Favorites.RemoveAt(i);
-                    }
-                    return;
-                }
-            }
             if (IsFavorite)
             {
-                Favorites.Add(new Favorite()
+                if (!dictFav.ContainsKey(PageNo))
                 {
-                    Pageno = PageNo
-                });
+                    dictFav[PageNo] = new Favorite() { Pageno = PageNo };
+                    IsDirty = true;
+                }
+            }
+            else
+            {
+                if (dictFav.ContainsKey(PageNo))
+                {
+                    dictFav.Remove(PageNo);
+                    IsDirty = true;
+                }
             }
         }
 
@@ -660,7 +654,7 @@ namespace WpfPdfViewer
         }
         public override string ToString()
         {
-            return $"{Path.GetFileNameWithoutExtension(_FullPathRootFile)} Vol={lstVolInfo.Count} Toc={lstTocEntries.Count} Fav={Favorites.Count}";
+            return $"{Path.GetFileNameWithoutExtension(_FullPathRootFile)} Vol={lstVolInfo.Count} Toc={lstTocEntries.Count} Fav={dictFav.Count}";
         }
     }
     [Serializable]
