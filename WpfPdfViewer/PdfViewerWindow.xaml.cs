@@ -87,33 +87,37 @@ namespace WpfPdfViewer
             /// <returns></returns>
             public static CacheEntry TryAddCacheEntry(int PageNo)
             {
-                if (!s_pdfViewerWindow.dictCache.TryGetValue(PageNo, out var cacheEntry) ||
-                    cacheEntry.cts.IsCancellationRequested ||
-                    cacheEntry.task.IsCanceled)
+                CacheEntry cacheEntry = null;
+                if (PageNo >= s_pdfViewerWindow.currentPdfMetaData.PageNumberOffset && PageNo < s_pdfViewerWindow.MaxPageNumber)
                 {
-                    cacheEntry = new CacheEntry()
+                    if (!s_pdfViewerWindow.dictCache.TryGetValue(PageNo, out cacheEntry) ||
+                        cacheEntry.cts.IsCancellationRequested ||
+                        cacheEntry.task.IsCanceled)
                     {
-                        pageNo = PageNo,
-                        age = currentCacheAge++
-                    };
-                    cacheEntry.task = s_pdfViewerWindow.CalculateGridForPageAync(cacheEntry);
-
-                    int cacheSize = 50;
-                    if (s_pdfViewerWindow.dictCache.Count > cacheSize)
-                    {
-                        var lst = s_pdfViewerWindow.dictCache.Values.OrderBy(s => s.age).Take(s_pdfViewerWindow.dictCache.Count - cacheSize);
-                        foreach (var entry in lst)
+                        cacheEntry = new CacheEntry()
                         {
-                            s_pdfViewerWindow.dictCache.Remove(entry.pageNo);
+                            pageNo = PageNo,
+                            age = currentCacheAge++
+                        };
+                        cacheEntry.task = s_pdfViewerWindow.CalculateBitMapImageForPageAsync(cacheEntry);
+
+                        int cacheSize = 50;
+                        if (s_pdfViewerWindow.dictCache.Count > cacheSize)
+                        {
+                            var lst = s_pdfViewerWindow.dictCache.Values.OrderBy(s => s.age).Take(s_pdfViewerWindow.dictCache.Count - cacheSize);
+                            foreach (var entry in lst)
+                            {
+                                s_pdfViewerWindow.dictCache.Remove(entry.pageNo);
+                            }
                         }
+                        s_pdfViewerWindow.dictCache[PageNo] = cacheEntry;
                     }
-                    s_pdfViewerWindow.dictCache[PageNo] = cacheEntry;
                 }
                 return cacheEntry;
             }
             internal CancellationTokenSource cts = new CancellationTokenSource();
             public int pageNo;
-            public Task<Grid> task;
+            public Task<BitmapImage> task;
             public int age; // just a growing int
             public override string ToString()
             {
@@ -328,30 +332,61 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             try
             {
                 this.CurrentPageNumber = pageNo;
-                if (!dictCache.TryGetValue(pageNo, out var cacheEntry) || cacheEntry.task.IsCanceled)
+                CacheEntry cacheEntryCurrentPage = null;
+                CacheEntry cacheEntryNextPage = null;
+                //if (!dictCache.TryGetValue(pageNo, out cacheEntryCurrentPage) || cacheEntryCurrentPage.task.IsCanceled)
+                //{
+                //    cacheEntryCurrentPage = CacheEntry.TryAddCacheEntry(pageNo);
+                //}
+                for (int i = -NumPagesPerView; i <= NumPagesPerView; i++) // lookahead,lookbehind cache
                 {
-                    cacheEntry = CacheEntry.TryAddCacheEntry(pageNo);
-                }
-                if (pageNo + NumPagesPerView <= MaxPageNumber && !dictCache.ContainsKey(pageNo + NumPagesPerView))
-                {
-                    CacheEntry.TryAddCacheEntry(pageNo + NumPagesPerView);
-                }
-                if (pageNo - NumPagesPerView >= this.slider.Minimum && !dictCache.ContainsKey(pageNo - NumPagesPerView))
-                {
-                    CacheEntry.TryAddCacheEntry(pageNo - NumPagesPerView);
-                }
-                if (!cacheEntry.task.IsCompleted)
-                {
-                    await cacheEntry.task;
+                    var val = CacheEntry.TryAddCacheEntry(pageNo + i);
+                    switch(i)
+                    {
+                        case 0:
+                            cacheEntryCurrentPage = val;
+                            break;
+                        case 1:
+                            cacheEntryNextPage = val;
+                            break;
+                    }
                 }
                 if (this.CurrentPageNumber == pageNo) // user might have typed ahead
                 {
                     this.dpPage.Children.Clear();
-                    if (cacheEntry.task.IsCanceled)
+                    if (cacheEntryCurrentPage.task.IsCanceled)
                     {
-                        dictCache.Remove(cacheEntry.pageNo);
+                        dictCache.Remove(cacheEntryCurrentPage.pageNo);
                     }
-                    var grid = cacheEntry.task.Result;
+                    var grid = new Grid();
+                    var bitmapimageCurPage = await cacheEntryCurrentPage.task;
+                    var imageCurPage = new Image() { Source = bitmapimageCurPage };
+                    if (NumPagesPerView == 1)
+                    {
+                        //grid.RowDefinitions.Add(new RowDefinition() { Height = (GridLength)new GridLengthConverter().ConvertFromString("Auto") });
+                        //grid.RowDefinitions.Add(new RowDefinition() { Height = (GridLength)new GridLengthConverter().ConvertFromString("*") });
+                        //                    var x = new RowDefinition() { Height = new GridLength(0, GridUnitType.Star) };
+                        grid.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto });
+                        grid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(1, GridUnitType.Star) });
+                        grid.Children.Add(imageCurPage);
+                        Grid.SetRow(imageCurPage, 1);
+                    }
+                    else
+                    {
+                        if (cacheEntryNextPage != null)
+                        {
+                            var bitmapimageNextPage = await cacheEntryNextPage.task;
+                            var imageNextPage = new Image() { Source = cacheEntryNextPage.task.Result };
+                            imageCurPage.HorizontalAlignment = HorizontalAlignment.Right; // put lefthand page close to middle
+                            imageNextPage.HorizontalAlignment = HorizontalAlignment.Left; // put righthand page close to middle
+
+                            grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
+                            grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
+                            grid.Children.Add(imageCurPage);
+                            grid.Children.Add(imageNextPage);
+                            Grid.SetColumn(imageNextPage, 1);
+                        }
+                    }
                     this.dpPage.Children.Add(grid);
                     OnMyPropertyChanged(nameof(Description0));
                     chkFav0.IsChecked = currentPdfMetaData.IsFavorite(pageNo);
@@ -392,6 +427,41 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
         }
 
+        async Task<BitmapImage> CalculateBitMapImageForPageAsync(CacheEntry cacheEntry)
+        {
+            var bmi = new BitmapImage();
+            cacheEntry.cts.Token.ThrowIfCancellationRequested();
+            var (pdfDoc, pdfPgno) = await currentPdfMetaData.GetPdfDocumentForPageno(cacheEntry.pageNo);
+            if (pdfDoc != null && pdfPgno >= 0 && pdfPgno < pdfDoc.PageCount)
+            {
+                using (var pdfPage = pdfDoc.GetPage((uint)(pdfPgno)))
+                {
+                    using (var strm = new InMemoryRandomAccessStream())
+                    {
+                        var rect = pdfPage.Dimensions.ArtBox;
+                        var renderOpts = new PdfPageRenderOptions()
+                        {
+                            DestinationWidth = (uint)rect.Width,
+                            DestinationHeight = (uint)rect.Height,
+                        };
+                        if (pdfPage.Rotation != PdfPageRotation.Normal)
+                        {
+                            renderOpts.DestinationHeight = (uint)rect.Width;
+                            renderOpts.DestinationWidth = (uint)rect.Height;
+                        }
+                        await pdfPage.RenderToStreamAsync(strm, renderOpts);
+                        cacheEntry.cts.Token.ThrowIfCancellationRequested();
+                        bmi.BeginInit();
+                        bmi.StreamSource = strm.AsStream();
+                        bmi.Rotation = (Rotation)currentPdfMetaData.GetRotation(cacheEntry.pageNo);
+                        bmi.CacheOption = BitmapCacheOption.OnLoad;
+                        bmi.EndInit();
+                    }
+                }
+            }
+            return bmi;
+        }
+
         async Task<Grid> CalculateGridForPageAync(CacheEntry cacheEntry)
         {
             var grid = new Grid();
@@ -403,8 +473,8 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 {
                     cacheEntry.cts.Token.ThrowIfCancellationRequested();
                     var (pdfDoc, pdfPgno) = await currentPdfMetaData.GetPdfDocumentForPageno(pageNo + i);
-//                    var pdfPgNo = currentPdfMetaData.GetPdfVolPageNo(pageNo + i);
-                    if (pdfDoc != null && pdfPgno>=0 && pdfPgno < pdfDoc.PageCount)
+                    //                    var pdfPgNo = currentPdfMetaData.GetPdfVolPageNo(pageNo + i);
+                    if (pdfDoc != null && pdfPgno >= 0 && pdfPgno < pdfDoc.PageCount)
                     {
                         using (var pdfPage = pdfDoc.GetPage((uint)(pdfPgno)))
                         {
@@ -487,7 +557,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 switch (e.Key)
                 {
                     case Key.System: // alt
-                        if (e.SystemKey== Key.E)
+                        if (e.SystemKey == Key.E)
                         {
                             //ImgThumb_MouseDown(this, null);
                             //e.Handled = true;
@@ -779,6 +849,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 }
                 IsShowingMetaDataForm = false;
             }
-}
+        }
     }
 }
