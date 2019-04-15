@@ -429,10 +429,10 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 
         async Task<BitmapImage> CalculateBitMapImageForPageAsync(CacheEntry cacheEntry)
         {
-            if (cacheEntry.pageNo == currentPdfMetaData.PageNumberOffset && currentPdfMetaData.bitmapImageCache != null)
-            {
-                return currentPdfMetaData.bitmapImageCache;
-            }
+            //if (cacheEntry.pageNo == currentPdfMetaData.PageNumberOffset && currentPdfMetaData.bitmapImageCache != null)
+            //{
+            //    return currentPdfMetaData.bitmapImageCache;
+            //}
             var bmi = new BitmapImage();
             cacheEntry.cts.Token.ThrowIfCancellationRequested();
             var (pdfDoc, pdfPgno) = await currentPdfMetaData.GetPdfDocumentForPageno(cacheEntry.pageNo);

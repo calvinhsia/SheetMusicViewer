@@ -9,6 +9,11 @@
         >
     <Grid >
         <Grid Name="dpPage" Background="#FF190808" MouseDown="DpPage_MouseDown"/>
+        <Grid>
+            <InkCanvas Name="inkCanvas" Background="{x:Null}" Visibility="Hidden">
+
+            </InkCanvas>
+        </Grid>
         <Grid Background="{x:Null}" VerticalAlignment="Top">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
