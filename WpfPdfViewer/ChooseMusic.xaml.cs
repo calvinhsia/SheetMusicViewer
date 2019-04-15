@@ -336,7 +336,7 @@ namespace WpfPdfViewer
                     _pdfViewerWindow.lstPdfMetaFileData.Count()} # Songs = {
                     _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.lstTocEntries.Count):n0} # Pages = {
                     _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.NumPagesInSet):n0} #Fav={
-                    _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.Favorites.Count):n0}";
+                    _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.dictFav.Count):n0}";
                 var lst = new ObservableCollection<UIElement>();
                 this.lbBooks.ItemsSource = lst;
                 foreach (var pdfMetaDataItem in
@@ -353,9 +353,11 @@ namespace WpfPdfViewer
                         Text = pdfMetaDataItem.GetFullPathFile(volNo: 0, MakeRelative: true),
                         ToolTip = pdfMetaDataItem.GetFullPathFile(volNo: 0)
                     });
+                    var data = $"#Sngs={pdfMetaDataItem.GetSongCount()} Pg={pdfMetaDataItem.GetTotalPageCount()} Fav={pdfMetaDataItem.dictFav.Count}";
                     sp.Children.Add(new TextBlock()
                     {
-                        Text = $"#Sngs={pdfMetaDataItem.GetSongCount()} Pg={pdfMetaDataItem.GetTotalPageCount()} Fav={pdfMetaDataItem.Favorites.Count}"
+                        Text = $"#Sngs={pdfMetaDataItem.GetSongCount()} Pg={pdfMetaDataItem.GetTotalPageCount()} Fav={pdfMetaDataItem.dictFav.Count}",
+                        ToolTip = data
                     });
                     await Task.Delay(0);
                     lst.Add(sp);
@@ -383,7 +385,7 @@ namespace WpfPdfViewer
                         lstPdfMetaFileData.
                         OrderBy(p => p.GetFullPathFile(volNo: 0, MakeRelative: true)))
                     {
-                        foreach (var fav in pdfMetaDataItem.Favorites)
+                        foreach (var fav in pdfMetaDataItem.dictFav.Values)
                         {
                             fav.Tag = pdfMetaDataItem;
                             _lstFavoriteEntries.Add(fav);

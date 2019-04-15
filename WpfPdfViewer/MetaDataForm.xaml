@@ -76,6 +76,14 @@
             </StackPanel>
         </Grid>
         <DockPanel Grid.Row="1">
+            <ListView ItemsSource="{Binding LstFavDisp}" >
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn Header="Page" DisplayMemberBinding="{Binding Path=PageNo}"/>
+                        <GridViewColumn Header="Desc" DisplayMemberBinding="{Binding Path=Description}"/>
+                    </GridView>
+                </ListView.View>
+            </ListView>
             <ListView x:Name="lvTOC" ItemsSource="{Binding LstTOC}" IsSynchronizedWithCurrentItem="False" >
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">

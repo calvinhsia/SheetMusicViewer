@@ -38,6 +38,15 @@ namespace WpfPdfViewer
         ObservableCollection<TOCEntry> _lstToc;
         public ObservableCollection<TOCEntry> LstTOC { get { return _lstToc; } set { _lstToc = value; OnMyPropertyChanged(); } }
 
+        ObservableCollection<FavDisp> _lstFavDisp;
+        public ObservableCollection<FavDisp> LstFavDisp { get { return _lstFavDisp; } set { _lstFavDisp = value; OnMyPropertyChanged(); } }
+        public class FavDisp
+        {
+            public int PageNo { get; set; }
+            public string Description { get; set; }
+        }
+
+
         readonly PdfViewerWindow _pdfViewerWindow;
         public MetaDataForm(PdfViewerWindow pdfViewerWindow)
         {
@@ -51,6 +60,12 @@ namespace WpfPdfViewer
             LstVolInfo = new List<string>();
             int volno = 0;
             Array.ForEach<PdfVolumeInfo>(pdfViewerWindow.currentPdfMetaData.lstVolInfo.ToArray(), (p => LstVolInfo.Add($"Vol={volno++} {p}")));
+            LstFavDisp = new ObservableCollection<FavDisp>();
+            foreach (var fav in pdfViewerWindow.currentPdfMetaData.dictFav.Values)
+            {
+                LstFavDisp.Add(new FavDisp() { PageNo = fav.Pageno, Description = pdfViewerWindow.currentPdfMetaData.GetDescription(fav.Pageno) });
+            }
+
             this.PageNumberOffset = pdfViewerWindow.currentPdfMetaData.PageNumberOffset;
             this.DocNotes = pdfViewerWindow.currentPdfMetaData.Notes;
             this.DataContext = this;

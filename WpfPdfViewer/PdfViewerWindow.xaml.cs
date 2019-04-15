@@ -429,7 +429,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 
         async Task<BitmapImage> CalculateBitMapImageForPageAsync(CacheEntry cacheEntry)
         {
-            if (cacheEntry.pageNo== currentPdfMetaData.PageNumberOffset)
+            if (cacheEntry.pageNo == currentPdfMetaData.PageNumberOffset && currentPdfMetaData.bitmapImageCache != null)
             {
                 return currentPdfMetaData.bitmapImageCache;
             }
@@ -465,8 +465,8 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
             return bmi;
         }
-
-        protected override void OnPreviewKeyDown(KeyEventArgs e)
+        CancellationTokenSource ctsPageScan;
+        protected async override void OnPreviewKeyDown(KeyEventArgs e)
         {
             base.OnPreviewKeyDown(e);
             var elmWithFocus = Keyboard.FocusedElement;
@@ -485,13 +485,37 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     case Key.PageUp:
                     case Key.Left:
                         e.Handled = true;
-                        Navigate(-NumPagesPerView);
+                        NavigateAsync(-NumPagesPerView);
                         break;
                     case Key.Down:
                     case Key.PageDown:
                     case Key.Right:
-                        Navigate(NumPagesPerView);
-                        e.Handled = true;
+                        if (e.KeyboardDevice.Modifiers == ModifierKeys.Control)
+                        {
+                            if (ctsPageScan == null)
+                            {
+                                ctsPageScan = new CancellationTokenSource();
+                                for (int pg = currentPdfMetaData.PageNumberOffset; pg < MaxPageNumber; pg++)
+                                {
+                                    if (ctsPageScan.IsCancellationRequested)
+                                    {
+                                        break;
+                                    }
+                                    await ShowPageAsync(pg, ClearCache: false);
+                                    await Task.Delay(1000);
+                                }
+                                ctsPageScan = null;
+                            }
+                            else
+                            {
+                                ctsPageScan.Cancel();
+                            }
+                        }
+                        else
+                        {
+                            NavigateAsync(NumPagesPerView);
+                            e.Handled = true;
+                        }
                         break;
                 }
             }
@@ -511,7 +535,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             await ShowPageAsync(CurrentPageNumber, ClearCache: true);
         }
 
-        async void Navigate(int delta)
+        async void NavigateAsync(int delta)
         {
             var newPageNo = CurrentPageNumber + delta;
             await ShowPageAsync(newPageNo, ClearCache: false);
@@ -527,10 +551,51 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
         }
 
-        void BtnPrevNext_Click(object sender, RoutedEventArgs e)
+        async void BtnPrevNext_Click(object sender, RoutedEventArgs e)
         {
-            var delta = (sender is Button b && b.Name != "btnPrev") ? NumPagesPerView : -NumPagesPerView;
-            Navigate(delta);
+            var isPrevious = sender is Button b && b.Name == "btnPrev";
+            if (currentPdfMetaData.dictFav.Count > 0)
+            {
+                var ndxClosest = currentPdfMetaData.dictFav.Keys.FindIndexOfFirstGTorEQTo(CurrentPageNumber);
+                if (!isPrevious)
+                {
+                    if (ndxClosest >= 0 && ndxClosest < currentPdfMetaData.dictFav.Count)
+                    {
+                        var pgNextFav = currentPdfMetaData.dictFav.Keys[ndxClosest];
+                        if (pgNextFav == CurrentPageNumber)
+                        {
+                            ndxClosest++;
+                            if (ndxClosest < currentPdfMetaData.dictFav.Count)
+                            {
+                                pgNextFav = currentPdfMetaData.dictFav.Keys[ndxClosest];
+                            }
+                        }
+                        await ShowPageAsync(pgNextFav, ClearCache: false);
+                    }
+                }
+                else
+                { // prev fav
+                    ndxClosest--;
+                    if (ndxClosest >= 0 && ndxClosest < currentPdfMetaData.dictFav.Count)
+                    {
+                        var pgPriorNextFav = currentPdfMetaData.dictFav.Keys[ndxClosest];
+                        if (pgPriorNextFav == CurrentPageNumber)
+                        {
+                            ndxClosest++;
+                            if (ndxClosest < currentPdfMetaData.dictFav.Count)
+                            {
+                                pgPriorNextFav = currentPdfMetaData.dictFav.Keys[ndxClosest];
+                            }
+                        }
+                        await ShowPageAsync(pgPriorNextFav, ClearCache: false);
+                    }
+                }
+            }
+            else
+            {
+                var delta = isPrevious ? NumPagesPerView : -NumPagesPerView;
+                NavigateAsync(delta);
+            }
         }
 
         private void DpPage_MouseDown(object sender, MouseButtonEventArgs e)
@@ -550,7 +615,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             {
                 delta = -delta;
             }
-            Navigate(delta);
+            NavigateAsync(delta);
         }
 
         async Task<bool> ChooseMusic()

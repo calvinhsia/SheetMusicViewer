@@ -95,13 +95,13 @@ namespace WpfPdfViewer
             {
                 foreach (var toce in lstTocs)
                 {
-                    var val = $"{pageNo} {toce.SongName} {toce.Composer} {toce.Date} {toce.Notes}".Trim();
+                    var val = $"{toce.SongName} {toce.Composer} {toce.Date} {toce.Notes}".Trim();
                     str += val + " ";
                 }
             }
             else
             {
-                str = $"{tocPgNm} {this}";
+                str = $"{this}";
             }
             return str.Trim();
         }
@@ -333,7 +333,6 @@ namespace WpfPdfViewer
                             {
                                 pdfFileData.LastPageNo = pdfFileData.PageNumberOffset; // go to first page
                             }
-                            pdfFileData.Favorites = pdfFileData.dictFav.Values.ToList();
                         }
                     }
                 }
