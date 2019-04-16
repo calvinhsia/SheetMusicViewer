@@ -59,7 +59,17 @@ namespace WpfPdfViewer
             }
             LstVolInfo = new List<string>();
             int volno = 0;
-            Array.ForEach<PdfVolumeInfo>(pdfViewerWindow.currentPdfMetaData.lstVolInfo.ToArray(), (p => LstVolInfo.Add($"Vol={volno++} {p}")));
+            var pgno = pdfViewerWindow.currentPdfMetaData.PageNumberOffset;
+            foreach (var vol in pdfViewerWindow.currentPdfMetaData.lstVolInfo)
+            {
+                LstVolInfo.Add($"Vol={volno++} Pg= {pgno,3} {vol}");
+                pgno += vol.NPagesInThisVolume;
+            }
+            //var pgno = pdfViewerWindow.currentPdfMetaData.PageNumberOffset;
+            //Array.ForEach<PdfVolumeInfo>(pdfViewerWindow.currentPdfMetaData.lstVolInfo.ToArray(),
+            //    {
+            //    (p => LstVolInfo.Add($"Vol={volno++} {p}")
+            //    ););
             LstFavDisp = new ObservableCollection<FavDisp>();
             foreach (var fav in pdfViewerWindow.currentPdfMetaData.dictFav.Values)
             {

@@ -13,6 +13,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
+using System.Windows.Ink;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -61,6 +62,7 @@ namespace WpfPdfViewer
             {
                 _fShow2Pages = value;
                 chkFav1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
+                chkInk1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
                 txtDesc1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
                 this.dpPage.Children.Clear();
                 this.Dispatcher.InvokeAsync(async () => await ShowPageAsync(CurrentPageNumber, ClearCache: true));
@@ -77,6 +79,8 @@ namespace WpfPdfViewer
 
         internal PdfMetaData currentPdfMetaData = null;
         internal static PdfViewerWindow s_pdfViewerWindow;
+        internal InkCanvas[] inkCanvas = new InkCanvas[2];
+        internal Image[] imgPages = new Image[2];
 
         internal class CacheEntry
         {
@@ -303,34 +307,34 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         /// <param name="ClearCache"></param>
         internal async Task ShowPageAsync(int pageNo, bool ClearCache)
         {
-            if (ClearCache)
+            try
             {
-                dictCache.Clear();
-                currentCacheAge = 0;
-            }
-            if (currentPdfMetaData == null)
-            {
-                this.dpPage.Children.Clear();
-                return;
-            }
-            if (pageNo == CurrentPageNumber && dpPage.Children.Count > 0)
-            {
-                return;
-            }
-            if (pageNo < this.slider.Minimum)
-            {
-                pageNo = (int)this.slider.Minimum;
-            }
-            if (pageNo > MaxPageNumber)
-            {
-                pageNo -= NumPagesPerView;
-                if (pageNo < 0)
+                if (ClearCache)
+                {
+                    dictCache.Clear();
+                    currentCacheAge = 0;
+                }
+                if (currentPdfMetaData == null)
+                {
+                    this.dpPage.Children.Clear();
+                    return;
+                }
+                if (pageNo == CurrentPageNumber && dpPage.Children.Count > 0)
+                {
+                    return;
+                }
+                if (pageNo < this.slider.Minimum)
                 {
                     pageNo = (int)this.slider.Minimum;
                 }
-            }
-            try
-            {
+                if (pageNo > MaxPageNumber)
+                {
+                    pageNo -= NumPagesPerView;
+                    if (pageNo < 0)
+                    {
+                        pageNo = (int)this.slider.Minimum;
+                    }
+                }
                 this.CurrentPageNumber = pageNo;
                 CacheEntry cacheEntryCurrentPage = null;
                 CacheEntry cacheEntryNextPage = null;
@@ -358,18 +362,39 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     {
                         dictCache.Remove(cacheEntryCurrentPage.pageNo);
                     }
-                    var grid = new Grid();
+                    var gridContainer = new Grid();
                     var bitmapimageCurPage = await cacheEntryCurrentPage.task;
                     var imageCurPage = new Image() { Source = bitmapimageCurPage };
+                    imgPages[0] = imageCurPage;
+                    var gridCurPage = new Grid();
+                    gridCurPage.Loaded += (ol, el) =>
+                     {
+                         var p = imageCurPage.PointToScreen(new Point(0, 0));
+                         var x = imageCurPage.ActualWidth;
+                         var r = System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(imageCurPage);
+
+                         inkCanvas[0] = LoadInk(CurrentPageNumber, imageCurPage);
+                         if (inkCanvas[0] == null && chkInk0.IsChecked == true)
+                         {
+                             inkCanvas[0] = new InkCanvas() { Background = null };
+                         }
+                         if (inkCanvas[0] != null)
+                         {
+                             gridCurPage.Children.Add(inkCanvas[0]);
+                             if (chkInk0.IsChecked == false) // if we're not inking, then let mouse events change the page
+                             {
+                                 inkCanvas[0].EditingMode = InkCanvasEditingMode.None;
+                                 //inkCanvas[0].PreviewMouseDown += (o, e) =>
+                                 //{
+                                 //    DpPage_MouseDown(o, e);
+                                 //};
+                             }
+                         }
+                     };
+                    gridCurPage.Children.Add(imageCurPage);
                     if (NumPagesPerView == 1)
                     {
-                        //grid.RowDefinitions.Add(new RowDefinition() { Height = (GridLength)new GridLengthConverter().ConvertFromString("Auto") });
-                        //grid.RowDefinitions.Add(new RowDefinition() { Height = (GridLength)new GridLengthConverter().ConvertFromString("*") });
-                        //                    var x = new RowDefinition() { Height = new GridLength(0, GridUnitType.Star) };
-                        grid.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto });
-                        grid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(1, GridUnitType.Star) });
-                        grid.Children.Add(imageCurPage);
-                        Grid.SetRow(imageCurPage, 1);
+                        gridContainer.Children.Add(gridCurPage);
                     }
                     else
                     {
@@ -377,17 +402,40 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                         {
                             var bitmapimageNextPage = await cacheEntryNextPage.task;
                             var imageNextPage = new Image() { Source = cacheEntryNextPage.task.Result };
+                            imgPages[1] = imageNextPage;
                             imageCurPage.HorizontalAlignment = HorizontalAlignment.Right; // put lefthand page close to middle
                             imageNextPage.HorizontalAlignment = HorizontalAlignment.Left; // put righthand page close to middle
 
-                            grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
-                            grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
-                            grid.Children.Add(imageCurPage);
-                            grid.Children.Add(imageNextPage);
-                            Grid.SetColumn(imageNextPage, 1);
+                            gridContainer.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
+                            gridContainer.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
+                            gridContainer.Children.Add(gridCurPage);
+                            var gridNextPage = new Grid();
+                            gridNextPage.Loaded += (ol, el) =>
+                              {
+                                  inkCanvas[1] = LoadInk(CurrentPageNumber + 1, imageNextPage);
+                                  if (inkCanvas[1] == null && chkInk1.IsChecked == true)
+                                  {
+                                      inkCanvas[1] = new InkCanvas() { Background = null };
+                                  }
+                                  if (inkCanvas[1] != null)
+                                  {
+                                      gridNextPage.Children.Add(inkCanvas[1]);
+                                      if (chkInk1.IsChecked == false)
+                                      {
+                                          inkCanvas[1].EditingMode = InkCanvasEditingMode.None;
+                                          //inkCanvas[1].PreviewMouseDown += (o, e) =>
+                                          //{
+                                          //    DpPage_MouseDown(o, e);
+                                          //};
+                                      }
+                                  }
+                              };
+                            gridNextPage.Children.Add(imageNextPage);
+                            Grid.SetColumn(gridNextPage, 1);
+                            gridContainer.Children.Add(gridNextPage);
                         }
                     }
-                    this.dpPage.Children.Add(grid);
+                    this.dpPage.Children.Add(gridContainer);
                     OnMyPropertyChanged(nameof(Description0));
                     chkFav0.IsChecked = currentPdfMetaData.IsFavorite(pageNo);
                     if (NumPagesPerView > 1)
@@ -528,6 +576,89 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             currentPdfMetaData.ToggleFavorite(pgno, isChked);
         }
 
+        private async void ChkInkToggled(object sender, RoutedEventArgs e)
+        {
+            var nameSender = ((CheckBox)sender).Name;
+            var pgno = CurrentPageNumber + (nameSender == "chkInk0" ? 0 : 1);
+            var isChked = e.RoutedEvent.Name == "Checked";
+            if (!isChked) // toggled off. see if ink needs saving
+            {
+                var curCanvas = inkCanvas[pgno - CurrentPageNumber];
+                SaveInk(pgno, curCanvas);
+            }
+            this.dpPage.Children.Clear();
+            await ShowPageAsync(CurrentPageNumber, ClearCache: false);
+        }
+
+        InkCanvas LoadInk(int pageNo, Image imageCurPage)
+        {
+            InkCanvas retval = null;
+            if (currentPdfMetaData.dictInkStrokes.TryGetValue(pageNo, out var inkStrokeClass))
+            {
+                retval = new InkCanvas()
+                {
+                    Background = null
+                };
+                using (var strm = new MemoryStream(inkStrokeClass.StrokeData))
+                {
+                    var x = new StrokeCollection(strm);
+                    if (NumPagesPerView == 1)
+                    {
+                        //var s = new ScaleTransform(2, 1);
+                        //                        var m = s.Value;
+                        //                        var m = new Matrix(1, 0, 0, 1, 780, 0);
+                        var delta = (this.dpPage.ActualWidth - imageCurPage.ActualWidth) / 2;
+                        var m = new Matrix(1, 0, 0, 1, delta, 0);
+                        x.Transform(m, applyToStylusTip: false);
+                    }
+                    else
+                    {
+                        var delta = 0.0;
+                        if (pageNo == CurrentPageNumber)
+                        {   // because the left image is right aligned we want to store the ink relative to the left of the actual imgpage
+                            delta = (this.dpPage.ActualWidth / 2 - imgPages[0].ActualWidth);
+                        }
+                        else
+                        { // rhpage
+                            delta = 1;
+                        }
+                        var m = new Matrix(1, 0, 0, 1, delta, 0);
+                        //var s = new ScaleTransform(, 1);
+                        //m = s.Value;
+                        x.Transform(m, applyToStylusTip: false);
+                    }
+                    retval.Strokes = x;
+                }
+            }
+            return retval;
+        }
+        void SaveInk(int pgno, InkCanvas curCanvas)
+        {
+            if (curCanvas != null)
+            {
+                if (curCanvas.Strokes.Count > 0)
+                {
+                    var delta = (this.dpPage.ActualWidth - imgPages[0].ActualWidth) / 2;
+                    if (NumPagesPerView == 2)
+                    {
+                        if (pgno == CurrentPageNumber)
+                        {   // because the left image is right aligned we want to store the ink relative to the left of the actual imgpage
+                            delta =-( this.dpPage.ActualWidth/2 - imgPages[0].ActualWidth);
+                        }
+                        var strokes = curCanvas.Strokes;
+                        var m = new Matrix(1, 0, 0, 1, delta, 0);
+                        strokes.Transform(m, applyToStylusTip: false);
+                    }
+                    using (var strm = new MemoryStream())
+                    {
+                        curCanvas.Strokes.Save(strm, compress: false);
+                        currentPdfMetaData.dictInkStrokes[pgno] = new InkStrokeClass() { PageNo = pgno, StrokeData = strm.GetBuffer() };
+                        //currentPdfMetaData.IsDirty = true;
+                    }
+                }
+            }
+        }
+
         async void BtnRotate_Click(object sender, RoutedEventArgs e)
         {
             currentPdfMetaData.Rotate(CurrentPageNumber);
@@ -616,6 +747,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 delta = -delta;
             }
             NavigateAsync(delta);
+            e.Handled = true;
         }
 
         async Task<bool> ChooseMusic()

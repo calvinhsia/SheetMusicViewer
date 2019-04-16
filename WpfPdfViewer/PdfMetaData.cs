@@ -58,6 +58,8 @@ namespace WpfPdfViewer
 
         public string Notes;
 
+        public List<InkStrokeClass> LstInkStrokes = new List<InkStrokeClass>();
+
         public List<Favorite> Favorites = new List<Favorite>();
 
         public List<TOCEntry> lstTocEntries = new List<TOCEntry>();
@@ -66,6 +68,9 @@ namespace WpfPdfViewer
         public SortedList<int, List<TOCEntry>> dictToc = new SortedList<int, List<TOCEntry>>();
         [XmlIgnore]
         public SortedList<int, Favorite> dictFav = new SortedList<int, Favorite>();
+
+        [XmlIgnore]
+        public SortedList<int, InkStrokeClass> dictInkStrokes = new SortedList<int, InkStrokeClass>();
 
         [XmlIgnore]
         internal BitmapImage bitmapImageCache;
@@ -191,7 +196,7 @@ namespace WpfPdfViewer
                             {
                                 lstPdfMetaFileData.Add(curPdfFileData);
                             }
-                            retval =true;
+                            retval = true;
                         }
                         catch (Exception)
                         {
@@ -359,6 +364,7 @@ namespace WpfPdfViewer
             }
             pdfFileData?.InitializeDictToc(pdfFileData?.lstTocEntries);
             pdfFileData?.InitializeFavList();
+            pdfFileData?.InitializeInkStrokes();
             return pdfFileData;
         }
 
@@ -378,6 +384,15 @@ namespace WpfPdfViewer
                 }
                 tocLst.Add(toc);
             }
+        }
+        public void InitializeInkStrokes()
+        {
+            dictInkStrokes.Clear();
+            foreach (var ink in LstInkStrokes)
+            {
+                dictInkStrokes[ink.PageNo] = ink;
+            }
+            LstInkStrokes.Clear();
         }
 
         public void InitializeFavList()
@@ -490,6 +505,10 @@ namespace WpfPdfViewer
                     IndentChars = " "
                 };
                 pdfFileData.Favorites = pdfFileData.dictFav.Values.ToList();
+                if (pdfFileData.dictInkStrokes.Count > 0)
+                {
+                    pdfFileData.LstInkStrokes = pdfFileData.dictInkStrokes.Values.ToList();
+                }
                 var bmkFile = Path.ChangeExtension(pdfFileData._FullPathRootFile, "bmk");
                 if (File.Exists(bmkFile))
                 {
@@ -698,6 +717,12 @@ namespace WpfPdfViewer
         }
     }
 
+    [Serializable]
+    public class InkStrokeClass
+    {
+        public int PageNo { get; set; }
+        public byte[] StrokeData { get; set; }
+    }
 
     /// <summary>
     /// Not really bookmark: Table of Contents Entry
