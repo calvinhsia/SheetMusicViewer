@@ -48,7 +48,7 @@
                     <Slider x:Name="slider"  
                             Value="{Binding CurrentPageNumber}" 
                             Maximum="100" 
-                            Width="300"
+                            Width="100"
                             IsEnabled="{Binding PdfUIEnabled}" 
                             SmallChange="{Binding NumPagesPerView}" 
                             IsManipulationEnabled="False" 
