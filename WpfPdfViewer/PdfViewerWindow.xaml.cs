@@ -382,7 +382,10 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                      };
                     var imgBrush = new ImageBrush(bitmapimageCurPage);
                     inkCanvas[0] = new InkCanvas() { Background = imgBrush };
-                    inkCanvas[0].HorizontalAlignment = HorizontalAlignment.Right;
+                    if (NumPagesPerView == 2)
+                    {
+                        inkCanvas[0].HorizontalAlignment = HorizontalAlignment.Right;
+                    }
 //                    inkCanvas[0].VerticalAlignment = VerticalAlignment.Stretch;
                     inkCanvas[0].Height = this.dpPage.ActualHeight;
                     if (inkCanvas[0] != null)
@@ -393,7 +396,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                         //                             inkCanvas[0].HorizontalAlignment = HorizontalAlignment.Right;
                         if (chkInk0.IsChecked == false) // if we're not inking, then let mouse events change the page
                         {
-                            //inkCanvas[0].EditingMode = InkCanvasEditingMode.None;
+                            inkCanvas[0].EditingMode = InkCanvasEditingMode.None;
                             //inkCanvas[0].PreviewMouseDown += (o, e) =>
                             //{
                             //    DpPage_MouseDown(o, e);
