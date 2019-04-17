@@ -593,60 +593,72 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 
         private async void ChkInkToggled(object sender, RoutedEventArgs e)
         {
-            var nameSender = ((CheckBox)sender).Name;
-            var pgno = CurrentPageNumber + (nameSender == "chkInk0" ? 0 : 1);
-            var isChked = e.RoutedEvent.Name == "Checked";
-            if (!isChked) // toggled off. see if ink needs saving
+            try
             {
-                var curCanvas = inkCanvas[pgno - CurrentPageNumber];
-                SaveInk(pgno, curCanvas);
+                var nameSender = ((CheckBox)sender).Name;
+                var pgno = CurrentPageNumber + (nameSender == "chkInk0" ? 0 : 1);
+                var isChked = e.RoutedEvent.Name == "Checked";
+                if (!isChked) // toggled off. see if ink needs saving
+                {
+                    var curCanvas = inkCanvas[pgno - CurrentPageNumber];
+                    SaveInk(pgno, curCanvas);
+                }
+                this.dpPage.Children.Clear();
+                await ShowPageAsync(CurrentPageNumber, ClearCache: false);
             }
-            this.dpPage.Children.Clear();
-            await ShowPageAsync(CurrentPageNumber, ClearCache: false);
+            catch (Exception ex)
+            {
+            }
         }
 
         InkCanvas LoadInk(int pageNo, Image imageCurPage)
         {
             InkCanvas retval = null;
-            if (currentPdfMetaData.dictInkStrokes.TryGetValue(pageNo, out var inkStrokeClass))
+            try
             {
-                retval = new InkCanvas()
+                if (currentPdfMetaData.dictInkStrokes.TryGetValue(pageNo, out var inkStrokeClass))
                 {
-                    Background = null
-                };
-                using (var strm = new MemoryStream(inkStrokeClass.StrokeData))
-                {
-                    var x = new StrokeCollection(strm);
-                    if (NumPagesPerView == 1)
+                    retval = new InkCanvas()
                     {
-                        //var s = new ScaleTransform(2, 1);
-                        //                        var m = s.Value;
-                        //                        var m = new Matrix(1, 0, 0, 1, 780, 0);
-                        var delta = (this.dpPage.ActualWidth - imageCurPage.ActualWidth) / 2;
-                        var m = new Matrix(1, 0, 0, 1, delta, 0);
-                        x.Transform(m, applyToStylusTip: false);
-                    }
-                    else
+                        Background = null
+                    };
+                    using (var strm = new MemoryStream(inkStrokeClass.StrokeData))
                     {
-                        var delta = 0.0;
-                        if (pageNo == CurrentPageNumber)
-                        {   // because the left image is right aligned we want to store the ink relative to the left of the actual imgpage
-                            delta = (this.dpPage.ActualWidth / 2 - imgPages[0].ActualWidth);
+                        var x = new StrokeCollection(strm);
+                        if (NumPagesPerView == 1)
+                        {
+                            //var s = new ScaleTransform(2, 1);
+                            //                        var m = s.Value;
+                            //                        var m = new Matrix(1, 0, 0, 1, 780, 0);
+                            var delta = (this.dpPage.ActualWidth - imageCurPage.ActualWidth) / 2;
+                            var m = new Matrix(1, 0, 0, 1, delta, 0);
+                            x.Transform(m, applyToStylusTip: false);
                         }
                         else
-                        { // rhpage
-                            delta = 1;
+                        {
+                            var delta = 0.0;
+                            if (pageNo == CurrentPageNumber)
+                            {   // because the left image is right aligned we want to store the ink relative to the left of the actual imgpage
+                                delta = (this.dpPage.ActualWidth / 2 - imgPages[0].ActualWidth);
+                            }
+                            else
+                            { // rhpage
+                                delta = 1;
+                            }
+                            var brect = x.GetBounds();
+                            var xscale = imageCurPage.ActualWidth / brect.Right;
+                            var yscale = imageCurPage.ActualHeight / brect.Bottom;
+                            var m = new Matrix(xscale, 0, 0, yscale, delta, 0);
+                            //var s = new ScaleTransform(, 1);
+                            //m = s.Value;
+                            x.Transform(m, applyToStylusTip: false);
                         }
-                        var brect = x.GetBounds();
-                        var xscale = imageCurPage.ActualWidth / brect.Right;
-                        var yscale = imageCurPage.ActualHeight / brect.Bottom;
-                        var m = new Matrix(xscale, 0, 0, yscale, delta, 0);
-                        //var s = new ScaleTransform(, 1);
-                        //m = s.Value;
-                        x.Transform(m, applyToStylusTip: false);
+                        retval.Strokes = x;
                     }
-                    retval.Strokes = x;
                 }
+            }
+            catch (Exception)
+            {
             }
             return retval;
         }

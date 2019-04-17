@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Media.Imaging;
 using System.Xml;
 using System.Xml.Serialization;
@@ -498,28 +499,35 @@ namespace WpfPdfViewer
 
             if (pdfFileData.IsDirty || ForceSave || pdfFileData.initialLastPageNo != pdfFileData.LastPageNo)
             {
-                var serializer = new XmlSerializer(typeof(PdfMetaData));
-                var settings = new XmlWriterSettings()
+                try
                 {
-                    Indent = true,
-                    IndentChars = " "
-                };
-                pdfFileData.Favorites = pdfFileData.dictFav.Values.ToList();
-                if (pdfFileData.dictInkStrokes.Count > 0)
-                {
-                    pdfFileData.LstInkStrokes = pdfFileData.dictInkStrokes.Values.ToList();
-                }
-                var bmkFile = Path.ChangeExtension(pdfFileData._FullPathRootFile, "bmk");
-                if (File.Exists(bmkFile))
-                {
-                    File.Delete(bmkFile);
-                }
-                using (var strm = File.Create(bmkFile))
-                {
-                    using (var w = XmlWriter.Create(strm, settings))
+                    var serializer = new XmlSerializer(typeof(PdfMetaData));
+                    var settings = new XmlWriterSettings()
                     {
-                        serializer.Serialize(w, pdfFileData);
+                        Indent = true,
+                        IndentChars = " "
+                    };
+                    pdfFileData.Favorites = pdfFileData.dictFav.Values.ToList();
+                    if (pdfFileData.dictInkStrokes.Count > 0)
+                    {
+                        pdfFileData.LstInkStrokes = pdfFileData.dictInkStrokes.Values.ToList();
                     }
+                    var bmkFile = Path.ChangeExtension(pdfFileData._FullPathRootFile, "bmk");
+                    if (File.Exists(bmkFile))
+                    {
+                        File.Delete(bmkFile);
+                    }
+                    using (var strm = File.Create(bmkFile))
+                    {
+                        using (var w = XmlWriter.Create(strm, settings))
+                        {
+                            serializer.Serialize(w, pdfFileData);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Exception saving file " + ex.ToString());
                 }
             }
         }
