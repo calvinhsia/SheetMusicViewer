@@ -1,10 +1,16 @@
 ﻿using System;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Windows.Data.Pdf;
 using Windows.Storage.Streams;
 using WpfPdfViewer;
+using static WpfPdfViewer.PdfViewerWindow;
 
 namespace Tests
 {
@@ -21,21 +27,19 @@ namespace Tests
     [TestClass]
     public class UnitTest1 : TestBase
     {
-        readonly string rootfolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic";
+        readonly string rootfolder = @"C:\SheetMusic";
         //string testbmk = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.bmk";
-        readonly string testPdf = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
+        readonly string testPdf = @"C:\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
 
         [TestMethod]
         public async Task TestStress()
         {
-            var //rootfolder = @"C:\Bak\SheetMusic\Poptest";
-            rootfolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic";
             var w = new WpfPdfViewer.PdfViewerWindow
             {
                 _RootMusicFolder = rootfolder
             };
             var lstMetaData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
-            var currentPdfMetaData = lstMetaData.Where(m => m.GetFullPathFile(volNo: 0).Contains("Joplin")).First();
+            var currentPdfMetaData = lstMetaData.Where(m => m.GetFullPathFile(volNo: 0).Contains("Fake")).First();
             w.currentPdfMetaData = currentPdfMetaData;
             w.currentPdfMetaData.InitializeListPdfDocuments();
             //var cacheEntry = PdfViewerWindow.CacheEntry.TryAddCacheEntry(mpdf.PageNumberOffset);
@@ -69,13 +73,110 @@ namespace Tests
                                 }
 
                                 await pdfPage.RenderToStreamAsync(strm, renderOpts);
-                                TestContext.WriteLine($"got page {pageNo,5}   strms={strm.Size:n0}");
+                                var bmi = new BitmapImage();
+                                bmi.BeginInit();
+                                bmi.StreamSource = strm.AsStream();
+                                //                                bmi.Rotation = (Rotation)currentPdfMetaData.GetRotation(cacheEntry.pageNo);
+                                bmi.CacheOption = BitmapCacheOption.OnLoad;
+                                bmi.EndInit();
+
+                                TestContext.WriteLine($"got page {pageNo,5}   strms={strm.Size,10:n0} {currentPdfMetaData} ");
+                                //                                break;
                             }
                         }
                     }
                 }
             }
 
+        }
+        [TestMethod]
+        public async Task TestCache()
+        {
+            var ev = new ManualResetEventSlim();
+            //Thread dispThread = new Thread((p) =>
+            //{
+            //    var c = CreateExecutionContext();
+            //    SynchronizationContext.SetSynchronizationContext(c.DispatcherSynchronizationContext);
+            //    Dispatcher.Run();
+            //    ev.Set();
+            //});
+            //dispThread.SetApartmentState(ApartmentState.STA);
+            //dispThread.Start();
+            var c = CreateExecutionContext();
+            await c.Dispatcher.InvokeAsync(async () =>
+            {
+
+                var w = new WpfPdfViewer.PdfViewerWindow
+                {
+                    _RootMusicFolder = rootfolder
+                };
+                var lstMetaData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
+                foreach (var currentPdfMetaData in lstMetaData)
+                {
+                    var sw = Stopwatch.StartNew();
+//                    var currentPdfMetaData = lstMetaData.Where(m => m.GetFullPathFile(volNo: 0).Contains("Fake")).First();
+                    w.currentPdfMetaData = currentPdfMetaData;
+                    w.currentPdfMetaData.InitializeListPdfDocuments();
+                    //var cacheEntry = PdfViewerWindow.CacheEntry.TryAddCacheEntry(mpdf.PageNumberOffset);
+                    //await cacheEntry.task;
+                    //// calling thread must be STA, UIThread
+                    //var res = cacheEntry.task.Result;
+                    for (var iter = 0; iter < 1; iter++)
+                    {
+                        var pageNo = 0;
+                        for (pageNo = currentPdfMetaData.PageNumberOffset; pageNo < currentPdfMetaData.NumPagesInSet + currentPdfMetaData.PageNumberOffset - 1; pageNo++)
+
+                        {
+                            var cacheEntry = CacheEntry.TryAddCacheEntry(pageNo);
+                            await cacheEntry.task;
+                            var bmi = cacheEntry.task.Result;
+                            TestContext.WriteLine($"got page {pageNo,8}   bmi={bmi.Width:n0}, {bmi.Height:n0}  {sw.Elapsed.TotalSeconds,8:n4} {currentPdfMetaData} ");
+                        }
+                    }
+                }
+                ev.Set();
+            });
+            ev.Wait();
+        }
+
+        private ExecutionContext CreateExecutionContext()
+        {
+            const string Threadname = "MyMockUIThread";
+            var tcs = new TaskCompletionSource<ExecutionContext>();
+
+            var mockUIThread = new Thread(() =>
+            {
+                // Create the context, and install it:
+                var dispatcher = Dispatcher.CurrentDispatcher;
+                var syncContext = new DispatcherSynchronizationContext(dispatcher);
+
+                SynchronizationContext.SetSynchronizationContext(syncContext);
+
+                tcs.SetResult(new ExecutionContext
+                {
+                    DispatcherSynchronizationContext = syncContext,
+                    Dispatcher = dispatcher
+                });
+
+                // Start the Dispatcher Processing
+                TestContext.WriteLine($"{Threadname}  dispatcher run");
+                Dispatcher.Run();
+                TestContext.WriteLine($"{Threadname} done");
+                "".ToString();
+            });
+
+            mockUIThread.SetApartmentState(ApartmentState.STA);
+            mockUIThread.Name = Threadname;
+            TestContext.WriteLine($"{Threadname} start");
+            mockUIThread.Start();
+
+            return tcs.Task.Result;
+        }
+
+        internal class ExecutionContext
+        {
+            public DispatcherSynchronizationContext DispatcherSynchronizationContext { get; set; }
+            public Dispatcher Dispatcher { get; set; }
         }
 
         [TestMethod]

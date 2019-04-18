@@ -149,7 +149,7 @@ namespace WpfPdfViewer
 //                    this.Strokes.Transform(m, applyToStylusTip: false);
                     using (var strm = new MemoryStream())
                     {
-                        Strokes.Save(strm, compress: false);
+                        Strokes.Save(strm, compress: true);
                         _pdfViewerWindow.currentPdfMetaData.dictInkStrokes[_PgNo] = new InkStrokeClass() { PageNo = _PgNo, StrokeData = strm.GetBuffer() };
                         _pdfViewerWindow.currentPdfMetaData.lstInkStrokeDimensions.Clear();
                         _pdfViewerWindow.currentPdfMetaData.lstInkStrokeDimensions.Add(this.Width);

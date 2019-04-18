@@ -71,8 +71,7 @@ namespace WpfPdfViewer
                 OnMyPropertyChanged();
             }
         }
-        private int _MaxPageNumber;
-        public int MaxPageNumber { get { return _MaxPageNumber; } set { if (_MaxPageNumber != value) { _MaxPageNumber = value; OnMyPropertyChanged(); } } }
+        public int MaxPageNumber { get { return currentPdfMetaData==null ? 0 :  (int)currentPdfMetaData.NumPagesInSet + currentPdfMetaData.PageNumberOffset; } }
         public string PdfTitle { get { return currentPdfMetaData?.GetFullPathFile(volNo: 0, MakeRelative: true); } }
 
         public BitmapImage ImgThumbImage { get { return currentPdfMetaData?.GetBitmapImageThumbnail(); } }
@@ -178,8 +177,8 @@ namespace WpfPdfViewer
               {
                   var logfile = System.IO.Path.Combine(_RootMusicFolder, "MyPdfViewer.log");
                   var dt = DateTime.Now.ToString("MM/dd/yy hh:mm:ss");
-                  File.AppendAllText(logfile,$"\r\n{dt} {Environment.GetEnvironmentVariable("COMPUTERNAME")} {e.Message} {e.ErrorException} ");
-                  MessageBox.Show(e.Message+ "\r\r"+ e.ErrorException.ToString());
+                  File.AppendAllText(logfile, $"\r\n{dt} {Environment.GetEnvironmentVariable("COMPUTERNAME")} {e.Message} {e.ErrorException} ");
+                  MessageBox.Show(e.Message + "\r\r" + e.ErrorException.ToString());
               };
 
 
@@ -323,7 +322,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             currentPdfMetaData.InitializeListPdfDocuments();
             _DisableSliderValueChanged = true;
             this.slider.Minimum = currentPdfMetaData.PageNumberOffset;
-            this.MaxPageNumber = (int)currentPdfMetaData.NumPagesInSet + currentPdfMetaData.PageNumberOffset;
             this.slider.Maximum = this.MaxPageNumber;
             this.slider.LargeChange = Math.Max((int)(.1 * (this.MaxPageNumber - this.slider.Minimum)), 1); // 10%
             this.slider.Value = PageNo;
@@ -332,6 +330,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             this.PdfUIEnabled = true;
             OnMyPropertyChanged(nameof(PdfTitle));
             OnMyPropertyChanged(nameof(ImgThumbImage));
+            OnMyPropertyChanged(nameof(MaxPageNumber));
             await ShowPageAsync(PageNo, ClearCache: true);
         }
 
@@ -733,10 +732,10 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 currentPdfMetaData.LastPageNo = CurrentPageNumber;
                 PdfMetaData.SavePdfFileData(currentPdfMetaData);
                 currentPdfMetaData = null;
-                MaxPageNumber = 0;
                 CurrentPageNumber = 0;
                 this.dpPage.Children.Clear();
             }
+            OnMyPropertyChanged(nameof(MaxPageNumber));
             OnMyPropertyChanged(nameof(PdfTitle));
             OnMyPropertyChanged(nameof(Description0));
             OnMyPropertyChanged(nameof(Description1));
