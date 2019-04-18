@@ -29,6 +29,7 @@ namespace WpfPdfViewer
     public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler PropertyChanged;
+        // zoom gesture: https://stackoverflow.com/questions/25861840/zoom-pinch-detection-in-a-wpf-usercontrol
 
         //public static readonly RoutedEvent PdfExceptionEvent =
         //    EventManager.RegisterRoutedEvent("PdfExceptionEvent",
@@ -493,6 +494,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                             renderOpts.DestinationWidth = (uint)rect.Height;
                         }
                         await pdfPage.RenderToStreamAsync(strm, renderOpts);
+                        var strmLength = strm.Size;
                         cacheEntry.cts.Token.ThrowIfCancellationRequested();
                         bmi.BeginInit();
                         bmi.StreamSource = strm.AsStream();
