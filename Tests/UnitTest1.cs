@@ -27,7 +27,9 @@ namespace Tests
     [TestClass]
     public class UnitTest1 : TestBase
     {
-        readonly string rootfolder = @"C:\SheetMusic";
+        readonly string root1 = @"c:\Sheetmusic";
+        readonly string root2 = @"f:\Sheetmusic";
+        string Rootfolder { get { if (File.Exists(root1)) { return root1; } return root2; } }
         //string testbmk = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.bmk";
         readonly string testPdf = @"C:\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
 
@@ -36,7 +38,7 @@ namespace Tests
         {
             var w = new WpfPdfViewer.PdfViewerWindow
             {
-                _RootMusicFolder = rootfolder
+                _RootMusicFolder = Rootfolder
             };
             var lstMetaData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
             var currentPdfMetaData = lstMetaData.Where(m => m.GetFullPathFile(volNo: 0).Contains("Fake")).First();
@@ -108,7 +110,7 @@ namespace Tests
 
                 var w = new WpfPdfViewer.PdfViewerWindow
                 {
-                    _RootMusicFolder = rootfolder
+                    _RootMusicFolder = Rootfolder
                 };
                 var lstMetaData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
                 foreach (var currentPdfMetaData in lstMetaData)
@@ -212,7 +214,7 @@ namespace Tests
         {
             var w = new WpfPdfViewer.PdfViewerWindow
             {
-                _RootMusicFolder = rootfolder
+                _RootMusicFolder = Rootfolder
             };
             await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
             for (int i = 0; i < 11; i++)

@@ -242,7 +242,7 @@ namespace WpfPdfViewer
                         nContinuations = 0;
                         foreach (var file in Directory.EnumerateFiles(curPath, "*.pdf").OrderBy(f => f))//.Where(f=>f.Contains("Miser"))) // "file" is fullpath
                         {
-                            if (file.Contains("Princess"))
+                            if (file.Contains("Sonaten"))
                             {
                                 "".ToString();
                             }
@@ -255,10 +255,13 @@ namespace WpfPdfViewer
                                 var justfnameCurrent = System.IO.Path.GetFileNameWithoutExtension(file).Trim();
                                 if (justFnamelast.Length == justfnameCurrent.Length) // file1, file2
                                 {
-                                    if (justFnamelast.Substring(0, justFnamelast.Length - 1) ==
-                                       justfnameCurrent.Substring(0, justfnameCurrent.Length - 1))
+                                    if (char.IsDigit(justfnameCurrent[justfnameCurrent.Length-1]))
                                     {
-                                        isContinuation = true;
+                                        if (justFnamelast.Substring(0, justFnamelast.Length - 1) ==
+                                           justfnameCurrent.Substring(0, justfnameCurrent.Length - 1))
+                                        {
+                                            isContinuation = true;
+                                        }
                                     }
                                 }
                                 else
