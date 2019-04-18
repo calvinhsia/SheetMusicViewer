@@ -30,6 +30,27 @@ namespace WpfPdfViewer
     {
         public event PropertyChangedEventHandler PropertyChanged;
 
+        //public static readonly RoutedEvent PdfExceptionEvent =
+        //    EventManager.RegisterRoutedEvent("PdfExceptionEvent",
+        //        RoutingStrategy.Bubble,
+        //        typeof(EventHandler<PdfExceptionEventAgs>), typeof(PdfViewerWindow));
+
+        public event EventHandler<PdfExceptionEventAgs> PdfExceptionEvent;
+        public class PdfExceptionEventAgs : EventArgs
+        {
+            public Exception ErrorException { get; private set; }
+            public string Message { get; set; }
+            public PdfExceptionEventAgs(string Message, Exception errException)
+            {
+                ErrorException = errException;
+                this.Message = Message;
+            }
+        }
+        public void OnException(string Message, Exception ex)
+        {
+            PdfExceptionEvent?.Invoke(this, new PdfExceptionEventAgs(Message, ex));
+        }
+
         public void OnMyPropertyChanged([CallerMemberName] string propertyName = "")
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
@@ -151,6 +172,15 @@ namespace WpfPdfViewer
             //            this._RootMusicFolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Jazz";
             this.Show2Pages = Properties.Settings.Default.Show2Pages;
             this.chkFullScreen.IsChecked = Properties.Settings.Default.IsFullScreen;
+
+            PdfExceptionEvent += (o, e) =>
+              {
+                  var logfile = System.IO.Path.Combine(_RootMusicFolder, "MyPdfViewer.log");
+                  var dt = DateTime.Now.ToString("MM/dd/yy hh:mm:ss");
+                  File.AppendAllText(logfile,$"\r\n{dt} {Environment.GetEnvironmentVariable("COMPUTERNAME")} {e.Message} {e.ErrorException} ");
+                  MessageBox.Show(e.Message+ "\r\r"+ e.ErrorException.ToString());
+              };
+
 
             this.Closed += (o, e) =>
               {
@@ -290,16 +320,20 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             CloseCurrentPdfFile();
             currentPdfMetaData = pdfMetaData;
             currentPdfMetaData.InitializeListPdfDocuments();
+            _DisableSliderValueChanged = true;
             this.slider.Minimum = currentPdfMetaData.PageNumberOffset;
-            this.MaxPageNumber = (int)currentPdfMetaData.NumPagesInSet  + currentPdfMetaData.PageNumberOffset;
+            this.MaxPageNumber = (int)currentPdfMetaData.NumPagesInSet + currentPdfMetaData.PageNumberOffset;
             this.slider.Maximum = this.MaxPageNumber;
             this.slider.LargeChange = Math.Max((int)(.1 * (this.MaxPageNumber - this.slider.Minimum)), 1); // 10%
+            this.slider.Value = PageNo;
+            _DisableSliderValueChanged = false;
             //this.slider.IsDirectionReversed = true;
             this.PdfUIEnabled = true;
             OnMyPropertyChanged(nameof(PdfTitle));
             OnMyPropertyChanged(nameof(ImgThumbImage));
             await ShowPageAsync(PageNo, ClearCache: true);
         }
+
 
         /// <summary>
         /// Show a page or 2
@@ -336,7 +370,9 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                         pageNo = (int)this.slider.Minimum;
                     }
                 }
+                _DisableSliderValueChanged = true;
                 this.CurrentPageNumber = pageNo;
+                _DisableSliderValueChanged = false;
                 CacheEntry cacheEntryCurrentPage = null;
                 CacheEntry cacheEntryNextPage = null;
                 //if (!dictCache.TryGetValue(pageNo, out cacheEntryCurrentPage) || cacheEntryCurrentPage.task.IsCanceled)
@@ -359,7 +395,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 if (this.CurrentPageNumber == pageNo && cacheEntryCurrentPage != null) // user might have typed ahead
                 {
                     this.dpPage.Children.Clear();
-                    this.dpPage.Background = Brushes.Brown;
+                    //                    this.dpPage.Background = Brushes.Brown;
                     if (cacheEntryCurrentPage.task.IsCanceled)
                     {
                         dictCache.Remove(cacheEntryCurrentPage.pageNo);
@@ -367,7 +403,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     var gridContainer = new Grid();
                     var bitmapimageCurPage = await cacheEntryCurrentPage.task;
                     var imageCurPage = new Image() { Source = bitmapimageCurPage };
-                    inkCanvas[0] = new MyInkCanvas(bitmapimageCurPage, this, chkInk0);
+                    inkCanvas[0] = new MyInkCanvas(bitmapimageCurPage, this, chkInk0, CurrentPageNumber);
                     var gridCurPage = new Grid();
                     gridCurPage.Children.Add(inkCanvas[0]);
                     gridContainer.Children.Add(gridCurPage);
@@ -378,10 +414,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                             gridContainer.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
                             gridContainer.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
                             var bitmapimageNextPage = await cacheEntryNextPage.task;
-                            inkCanvas[1] = new MyInkCanvas(bitmapimageNextPage, this, chkInk1);
-                            //var imageNextPage = new Image() { Source = cacheEntryNextPage.task.Result };
-                            //imageCurPage.HorizontalAlignment = HorizontalAlignment.Right; // put lefthand page close to middle
-                            //imageNextPage.HorizontalAlignment = HorizontalAlignment.Left; // put righthand page close to middle
+                            inkCanvas[1] = new MyInkCanvas(bitmapimageNextPage, this, chkInk1, CurrentPageNumber + 1);
                             inkCanvas[0].HorizontalAlignment = HorizontalAlignment.Right;
                             inkCanvas[1].HorizontalAlignment = HorizontalAlignment.Left; // put righthand page close to middle
                             var gridNextPage = new Grid();
@@ -425,8 +458,11 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             catch (Exception ex)
             {
                 this.dpPage.Children.Clear();
+
+                //RaiseEvent(new PdfExceptionEventAgs(PdfExceptionEvent, this, null));
                 System.Windows.Forms.MessageBox.Show($"Exception showing {currentPdfMetaData.GetFullPathFileFromPageNo(pageNo)}\r\n {ex.ToString()}");
                 CloseCurrentPdfFile();
+                OnException($"Showing {currentPdfMetaData.GetFullPathFileFromPageNo(pageNo)}", ex);
             }
         }
 
@@ -550,87 +586,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             {
             }
         }
-
-        //InkCanvas LoadInk(int pageNo, Image imageCurPage)
-        //{
-        //    InkCanvas retval = null;
-        //    try
-        //    {
-        //        if (currentPdfMetaData.dictInkStrokes.TryGetValue(pageNo, out var inkStrokeClass))
-        //        {
-        //            retval = new InkCanvas()
-        //            {
-        //                Background = null
-        //            };
-        //            using (var strm = new MemoryStream(inkStrokeClass.StrokeData))
-        //            {
-        //                var x = new StrokeCollection(strm);
-        //                if (NumPagesPerView == 1)
-        //                {
-        //                    //var s = new ScaleTransform(2, 1);
-        //                    //                        var m = s.Value;
-        //                    //                        var m = new Matrix(1, 0, 0, 1, 780, 0);
-        //                    var delta = (this.dpPage.ActualWidth - imageCurPage.ActualWidth) / 2;
-        //                    var m = new Matrix(1, 0, 0, 1, delta, 0);
-        //                    x.Transform(m, applyToStylusTip: false);
-        //                }
-        //                else
-        //                {
-        //                    var delta = 0.0;
-        //                    if (pageNo == CurrentPageNumber)
-        //                    {   // because the left image is right aligned we want to store the ink relative to the left of the actual imgpage
-        //                        delta = (this.dpPage.ActualWidth / 2 - imgPages[0].ActualWidth);
-        //                    }
-        //                    else
-        //                    { // rhpage
-        //                        delta = 1;
-        //                    }
-        //                    var brect = x.GetBounds();
-        //                    var xscale = imageCurPage.ActualWidth / brect.Right;
-        //                    var yscale = imageCurPage.ActualHeight / brect.Bottom;
-        //                    var m = new Matrix(xscale, 0, 0, yscale, delta, 0);
-        //                    //var s = new ScaleTransform(, 1);
-        //                    //m = s.Value;
-        //                    x.Transform(m, applyToStylusTip: false);
-        //                }
-        //                retval.Strokes = x;
-        //            }
-        //        }
-        //    }
-        //    catch (Exception)
-        //    {
-        //    }
-        //    return retval;
-        //}
-        //void SaveInk(int pgno, InkCanvas curCanvas)
-        //{
-        //    if (curCanvas != null)
-        //    {
-        //        if (curCanvas.Strokes.Count > 0)
-        //        {
-        //            var delta = (this.dpPage.ActualWidth - imgPages[0].ActualWidth) / 2;
-        //            if (NumPagesPerView == 2)
-        //            {
-        //                if (pgno == CurrentPageNumber)
-        //                {   // because the left image is right aligned we want to store the ink relative to the left of the actual imgpage
-        //                    delta = -(this.dpPage.ActualWidth / 2 - imgPages[0].ActualWidth);
-        //                }
-        //                var x = curCanvas.Strokes;
-        //                var brect = x.GetBounds();
-        //                var xscale = brect.Right / imgPages[0].ActualWidth;
-        //                var yscale = brect.Bottom / imgPages[0].ActualHeight;
-        //                var m = new Matrix(xscale, 0, 0, yscale, delta, 0);
-        //                x.Transform(m, applyToStylusTip: false);
-        //            }
-        //            using (var strm = new MemoryStream())
-        //            {
-        //                curCanvas.Strokes.Save(strm, compress: false);
-        //                currentPdfMetaData.dictInkStrokes[pgno] = new InkStrokeClass() { PageNo = pgno, StrokeData = strm.GetBuffer() };
-        //                //currentPdfMetaData.IsDirty = true;
-        //            }
-        //        }
-        //    }
-        //}
 
         async void BtnRotate_Click(object sender, RoutedEventArgs e)
         {
@@ -904,19 +859,19 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         {
             e.Handled = true;
         }
-        private bool _sliderDragStarted;
+        private bool _DisableSliderValueChanged;
         void OnSliderThumbDragstarted(object sender, RoutedEventArgs e)
         {
-            _sliderDragStarted = true;
+            _DisableSliderValueChanged = true;
         }
         void OnSliderThumbDragCompleted(object sender, RoutedEventArgs e)
         {
-            _sliderDragStarted = false;
+            _DisableSliderValueChanged = false;
             OnSliderValueChanged(sender, e);
         }
         void OnSliderValueChanged(object sender, RoutedEventArgs e)
         {
-            if (!_sliderDragStarted)
+            if (!_DisableSliderValueChanged)
             {
                 if (currentPdfMetaData != null)
                 {

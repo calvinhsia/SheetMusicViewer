@@ -59,6 +59,12 @@ namespace WpfPdfViewer
 
         public string Notes;
 
+
+        /// <summary>
+        /// 2 numbers, x, then y
+        /// </summary>
+        public List<double> lstInkStrokeDimensions = new List<double>();
+
         public List<InkStrokeClass> LstInkStrokes = new List<InkStrokeClass>();
 
         public List<Favorite> Favorites = new List<Favorite>();
@@ -199,8 +205,9 @@ namespace WpfPdfViewer
                             }
                             retval = true;
                         }
-                        catch (Exception)
+                        catch (Exception ex)
                         {
+                            PdfViewerWindow.s_pdfViewerWindow.OnException($"Reading {curFullPathFile}" ,ex);
                         }
                         return retval;
                     }
@@ -344,7 +351,7 @@ namespace WpfPdfViewer
                 }
                 catch (Exception ex)
                 {
-                    System.Windows.Forms.MessageBox.Show($"{bmkFile}\r\n {ex.ToString()}", "Exception parsing Xml");
+                    PdfViewerWindow.s_pdfViewerWindow.OnException($"Reading {bmkFile}",ex);
                     // we don't want to delete the file because the user might have valuable bookmarks/favorites.
                     // let the user have an opportunity to fix it.
                 }

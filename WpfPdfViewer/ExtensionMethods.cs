@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
 
 namespace WpfPdfViewer
 {
@@ -47,9 +49,21 @@ namespace WpfPdfViewer
                 {
                     right = sortedList.Count;
                 }
-
             }
             return right;
         }
+
+        public static MenuItem AddMnuItem(this ContextMenu ctxmenu, string name, string tip, RoutedEventHandler hndlr)
+        {
+            var mitem = new MenuItem()
+            {
+                Header = name,
+                ToolTip = tip
+            };
+            ctxmenu.Items.Add(mitem);
+            mitem.Click += hndlr;
+            return mitem;
+        }
+
     }
 }
