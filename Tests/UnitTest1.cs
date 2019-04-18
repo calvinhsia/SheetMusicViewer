@@ -107,7 +107,6 @@ namespace Tests
             var c = CreateExecutionContext();
             await c.Dispatcher.InvokeAsync(async () =>
             {
-
                 var w = new WpfPdfViewer.PdfViewerWindow
                 {
                     _RootMusicFolder = Rootfolder
@@ -127,12 +126,12 @@ namespace Tests
                     {
                         var pageNo = 0;
                         for (pageNo = currentPdfMetaData.PageNumberOffset; pageNo < currentPdfMetaData.NumPagesInSet + currentPdfMetaData.PageNumberOffset - 1; pageNo++)
-
                         {
-                            var cacheEntry = CacheEntry.TryAddCacheEntry(pageNo);
+                            var cacheEntry = w._pageCache.TryAddCacheEntry(pageNo);
                             await cacheEntry.task;
                             var bmi = cacheEntry.task.Result;
                             TestContext.WriteLine($"got page {pageNo,8}   bmi={bmi.Width:n0}, {bmi.Height:n0}  {sw.Elapsed.TotalSeconds,8:n4} {currentPdfMetaData} ");
+                            //break;
                         }
                     }
                 }

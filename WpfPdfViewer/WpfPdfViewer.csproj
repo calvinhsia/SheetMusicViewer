@@ -103,6 +103,7 @@
       <DependentUpon>MetaDataForm.xaml</DependentUpon>
     </Compile>
     <Compile Include="MyInkCanvas.cs" />
+    <Compile Include="PageCache.cs" />
     <Compile Include="PdfViewerWindow.xaml.cs">
       <DependentUpon>PdfViewerWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
