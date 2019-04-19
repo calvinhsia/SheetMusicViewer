@@ -231,7 +231,7 @@ namespace WpfPdfViewer
                             {
                                 "adf".ToString();
                             }
-                            SavePdfFileData(curPdfFileData);
+                            SavePdfMetaFileData(curPdfFileData);
                         }
                         nContinuations = 0;
                     }
@@ -503,7 +503,7 @@ namespace WpfPdfViewer
             return pdfDoc;
         }
 
-        public static void SavePdfFileData(PdfMetaData pdfFileData, bool ForceSave = false)
+        public static void SavePdfMetaFileData(PdfMetaData pdfFileData, bool ForceSave = false)
         {
             pdfFileData.InitializeListPdfDocuments(); // reinit list to clear out results to save mem
 

@@ -620,7 +620,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             {
                 _pageCache.ClearCache();
                 currentPdfMetaData.LastPageNo = CurrentPageNumber;
-                PdfMetaData.SavePdfFileData(currentPdfMetaData);
+                PdfMetaData.SavePdfMetaFileData(currentPdfMetaData);
                 currentPdfMetaData = null;
                 CurrentPageNumber = 0;
                 this.dpPage.Children.Clear();

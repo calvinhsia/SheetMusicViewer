@@ -101,7 +101,7 @@ namespace WpfPdfViewer
             _pdfViewerWindow.currentPdfMetaData.InitializeDictToc(LstTOC.ToList());
             _pdfViewerWindow.currentPdfMetaData.Notes = DocNotes?.Trim();
             _pdfViewerWindow.currentPdfMetaData.PageNumberOffset = PageNumberOffset;
-            PdfMetaData.SavePdfFileData(_pdfViewerWindow.currentPdfMetaData, ForceSave: true);
+            PdfMetaData.SavePdfMetaFileData(_pdfViewerWindow.currentPdfMetaData, ForceSave: true);
             this.Close();
         }
 
