@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -29,7 +31,7 @@ namespace Tests
     {
         readonly string root1 = @"c:\Sheetmusic";
         readonly string root2 = @"f:\Sheetmusic";
-        string Rootfolder { get { if (File.Exists(root1)) { return root1; } return root2; } }
+        string Rootfolder { get { if (Directory.Exists(root1)) { return root1; } return root2; } }
         //string testbmk = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.bmk";
         readonly string testPdf = @"C:\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
 
@@ -111,6 +113,8 @@ namespace Tests
                 {
                     _RootMusicFolder = Rootfolder
                 };
+                var testw = new Window();
+                testw.Show();
                 var lstMetaData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
                 foreach (var currentPdfMetaData in lstMetaData)
                 {
@@ -130,6 +134,8 @@ namespace Tests
                             var cacheEntry = w._pageCache.TryAddCacheEntry(pageNo);
                             await cacheEntry.task;
                             var bmi = cacheEntry.task.Result;
+                            var image = new Image() { Source = bmi };
+                            testw.Content = image;
                             TestContext.WriteLine($"got page {pageNo,8}   bmi={bmi.Width:n0}, {bmi.Height:n0}  {sw.Elapsed.TotalSeconds,8:n4} {currentPdfMetaData} ");
                             //break;
                         }

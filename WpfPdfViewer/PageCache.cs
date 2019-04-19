@@ -29,7 +29,7 @@ namespace WpfPdfViewer
         readonly Dictionary<int, PageCacheEntry> dictCache = new Dictionary<int, PageCacheEntry>(); // for either show2pages, pageno ->grid. results in dupes if even, then odd number on show2pages
 
 
-        private PdfViewerWindow pdfViewerWindow;
+        private readonly PdfViewerWindow pdfViewerWindow;
 
         public PageCache(PdfViewerWindow pdfViewerWindow)
         {
@@ -57,7 +57,7 @@ namespace WpfPdfViewer
                     };
                     cacheEntry.task = CalculateBitMapImageForPageAsync(cacheEntry);
 
-                    int cacheSize = 50;
+                    int cacheSize = 5;
                     if (dictCache.Count > cacheSize)
                     {
                         var lst = dictCache.Values.OrderBy(s => s.age).Take(dictCache.Count - cacheSize);
@@ -105,6 +105,7 @@ namespace WpfPdfViewer
                         bmi.Rotation = (Rotation)pdfViewerWindow.currentPdfMetaData.GetRotation(cacheEntry.pageNo);
                         bmi.CacheOption = BitmapCacheOption.OnLoad;
                         bmi.EndInit();
+                        bmi.StreamSource = null;
                     }
                 }
             }
@@ -137,6 +138,7 @@ namespace WpfPdfViewer
                 {
                     dictCache.Remove(item);
                 }
+                GC.Collect(2, GCCollectionMode.Forced);
             }
         }
     }
