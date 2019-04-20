@@ -55,9 +55,9 @@ namespace WpfPdfViewer
                         pageNo = PageNo,
                         age = currentCacheAge++
                     };
-                    cacheEntry.task = CalculateBitMapImageForPageAsync(cacheEntry);
+                    cacheEntry.task = pdfViewerWindow.currentPdfMetaData.CalculateBitMapImageForPageAsync(cacheEntry.pageNo, cacheEntry.cts, SizeDesired: null);
 
-                    int cacheSize = 5;
+                    int cacheSize = 50;
                     if (dictCache.Count > cacheSize)
                     {
                         var lst = dictCache.Values.OrderBy(s => s.age).Take(dictCache.Count - cacheSize);
@@ -65,51 +65,13 @@ namespace WpfPdfViewer
                         {
                             dictCache.Remove(entry.pageNo);
                         }
+                        System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+                        GC.Collect(2);
                     }
                     dictCache[PageNo] = cacheEntry;
                 }
             }
             return cacheEntry;
-        }
-        internal async Task<BitmapImage> CalculateBitMapImageForPageAsync(PageCacheEntry cacheEntry)
-        {
-            //if (cacheEntry.pageNo == currentPdfMetaData.PageNumberOffset && currentPdfMetaData.bitmapImageCache != null)
-            //{
-            //    return currentPdfMetaData.bitmapImageCache;
-            //}
-            var bmi = new BitmapImage();
-            cacheEntry.cts.Token.ThrowIfCancellationRequested();
-            var (pdfDoc, pdfPgno) = await pdfViewerWindow.currentPdfMetaData.GetPdfDocumentForPageno(cacheEntry.pageNo);
-            if (pdfDoc != null && pdfPgno >= 0 && pdfPgno < pdfDoc.PageCount)
-            {
-                using (var pdfPage = pdfDoc.GetPage((uint)(pdfPgno)))
-                {
-                    using (var strm = new InMemoryRandomAccessStream())
-                    {
-                        var rect = pdfPage.Dimensions.ArtBox;
-                        var renderOpts = new PdfPageRenderOptions()
-                        {
-                            DestinationWidth = (uint)rect.Width,
-                            DestinationHeight = (uint)rect.Height,
-                        };
-                        if (pdfPage.Rotation != PdfPageRotation.Normal)
-                        {
-                            renderOpts.DestinationHeight = (uint)rect.Width;
-                            renderOpts.DestinationWidth = (uint)rect.Height;
-                        }
-                        await pdfPage.RenderToStreamAsync(strm, renderOpts);
-                        var strmLength = strm.Size;
-                        cacheEntry.cts.Token.ThrowIfCancellationRequested();
-                        bmi.BeginInit();
-                        bmi.StreamSource = strm.AsStream();
-                        bmi.Rotation = (Rotation)pdfViewerWindow.currentPdfMetaData.GetRotation(cacheEntry.pageNo);
-                        bmi.CacheOption = BitmapCacheOption.OnLoad;
-                        bmi.EndInit();
-                        bmi.StreamSource = null;
-                    }
-                }
-            }
-            return bmi;
         }
         public void ClearCache()
         {

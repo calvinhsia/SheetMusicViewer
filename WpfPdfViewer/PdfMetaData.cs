@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media.Imaging;
@@ -207,7 +208,7 @@ namespace WpfPdfViewer
                         }
                         catch (Exception ex)
                         {
-                            PdfViewerWindow.s_pdfViewerWindow.OnException($"Reading {curFullPathFile}" ,ex);
+                            PdfViewerWindow.s_pdfViewerWindow.OnException($"Reading {curFullPathFile}", ex);
                         }
                         return retval;
                     }
@@ -255,7 +256,7 @@ namespace WpfPdfViewer
                                 var justfnameCurrent = System.IO.Path.GetFileNameWithoutExtension(file).Trim();
                                 if (justFnamelast.Length == justfnameCurrent.Length) // file1, file2
                                 {
-                                    if (char.IsDigit(justfnameCurrent[justfnameCurrent.Length-1]))
+                                    if (char.IsDigit(justfnameCurrent[justfnameCurrent.Length - 1]))
                                     {
                                         if (justFnamelast.Substring(0, justFnamelast.Length - 1) ==
                                            justfnameCurrent.Substring(0, justfnameCurrent.Length - 1))
@@ -354,7 +355,7 @@ namespace WpfPdfViewer
                 }
                 catch (Exception ex)
                 {
-                    PdfViewerWindow.s_pdfViewerWindow.OnException($"Reading {bmkFile}",ex);
+                    PdfViewerWindow.s_pdfViewerWindow.OnException($"Reading {bmkFile}", ex);
                     // we don't want to delete the file because the user might have valuable bookmarks/favorites.
                     // let the user have an opportunity to fix it.
                 }
@@ -420,7 +421,7 @@ namespace WpfPdfViewer
             var pageNo = PageNumberOffset;
             for (int volNo = 0; volNo < lstVolInfo.Count; volNo++)
             {
-                var task = new Task<PdfDocument>((pg) =>
+                var task = new Task<PdfDocument>((pg) =>// can't be async
                 {
                     PdfDocument pdfDoc = null;
                     pdfDoc = GetPdfDocumentAsync((int)pg).GetAwaiter().GetResult();
@@ -585,6 +586,57 @@ namespace WpfPdfViewer
             return bmi;
         }
 
+        internal async Task<BitmapImage> CalculateBitMapImageForPageAsync(int PageNo, CancellationTokenSource cts, Size? SizeDesired)
+        {
+            BitmapImage bmi = null;
+            cts?.Token.ThrowIfCancellationRequested();
+            var (pdfDoc, pdfPgno) = await GetPdfDocumentForPageno(PageNo);
+            if (pdfDoc != null && pdfPgno >= 0 && pdfPgno < pdfDoc.PageCount)
+            {
+                using (var pdfPage = pdfDoc.GetPage((uint)(pdfPgno)))
+                {
+                    var rect = pdfPage.Dimensions.ArtBox;
+                    var renderOpts = new PdfPageRenderOptions();
+                    if (SizeDesired.HasValue)
+                    {
+                        renderOpts.DestinationWidth = (uint)SizeDesired.Value.Width;
+                        renderOpts.DestinationHeight = (uint)SizeDesired.Value.Height;
+                    }
+                    else
+                    {
+                        renderOpts.DestinationWidth = (uint)rect.Width;
+                        renderOpts.DestinationHeight = (uint)rect.Height;
+                    }
+                    if (pdfPage.Rotation != PdfPageRotation.Normal)
+                    {
+                        renderOpts.DestinationHeight = (uint)rect.Width;
+                        renderOpts.DestinationWidth = (uint)rect.Height;
+                    }
+                    bmi = await GetBitMapImageFromPdfPage(pdfPage, GetRotation(PageNo), renderOpts, cts);
+                }
+            }
+            return bmi;
+        }
+
+        private async Task<BitmapImage> GetBitMapImageFromPdfPage(PdfPage pdfPage, Rotation rotation, PdfPageRenderOptions renderOpts, CancellationTokenSource cts)
+        {
+            var bmi = new BitmapImage();
+            using (var strm = new InMemoryRandomAccessStream())
+            {
+                await pdfPage.RenderToStreamAsync(strm, renderOpts);
+                var strmLength = strm.Size;
+                cts?.Token.ThrowIfCancellationRequested();
+                bmi.BeginInit();
+                bmi.StreamSource = strm.AsStream();
+                bmi.Rotation = rotation;
+                bmi.CacheOption = BitmapCacheOption.OnLoad;
+                bmi.EndInit();
+                //                        bmi.Freeze();
+                //                        bmi.StreamSource = null;
+            }
+            return bmi;
+        }
+
         /// <summary>
         /// gets a thumbnail for the 1st page of a sequence of PDFs.
         /// </summary>
@@ -596,29 +648,28 @@ namespace WpfPdfViewer
             if (bmi == null)
             {
                 var pdfDoc = await GetPdfDocumentForFileAsync(GetFullPathFile(volNo: 0));
-                var pgcnt = pdfDoc.PageCount;
-                Debug.Assert(pgcnt > 0);
-                bmi = new BitmapImage();
-                using (var page = pdfDoc.GetPage(0))
+                using (var pdfPage = pdfDoc.GetPage(0))
                 {
-                    using (var strm = new InMemoryRandomAccessStream())
+                    var rect = pdfPage.Dimensions.ArtBox;
+                    var renderOpts = new PdfPageRenderOptions
                     {
-                        var rect = page.Dimensions.ArtBox;
-                        var renderOpts = new PdfPageRenderOptions
-                        {
-                            DestinationWidth = (uint)150, // match these with choose.xaml
-                            DestinationHeight = (uint)225
-                        };
+                        DestinationWidth = (uint)150, // match these with choose.xaml
+                        DestinationHeight = (uint)225
+                    };
+                    bmi = await GetBitMapImageFromPdfPage(pdfPage, GetRotation(PageNumberOffset), renderOpts, cts:null);
 
-                        await page.RenderToStreamAsync(strm, renderOpts);
-                        //var enc = new PngBitmapEncoder();
-                        //enc.Frames.Add(BitmapFrame.Create)
-                        bmi.BeginInit();
-                        bmi.StreamSource = strm.AsStream();
-                        bmi.CacheOption = BitmapCacheOption.OnLoad;
-                        bmi.Rotation = (Rotation)GetRotation(pgNo: PageNumberOffset);
-                        bmi.EndInit();
-                    }
+                    //using (var strm = new InMemoryRandomAccessStream())
+                    //{
+
+                    //    await pdfPage.RenderToStreamAsync(strm, renderOpts);
+                    //    //var enc = new PngBitmapEncoder();
+                    //    //enc.Frames.Add(BitmapFrame.Create)
+                    //    bmi.BeginInit();
+                    //    bmi.StreamSource = strm.AsStream();
+                    //    bmi.CacheOption = BitmapCacheOption.OnLoad;
+                    //    bmi.Rotation = (Rotation)GetRotation(pgNo: PageNumberOffset);
+                    //    bmi.EndInit();
+                    //}
                 }
                 bitmapImageCache = bmi;
                 if (PdfViewerWindow.s_pdfViewerWindow.currentPdfMetaData?._FullPathRootFile == _FullPathRootFile)

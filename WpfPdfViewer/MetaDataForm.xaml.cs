@@ -45,6 +45,7 @@ namespace WpfPdfViewer
             public int PageNo { get; set; }
             public string Description { get; set; }
         }
+        public int? PageNumberResult;
 
 
         readonly PdfViewerWindow _pdfViewerWindow;
@@ -204,6 +205,65 @@ namespace WpfPdfViewer
 
 
             //}
+
+        }
+
+
+        private void LvFav_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (this.lvFav.SelectedIndex >= 0)
+            {
+                if (lvFav.SelectedItem is FavDisp curItem)
+                {
+                    this.PageNumberResult = curItem.PageNo;
+                    this.DialogResult = true;
+                    this.Close();
+                }
+            }
+        }
+        private void LvFav_TouchDown(object sender, TouchEventArgs e)
+        {
+            if (this.lvFav.SelectedIndex >= 0)
+            {
+                if (PdfViewerWindow.IsDoubleTap(this.lvFav, e))
+                {
+                    if (lvFav.SelectedItem is FavDisp curItem)
+                    {
+                        this.PageNumberResult = curItem.PageNo;
+                        this.DialogResult = true;
+                        this.Close();
+                    }
+                }
+            }
+        }
+
+        private void LvTOC_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (this.lvTOC.SelectedIndex >= 0)
+            {
+                if (lvTOC.SelectedItem is TOCEntry curItem)
+                {
+                    this.PageNumberResult = curItem.PageNo;
+                    this.DialogResult = true;
+                    this.Close();
+                }
+            }
+        }
+
+        private void LvTOC_TouchDown(object sender, TouchEventArgs e)
+        {
+            if (this.lvTOC.SelectedIndex >= 0)
+            {
+                if (PdfViewerWindow.IsDoubleTap(this.lvTOC, e))
+                {
+                    if (lvTOC.SelectedItem is TOCEntry curItem)
+                    {
+                        this.PageNumberResult = curItem.PageNo;
+                        this.DialogResult = true;
+                        this.Close();
+                    }
+                }
+            }
 
         }
     }

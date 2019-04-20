@@ -177,31 +177,6 @@ namespace WpfPdfViewer
             ActivateTab(string.Empty);
         }
 
-        private readonly Stopwatch _doubleTapStopwatch = new Stopwatch();
-        private Point _lastTapLocation;
-
-        public static double GetDistanceBetweenPoints(Point p, Point q)
-        {
-            double a = p.X - q.X;
-            double b = p.Y - q.Y;
-            double distance = Math.Sqrt(a * a + b * b);
-            return distance;
-        }
-        private bool IsDoubleTap(TouchEventArgs e)
-        {
-            Point currentTapPosition = e.GetTouchPoint(this).Position;
-            bool tapsAreCloseInDistance = GetDistanceBetweenPoints(currentTapPosition, _lastTapLocation) < 40;
-            _lastTapLocation = currentTapPosition;
-
-            TimeSpan elapsed = _doubleTapStopwatch.Elapsed;
-            _doubleTapStopwatch.Restart();
-            //var x = System.Windows.Forms.SystemInformation.DoubleClickSize; // 4, 4
-            //var y = System.Windows.Forms.SystemInformation.DoubleClickTime; // 700
-            bool tapsAreCloseInTime = (elapsed != TimeSpan.Zero && elapsed < TimeSpan.FromMilliseconds(700));
-
-            return tapsAreCloseInDistance && tapsAreCloseInTime;
-        }
-
         private void ActivateTab(string tabItemHeader)
         {
             if (string.IsNullOrEmpty(tabItemHeader))
@@ -308,7 +283,7 @@ namespace WpfPdfViewer
                 {
                     if (this.lbBooks.SelectedIndex >= 0)
                     {
-                        if (IsDoubleTap(e))
+                        if (PdfViewerWindow.IsDoubleTap(this.lbBooks, e))
                         {
                             BtnOk_Click(o, e);
                         }

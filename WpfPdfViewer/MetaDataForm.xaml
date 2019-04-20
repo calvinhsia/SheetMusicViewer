@@ -76,7 +76,7 @@
             </StackPanel>
         </Grid>
         <DockPanel Grid.Row="1" Margin="0,0,0,5">
-            <ListView x:Name="lvTOC" ItemsSource="{Binding LstTOC}" IsSynchronizedWithCurrentItem="False" >
+            <ListView x:Name="lvTOC" ItemsSource="{Binding LstTOC}" IsSynchronizedWithCurrentItem="False" MouseDoubleClick="LvTOC_MouseDoubleClick" TouchDown="LvTOC_TouchDown" >
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
                         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -129,7 +129,7 @@
 
                 </ListView.View>
             </ListView>
-            <ListView ItemsSource="{Binding LstFavDisp}" >
+            <ListView Name="lvFav" ItemsSource="{Binding LstFavDisp}" TouchDown="LvFav_TouchDown" MouseDoubleClick="LvFav_MouseDoubleClick" >
                 <ListView.View>
                     <GridView>
                         <GridViewColumn Header="Page" DisplayMemberBinding="{Binding Path=PageNo}"/>

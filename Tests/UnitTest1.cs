@@ -85,7 +85,6 @@ namespace Tests
                                 bmi.EndInit();
 
                                 TestContext.WriteLine($"got page {pageNo,5}   strms={strm.Size,10:n0} {currentPdfMetaData} ");
-                                //                                break;
                             }
                         }
                     }
@@ -111,21 +110,30 @@ namespace Tests
             {
                 var w = new WpfPdfViewer.PdfViewerWindow
                 {
+//                    _RootMusicFolder = Path.Combine(Rootfolder, "FakeBooks")
                     _RootMusicFolder = Rootfolder
                 };
                 var testw = new Window();
+                //var sp = new StackPanel() { Orientation = Orientation.Vertical };
+                //var tbTxt = new TextBlock();
+                //sp.Children.Add(tbTxt);
+                //var im = new Image();
+                //sp.Children.Add(im);
+                //testw.Content = sp;
                 testw.Show();
                 var lstMetaData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
+                int cnt = 0;
                 foreach (var currentPdfMetaData in lstMetaData)
                 {
                     var sw = Stopwatch.StartNew();
-//                    var currentPdfMetaData = lstMetaData.Where(m => m.GetFullPathFile(volNo: 0).Contains("Fake")).First();
+                    //                    var currentPdfMetaData = lstMetaData.Where(m => m.GetFullPathFile(volNo: 0).Contains("Fake")).First();
                     w.currentPdfMetaData = currentPdfMetaData;
                     w.currentPdfMetaData.InitializeListPdfDocuments();
                     //var cacheEntry = PdfViewerWindow.CacheEntry.TryAddCacheEntry(mpdf.PageNumberOffset);
                     //await cacheEntry.task;
                     //// calling thread must be STA, UIThread
                     //var res = cacheEntry.task.Result;
+                    TestContext.WriteLine($"Starting book {w.currentPdfMetaData}");
                     for (var iter = 0; iter < 1; iter++)
                     {
                         var pageNo = 0;
@@ -134,13 +142,14 @@ namespace Tests
                             var cacheEntry = w._pageCache.TryAddCacheEntry(pageNo);
                             await cacheEntry.task;
                             var bmi = cacheEntry.task.Result;
-                            var image = new Image() { Source = bmi };
-                            testw.Content = image;
-                            TestContext.WriteLine($"got page {pageNo,8}   bmi={bmi.Width:n0}, {bmi.Height:n0}  {sw.Elapsed.TotalSeconds,8:n4} {currentPdfMetaData} ");
+                            testw.Content = new Image() { Source = bmi };
+                            testw.Title = $"{cnt++} {pageNo,8}   bmi={bmi.Width:n0}, {bmi.Height:n0}  {sw.Elapsed.TotalSeconds,8:n4} {currentPdfMetaData} ";
+                            TestContext.WriteLine(testw.Title );
                             //break;
                         }
                     }
                 }
+                TestContext.WriteLine($"Done with all");
                 ev.Set();
             });
             ev.Wait();

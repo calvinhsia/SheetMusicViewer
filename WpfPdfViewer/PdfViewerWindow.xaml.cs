@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Printing;
@@ -281,6 +282,8 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             _DisableSliderValueChanged = false;
             //this.slider.IsDirectionReversed = true;
             this.PdfUIEnabled = true;
+            this.Title = $"MyMusicViewer {currentPdfMetaData.GetFullPathFile(volNo: 0, MakeRelative:false)}";
+            OnMyPropertyChanged(nameof(Title));
             OnMyPropertyChanged(nameof(PdfTitle));
             OnMyPropertyChanged(nameof(ImgThumbImage));
             OnMyPropertyChanged(nameof(MaxPageNumber));
@@ -787,7 +790,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
         }
         bool IsShowingMetaDataForm = false;
-        private void ImgThumb_Click(object sender, RoutedEventArgs e)
+        private async void ImgThumb_Click(object sender, RoutedEventArgs e)
         {
             if (!IsShowingMetaDataForm && currentPdfMetaData != null)
             {
@@ -795,10 +798,38 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 var w = new MetaDataForm(this);
                 if (w.ShowDialog() == true)
                 {
+                    if (w.PageNumberResult.HasValue)
+                    {
+                        await ShowPageAsync(w.PageNumberResult.Value, ClearCache: true);
+                    }
 
                 }
                 IsShowingMetaDataForm = false;
             }
+        }
+        private static readonly Stopwatch _doubleTapStopwatch = new Stopwatch();
+        private static Point _lastTapLocation;
+
+        public static double GetDistanceBetweenPoints(Point p, Point q)
+        {
+            double a = p.X - q.X;
+            double b = p.Y - q.Y;
+            double distance = Math.Sqrt(a * a + b * b);
+            return distance;
+        }
+        public static bool IsDoubleTap(IInputElement sender, TouchEventArgs e)
+        {
+            Point currentTapPosition = e.GetTouchPoint(sender).Position;
+            bool tapsAreCloseInDistance = GetDistanceBetweenPoints(currentTapPosition, _lastTapLocation) < 40;
+            _lastTapLocation = currentTapPosition;
+
+            TimeSpan elapsed = _doubleTapStopwatch.Elapsed;
+            _doubleTapStopwatch.Restart();
+            //var x = System.Windows.Forms.SystemInformation.DoubleClickSize; // 4, 4
+            //var y = System.Windows.Forms.SystemInformation.DoubleClickTime; // 700
+            bool tapsAreCloseInTime = (elapsed != TimeSpan.Zero && elapsed < TimeSpan.FromMilliseconds(700));
+
+            return tapsAreCloseInDistance && tapsAreCloseInTime;
         }
     }
 }
