@@ -75,7 +75,7 @@ namespace WpfPdfViewer
         public int MaxPageNumber { get { return currentPdfMetaData == null ? 0 : (int)currentPdfMetaData.NumPagesInSet + currentPdfMetaData.PageNumberOffset; } }
         public string PdfTitle { get { return currentPdfMetaData?.GetFullPathFile(volNo: 0, MakeRelative: true); } }
 
-        public BitmapImage ImgThumbImage { get { return currentPdfMetaData?.GetBitmapImageThumbnail(); } }
+        public BitmapImage ImgThumbImage { get { return currentPdfMetaData?.bitmapImageCache; } }
         public string Description0 { get { return currentPdfMetaData?.GetDescription(CurrentPageNumber); } }
         public string Description1 { get { return currentPdfMetaData?.GetDescription(CurrentPageNumber + 1); } }
         bool _fShow2Pages = true;

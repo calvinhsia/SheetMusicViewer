@@ -28,7 +28,7 @@ namespace WpfPdfViewer
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
-        public BitmapImage ImgThumb { get { return _pdfViewerWindow.currentPdfMetaData?.GetBitmapImageThumbnail(); } }
+        public BitmapImage ImgThumb { get { return _pdfViewerWindow.currentPdfMetaData?.bitmapImageCache; } }
 
         public int PageNumberOffset { get; set; }
         public List<string> LstVolInfo { get; set; }

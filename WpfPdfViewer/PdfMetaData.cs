@@ -576,15 +576,15 @@ namespace WpfPdfViewer
         {
             return lstTocEntries.Count;
         }
-        public BitmapImage GetBitmapImageThumbnail()
-        {
-            var bmi = bitmapImageCache;
-            if (bmi == null)
-            {
-                bmi = this.bitmapImageCache;
-            }
-            return bmi;
-        }
+        //public BitmapImage GetBitmapImageThumbnail()
+        //{
+        //    var bmi = bitmapImageCache;
+        //    if (bmi == null)
+        //    {
+        //        bmi = this.bitmapImageCache;
+        //    }
+        //    return bmi;
+        //}
 
         internal async Task<BitmapImage> CalculateBitMapImageForPageAsync(int PageNo, CancellationTokenSource cts, Size? SizeDesired)
         {

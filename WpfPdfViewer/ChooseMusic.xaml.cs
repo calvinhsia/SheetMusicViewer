@@ -322,7 +322,7 @@ namespace WpfPdfViewer
                     var sp = new StackPanel() { Orientation = Orientation.Vertical };
                     sp.Tag = pdfMetaDataItem;
                     await pdfMetaDataItem.GetBitmapImageThumbnailAsync();
-                    sp.Children.Add(new Image() { Source = pdfMetaDataItem.GetBitmapImageThumbnail() });
+                    sp.Children.Add(new Image() { Source = pdfMetaDataItem?.bitmapImageCache });
                     sp.Children.Add(new TextBlock()
                     {
                         Text = pdfMetaDataItem.GetFullPathFile(volNo: 0, MakeRelative: true),
