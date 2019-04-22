@@ -423,8 +423,10 @@ namespace WpfPdfViewer
             {
                 var task = new Task<PdfDocument>((pg) =>// can't be async
                 {
-                    PdfDocument pdfDoc = null;
-                    pdfDoc = GetPdfDocumentAsync((int)pg).GetAwaiter().GetResult();
+                    var pathPdfFileVol = GetFullPathFileFromPageNo((int)pg);
+                    var pdfDoc= GetPdfDocumentForFileAsync(pathPdfFileVol).GetAwaiter().GetResult();
+                    //PdfDocument pdfDoc = null;
+                    //pdfDoc = GetPdfDocumentAsync((int)pg).GetAwaiter().GetResult();
                     return pdfDoc;
                 }, pageNo);
                 pageNo += lstVolInfo[volNo].NPagesInThisVolume;
@@ -487,11 +489,6 @@ namespace WpfPdfViewer
                 }
             }
             return (pdfDoc, pdfPgNo);
-        }
-        public async Task<PdfDocument> GetPdfDocumentAsync(int pageNo)
-        {
-            var pathPdfFileVol = GetFullPathFileFromPageNo(pageNo);
-            return await GetPdfDocumentForFileAsync(pathPdfFileVol);
         }
         public static async Task<PdfDocument> GetPdfDocumentForFileAsync(string pathPdfFileVol)
         {

@@ -435,7 +435,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                                         break;
                                     }
                                     await ShowPageAsync(pg, ClearCache: false);
-                                    await Task.Delay(1000);
+//                                    await Task.Delay(100);
                                 }
                                 ctsPageScan = null;
                             }
