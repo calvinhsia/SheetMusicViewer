@@ -562,7 +562,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
             else
             {
-                var delta = isPrevious ? NumPagesPerView : -NumPagesPerView;
+                var delta = isPrevious ? -NumPagesPerView : NumPagesPerView;
                 NavigateAsync(delta);
             }
         }

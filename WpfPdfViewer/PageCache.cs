@@ -57,7 +57,7 @@ namespace WpfPdfViewer
                     };
                     cacheEntry.task = pdfViewerWindow.currentPdfMetaData.CalculateBitMapImageForPageAsync(cacheEntry.pageNo, cacheEntry.cts, SizeDesired: null);
 
-                    int cacheSize = 30;
+                    int cacheSize = 50;
                     if (dictCache.Count > cacheSize)
                     {
                         var lst = dictCache.Values.OrderBy(s => s.age).Take(dictCache.Count - cacheSize);

@@ -241,7 +241,7 @@ namespace WpfPdfViewer
                         var lastFile = string.Empty;
                         var pgOffset = 0;
                         nContinuations = 0;
-                        foreach (var file in Directory.EnumerateFiles(curPath, "*.pdf").OrderBy(f => f))//.Where(f=>f.Contains("Miser"))) // "file" is fullpath
+                        foreach (var file in Directory.EnumerateFiles(curPath, "*.pdf").OrderBy(f => f.ToLower()))//.Where(f=>f.Contains("Miser"))) // "file" is fullpath
                         {
                             if (file.Contains("Sonaten"))
                             {
@@ -252,8 +252,8 @@ namespace WpfPdfViewer
                                 System.IO.Path.GetDirectoryName(lastFile) == System.IO.Path.GetDirectoryName(file))
                             {
                                 // if the prior added file and this file differ by ony a single char, treat as continuation. E.g. file1.pdf, file2.pdf
-                                var justFnamelast = System.IO.Path.GetFileNameWithoutExtension(lastFile).Trim();
-                                var justfnameCurrent = System.IO.Path.GetFileNameWithoutExtension(file).Trim();
+                                var justFnamelast = System.IO.Path.GetFileNameWithoutExtension(lastFile).Trim().ToLower();
+                                var justfnameCurrent = System.IO.Path.GetFileNameWithoutExtension(file).Trim().ToLower();
                                 if (justFnamelast.Length == justfnameCurrent.Length) // file1, file2
                                 {
                                     if (char.IsDigit(justfnameCurrent[justfnameCurrent.Length - 1]))
