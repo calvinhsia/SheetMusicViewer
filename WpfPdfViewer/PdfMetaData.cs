@@ -621,7 +621,6 @@ namespace WpfPdfViewer
             using (var strm = new InMemoryRandomAccessStream())
             {
                 await pdfPage.RenderToStreamAsync(strm, renderOpts);
-                var strmLength = strm.Size;
                 cts?.Token.ThrowIfCancellationRequested();
                 bmi.BeginInit();
                 bmi.StreamSource = strm.AsStream();

@@ -15,7 +15,6 @@ namespace WpfPdfViewer
     public class MyInkCanvas : InkCanvas
     {
         private readonly PdfViewerWindow _pdfViewerWindow;
-        private readonly CheckBox _chkInk;
         readonly BitmapImage _bmImage;
         readonly int _PgNo;
         Size _availSize;
@@ -23,7 +22,6 @@ namespace WpfPdfViewer
         public MyInkCanvas(BitmapImage bmImage, PdfViewerWindow pdfViewerWindow, CheckBox chkInk, int PgNo)
         {
             this._pdfViewerWindow = pdfViewerWindow;
-            this._chkInk = chkInk;
             this._PgNo = PgNo;
             _bmImage = bmImage;
             if (chkInk.IsChecked == false)
@@ -34,19 +32,6 @@ namespace WpfPdfViewer
             {
                 AddCtxtMenu();
             }
-            _chkInk.Checked += (oc, ec) =>
-              {
-                  this.EditingMode = InkCanvasEditingMode.Ink;
-                  AddCtxtMenu();
-              };
-            _chkInk.Unchecked += (o, e) =>
-              {
-                  this.ContextMenu = null;
-                  this.EditingMode = InkCanvasEditingMode.None;
-                  SaveInk();
-                  //this._pdfViewerWindow.dpPage.Children.Clear();   ///xxxxx temporary for testing 
-                  //await this._pdfViewerWindow.ShowPageAsync(_PgNo, ClearCache: false);///xxxxx temporary for testing 
-              };
             //var imBrush = new ImageBrush(bmImage);
             //Background = imBrush;
             //Background = Brushes.AliceBlue;
@@ -62,6 +47,25 @@ namespace WpfPdfViewer
 //                      LoadInk();
                   };
         }
+
+        public void ChkInkToggled(object sender, RoutedEventArgs e)
+        {
+            var isChked = e.RoutedEvent.Name == "Checked";
+            if (isChked)
+            {
+                this.EditingMode = InkCanvasEditingMode.Ink;
+                AddCtxtMenu();
+            }
+            else
+            {
+                this.ContextMenu = null;
+                this.EditingMode = InkCanvasEditingMode.None;
+                SaveInk();
+                //      //this._pdfViewerWindow.dpPage.Children.Clear();   ///xxxxx temporary for testing 
+                //      //await this._pdfViewerWindow.ShowPageAsync(_PgNo, ClearCache: false);///xxxxx temporary for testing 
+            }
+        }
+
         void AddCtxtMenu()
         {
             if (this.ContextMenu == null)

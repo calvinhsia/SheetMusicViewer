@@ -428,14 +428,19 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                             if (ctsPageScan == null)
                             {
                                 ctsPageScan = new CancellationTokenSource();
-                                for (int pg = currentPdfMetaData.PageNumberOffset; pg < MaxPageNumber; pg++)
+                                var done = false;
+                                while (!done)
                                 {
-                                    if (ctsPageScan.IsCancellationRequested)
+                                    for (int pg = currentPdfMetaData.PageNumberOffset; pg < MaxPageNumber; pg++)
                                     {
-                                        break;
+                                        if (ctsPageScan.IsCancellationRequested)
+                                        {
+                                            done = true;
+                                            break;
+                                        }
+                                        await ShowPageAsync(pg, ClearCache: false);
+                                        await Task.Delay(100);
                                     }
-                                    await ShowPageAsync(pg, ClearCache: false);
-//                                    await Task.Delay(100);
                                 }
                                 ctsPageScan = null;
                             }
@@ -468,11 +473,8 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 var nameSender = ((CheckBox)sender).Name;
                 var pgno = CurrentPageNumber + (nameSender == "chkInk0" ? 0 : 1);
                 var isChked = e.RoutedEvent.Name == "Checked";
-                if (!isChked) // toggled off. see if ink needs saving
-                {
-                    var curCanvas = inkCanvas[pgno - CurrentPageNumber];
-                    //SaveInk(pgno, curCanvas);
-                }
+                var curCanvas = inkCanvas[pgno - CurrentPageNumber];
+                curCanvas.ChkInkToggled(sender, e);
                 this.dpPage.Children.Clear();
                 await ShowPageAsync(CurrentPageNumber, ClearCache: false);
             }

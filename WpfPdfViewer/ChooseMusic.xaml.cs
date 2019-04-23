@@ -259,7 +259,10 @@ namespace WpfPdfViewer
                 };
                 br._BrowseList.MouseDoubleClick += (o, e) =>
                 {
-                    BtnOk_Click(o, e);
+                    if (this.lbBooks.SelectedIndex >= 0)
+                    {
+                        BtnOk_Click(o, e);
+                    }
                 };
                 br._BrowseList.KeyUp += (o, e) =>
                 {
@@ -274,28 +277,6 @@ namespace WpfPdfViewer
         {
             if (this.lbBooks.ItemsSource == null)
             {
-
-                this.lbBooks.MouseDoubleClick += (o, e) =>
-                  {
-                      BtnOk_Click(o, e);
-                  };
-                this.lbBooks.TouchDown += (o, e) =>
-                {
-                    if (this.lbBooks.SelectedIndex >= 0)
-                    {
-                        if (PdfViewerWindow.IsDoubleTap(this.lbBooks, e))
-                        {
-                            BtnOk_Click(o, e);
-                        }
-                    }
-                };
-                //this.lbBooks.TouchUp += (o, e) =>
-                // {
-                //     if (DateTime.Now- lastTouch > TimeSpan.FromMilliseconds(500))
-                //     {
-                //         BtnOk_Click(this, e);
-                //     }
-                // };
                 this.lbBooks.KeyUp += (o, e) =>
                  {
                      if (e.Key == Key.Return)
@@ -319,8 +300,9 @@ namespace WpfPdfViewer
                         lstPdfMetaFileData.
                         OrderBy(p => p.GetFullPathFile(volNo: 0, MakeRelative: true)))
                 {
+                    var contentControl = new ContentControl();
                     var sp = new StackPanel() { Orientation = Orientation.Vertical };
-                    sp.Tag = pdfMetaDataItem;
+                    contentControl.Tag = pdfMetaDataItem;
                     await pdfMetaDataItem.GetBitmapImageThumbnailAsync();
                     sp.Children.Add(new Image() { Source = pdfMetaDataItem?.bitmapImageCache });
                     sp.Children.Add(new TextBlock()
@@ -335,7 +317,19 @@ namespace WpfPdfViewer
                         ToolTip = data
                     });
                     await Task.Delay(0);
-                    lst.Add(sp);
+                    contentControl.Content = sp;
+                    lst.Add(contentControl);
+                    contentControl.MouseDoubleClick += (o, e) =>
+                      {
+                          BtnOk_Click(this, e);
+                      };
+                    contentControl.TouchDown += (o, e) =>
+                      {
+                          if (PdfViewerWindow.IsDoubleTap(this.lbBooks, e))
+                          {
+                              BtnOk_Click(o, e);
+                          }
+                      };
                 }
             }
         }

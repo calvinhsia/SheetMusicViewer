@@ -26,14 +26,14 @@ namespace LeakTest
     /// </summary>
     public partial class MainWindow : Window
     {
-        Random _Rand = new Random();
+        readonly Random _Rand = new Random();
         readonly string root1 = @"c:\Sheetmusic";
         readonly string root2 = @"f:\Sheetmusic";
         string Rootfolder { get { if (Directory.Exists(root1)) { return root1; } return root2; } }
         public MainWindow()
         {
             InitializeComponent();
-            this.Loaded += MainWindow_Loadedtry;
+            this.Loaded += MainWindow_Loaded;
         }
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -53,7 +53,6 @@ namespace LeakTest
             };
 
             var lstMetaData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
-            int cnt = 0;
             foreach (var currentPdfMetaData in lstMetaData.Where(p => p.GetFullPathFile(volNo: 0).Contains("Classical Fake")))
             {
                 var sw = Stopwatch.StartNew();
@@ -98,9 +97,11 @@ namespace LeakTest
                         using (var strm = new InMemoryRandomAccessStream())
                         {
                             var rect = pdfPage.Dimensions.ArtBox;
-                            var renderOpts = new PdfPageRenderOptions();
-                            renderOpts.DestinationWidth = (uint)(rect.Width + 100 * (_Rand.Next(100) - 100));
-                            renderOpts.DestinationHeight = (uint)(rect.Height + 200 * (_Rand.Next(200) - 100));
+                            var renderOpts = new PdfPageRenderOptions
+                            {
+                                DestinationWidth = (uint)(rect.Width + 100 * (_Rand.Next(100) - 100)),
+                                DestinationHeight = (uint)(rect.Height + 200 * (_Rand.Next(200) - 100))
+                            };
                             if (pdfPage.Rotation != PdfPageRotation.Normal)
                             {
                                 renderOpts.DestinationHeight = (uint)rect.Width;

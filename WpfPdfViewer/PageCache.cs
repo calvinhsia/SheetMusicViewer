@@ -57,7 +57,7 @@ namespace WpfPdfViewer
                     };
                     cacheEntry.task = pdfViewerWindow.currentPdfMetaData.CalculateBitMapImageForPageAsync(cacheEntry.pageNo, cacheEntry.cts, SizeDesired: null);
 
-                    int cacheSize = 50;
+                    int cacheSize = 30;
                     if (dictCache.Count > cacheSize)
                     {
                         var lst = dictCache.Values.OrderBy(s => s.age).Take(dictCache.Count - cacheSize);
@@ -65,8 +65,6 @@ namespace WpfPdfViewer
                         {
                             dictCache.Remove(entry.pageNo);
                         }
-                        System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
-                        GC.Collect(2);
                     }
                     dictCache[PageNo] = cacheEntry;
                 }
