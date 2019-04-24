@@ -100,6 +100,7 @@ namespace WpfPdfViewer
 
         internal string _RootMusicFolder;
         internal List<PdfMetaData> lstPdfMetaFileData = new List<PdfMetaData>();
+        internal List<string> lstFolders = new List<string>();
 
         internal PdfMetaData currentPdfMetaData = null;
         internal static PdfViewerWindow s_pdfViewerWindow;
@@ -241,7 +242,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 }
                 else
                 {
-                    lstPdfMetaFileData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(_RootMusicFolder);
+                    (lstPdfMetaFileData, lstFolders) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(_RootMusicFolder);
                     this.btnChooser.IsEnabled = true;
                     var lastPdfMetaData = lstPdfMetaFileData.Where(p => p.GetFullPathFile(volNo: 0, MakeRelative: true) == lastPdfOpen).FirstOrDefault();
                     if (lastPdfMetaData != null)
@@ -282,7 +283,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             _DisableSliderValueChanged = false;
             //this.slider.IsDirectionReversed = true;
             this.PdfUIEnabled = true;
-            this.Title = $"MyMusicViewer {currentPdfMetaData.GetFullPathFile(volNo: 0, MakeRelative:false)}";
+            this.Title = $"MyMusicViewer {currentPdfMetaData.GetFullPathFile(volNo: 0, MakeRelative: false)}";
             OnMyPropertyChanged(nameof(Title));
             OnMyPropertyChanged(nameof(PdfTitle));
             OnMyPropertyChanged(nameof(ImgThumbImage));

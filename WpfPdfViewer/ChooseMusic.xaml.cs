@@ -169,7 +169,7 @@ namespace WpfPdfViewer
             this.tabControl.SelectedIndex = 0;
             _pdfViewerWindow.CloseCurrentPdfFile();
             _pdfViewerWindow.lstPdfMetaFileData.Clear(); // release mem
-            _pdfViewerWindow.lstPdfMetaFileData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(selectedPath);
+            (_pdfViewerWindow.lstPdfMetaFileData, _pdfViewerWindow.lstFolders) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(selectedPath);
             this.lbBooks.ItemsSource = null;
             this.dpTview.Children.Clear();
             this.dpQuery.Children.Clear();
@@ -288,48 +288,115 @@ namespace WpfPdfViewer
                 {
                     e.Handled = true; // prevent bubbling SelectionChanged up to tabcontrol
                 };
-                this.tbxTotals.Text = $@"Total #Books = {
-                    _pdfViewerWindow.lstPdfMetaFileData.Count()} # Songs = {
-                    _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.lstTocEntries.Count):n0} # Pages = {
-                    _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.NumPagesInSet):n0} #Fav={
-                    _pdfViewerWindow.lstPdfMetaFileData.Sum(p => p.dictFav.Count):n0}";
-                var lst = new ObservableCollection<UIElement>();
-                this.lbBooks.ItemsSource = lst;
-                foreach (var pdfMetaDataItem in
-                        _pdfViewerWindow.
-                        lstPdfMetaFileData.
-                        OrderBy(p => p.GetFullPathFile(volNo: 0, MakeRelative: true)))
+
+                var lstBooks = new ObservableCollection<UIElement>();
+                this.lbBooks.ItemsSource = lstBooks;
+
+                var lstFoldrs = new ObservableCollection<UIElement>();
+                this.lbfolders.ItemsSource = lstFoldrs;
+                foreach (var folder in _pdfViewerWindow.lstFolders)
                 {
-                    var contentControl = new ContentControl();
-                    var sp = new StackPanel() { Orientation = Orientation.Vertical };
-                    contentControl.Tag = pdfMetaDataItem;
-                    await pdfMetaDataItem.GetBitmapImageThumbnailAsync();
-                    sp.Children.Add(new Image() { Source = pdfMetaDataItem?.bitmapImageCache });
-                    sp.Children.Add(new TextBlock()
+                    var chkbox = new CheckBox()
                     {
-                        Text = pdfMetaDataItem.GetFullPathFile(volNo: 0, MakeRelative: true),
-                        ToolTip = pdfMetaDataItem.GetFullPathFile(volNo: 0)
-                    });
-                    var data = $"#Sngs={pdfMetaDataItem.GetSongCount()} Pg={pdfMetaDataItem.GetTotalPageCount()} Fav={pdfMetaDataItem.dictFav.Count}";
-                    sp.Children.Add(new TextBlock()
+                        Content = folder,
+                        IsChecked = true
+                    };
+                    chkbox.Checked += async (o, e) =>
                     {
-                        Text = $"#Sngs={pdfMetaDataItem.GetSongCount()} Pg={pdfMetaDataItem.GetTotalPageCount()} Fav={pdfMetaDataItem.dictFav.Count}",
-                        ToolTip = data
-                    });
-                    await Task.Delay(0);
-                    contentControl.Content = sp;
-                    lst.Add(contentControl);
-                    contentControl.MouseDoubleClick += (o, e) =>
-                      {
-                          BtnOk_Click(this, e);
-                      };
-                    contentControl.TouchDown += (o, e) =>
-                      {
-                          if (PdfViewerWindow.IsDoubleTap(this.lbBooks, e))
-                          {
-                              BtnOk_Click(o, e);
-                          }
-                      };
+                        await FillBookItemsAsync();
+                    };
+                    chkbox.Unchecked += async (o, e) =>
+                    {
+                        await FillBookItemsAsync();
+                    };
+                    lstFoldrs.Add(chkbox);
+                }
+                tbxFilter.TextChanged += async (o, e) =>
+                   {
+                       await FillBookItemsAsync();
+                   };
+                await FillBookItemsAsync();
+                async Task FillBookItemsAsync()
+                {
+                    lstBooks.Clear();
+                    var nBooks = 0;
+                    var nSongs = 0;
+                    var nPages = 0;
+                    var nFavs = 0;
+                    foreach (var pdfMetaDataItem in
+                            _pdfViewerWindow.
+                            lstPdfMetaFileData.
+                            OrderBy(p => p.GetFullPathFile(volNo: 0, MakeRelative: true)))
+                    {
+                        var includeThisItem = false;
+                        foreach (CheckBox chk in lstFoldrs)
+                        {
+                            if (chk.IsChecked == true)
+                            {
+                                var str = chk.Content as string + System.IO.Path.DirectorySeparatorChar.ToString();
+                                if (pdfMetaDataItem.GetFullPathFile(volNo: 0, MakeRelative: true).IndexOf(str) >= 0) 
+                                {
+                                    includeThisItem = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!includeThisItem)
+                        {
+                            continue;
+                        }
+                        if (tbxFilter.Text.Trim().Length > 0)
+                        {
+                            if (pdfMetaDataItem.GetFullPathFile(volNo: 0, MakeRelative: true).IndexOf(tbxFilter.Text.Trim(), StringComparison.OrdinalIgnoreCase) < 0)
+                            {
+                                continue;
+                            }
+                        }
+                        //if (pdfMetaDataItem._FullPathFile)
+                        //{
+
+                        //}
+                        var contentControl = new ContentControl();
+                        var sp = new StackPanel() { Orientation = Orientation.Vertical };
+                        contentControl.Tag = pdfMetaDataItem;
+                        await pdfMetaDataItem.GetBitmapImageThumbnailAsync();
+                        sp.Children.Add(new Image() { Source = pdfMetaDataItem?.bitmapImageCache });
+                        sp.Children.Add(new TextBlock()
+                        {
+                            Text = pdfMetaDataItem.GetFullPathFile(volNo: 0, MakeRelative: true),
+                            ToolTip = pdfMetaDataItem.GetFullPathFile(volNo: 0)
+                        });
+                        var data = $"#Sngs={pdfMetaDataItem.GetSongCount()} Pg={pdfMetaDataItem.GetTotalPageCount()} Fav={pdfMetaDataItem.dictFav.Count}";
+                        sp.Children.Add(new TextBlock()
+                        {
+                            Text = $"#Sngs={pdfMetaDataItem.GetSongCount()} Pg={pdfMetaDataItem.GetTotalPageCount()} Fav={pdfMetaDataItem.dictFav.Count}",
+                            ToolTip = data
+                        });
+                        await Task.Delay(0);
+                        contentControl.Content = sp;
+                        lstBooks.Add(contentControl);
+                        contentControl.MouseDoubleClick += (o, e) =>
+                        {
+                            BtnOk_Click(this, e);
+                        };
+                        contentControl.TouchDown += (o, e) =>
+                        {
+                            if (PdfViewerWindow.IsDoubleTap(this.lbBooks, e))
+                            {
+                                BtnOk_Click(o, e);
+                            }
+                        };
+                        nBooks++;
+                        nSongs += pdfMetaDataItem.lstTocEntries.Count;
+                        nPages += pdfMetaDataItem.NumPagesInSet;
+                        nFavs += pdfMetaDataItem.dictFav.Count;
+                    }
+                    this.tbxTotals.Text = $@"Total #Books = {
+                        nBooks} # Songs = {
+                        nSongs:n0} # Pages = {
+                        nPages:n0} #Fav={
+                        nFavs:n0}";
+
                 }
             }
         }
@@ -446,6 +513,5 @@ namespace WpfPdfViewer
             e.Handled = true;
             this.Close();
         }
-
     }
 }

@@ -25,7 +25,8 @@ namespace WpfPdfViewer
     [Serializable]
     public class PdfMetaData
     {
-        private string _FullPathRootFile;
+        [XmlIgnore]
+        public string _FullPathFile;
 
         /// <summary>
         /// num pages in all volumes of set
@@ -120,8 +121,8 @@ namespace WpfPdfViewer
         }
         public string GetFullPathFile(int volNo, bool MakeRelative = false)
         {
-            var retval = _FullPathRootFile;
-            if (_FullPathRootFile.EndsWith("0.pdf"))
+            var retval = _FullPathFile;
+            if (_FullPathFile.EndsWith("0.pdf"))
             {
                 retval = retval.Replace("0.pdf", string.Empty) + volNo.ToString() + ".pdf";
             }
@@ -140,13 +141,13 @@ namespace WpfPdfViewer
         }
         public string GetFullPathFileFromPageNo(int pageNo)
         {
-            var retval = _FullPathRootFile;
-            if (_FullPathRootFile.EndsWith("0.pdf"))
+            var retval = _FullPathFile;
+            if (_FullPathFile.EndsWith("0.pdf"))
             {
                 var volNo = GetVolNumFromPageNum(pageNo);
                 retval = retval.Replace("0.pdf", string.Empty) + volNo.ToString() + ".pdf";
             }
-            else if (_FullPathRootFile.EndsWith("1.pdf"))
+            else if (_FullPathFile.EndsWith("1.pdf"))
             {
                 var volNo = GetVolNumFromPageNum(pageNo) + 1; // no page 0, so 1 based
                 retval = retval.Replace("1.pdf", string.Empty) + volNo.ToString() + ".pdf";
@@ -182,12 +183,13 @@ namespace WpfPdfViewer
             return volno;
         }
 
-        internal static async Task<List<PdfMetaData>> LoadAllPdfMetaDataFromDiskAsync(string _RootMusicFolder)
+        internal static async Task<(List<PdfMetaData>, List<string>)> LoadAllPdfMetaDataFromDiskAsync(string rootMusicFolder)
         {
             var lstPdfMetaFileData = new List<PdfMetaData>();
-            if (!string.IsNullOrEmpty(_RootMusicFolder) && Directory.Exists(_RootMusicFolder))
+            var lstFolders = new List<string>(); // folder names modulo root
+            if (!string.IsNullOrEmpty(rootMusicFolder) && Directory.Exists(rootMusicFolder))
             {
-                var pathCurrentMusicFolder = _RootMusicFolder;
+                var pathCurrentMusicFolder = rootMusicFolder;
                 lstPdfMetaFileData.Clear();
                 await Task.Run(async () =>
                 {
@@ -221,7 +223,7 @@ namespace WpfPdfViewer
                             {
                                 curPdfFileData.lstTocEntries.Add(new TOCEntry()
                                 {
-                                    SongName = Path.GetFileNameWithoutExtension(curPdfFileData._FullPathRootFile)
+                                    SongName = Path.GetFileNameWithoutExtension(curPdfFileData._FullPathFile)
                                 });
                                 curPdfFileData.IsDirty = true;
                             }
@@ -236,11 +238,12 @@ namespace WpfPdfViewer
                         }
                         nContinuations = 0;
                     }
-                    async Task recurDirsAsync(string curPath)
+                    async Task<int> recurDirsAsync(string curPath)
                     {
                         var lastFile = string.Empty;
                         var pgOffset = 0;
                         nContinuations = 0;
+                        var cntItems = 0;
                         foreach (var file in Directory.EnumerateFiles(curPath, "*.pdf").OrderBy(f => f.ToLower()))//.Where(f=>f.Contains("Miser"))) // "file" is fullpath
                         {
                             if (file.Contains("Sonaten"))
@@ -297,7 +300,10 @@ namespace WpfPdfViewer
                             else
                             {
                                 SaveMetaData();
-                                await TryAddFileAsync(file);
+                                if (await TryAddFileAsync(file))
+                                {
+                                    cntItems++;
+                                }
                                 if (curPdfFileData != null)
                                 {
                                     pgOffset = curPdfFileData.lstVolInfo[0].NPagesInThisVolume;
@@ -308,12 +314,17 @@ namespace WpfPdfViewer
                         SaveMetaData();
                         foreach (var dir in Directory.EnumerateDirectories(curPath))
                         {
-                            await recurDirsAsync(dir);
+                            if (await recurDirsAsync(dir) > 0)
+                            {
+                                var justdir = dir.Substring(rootMusicFolder.Length + 1);
+                                lstFolders.Add(justdir);
+                            }
                         }
+                        return cntItems;
                     }
                 });
             }
-            return lstPdfMetaFileData;
+            return (lstPdfMetaFileData, lstFolders);
         }
 
         public static async Task<PdfMetaData> ReadPdfMetaDataAsync(string FullPathPdfFile)
@@ -328,7 +339,7 @@ namespace WpfPdfViewer
                     using (var sr = new StreamReader(bmkFile))
                     {
                         pdfFileData = (PdfMetaData)serializer.Deserialize(sr);
-                        pdfFileData._FullPathRootFile = FullPathPdfFile;
+                        pdfFileData._FullPathFile = FullPathPdfFile;
                         pdfFileData.initialLastPageNo = pdfFileData.LastPageNo;
                         if (pdfFileData.HideThisPDFFile)
                         {
@@ -364,7 +375,7 @@ namespace WpfPdfViewer
             {
                 pdfFileData = new PdfMetaData()
                 {
-                    _FullPathRootFile = FullPathPdfFile,
+                    _FullPathFile = FullPathPdfFile,
                     IsDirty = true
                 };
                 var doc = await GetPdfDocumentForFileAsync(FullPathPdfFile);
@@ -424,7 +435,7 @@ namespace WpfPdfViewer
                 var task = new Task<PdfDocument>((pg) =>// can't be async
                 {
                     var pathPdfFileVol = GetFullPathFileFromPageNo((int)pg);
-                    var pdfDoc= GetPdfDocumentForFileAsync(pathPdfFileVol).GetAwaiter().GetResult();
+                    var pdfDoc = GetPdfDocumentForFileAsync(pathPdfFileVol).GetAwaiter().GetResult();
                     //PdfDocument pdfDoc = null;
                     //pdfDoc = GetPdfDocumentAsync((int)pg).GetAwaiter().GetResult();
                     return pdfDoc;
@@ -520,7 +531,7 @@ namespace WpfPdfViewer
                     {
                         pdfFileData.LstInkStrokes = pdfFileData.dictInkStrokes.Values.ToList();
                     }
-                    var bmkFile = Path.ChangeExtension(pdfFileData._FullPathRootFile, "bmk");
+                    var bmkFile = Path.ChangeExtension(pdfFileData._FullPathFile, "bmk");
                     if (File.Exists(bmkFile))
                     {
                         File.Delete(bmkFile);
@@ -652,7 +663,7 @@ namespace WpfPdfViewer
                         DestinationWidth = (uint)150, // match these with choose.xaml
                         DestinationHeight = (uint)225
                     };
-                    bmi = await GetBitMapImageFromPdfPage(pdfPage, GetRotation(PageNumberOffset), renderOpts, cts:null);
+                    bmi = await GetBitMapImageFromPdfPage(pdfPage, GetRotation(PageNumberOffset), renderOpts, cts: null);
 
                     //using (var strm = new InMemoryRandomAccessStream())
                     //{
@@ -668,7 +679,7 @@ namespace WpfPdfViewer
                     //}
                 }
                 bitmapImageCache = bmi;
-                if (PdfViewerWindow.s_pdfViewerWindow.currentPdfMetaData?._FullPathRootFile == _FullPathRootFile)
+                if (PdfViewerWindow.s_pdfViewerWindow.currentPdfMetaData?._FullPathFile == _FullPathFile)
                 {
                     if (PdfViewerWindow.s_pdfViewerWindow.ImgThumbImage != null)
                     {
@@ -737,7 +748,7 @@ namespace WpfPdfViewer
         }
         public override string ToString()
         {
-            return $"{Path.GetFileNameWithoutExtension(_FullPathRootFile)} Vol={lstVolInfo.Count} Toc={lstTocEntries.Count} Fav={dictFav.Count}";
+            return $"{Path.GetFileNameWithoutExtension(_FullPathFile)} Vol={lstVolInfo.Count} Toc={lstTocEntries.Count} Fav={dictFav.Count}";
         }
     }
     [Serializable]

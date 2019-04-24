@@ -42,7 +42,7 @@ namespace Tests
             {
                 _RootMusicFolder = Rootfolder
             };
-            var lstMetaData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
+            (var lstMetaData, var _) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
             var currentPdfMetaData = lstMetaData.Where(m => m.GetFullPathFile(volNo: 0).Contains("Fake")).First();
             w.currentPdfMetaData = currentPdfMetaData;
             w.currentPdfMetaData.InitializeListPdfDocuments();
@@ -121,7 +121,7 @@ namespace Tests
                 //sp.Children.Add(im);
                 //testw.Content = sp;
                 testw.Show();
-                var lstMetaData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
+                (var lstMetaData, var _) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
                 int cnt = 0;
                 foreach (var currentPdfMetaData in lstMetaData)
                 {
@@ -205,7 +205,7 @@ namespace Tests
             {
                 _RootMusicFolder = rootfolder
             };
-            var lstMetaData = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
+            (var lstMetaData, var _) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
             foreach (var pm in lstMetaData)
             {
                 TestContext.WriteLine($"{pm.GetFullPathFile(volNo: 0)}");
