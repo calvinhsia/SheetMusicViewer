@@ -11,14 +11,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,4">
-            <TextBlock Name="tbxTotals"/>
-            <Label Content="Music Folder Path:" HorizontalAlignment="Left" Margin="20,-3,0,0" VerticalAlignment="Top" IsEnabled="{Binding PdfUIEnabled}" ToolTip="You can choose a different path to a root folder which contains PDF music files"/>
-            <ComboBox Name="cboRootFolder" Margin="2,0,10,0" VerticalAlignment="Top" IsReadOnly="True" SelectionChanged="CboRootFolder_SelectionChanged" PreviewKeyDown="CboRootFolder_PreviewKeyDown" />
-            <Button Content="Cancel" Margin="10,0,0,0" Click="BtnCancel_Click" Height="22" IsCancel="True"/>
-            <Button Content="_OK" Margin="10,0,40,1" Click="BtnOk_Click" Height="22" Width="50" IsDefault="True"/>
-        </StackPanel>
-        <DockPanel Grid.Row="1" Grid.RowSpan="1">
+        <DockPanel Grid.Row="0" Grid.RowSpan="2">
             <TabControl Name="tabControl">
                 <TabItem Header="_Books">
                     <TabItem.Content>
@@ -42,7 +35,7 @@
                                 <ListBox Name="lbBooks" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                                     <ListBox.ItemsPanel>
                                         <ItemsPanelTemplate>
-                                            <WrapPanel IsItemsHost="True" Orientation="Horizontal" ItemHeight="255" ItemWidth="150"/>
+                                            <WrapPanel IsManipulationEnabled="True" ManipulationDelta="WrapPanel_ManipulationDelta" ManipulationStarting="WrapPanel_ManipulationStarting" IsItemsHost="True" Orientation="Horizontal" ItemHeight="255" ItemWidth="150" ManipulationInertiaStarting="WrapPanel_ManipulationInertiaStarting"/>
                                             <!--needs to be a little taller than the bmp for the title-->
                                         </ItemsPanelTemplate>
                                     </ListBox.ItemsPanel>
@@ -68,5 +61,12 @@
                 </TabItem>
             </TabControl>
         </DockPanel>
+        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,4">
+            <TextBlock Name="tbxTotals"/>
+            <Label Content="Music Folder Path:" HorizontalAlignment="Left" Margin="20,-3,0,0" VerticalAlignment="Top" IsEnabled="{Binding PdfUIEnabled}" ToolTip="You can choose a different path to a root folder which contains PDF music files"/>
+            <ComboBox Name="cboRootFolder" Margin="10,0,10,0" VerticalAlignment="Top" IsReadOnly="True" SelectionChanged="CboRootFolder_SelectionChanged" PreviewKeyDown="CboRootFolder_PreviewKeyDown" />
+            <Button Content="Cancel" Margin="10,0,0,0" Click="BtnCancel_Click" IsCancel="True"/>
+            <Button Content="_OK" Margin="10,0,40,1" Click="BtnOk_Click" Width="50" IsDefault="True"/>
+        </StackPanel>
     </Grid>
 </Window>

@@ -89,6 +89,7 @@ namespace WpfPdfViewer
                 chkInk1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
                 txtDesc1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
                 this.dpPage.Children.Clear();
+                this.dpPage.RenderTransform = Transform.Identity;
                 this.Dispatcher.InvokeAsync(async () => await ShowPageAsync(CurrentPageNumber, ClearCache: true));
                 OnMyPropertyChanged();
                 OnMyPropertyChanged("NumPagesPerView");
@@ -129,26 +130,26 @@ namespace WpfPdfViewer
             this.chkFullScreen.IsChecked = Properties.Settings.Default.IsFullScreen;
 
             PdfExceptionEvent += (o, e) =>
-              {
-                  var logfile = System.IO.Path.Combine(_RootMusicFolder, "MyPdfViewer.log");
-                  var dt = DateTime.Now.ToString("MM/dd/yy hh:mm:ss");
-                  File.AppendAllText(logfile, $"\r\n{dt} {Environment.GetEnvironmentVariable("COMPUTERNAME")} {e.Message} {e.ErrorException} ");
-                  MessageBox.Show(e.Message + "\r\r" + e.ErrorException.ToString());
-              };
+            {
+                var logfile = System.IO.Path.Combine(_RootMusicFolder, "MyPdfViewer.log");
+                var dt = DateTime.Now.ToString("MM/dd/yy hh:mm:ss");
+                File.AppendAllText(logfile, $"\r\n{dt} {Environment.GetEnvironmentVariable("COMPUTERNAME")} {e.Message} {e.ErrorException} ");
+                MessageBox.Show(e.Message + "\r\r" + e.ErrorException.ToString());
+            };
 
 
             this.Closed += (o, e) =>
-              {
-                  Properties.Settings.Default.Show2Pages = Show2Pages;
-                  Properties.Settings.Default.LastPDFOpen = currentPdfMetaData?.GetFullPathFile(volNo: 0, MakeRelative: true);
-                  Properties.Settings.Default.MainWindowPos = new System.Drawing.Size((int)this.Left, (int)this.Top);
-                  Properties.Settings.Default.MainWindowSize = new System.Drawing.Size((int)this.ActualWidth, (int)this.ActualHeight);
-                  Properties.Settings.Default.IsFullScreen = this.chkFullScreen.IsChecked == true;
-                  Properties.Settings.Default.Save();
-                  CloseCurrentPdfFile();
-                  /*
+            {
+                Properties.Settings.Default.Show2Pages = Show2Pages;
+                Properties.Settings.Default.LastPDFOpen = currentPdfMetaData?.GetFullPathFile(volNo: 0, MakeRelative: true);
+                Properties.Settings.Default.MainWindowPos = new System.Drawing.Size((int)this.Left, (int)this.Top);
+                Properties.Settings.Default.MainWindowSize = new System.Drawing.Size((int)this.ActualWidth, (int)this.ActualHeight);
+                Properties.Settings.Default.IsFullScreen = this.chkFullScreen.IsChecked == true;
+                Properties.Settings.Default.Save();
+                CloseCurrentPdfFile();
+                /*
 0:000> k
- # ChildEBP RetAddr  
+# ChildEBP RetAddr  
 00 00afe7c0 775a2949 ntdll!NtWaitForSingleObject+0xc [minkernel\ntdll\wow6432\objfre\i386\usrstubs.asm @ 129] 
 01 00afe834 775a28a2 KERNELBASE!WaitForSingleObjectEx+0x99
 *** ERROR: Symbol file could not be found.  Defaulted to export symbols for nvwgf2um.dll - 
@@ -217,9 +218,9 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 3f 00aff8ac 7770662d kernel32!BaseThreadInitThunk+0x19
 40 00aff908 777065fd ntdll!__RtlUserThreadStart+0x2f [minkernel\ntdll\rtlstrt.c @ 1163] 
 41 00aff918 00000000 ntdll!_RtlUserThreadStart+0x1b [minkernel\ntdll\rtlstrt.c @ 1080] 
-                   */
-                  Environment.Exit(0);
-              };
+                 */
+                Environment.Exit(0);
+            };
             this.Loaded += MainWindow_LoadedAsync;
         }
 
@@ -440,7 +441,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                                             break;
                                         }
                                         await ShowPageAsync(pg, ClearCache: false);
-                                        await Task.Delay(100);
+                                        await Task.Delay(270); // allow enough time to render
                                     }
                                 }
                                 ctsPageScan = null;
@@ -510,11 +511,12 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                         Interval = TimeSpan.FromSeconds(1)
                     };
                     _resizeTimer.Tick += async (o, e) =>
-                      {
-                          _resizeTimer.IsEnabled = false;
-                          this.dpPage.Children.Clear();
-                          await ShowPageAsync(CurrentPageNumber, ClearCache: true);
-                      };
+                    {
+                        _resizeTimer.IsEnabled = false;
+                        this.dpPage.Children.Clear();
+                        this.dpPage.RenderTransform = Transform.Identity;
+                        await ShowPageAsync(CurrentPageNumber, ClearCache: true);
+                    };
                 }
                 _resizeTimer.Stop();
                 _resizeTimer.Start();
@@ -571,22 +573,91 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         private void DpPage_MouseDown(object sender, MouseButtonEventArgs e)
         {
             var pos = e.GetPosition(this.dpPage);
-            var delta = NumPagesPerView;
-            if (NumPagesPerView > 1)
+            e.Handled = OnMouseOrTouchDown(pos, e);
+        }
+
+        int lastTouchTimeStamp = 0; //msecs wraps neg in 24.9 days  
+        private bool OnMouseOrTouchDown(Point pos, InputEventArgs e)
+        {
+            var handled = false;
+            var diff = Math.Abs(e.Timestamp - lastTouchTimeStamp);
+            if (diff > System.Windows.Forms.SystemInformation.DoubleClickTime)
             {
-                var distToMiddle = Math.Abs(this.dpPage.ActualWidth / 2 - pos.X);
-                if (distToMiddle < this.dpPage.ActualWidth / 4)
+                if (pos.Y > .75 * dpPage.ActualHeight) // must be bottom portion of page
                 {
-                    delta = 1;
+                    var delta = NumPagesPerView;
+                    if (NumPagesPerView > 1)
+                    {
+                        var distToMiddle = Math.Abs(this.dpPage.ActualWidth / 2 - pos.X);
+                        if (distToMiddle < this.dpPage.ActualWidth / 4)
+                        {
+                            delta = 1;
+                        }
+                    }
+                    var leftSide = pos.X < this.dpPage.ActualWidth / 2;
+                    if (leftSide)
+                    {
+                        delta = -delta;
+                    }
+                    NavigateAsync(delta);
+                    handled = true;
                 }
             }
-            var leftSide = pos.X < this.dpPage.ActualWidth / 2;
-            if (leftSide)
-            {
-                delta = -delta;
-            }
-            NavigateAsync(delta);
+            lastTouchTimeStamp = e.Timestamp;
+            return handled;
+        }
+
+        private void DpPage_ManipulationStarting(object sender, ManipulationStartingEventArgs e)
+        {
+            //            e.IsSingleTouchEnabled = false;
+            e.ManipulationContainer = this;
             e.Handled = true;
+
+        }
+        private void DpPage_TouchDown(object sender, TouchEventArgs e)
+        {
+            var pos = e.GetTouchPoint(this.dpPage).Position;
+            e.Handled = OnMouseOrTouchDown(pos, e);
+        }
+
+        private void DpPage_ManipulationDelta(object sender, ManipulationDeltaEventArgs e)
+        {
+            // if we're inking, we don't want to be zooming too... makes a messs
+            if (chkInk0.IsChecked == false && chkInk1.IsChecked == false)
+            {
+                //this just gets the source. 
+                // I cast it to FE because I wanted to use ActualWidth for Center. You could try RenderSize as alternate
+                if (e.Source is FrameworkElement element)
+                {
+                    //e.DeltaManipulation has the changes 
+                    // Scale is a delta multiplier; 1.0 is last size,  (so 1.1 == scale 10%, 0.8 = shrink 20%) 
+                    // Rotate = Rotation, in degrees
+                    // Pan = Translation, == Translate offset, in Device Independent Pixels 
+
+                    var deltaManipulation = e.DeltaManipulation;
+                    var matrix = ((MatrixTransform)element.RenderTransform).Matrix;
+                    // find the old center; arguaby this could be cached 
+                    Point center = new Point(element.ActualWidth / 2, element.ActualHeight / 2);
+                    center = new Point(e.ManipulationOrigin.X, e.ManipulationOrigin.Y);
+                    // transform it to take into account transforms from previous manipulations 
+                    center = matrix.Transform(center);
+                    //this will be a Zoom. 
+                    matrix.ScaleAt(deltaManipulation.Scale.X, deltaManipulation.Scale.Y, center.X, center.Y);
+                    // Rotation 
+                    matrix.RotateAt(e.DeltaManipulation.Rotation, center.X, center.Y);
+                    //Translation (pan) 
+                    matrix.Translate(e.DeltaManipulation.Translation.X, e.DeltaManipulation.Translation.Y);
+
+                    element.RenderTransform = new MatrixTransform(matrix);
+                    //                ((MatrixTransform)element.RenderTransform).Matrix = matrix;
+
+                    e.Handled = true;
+                }
+            }
+        }
+
+        private void DpPage_ManipulationInertiaStarting(object sender, ManipulationInertiaStartingEventArgs e)
+        {
         }
 
         async Task<bool> ChooseMusic()
@@ -629,7 +700,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 PdfMetaData.SavePdfMetaFileData(currentPdfMetaData);
                 currentPdfMetaData = null;
                 CurrentPageNumber = 0;
-                this.dpPage.Children.Clear();
             }
             OnMyPropertyChanged(nameof(MaxPageNumber));
             OnMyPropertyChanged(nameof(PdfTitle));
