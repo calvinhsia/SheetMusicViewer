@@ -398,7 +398,10 @@ namespace WpfPdfViewer
                         nSongs:n0} # Pages = {
                         nPages:n0} #Fav={
                         nFavs:n0}";
-
+                    if (lstBooks.Count > 0)
+                    {
+                        this.lbBooks.ScrollIntoView(lstBooks[0]);
+                    }
                 }
             }
         }
@@ -524,7 +527,7 @@ namespace WpfPdfViewer
 
         private void WrapPanel_ManipulationStarting(object sender, ManipulationStartingEventArgs e)
         {
-//            e.IsSingleTouchEnabled = false;
+            //            e.IsSingleTouchEnabled = false;
             e.ManipulationContainer = this.tabControl;
             e.Handled = true;
         }
