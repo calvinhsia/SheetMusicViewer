@@ -142,27 +142,8 @@ namespace WpfPdfViewer
         public string GetFullPathFileFromPageNo(int pageNo)
         {
             var retval = _FullPathFile;
-            if (_FullPathFile.EndsWith("0.pdf"))
-            {
-                var volNo = GetVolNumFromPageNum(pageNo);
-                retval = retval.Replace("0.pdf", string.Empty) + volNo.ToString() + ".pdf";
-            }
-            else if (_FullPathFile.EndsWith("1.pdf"))
-            {
-                var volNo = GetVolNumFromPageNum(pageNo) + 1; // no page 0, so 1 based
-                retval = retval.Replace("1.pdf", string.Empty) + volNo.ToString() + ".pdf";
-            }
-            else if (this.lstVolInfo.Count > 0) //there's more than 1 entry
-            {
-                var volNo = GetVolNumFromPageNum(pageNo);
-                if (volNo == 0)
-                {
-                }
-                else
-                {
-                    retval = retval.Replace(".pdf", string.Empty) + volNo.ToString() + ".pdf";
-                }
-            }
+            var volNo = GetVolNumFromPageNum(pageNo);
+            retval = lstVolInfo[volNo].FullPathToVolume;
             Debug.Assert(File.Exists(retval));
             return retval;
         }
@@ -246,7 +227,7 @@ namespace WpfPdfViewer
                         var cntItems = 0;
                         foreach (var file in Directory.EnumerateFiles(curPath, "*.pdf").OrderBy(f => f.ToLower()))//.Where(f=>f.Contains("Miser"))) // "file" is fullpath
                         {
-                            if (file.Contains("Billy Joel A Collection"))
+                            if (file.Contains("Everybodys Fa"))
                             {
                                 "".ToString();
                             }
@@ -434,7 +415,8 @@ namespace WpfPdfViewer
             {
                 var task = new Task<PdfDocument>((pg) =>// can't be async
                 {
-                    var pathPdfFileVol = GetFullPathFileFromPageNo((int)pg);
+                    var vol = GetVolNumFromPageNum((int)pg);
+                    var pathPdfFileVol =  lstVolInfo[vol].FullPathToVolume;
                     var pdfDoc = GetPdfDocumentForFileAsync(pathPdfFileVol).GetAwaiter().GetResult();
                     //PdfDocument pdfDoc = null;
                     //pdfDoc = GetPdfDocumentAsync((int)pg).GetAwaiter().GetResult();
