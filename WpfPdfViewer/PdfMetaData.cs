@@ -246,7 +246,7 @@ namespace WpfPdfViewer
                         var cntItems = 0;
                         foreach (var file in Directory.EnumerateFiles(curPath, "*.pdf").OrderBy(f => f.ToLower()))//.Where(f=>f.Contains("Miser"))) // "file" is fullpath
                         {
-                            if (file.Contains("Sonaten"))
+                            if (file.Contains("Billy Joel A Collection"))
                             {
                                 "".ToString();
                             }
@@ -255,25 +255,22 @@ namespace WpfPdfViewer
                                 System.IO.Path.GetDirectoryName(lastFile) == System.IO.Path.GetDirectoryName(file))
                             {
                                 // if the prior added file and this file differ by ony a single char, treat as continuation. E.g. file1.pdf, file2.pdf
-                                var justFnamelast = System.IO.Path.GetFileNameWithoutExtension(lastFile).Trim().ToLower();
-                                var justfnameCurrent = System.IO.Path.GetFileNameWithoutExtension(file).Trim().ToLower();
-                                if (justFnamelast.Length == justfnameCurrent.Length) // file1, file2
+                                int GetIndexOfFirstDigitOfVolNo(string fname)
                                 {
-                                    if (char.IsDigit(justfnameCurrent[justfnameCurrent.Length - 1]))
+                                    var ndx = fname.Length - 1;
+                                    while (char.IsDigit(fname[ndx]))
                                     {
-                                        if (justFnamelast.Substring(0, justFnamelast.Length - 1) ==
-                                           justfnameCurrent.Substring(0, justfnameCurrent.Length - 1))
-                                        {
-                                            isContinuation = true;
-                                        }
+                                        ndx--;
                                     }
+                                    return ndx;
                                 }
-                                else
-                                {  // file, file2
-                                    if (justFnamelast == justfnameCurrent.Substring(0, justfnameCurrent.Length - 1))
-                                    {
-                                        isContinuation = true;
-                                    }
+                                var justFnamelast = System.IO.Path.GetFileNameWithoutExtension(lastFile).Trim().ToLower();
+                                var ndxVolLast = GetIndexOfFirstDigitOfVolNo(justFnamelast); // find index of volno. if none, it's the length of the string
+                                var justfnameCurrent = System.IO.Path.GetFileNameWithoutExtension(file).Trim().ToLower();
+                                var ndxvolCur = GetIndexOfFirstDigitOfVolNo(justfnameCurrent);
+                                if (ndxVolLast == ndxvolCur && justFnamelast.Substring(0, ndxvolCur) == justfnameCurrent.Substring(0, ndxvolCur)) // file1, file2
+                                {
+                                    isContinuation = true;
                                 }
                             }
                             if (isContinuation)
@@ -284,6 +281,7 @@ namespace WpfPdfViewer
                                 {
                                     var newvolInfo = new PdfVolumeInfo()
                                     {
+                                        FullPathToVolume = file,
                                         NPagesInThisVolume = (int)(await GetPdfDocumentForFileAsync(file)).PageCount
                                     };
                                     if (newvolInfo.NPagesInThisVolume != 1)
@@ -352,6 +350,7 @@ namespace WpfPdfViewer
                                 var doc = await GetPdfDocumentForFileAsync(FullPathPdfFile);
                                 pdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
                                 {
+                                    FullPathToVolume= FullPathPdfFile,
                                     NPagesInThisVolume = (int)doc.PageCount,
                                     Rotation = 0
                                 });
@@ -381,6 +380,7 @@ namespace WpfPdfViewer
                 var doc = await GetPdfDocumentForFileAsync(FullPathPdfFile);
                 pdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
                 {
+                    FullPathToVolume = FullPathPdfFile,
                     NPagesInThisVolume = (int)doc.PageCount,
                     Rotation = 0
                 });
@@ -754,6 +754,8 @@ namespace WpfPdfViewer
     [Serializable]
     public class PdfVolumeInfo
     {
+        [XmlIgnore]
+        public string FullPathToVolume;
         /// <summary>
         /// The num PDF pages in this PDF file
         /// </summary>

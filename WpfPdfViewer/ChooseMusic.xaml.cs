@@ -295,6 +295,10 @@ namespace WpfPdfViewer
 
                 var lstFoldrs = new ObservableCollection<UIElement>();
                 this.lbfolders.ItemsSource = lstFoldrs;
+                //for (int i  = 0; i <100; i++)
+                //{
+                //    _pdfViewerWindow.lstFolders.Add($"folder{i}");
+                //}
                 foreach (var folder in _pdfViewerWindow.lstFolders)
                 {
                     var chkbox = new CheckBox()
@@ -353,11 +357,7 @@ namespace WpfPdfViewer
                                 continue;
                             }
                         }
-                        //if (pdfMetaDataItem._FullPathFile)
-                        //{
-
-                        //}
-                        var contentControl = new ContentControl();
+                        var contentControl = new ContentControl(); // ContentControl has doubleclick event
                         var sp = new StackPanel() { Orientation = Orientation.Vertical };
                         contentControl.Tag = pdfMetaDataItem;
                         await pdfMetaDataItem.GetBitmapImageThumbnailAsync();

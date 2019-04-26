@@ -18,24 +18,28 @@
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
                             <StackPanel Orientation="Horizontal">
-                                <ListBox Name="lbfolders">
+                                <Label Content="Filter" Margin="20,0,0,0"/>
+                                <TextBox Name="tbxFilter" Width="100" ToolTip="Filter the books"/>
+                            </StackPanel>
+                            <DockPanel Grid.Row="1">
+                                <ListBox Name="lbfolders" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                                     <ListBox.ItemsPanel>
                                         <ItemsPanelTemplate>
                                             <WrapPanel IsItemsHost="True" Orientation="Horizontal"/>
                                         </ItemsPanelTemplate>
                                     </ListBox.ItemsPanel>
                                 </ListBox>
-                                <Label Content="Filter" Margin="20,0,0,0"/>
-                                <TextBox Name="tbxFilter" Width="100" ToolTip="Filter the books"/>
-                            </StackPanel>
-                            <DockPanel Grid.Row="1">
+                            </DockPanel>
+                            <DockPanel Grid.Row="2">
                                 <ListBox Name="lbBooks" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                                     <ListBox.ItemsPanel>
                                         <ItemsPanelTemplate>
-                                            <WrapPanel IsManipulationEnabled="True" ManipulationDelta="WrapPanel_ManipulationDelta" ManipulationStarting="WrapPanel_ManipulationStarting" IsItemsHost="True" Orientation="Horizontal" ItemHeight="255" ItemWidth="150" ManipulationInertiaStarting="WrapPanel_ManipulationInertiaStarting"/>
+                                            <WrapPanel IsManipulationEnabled="True" ManipulationDelta="WrapPanel_ManipulationDelta" ManipulationStarting="WrapPanel_ManipulationStarting" 
+                                                       IsItemsHost="True" Orientation="Horizontal" ItemHeight="255" ItemWidth="150" ManipulationInertiaStarting="WrapPanel_ManipulationInertiaStarting"/>
                                             <!--needs to be a little taller than the bmp for the title-->
                                         </ItemsPanelTemplate>
                                     </ListBox.ItemsPanel>

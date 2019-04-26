@@ -88,9 +88,7 @@ namespace WpfPdfViewer
                 chkFav1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
                 chkInk1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
                 txtDesc1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
-                this.dpPage.Children.Clear();
-                this.dpPage.RenderTransform = Transform.Identity;
-                this.Dispatcher.InvokeAsync(async () => await ShowPageAsync(CurrentPageNumber, ClearCache: true));
+                this.Dispatcher.InvokeAsync(async () => await ShowPageAsync(CurrentPageNumber, ClearCache: true, resetRenderTransform: true));
                 OnMyPropertyChanged();
                 OnMyPropertyChanged("NumPagesPerView");
             }
@@ -298,7 +296,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         /// </summary>
         /// <param name="pageNo"></param>
         /// <param name="ClearCache"></param>
-        internal async Task ShowPageAsync(int pageNo, bool ClearCache)
+        internal async Task ShowPageAsync(int pageNo, bool ClearCache, bool forceRedraw = false, bool resetRenderTransform = false)
         {
             try
             {
@@ -311,9 +309,13 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     this.dpPage.Children.Clear();
                     return;
                 }
-                if (pageNo == CurrentPageNumber && dpPage.Children.Count > 0)
+                if (forceRedraw || resetRenderTransform)
                 {
-                    return;
+                    this.dpPage.Children.Clear();
+                }
+                if (resetRenderTransform)
+                {
+                    this.dpPage.RenderTransform = Transform.Identity;
                 }
                 if (pageNo < this.slider.Minimum)
                 {
@@ -477,8 +479,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 var isChked = e.RoutedEvent.Name == "Checked";
                 var curCanvas = inkCanvas[pgno - CurrentPageNumber];
                 curCanvas.ChkInkToggled(sender, e);
-                this.dpPage.Children.Clear();
-                await ShowPageAsync(CurrentPageNumber, ClearCache: false);
+                await ShowPageAsync(CurrentPageNumber, ClearCache: false, forceRedraw: true);
             }
             catch (Exception)
             {
@@ -488,8 +489,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         async void BtnRotate_Click(object sender, RoutedEventArgs e)
         {
             currentPdfMetaData.Rotate(CurrentPageNumber);
-            this.dpPage.Children.Clear();
-            await ShowPageAsync(CurrentPageNumber, ClearCache: true);
+            await ShowPageAsync(CurrentPageNumber, ClearCache: true, forceRedraw: true, resetRenderTransform: true);
         }
 
         async void NavigateAsync(int delta)
@@ -513,9 +513,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     _resizeTimer.Tick += async (o, e) =>
                     {
                         _resizeTimer.IsEnabled = false;
-                        this.dpPage.Children.Clear();
-                        this.dpPage.RenderTransform = Transform.Identity;
-                        await ShowPageAsync(CurrentPageNumber, ClearCache: true);
+                        await ShowPageAsync(CurrentPageNumber, ClearCache: true, resetRenderTransform: true);
                     };
                 }
                 _resizeTimer.Stop();
@@ -581,7 +579,12 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         {
             var handled = false;
             var diff = Math.Abs(e.Timestamp - lastTouchTimeStamp);
-            if (diff > System.Windows.Forms.SystemInformation.DoubleClickTime)
+            var thresh = 100;
+            if (e is TouchEventArgs) // for mouse input we don't do anything on double click, so 2 quick clicks should be 2 single clicks. For touch, we need to de-bounce (filter out 2 touches within 2 msecs)
+            {
+                thresh = System.Windows.Forms.SystemInformation.DoubleClickTime;// == 500
+            }
+            if (diff > thresh)
             {
                 if (pos.Y > .75 * dpPage.ActualHeight) // must be bottom portion of page
                 {
@@ -842,8 +845,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             {
                 if (currentPdfMetaData != null)
                 {
-                    this.dpPage.Children.Clear();// force regen
-                    this.Dispatcher.InvokeAsync(async () => await ShowPageAsync(CurrentPageNumber, ClearCache: false));
+                    this.Dispatcher.InvokeAsync(async () => await ShowPageAsync(CurrentPageNumber, ClearCache: false, forceRedraw: true));
                 }
             }
         }
