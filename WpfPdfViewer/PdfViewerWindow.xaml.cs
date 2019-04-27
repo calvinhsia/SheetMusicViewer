@@ -48,6 +48,7 @@ namespace WpfPdfViewer
                 this.Message = Message;
             }
         }
+        public bool IsTesting; // if testing, we don't want to save bookmarks, lastpageno, etc.
         public void OnException(string Message, Exception ex)
         {
             PdfExceptionEvent?.Invoke(this, new PdfExceptionEventAgs(Message, ex));
@@ -349,7 +350,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 }
                 if (this.CurrentPageNumber == pageNo && cacheEntryCurrentPage != null) // user might have typed ahead
                 {
-                    this.dpPage.Children.Clear();
                     if (cacheEntryCurrentPage.task.IsCanceled)
                     {
                         cacheEntryCurrentPage = _pageCache.TryAddCacheEntry(pageNo);
@@ -377,6 +377,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                             gridContainer.Children.Add(gridNextPage);
                         }
                     }
+                    this.dpPage.Children.Clear();
                     this.dpPage.Children.Add(gridContainer);
                     OnMyPropertyChanged(nameof(Description0));
                     chkFav0.IsChecked = currentPdfMetaData.IsFavorite(pageNo);
@@ -427,25 +428,43 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     case Key.Down:
                     case Key.PageDown:
                     case Key.Right:
-                        if (e.KeyboardDevice.Modifiers == ModifierKeys.Control)
+                        if (e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Control))
                         {
                             if (ctsPageScan == null)
                             {
                                 ctsPageScan = new CancellationTokenSource();
                                 var done = false;
+                                IsTesting = true;
                                 while (!done)
                                 {
-                                    for (int pg = currentPdfMetaData.PageNumberOffset; pg < MaxPageNumber; pg++)
+                                    async Task LoopCurrentBook()
                                     {
-                                        if (ctsPageScan.IsCancellationRequested)
+                                        for (int pg = currentPdfMetaData.PageNumberOffset; pg < MaxPageNumber; pg++)
                                         {
-                                            done = true;
-                                            break;
+                                            if (ctsPageScan.IsCancellationRequested)
+                                            {
+                                                done = true;
+                                                break;
+                                            }
+                                            await ShowPageAsync(pg, ClearCache: false);
+                                            await Task.Delay(270); // allow enough time to render
                                         }
-                                        await ShowPageAsync(pg, ClearCache: false);
-                                        await Task.Delay(270); // allow enough time to render
+                                    }
+                                    if (e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Alt))
+                                    {
+                                        foreach (var pdfMetadata in this.lstPdfMetaFileData)
+                                        {
+                                            await this.LoadPdfFileAndShowAsync(pdfMetadata, pdfMetadata.PageNumberOffset);
+                                            await LoopCurrentBook();
+                                        }
+                                        done = true;
+                                    }
+                                    else
+                                    {
+                                        await LoopCurrentBook();
                                     }
                                 }
+                                IsTesting = false;
                                 ctsPageScan = null;
                             }
                             else

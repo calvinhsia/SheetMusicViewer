@@ -537,38 +537,40 @@ namespace WpfPdfViewer
         public static void SavePdfMetaFileData(PdfMetaData pdfFileData, bool ForceSave = false)
         {
             pdfFileData.InitializeListPdfDocuments(); // reinit list to clear out results to save mem
-
-            if (pdfFileData.IsDirty || ForceSave || pdfFileData.initialLastPageNo != pdfFileData.LastPageNo)
+            if (!PdfViewerWindow.s_pdfViewerWindow.IsTesting)
             {
-                try
+                if (pdfFileData.IsDirty || ForceSave || pdfFileData.initialLastPageNo != pdfFileData.LastPageNo)
                 {
-                    var serializer = new XmlSerializer(typeof(PdfMetaData));
-                    var settings = new XmlWriterSettings()
+                    try
                     {
-                        Indent = true,
-                        IndentChars = " "
-                    };
-                    pdfFileData.Favorites = pdfFileData.dictFav.Values.ToList();
-                    if (pdfFileData.dictInkStrokes.Count > 0)
-                    {
-                        pdfFileData.LstInkStrokes = pdfFileData.dictInkStrokes.Values.ToList();
-                    }
-                    var bmkFile = Path.ChangeExtension(pdfFileData._FullPathFile, "bmk");
-                    if (File.Exists(bmkFile))
-                    {
-                        File.Delete(bmkFile);
-                    }
-                    using (var strm = File.Create(bmkFile))
-                    {
-                        using (var w = XmlWriter.Create(strm, settings))
+                        var serializer = new XmlSerializer(typeof(PdfMetaData));
+                        var settings = new XmlWriterSettings()
                         {
-                            serializer.Serialize(w, pdfFileData);
+                            Indent = true,
+                            IndentChars = " "
+                        };
+                        pdfFileData.Favorites = pdfFileData.dictFav.Values.ToList();
+                        if (pdfFileData.dictInkStrokes.Count > 0)
+                        {
+                            pdfFileData.LstInkStrokes = pdfFileData.dictInkStrokes.Values.ToList();
+                        }
+                        var bmkFile = Path.ChangeExtension(pdfFileData._FullPathFile, "bmk");
+                        if (File.Exists(bmkFile))
+                        {
+                            File.Delete(bmkFile);
+                        }
+                        using (var strm = File.Create(bmkFile))
+                        {
+                            using (var w = XmlWriter.Create(strm, settings))
+                            {
+                                serializer.Serialize(w, pdfFileData);
+                            }
                         }
                     }
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show("Exception saving file " + ex.ToString());
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Exception saving file " + ex.ToString());
+                    }
                 }
             }
         }
