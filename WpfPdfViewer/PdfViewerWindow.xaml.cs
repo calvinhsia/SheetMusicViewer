@@ -288,7 +288,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             OnMyPropertyChanged(nameof(PdfTitle));
             OnMyPropertyChanged(nameof(ImgThumbImage));
             OnMyPropertyChanged(nameof(MaxPageNumber));
-            await ShowPageAsync(PageNo, ClearCache: true);
+            await ShowPageAsync(PageNo, ClearCache: true, resetRenderTransform:true);
         }
 
 
@@ -335,56 +335,82 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 _DisableSliderValueChanged = false;
                 PageCacheEntry cacheEntryCurrentPage = null;
                 PageCacheEntry cacheEntryNextPage = null;
-                for (int i = -NumPagesPerView; i <= NumPagesPerView + 1; i++) // lookahead,lookbehind cache
+                // we want to add items to the cache, but in a priority order: high pri are the 1 or 2 current pages.
+                cacheEntryCurrentPage = _pageCache.TryAddCacheEntry(pageNo);
+                cacheEntryNextPage = _pageCache.TryAddCacheEntry(pageNo + 1);
+                if (NumPagesPerView == 1)
                 {
-                    var val = _pageCache.TryAddCacheEntry(pageNo + i);
-                    switch (i)
-                    {
-                        case 0:
-                            cacheEntryCurrentPage = val;
-                            break;
-                        case 1:
-                            cacheEntryNextPage = val;
-                            break;
-                    }
+                    _pageCache.TryAddCacheEntry(pageNo + 2);
+                    _pageCache.TryAddCacheEntry(pageNo - 1);
                 }
+                else
+                {
+                    _pageCache.TryAddCacheEntry(pageNo + 2);
+                    _pageCache.TryAddCacheEntry(pageNo + 3);
+                    _pageCache.TryAddCacheEntry(pageNo - 1);
+                    _pageCache.TryAddCacheEntry(pageNo - 2);
+                }
+                //for (int i = -NumPagesPerView; i <= NumPagesPerView + 1; i++) // lookahead,lookbehind cache
+                //{
+                //    var val = _pageCache.TryAddCacheEntry(pageNo + i);
+                //    switch (i)
+                //    {
+                //        case 0:
+                //            cacheEntryCurrentPage = val;
+                //            break;
+                //        case 1:
+                //            cacheEntryNextPage = val;
+                //            break;
+                //    }
+                //}
                 if (this.CurrentPageNumber == pageNo && cacheEntryCurrentPage != null) // user might have typed ahead
                 {
-                    if (cacheEntryCurrentPage.task.IsCanceled)
+                    try
                     {
-                        cacheEntryCurrentPage = _pageCache.TryAddCacheEntry(pageNo);
-                    }
-                    var gridContainer = new Grid();
-                    var bitmapimageCurPage = await cacheEntryCurrentPage.task;
-                    var imageCurPage = new Image() { Source = bitmapimageCurPage };
-                    inkCanvas[0] = new MyInkCanvas(bitmapimageCurPage, this, chkInk0, CurrentPageNumber);
-                    var gridCurPage = new Grid();
-                    gridCurPage.Children.Add(inkCanvas[0]);
-                    gridContainer.Children.Add(gridCurPage);
-                    if (NumPagesPerView != 1)
-                    {
-                        if (cacheEntryNextPage != null)
+                        if (cacheEntryCurrentPage.task.IsCanceled)
                         {
-                            gridContainer.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
-                            gridContainer.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
-                            var bitmapimageNextPage = await cacheEntryNextPage.task;
-                            inkCanvas[1] = new MyInkCanvas(bitmapimageNextPage, this, chkInk1, CurrentPageNumber + 1);
-                            inkCanvas[0].HorizontalAlignment = HorizontalAlignment.Right;
-                            inkCanvas[1].HorizontalAlignment = HorizontalAlignment.Left; // put righthand page close to middle
-                            var gridNextPage = new Grid();
-                            gridNextPage.Children.Add(inkCanvas[1]);
-                            Grid.SetColumn(gridNextPage, 1);
-                            gridContainer.Children.Add(gridNextPage);
+                            cacheEntryCurrentPage = _pageCache.TryAddCacheEntry(pageNo);
+                        }
+                        var gridContainer = new Grid();
+                        var bitmapimageCurPage = await cacheEntryCurrentPage.task;
+                        var imageCurPage = new Image() { Source = bitmapimageCurPage };
+                        inkCanvas[0] = new MyInkCanvas(bitmapimageCurPage, this, chkInk0, CurrentPageNumber);
+                        var gridCurPage = new Grid();
+                        gridCurPage.Children.Add(inkCanvas[0]);
+                        gridContainer.Children.Add(gridCurPage);
+                        if (NumPagesPerView != 1)
+                        {
+                            if (cacheEntryNextPage != null)
+                            {
+                                gridContainer.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
+                                gridContainer.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
+                                var bitmapimageNextPage = await cacheEntryNextPage.task;
+                                inkCanvas[1] = new MyInkCanvas(bitmapimageNextPage, this, chkInk1, CurrentPageNumber + 1);
+                                inkCanvas[0].HorizontalAlignment = HorizontalAlignment.Right;
+                                inkCanvas[1].HorizontalAlignment = HorizontalAlignment.Left; // put righthand page close to middle
+                                var gridNextPage = new Grid();
+                                gridNextPage.Children.Add(inkCanvas[1]);
+                                Grid.SetColumn(gridNextPage, 1);
+                                gridContainer.Children.Add(gridNextPage);
+                            }
+                        }
+                        this.dpPage.Children.Clear();
+                        this.dpPage.Children.Add(gridContainer);
+                        OnMyPropertyChanged(nameof(Description0));
+                        chkFav0.IsChecked = currentPdfMetaData.IsFavorite(pageNo);
+                        if (NumPagesPerView > 1)
+                        {
+                            OnMyPropertyChanged(nameof(Description1));
+                            chkFav1.IsChecked = currentPdfMetaData.IsFavorite(pageNo + 1);
                         }
                     }
-                    this.dpPage.Children.Clear();
-                    this.dpPage.Children.Add(gridContainer);
-                    OnMyPropertyChanged(nameof(Description0));
-                    chkFav0.IsChecked = currentPdfMetaData.IsFavorite(pageNo);
-                    if (NumPagesPerView > 1)
+                    catch (OperationCanceledException ex)
                     {
-                        OnMyPropertyChanged(nameof(Description1));
-                        chkFav1.IsChecked = currentPdfMetaData.IsFavorite(pageNo + 1);
+                        ex.ToString();
+                    }
+                    if (this.CurrentPageNumber != pageNo) // user typed ahead ?
+                    {
+                        _pageCache.PurgeIfNecessary(pageNo);
                     }
                 }
                 else
@@ -398,8 +424,8 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 
                 //RaiseEvent(new PdfExceptionEventAgs(PdfExceptionEvent, this, null));
                 System.Windows.Forms.MessageBox.Show($"Exception showing {currentPdfMetaData.GetFullPathFileFromPageNo(pageNo)}\r\n {ex.ToString()}");
-                CloseCurrentPdfFile();
                 OnException($"Showing {currentPdfMetaData.GetFullPathFileFromPageNo(pageNo)}", ex);
+                CloseCurrentPdfFile();
             }
         }
 
@@ -419,11 +445,17 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                             //e.Handled = true;
                         }
                         break;
+                    case Key.Home:
+                        await ShowPageAsync(currentPdfMetaData.PageNumberOffset, ClearCache: false);
+                        break;
+                    case Key.End:
+                        await ShowPageAsync(this.MaxPageNumber - 1, ClearCache: false);
+                        break;
                     case Key.Up:
                     case Key.PageUp:
                     case Key.Left:
-                        e.Handled = true;
                         NavigateAsync(-NumPagesPerView);
+                        e.Handled = true;
                         break;
                     case Key.Down:
                     case Key.PageDown:
@@ -599,13 +631,16 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             var handled = false;
             var diff = Math.Abs(e.Timestamp - lastTouchTimeStamp);
             var thresh = 100;
-            if (e is TouchEventArgs) // for mouse input we don't do anything on double click, so 2 quick clicks should be 2 single clicks. For touch, we need to de-bounce (filter out 2 touches within 2 msecs)
-            {
-                thresh = System.Windows.Forms.SystemInformation.DoubleClickTime;// == 500
-            }
+            //if (e is TouchEventArgs) // for mouse input we don't do anything on double click, so 2 quick clicks should be 2 single clicks. For touch, we need to de-bounce (filter out 2 touches within 2 msecs)
+            //{
+            //    handled = true;
+            //}
+            // a touch sends both a touch and a mouse, (even if touch is handled) so we need to filter
+            thresh = System.Windows.Forms.SystemInformation.DoubleClickTime;// == 500
+            lastTouchTimeStamp = e.Timestamp;
             if (diff > thresh)
             {
-                if (pos.Y > .75 * dpPage.ActualHeight) // must be bottom portion of page
+                if (e is MouseButtonEventArgs || pos.Y > .75 * dpPage.ActualHeight) // must be bottom portion of page for touch: top part is for zooming
                 {
                     var delta = NumPagesPerView;
                     if (NumPagesPerView > 1)
@@ -625,7 +660,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     handled = true;
                 }
             }
-            lastTouchTimeStamp = e.Timestamp;
             return handled;
         }
 
@@ -659,8 +693,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     var deltaManipulation = e.DeltaManipulation;
                     var matrix = ((MatrixTransform)element.RenderTransform).Matrix;
                     // find the old center; arguaby this could be cached 
-                    Point center = new Point(element.ActualWidth / 2, element.ActualHeight / 2);
-                    center = new Point(e.ManipulationOrigin.X, e.ManipulationOrigin.Y);
+                    Point center = new Point(e.ManipulationOrigin.X, e.ManipulationOrigin.Y); // new Point(element.ActualWidth / 2, element.ActualHeight / 2);
                     // transform it to take into account transforms from previous manipulations 
                     center = matrix.Transform(center);
                     //this will be a Zoom. 

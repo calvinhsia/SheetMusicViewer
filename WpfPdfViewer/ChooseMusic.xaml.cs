@@ -260,7 +260,7 @@ namespace WpfPdfViewer
                 };
                 br._BrowseList.MouseDoubleClick += (o, e) =>
                 {
-                    if (this.lbBooks.SelectedIndex >= 0)
+                    if (br._BrowseList.SelectedIndex >= 0)
                     {
                         BtnOk_Click(o, e);
                     }

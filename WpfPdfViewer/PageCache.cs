@@ -98,7 +98,7 @@ namespace WpfPdfViewer
                 {
                     dictCache.Remove(item);
                 }
-                GC.Collect(2, GCCollectionMode.Forced);
+//                GC.Collect(2, GCCollectionMode.Forced);
             }
         }
     }

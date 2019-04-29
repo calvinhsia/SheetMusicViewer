@@ -38,7 +38,7 @@
                                 <ListBox Name="lbBooks" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                                     <ListBox.ItemsPanel>
                                         <ItemsPanelTemplate>
-                                            <WrapPanel IsManipulationEnabled="True" ManipulationDelta="WrapPanel_ManipulationDelta" ManipulationStarting="WrapPanel_ManipulationStarting" 
+                                            <WrapPanel IsManipulationEnabled="False" ManipulationDelta="WrapPanel_ManipulationDelta" ManipulationStarting="WrapPanel_ManipulationStarting" 
                                                        IsItemsHost="True" Orientation="Horizontal" ItemHeight="255" ItemWidth="150" ManipulationInertiaStarting="WrapPanel_ManipulationInertiaStarting"/>
                                             <!--needs to be a little taller than the bmp for the title-->
                                         </ItemsPanelTemplate>

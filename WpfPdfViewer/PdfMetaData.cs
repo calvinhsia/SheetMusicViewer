@@ -145,7 +145,7 @@ namespace WpfPdfViewer
             var volNo = GetVolNumFromPageNum(pageNo);
             string FormatVolno(int v)
             {
-                var str = string.Empty;
+                string str;
                 if (lstVolInfo.Count < 10)
                 {
                     str = $"{v}";
@@ -267,16 +267,6 @@ namespace WpfPdfViewer
                             if (!string.IsNullOrEmpty(lastFile) &&
                                 System.IO.Path.GetDirectoryName(lastFile) == System.IO.Path.GetDirectoryName(file))
                             {
-                                // if the prior added file and this file differ by ony a single char, treat as continuation. E.g. file1.pdf, file2.pdf
-                                int GetIndexOfFirstDigitOfVolNo(string fname)
-                                {
-                                    var ndx = fname.Length - 1;
-                                    while (char.IsDigit(fname[ndx]))
-                                    {
-                                        ndx--;
-                                    }
-                                    return ndx;
-                                }
                                 var justFnamelast = System.IO.Path.GetFileNameWithoutExtension(lastFile).Trim().ToLower();
                                 var justfnameCurrent = System.IO.Path.GetFileNameWithoutExtension(file).Trim().ToLower();
                                 if (justFnamelast.Length == justfnameCurrent.Length) // file1, file2
@@ -621,6 +611,11 @@ namespace WpfPdfViewer
         internal async Task<BitmapImage> CalculateBitMapImageForPageAsync(int PageNo, CancellationTokenSource cts, Size? SizeDesired)
         {
             BitmapImage bmi = null;
+            cts?.Token.Register(() =>
+            {
+                PageNo.ToString();
+                //Debug.WriteLine($"Cancel {PageNo}");
+            });
             cts?.Token.ThrowIfCancellationRequested();
             var (pdfDoc, pdfPgno) = await GetPdfDocumentForPageno(PageNo);
             if (pdfDoc != null && pdfPgno >= 0 && pdfPgno < pdfDoc.PageCount)
