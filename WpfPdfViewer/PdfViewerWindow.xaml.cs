@@ -29,6 +29,7 @@ namespace WpfPdfViewer
 {
     public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     {
+        public const string MyAppName = "MyPdfViewer";
         public event PropertyChangedEventHandler PropertyChanged;
         // zoom gesture: https://stackoverflow.com/questions/25861840/zoom-pinch-detection-in-a-wpf-usercontrol
 
@@ -130,7 +131,7 @@ namespace WpfPdfViewer
 
             PdfExceptionEvent += (o, e) =>
             {
-                var logfile = System.IO.Path.Combine(_RootMusicFolder, "MyPdfViewer.log");
+                var logfile = System.IO.Path.Combine(_RootMusicFolder, $"{MyAppName}.log");
                 var dt = DateTime.Now.ToString("MM/dd/yy hh:mm:ss");
                 File.AppendAllText(logfile, $"\r\n{dt} {Environment.GetEnvironmentVariable("COMPUTERNAME")} {e.Message} {e.ErrorException} ");
                 MessageBox.Show(e.Message + "\r\r" + e.ErrorException.ToString());
@@ -234,7 +235,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 //await CombinePDFsToASinglePdfAsync(pathPdf);
                 //return;
                 this.ChkfullScreenToggled(this, new RoutedEventArgs() { RoutedEvent = (this.chkFullScreen.IsChecked == true ? CheckBox.CheckedEvent : CheckBox.UncheckedEvent) });
-                this.Title = "MyMusicViewer"; // for task bar
+                this.Title = MyAppName; // for task bar
                 var lastPdfOpen = Properties.Settings.Default.LastPDFOpen;
                 if (string.IsNullOrEmpty(_RootMusicFolder))
                 {
@@ -283,7 +284,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             _DisableSliderValueChanged = false;
             //this.slider.IsDirectionReversed = true;
             this.PdfUIEnabled = true;
-            this.Title = $"MyMusicViewer {currentPdfMetaData.GetFullPathFile(volNo: 0, MakeRelative: false)}";
+            this.Title = $"{MyAppName} {currentPdfMetaData.GetFullPathFile(volNo: 0, MakeRelative: false)}";
             OnMyPropertyChanged(nameof(Title));
             OnMyPropertyChanged(nameof(PdfTitle));
             OnMyPropertyChanged(nameof(ImgThumbImage));
@@ -756,7 +757,9 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 currentPdfMetaData = null;
                 CurrentPageNumber = 0;
             }
+            this.Title = MyAppName;
             OnMyPropertyChanged(nameof(MaxPageNumber));
+            OnMyPropertyChanged(nameof(Title));
             OnMyPropertyChanged(nameof(PdfTitle));
             OnMyPropertyChanged(nameof(Description0));
             OnMyPropertyChanged(nameof(Description1));
