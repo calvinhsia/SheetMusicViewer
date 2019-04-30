@@ -257,73 +257,84 @@ namespace WpfPdfViewer
                         var pgOffset = 0;
                         nContinuations = 0;
                         var cntItems = 0;
-                        foreach (var file in Directory.EnumerateFiles(curPath, "*.pdf").OrderBy(f => f.ToLower()))//.Where(f=>f.Contains("Miser"))) // "file" is fullpath
+                        int curVolNo = 0; // 
+                        try
                         {
-                            if (file.Contains("Everybodys Fa"))
+                            foreach (var file in Directory.EnumerateFiles(curPath, "*.pdf").OrderBy(f => f.ToLower()))//.Where(f=>f.Contains("Miser"))) // "file" is fullpath
                             {
-                                "".ToString();
-                            }
-                            var isContinuation = false;
-                            if (!string.IsNullOrEmpty(lastFile) &&
-                                System.IO.Path.GetDirectoryName(lastFile) == System.IO.Path.GetDirectoryName(file))
-                            {
-                                var justFnamelast = System.IO.Path.GetFileNameWithoutExtension(lastFile).Trim().ToLower();
-                                var justfnameCurrent = System.IO.Path.GetFileNameWithoutExtension(file).Trim().ToLower();
-                                if (justFnamelast.Length == justfnameCurrent.Length) // file1, file2
+                                if (file.Contains("Billy Joel A Coll"))
                                 {
-                                    if (char.IsDigit(justfnameCurrent[justfnameCurrent.Length - 1]))
-                                    {
-                                        if (justFnamelast.Substring(0, justFnamelast.Length - 1) ==
-                                           justfnameCurrent.Substring(0, justfnameCurrent.Length - 1))
-                                        {
-                                            isContinuation = true;
-                                        }
-                                    }
+                                    "".ToString();
                                 }
-                                else
-                                {  // file, file2
-                                    if (justFnamelast == justfnameCurrent.Substring(0, justfnameCurrent.Length - 1))
+                                var isContinuation = false;
+                                if (!string.IsNullOrEmpty(lastFile) &&
+                                        curPdfFileData != null &&
+                                        System.IO.Path.GetDirectoryName(lastFile) == System.IO.Path.GetDirectoryName(file)) // same dir
+                                {
+                                    var justFnameVol0 = System.IO.Path.GetFileNameWithoutExtension(curPdfFileData._FullPathFile).Trim().ToLower();
+                                    if (justFnameVol0[justFnameVol0.Length - 1] == '0')
                                     {
+                                        justFnameVol0 = justFnameVol0.Substring(0, justFnameVol0.Length - 1);
+                                    }
+                                    var justfnameCurrent = System.IO.Path.GetFileNameWithoutExtension(file).Trim().ToLower();
+                                    if (justFnameVol0.Length < justfnameCurrent.Length &&
+                                        justFnameVol0 == justfnameCurrent.Substring(0, justFnameVol0.Length))
+                                    {
+                                        if (int.TryParse(justfnameCurrent.Substring(justFnameVol0.Length), out var volNo))
+                                        {
+                                            if (volNo != curVolNo + 1)
+                                            {
+                                                throw new InvalidOperationException($"Vol mismatch Expecred: {curVolNo} Actual: {volNo}  for {file}");
+                                            }
+                                        }
                                         isContinuation = true;
                                     }
                                 }
-                            }
-                            if (isContinuation)
-                            {
-                                nContinuations++;
-                                // add to current
-                                if (curPdfFileData != null && curPdfFileData.IsDirty) // dirty: we're creating a new one
+                                if (isContinuation)
                                 {
-                                    var newvolInfo = new PdfVolumeInfo()
+                                    curVolNo++;
+                                    nContinuations++;
+                                    // add to current
+                                    if (curPdfFileData != null && curPdfFileData.IsDirty) // dirty: we're creating a new one
                                     {
-                                        NPagesInThisVolume = (int)(await GetPdfDocumentForFileAsync(file)).PageCount
-                                    };
-                                    if (newvolInfo.NPagesInThisVolume != 1)
-                                    {
-                                        newvolInfo.Rotation = (int)Rotation.Rotate180;
+                                        var newvolInfo = new PdfVolumeInfo()
+                                        {
+                                            NPagesInThisVolume = (int)(await GetPdfDocumentForFileAsync(file)).PageCount
+                                        };
+                                        if (newvolInfo.NPagesInThisVolume != 1)
+                                        {
+                                            newvolInfo.Rotation = (int)Rotation.Rotate180;
+                                        }
+                                        else
+                                        {
+                                            newvolInfo.Rotation = (int)Rotation.Rotate0;  // assume if single page, it's upside up
+                                        }
+                                        curPdfFileData.lstVolInfo.Add(newvolInfo);
                                     }
-                                    else
+                                }
+                                else
+                                {
+                                    SaveMetaData(); // save prior metadata
+                                    if (await TryAddFileAsync(file))
                                     {
-                                        newvolInfo.Rotation = (int)Rotation.Rotate0;  // assume if single page, it's upside up
+                                        curVolNo = 0;
+                                        cntItems++;
                                     }
-                                    curPdfFileData.lstVolInfo.Add(newvolInfo);
+                                    if (curPdfFileData != null)
+                                    {
+                                        pgOffset = curPdfFileData.lstVolInfo[0].NPagesInThisVolume;
+                                    }
                                 }
+                                lastFile = file;
                             }
-                            else
-                            {
-                                SaveMetaData();
-                                if (await TryAddFileAsync(file))
-                                {
-                                    cntItems++;
-                                }
-                                if (curPdfFileData != null)
-                                {
-                                    pgOffset = curPdfFileData.lstVolInfo[0].NPagesInThisVolume;
-                                }
-                            }
-                            lastFile = file;
+
                         }
-                        SaveMetaData();
+                        catch (Exception ex)
+                        {
+                            PdfViewerWindow.s_pdfViewerWindow.OnException($"Exception reading files ", ex);
+                            throw;
+                        }
+                        SaveMetaData(); // last one in dir
                         foreach (var dir in Directory.EnumerateDirectories(curPath))
                         {
                             if (await recurDirsAsync(dir) > 0)

@@ -66,11 +66,6 @@ namespace WpfPdfViewer
                 LstVolInfo.Add($"Vol={volno++} Pg= {pgno,3} {vol}");
                 pgno += vol.NPagesInThisVolume;
             }
-            //var pgno = pdfViewerWindow.currentPdfMetaData.PageNumberOffset;
-            //Array.ForEach<PdfVolumeInfo>(pdfViewerWindow.currentPdfMetaData.lstVolInfo.ToArray(),
-            //    {
-            //    (p => LstVolInfo.Add($"Vol={volno++} {p}")
-            //    ););
             LstFavDisp = new ObservableCollection<FavDisp>();
             foreach (var fav in pdfViewerWindow.currentPdfMetaData.dictFav.Values)
             {
@@ -101,8 +96,20 @@ namespace WpfPdfViewer
         {
             _pdfViewerWindow.currentPdfMetaData.InitializeDictToc(LstTOC.ToList());
             _pdfViewerWindow.currentPdfMetaData.Notes = DocNotes?.Trim();
+            var delta = _pdfViewerWindow.currentPdfMetaData.PageNumberOffset - PageNumberOffset;
+            if (delta != 0)
+            {// user changed pagenumberoffset. we need to adjust the favorites page no
+                var favlist = _pdfViewerWindow.currentPdfMetaData.dictFav.Values.ToList();
+                foreach (var fav in favlist)
+                {
+                    fav.Pageno -= delta;
+                }
+                _pdfViewerWindow.currentPdfMetaData.Favorites = favlist;
+                _pdfViewerWindow.currentPdfMetaData.InitializeFavList();
+            }
             _pdfViewerWindow.currentPdfMetaData.PageNumberOffset = PageNumberOffset;
             PdfMetaData.SavePdfMetaFileData(_pdfViewerWindow.currentPdfMetaData, ForceSave: true);
+            this.DialogResult = true;
             this.Close();
         }
 

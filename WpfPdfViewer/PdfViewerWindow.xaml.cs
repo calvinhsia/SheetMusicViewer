@@ -289,7 +289,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             OnMyPropertyChanged(nameof(PdfTitle));
             OnMyPropertyChanged(nameof(ImgThumbImage));
             OnMyPropertyChanged(nameof(MaxPageNumber));
-            await ShowPageAsync(PageNo, ClearCache: true, resetRenderTransform:true);
+            await ShowPageAsync(PageNo, ClearCache: true, resetRenderTransform: true);
         }
 
 
@@ -631,13 +631,13 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         {
             var handled = false;
             var diff = Math.Abs(e.Timestamp - lastTouchTimeStamp);
-            var thresh = 100;
+            //            var thresh = 100;
             //if (e is TouchEventArgs) // for mouse input we don't do anything on double click, so 2 quick clicks should be 2 single clicks. For touch, we need to de-bounce (filter out 2 touches within 2 msecs)
             //{
             //    handled = true;
             //}
             // a touch sends both a touch and a mouse, (even if touch is handled) so we need to filter
-            thresh = System.Windows.Forms.SystemInformation.DoubleClickTime;// == 500
+            var thresh = System.Windows.Forms.SystemInformation.DoubleClickTime;// == 500
             lastTouchTimeStamp = e.Timestamp;
             if (diff > thresh)
             {
@@ -925,14 +925,21 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             if (!IsShowingMetaDataForm && currentPdfMetaData != null)
             {
                 IsShowingMetaDataForm = true;
+                var curdata = currentPdfMetaData;
+                var curpageno = CurrentPageNumber;
                 var w = new MetaDataForm(this);
-                if (w.ShowDialog() == true)
+                if (w.ShowDialog() == true) 
                 {
+                    IsShowingMetaDataForm = false;
                     if (w.PageNumberResult.HasValue)
                     {
-                        await ShowPageAsync(w.PageNumberResult.Value, ClearCache: true);
+                        curpageno = w.PageNumberResult.Value;
                     }
-
+                    if (curpageno < curdata.PageNumberOffset || curpageno >= curdata.PageNumberOffset + curdata.NumPagesInSet)
+                    {
+                        curpageno = curdata.PageNumberOffset;
+                    }
+                    await LoadPdfFileAndShowAsync(curdata, curpageno);  // user could have changed the PageNumberOffset, so we need to reload the doc
                 }
                 IsShowingMetaDataForm = false;
             }
