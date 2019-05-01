@@ -74,7 +74,7 @@ namespace WpfPdfViewer
             }
         }
         public int MaxPageNumber { get { return currentPdfMetaData == null ? 0 : (int)currentPdfMetaData.MaxPageNum; } }
-        public string PdfTitle { get { return currentPdfMetaData?.GetFullPathFile(volNo: 0, MakeRelative: true); } }
+        public string PdfTitle { get { return currentPdfMetaData?.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true); } }
 
         public BitmapImage ImgThumbImage { get { return currentPdfMetaData?.bitmapImageCache; } }
         public string Description0 { get { return currentPdfMetaData?.GetDescription(CurrentPageNumber); } }
@@ -140,7 +140,7 @@ namespace WpfPdfViewer
             this.Closed += (o, e) =>
             {
                 Properties.Settings.Default.Show2Pages = Show2Pages;
-                Properties.Settings.Default.LastPDFOpen = currentPdfMetaData?.GetFullPathFile(volNo: 0, MakeRelative: true);
+                Properties.Settings.Default.LastPDFOpen = currentPdfMetaData?.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true);
                 Properties.Settings.Default.MainWindowPos = new System.Drawing.Size((int)this.Left, (int)this.Top);
                 Properties.Settings.Default.MainWindowSize = new System.Drawing.Size((int)this.ActualWidth, (int)this.ActualHeight);
                 Properties.Settings.Default.IsFullScreen = this.chkFullScreen.IsChecked == true;
@@ -244,7 +244,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 {
                     (lstPdfMetaFileData, lstFolders) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(_RootMusicFolder);
                     this.btnChooser.IsEnabled = true;
-                    var lastPdfMetaData = lstPdfMetaFileData.Where(p => p.GetFullPathFile(volNo: 0, MakeRelative: true) == lastPdfOpen).FirstOrDefault();
+                    var lastPdfMetaData = lstPdfMetaFileData.Where(p => p.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true) == lastPdfOpen).FirstOrDefault();
                     if (lastPdfMetaData != null)
                     {
                         await LoadPdfFileAndShowAsync(lastPdfMetaData, lastPdfMetaData.LastPageNo);
@@ -283,7 +283,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             _DisableSliderValueChanged = false;
             //this.slider.IsDirectionReversed = true;
             this.PdfUIEnabled = true;
-            this.Title = $"{MyAppName} {currentPdfMetaData.GetFullPathFile(volNo: 0, MakeRelative: false)}";
+            this.Title = $"{MyAppName} {currentPdfMetaData.GetFullPathFileFromVolno(volNo: 0, MakeRelative: false)}";
             OnMyPropertyChanged(nameof(Title));
             OnMyPropertyChanged(nameof(PdfTitle));
             OnMyPropertyChanged(nameof(ImgThumbImage));
@@ -488,6 +488,10 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                                         {
                                             await this.LoadPdfFileAndShowAsync(pdfMetadata, pdfMetadata.PageNumberOffset);
                                             await LoopCurrentBook();
+                                            if (done)
+                                            {
+                                                break;
+                                            }
                                         }
                                         done = true;
                                     }

@@ -53,7 +53,7 @@ namespace LeakTest
             };
 
             (var lstMetaData, var _) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
-            foreach (var currentPdfMetaData in lstMetaData.Where(p => p.GetFullPathFile(volNo: 0).Contains("Classical Fake")))
+            foreach (var currentPdfMetaData in lstMetaData.Where(p => p.GetFullPathFileFromVolno(volNo: 0).Contains("Classical Fake")))
             {
                 var sw = Stopwatch.StartNew();
                 //                    var currentPdfMetaData = lstMetaData.Where(m => m.GetFullPathFile(volNo: 0).Contains("Fake")).First();

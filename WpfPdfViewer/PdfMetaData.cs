@@ -123,30 +123,10 @@ namespace WpfPdfViewer
             }
             return str.Trim();
         }
-        public string GetFullPathFile(int volNo, bool MakeRelative = false)
+
+        string GetFullPathFilePrivate(int volNo)
         {
             var retval = _FullPathFile;
-            if (_FullPathFile.EndsWith("0.pdf"))
-            {
-                retval = retval.Replace("0.pdf", string.Empty) + volNo.ToString() + ".pdf";
-            }
-            if (MakeRelative)
-            {
-                if (retval != null)
-                {
-                    retval = retval.Substring(PdfViewerWindow.s_pdfViewerWindow._RootMusicFolder.Length + 1).Replace(".pdf", string.Empty);
-                    if (retval.EndsWith("0") || retval.EndsWith("1"))
-                    {
-                        retval = retval.Substring(0, retval.Length - 2);
-                    }
-                }
-            }
-            return retval;
-        }
-        public string GetFullPathFileFromPageNo(int pageNo)
-        {
-            var retval = _FullPathFile;
-            var volNo = GetVolNumFromPageNum(pageNo);
             string FormatVolno(int v)
             {
                 string str;
@@ -161,14 +141,28 @@ namespace WpfPdfViewer
                 }
                 return str;
             }
-            if (_FullPathFile.EndsWith("0.pdf"))
+            if (retval.EndsWith("0.pdf"))
             {
-                retval = retval.Replace("0.pdf", string.Empty) + FormatVolno(volNo) + ".pdf";
+                if (retval.EndsWith("00.pdf"))
+                {
+                    retval = retval.Replace("00.pdf", string.Empty) + FormatVolno(volNo) + ".pdf";
+                }
+                else
+                {
+                    retval = retval.Replace("0.pdf", string.Empty) + FormatVolno(volNo) + ".pdf";
+                }
             }
             else if (_FullPathFile.EndsWith("1.pdf"))
             {
                 // no page 0, so 1 based
-                retval = retval.Replace("1.pdf", string.Empty) + FormatVolno(volNo + 1) + ".pdf";
+                if (retval.EndsWith("01.pdf"))
+                {
+                    retval = retval.Replace("01.pdf", string.Empty) + FormatVolno(volNo + 1) + ".pdf";
+                }
+                else
+                {
+                    retval = retval.Replace("1.pdf", string.Empty) + FormatVolno(volNo + 1) + ".pdf";
+                }
             }
             else if (this.lstVolInfo.Count > 0) //there's more than 1 entry
             {
@@ -181,6 +175,28 @@ namespace WpfPdfViewer
                 }
             }
             Debug.Assert(File.Exists(retval));
+            return retval;
+        }
+        public string GetFullPathFileFromVolno(int volNo, bool MakeRelative = false)
+        {
+            var retval = GetFullPathFilePrivate(volNo);
+            if (MakeRelative)
+            {
+                if (retval != null)
+                {
+                    retval = retval.Substring(PdfViewerWindow.s_pdfViewerWindow._RootMusicFolder.Length + 1).Replace(".pdf", string.Empty);
+                    while (retval.EndsWith("0") || retval.EndsWith("1"))
+                    {
+                        retval = retval.Substring(0, retval.Length - 2);
+                    }
+                }
+            }
+            return retval;
+        }
+        public string GetFullPathFileFromPageNo(int pageNo)
+        {
+            var volNo = GetVolNumFromPageNum(pageNo);
+            var retval = GetFullPathFileFromVolno(volNo);
             return retval;
         }
 
@@ -692,7 +708,7 @@ namespace WpfPdfViewer
             var bmi = bitmapImageCache; // first see if we have one 
             if (bmi == null)
             {
-                var pdfDoc = await GetPdfDocumentForFileAsync(GetFullPathFile(volNo: 0));
+                var pdfDoc = await GetPdfDocumentForFileAsync(GetFullPathFileFromVolno(volNo: 0));
                 using (var pdfPage = pdfDoc.GetPage(0))
                 {
                     var rect = pdfPage.Dimensions.ArtBox;

@@ -43,7 +43,7 @@ namespace Tests
                 _RootMusicFolder = Rootfolder
             };
             (var lstMetaData, var _) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
-            var currentPdfMetaData = lstMetaData.Where(m => m.GetFullPathFile(volNo: 0).Contains("Fake")).First();
+            var currentPdfMetaData = lstMetaData.Where(m => m.GetFullPathFileFromVolno(volNo: 0).Contains("Fake")).First();
             w.currentPdfMetaData = currentPdfMetaData;
             w.currentPdfMetaData.InitializeListPdfDocuments();
             //var cacheEntry = PdfViewerWindow.CacheEntry.TryAddCacheEntry(mpdf.PageNumberOffset);
@@ -53,7 +53,7 @@ namespace Tests
             for (var iter = 0; iter < 12; iter++)
             {
                 var pageNo = 0;
-                for (pageNo = currentPdfMetaData.PageNumberOffset; pageNo < currentPdfMetaData.MaxPageNum; pageNo++)
+                for (pageNo = currentPdfMetaData.PageNumberOffset; pageNo < currentPdfMetaData.NumPagesInSet + currentPdfMetaData.PageNumberOffset - 1; pageNo++)
 
                 {
                     var (pdfDoc, pdfPgno) = await currentPdfMetaData.GetPdfDocumentForPageno(pageNo);
@@ -137,7 +137,7 @@ namespace Tests
                     for (var iter = 0; iter < 1; iter++)
                     {
                         var pageNo = 0;
-                        for (pageNo = currentPdfMetaData.PageNumberOffset; pageNo < currentPdfMetaData.MaxPageNum; pageNo++)
+                        for (pageNo = currentPdfMetaData.PageNumberOffset; pageNo < currentPdfMetaData.NumPagesInSet + currentPdfMetaData.PageNumberOffset - 1; pageNo++)
                         {
                             var cacheEntry = w._pageCache.TryAddCacheEntry(pageNo);
                             await cacheEntry.task;
@@ -208,7 +208,7 @@ namespace Tests
             (var lstMetaData, var _) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
             foreach (var pm in lstMetaData)
             {
-                TestContext.WriteLine($"{pm.GetFullPathFile(volNo: 0)}");
+                TestContext.WriteLine($"{pm.GetFullPathFileFromVolno(volNo: 0)}");
                 foreach (var vol in pm.lstVolInfo)
                 {
                     TestContext.WriteLine($"   {vol.ToString()}");

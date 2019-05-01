@@ -230,7 +230,7 @@ namespace WpfPdfViewer
                 foreach (var pdfMetaDataItem in
                     _pdfViewerWindow.
                     lstPdfMetaFileData.
-                    OrderBy(p => p.GetFullPathFile(volNo: 0, MakeRelative: true)))
+                    OrderBy(p => p.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true)))
                 {
                     foreach (var tentry in pdfMetaDataItem.lstTocEntries)
                     {
@@ -246,7 +246,7 @@ namespace WpfPdfViewer
                             itm.Date,
                             itm.Notes,
                             itm.PageNo,
-                            FileName = ((PdfMetaData)itm.Tag).GetFullPathFile(volNo: 0, MakeRelative: true),
+                            FileName = ((PdfMetaData)itm.Tag).GetFullPathFileFromVolno(volNo: 0, MakeRelative: true),
                             _TocEntry = itm
                         };
 
@@ -331,7 +331,7 @@ namespace WpfPdfViewer
                     foreach (var pdfMetaDataItem in
                             _pdfViewerWindow.
                             lstPdfMetaFileData.
-                            OrderBy(p => p.GetFullPathFile(volNo: 0, MakeRelative: true)))
+                            OrderBy(p => p.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true)))
                     {
                         var includeThisItem = false;
                         foreach (CheckBox chk in lstFoldrs)
@@ -339,7 +339,7 @@ namespace WpfPdfViewer
                             if (chk.IsChecked == true)
                             {
                                 var str = chk.Content as string + System.IO.Path.DirectorySeparatorChar.ToString();
-                                if (pdfMetaDataItem.GetFullPathFile(volNo: 0, MakeRelative: true).IndexOf(str) >= 0)
+                                if (pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true).IndexOf(str) >= 0)
                                 {
                                     includeThisItem = true;
                                     break;
@@ -352,7 +352,7 @@ namespace WpfPdfViewer
                         }
                         if (tbxFilter.Text.Trim().Length > 0)
                         {
-                            if (pdfMetaDataItem.GetFullPathFile(volNo: 0, MakeRelative: true).IndexOf(tbxFilter.Text.Trim(), StringComparison.OrdinalIgnoreCase) < 0)
+                            if (pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true).IndexOf(tbxFilter.Text.Trim(), StringComparison.OrdinalIgnoreCase) < 0)
                             {
                                 continue;
                             }
@@ -364,8 +364,8 @@ namespace WpfPdfViewer
                         sp.Children.Add(new Image() { Source = pdfMetaDataItem?.bitmapImageCache });
                         sp.Children.Add(new TextBlock()
                         {
-                            Text = pdfMetaDataItem.GetFullPathFile(volNo: 0, MakeRelative: true),
-                            ToolTip = pdfMetaDataItem.GetFullPathFile(volNo: 0)
+                            Text = pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true),
+                            ToolTip = pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0)
                         });
                         var data = $"#Sngs={pdfMetaDataItem.GetSongCount()} Pg={pdfMetaDataItem.GetTotalPageCount()} Fav={pdfMetaDataItem.dictFav.Count}";
                         sp.Children.Add(new TextBlock()
@@ -424,7 +424,7 @@ namespace WpfPdfViewer
                     foreach (var pdfMetaDataItem in
                         _pdfViewerWindow.
                         lstPdfMetaFileData.
-                        OrderBy(p => p.GetFullPathFile(volNo: 0, MakeRelative: true)))
+                        OrderBy(p => p.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true)))
                     {
                         foreach (var fav in pdfMetaDataItem.dictFav.Values)
                         {
