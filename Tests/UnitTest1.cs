@@ -53,7 +53,7 @@ namespace Tests
             for (var iter = 0; iter < 12; iter++)
             {
                 var pageNo = 0;
-                for (pageNo = currentPdfMetaData.PageNumberOffset; pageNo < currentPdfMetaData.NumPagesInSet + currentPdfMetaData.PageNumberOffset - 1; pageNo++)
+                for (pageNo = currentPdfMetaData.PageNumberOffset; pageNo < currentPdfMetaData.MaxPageNum; pageNo++)
 
                 {
                     var (pdfDoc, pdfPgno) = await currentPdfMetaData.GetPdfDocumentForPageno(pageNo);
@@ -137,7 +137,7 @@ namespace Tests
                     for (var iter = 0; iter < 1; iter++)
                     {
                         var pageNo = 0;
-                        for (pageNo = currentPdfMetaData.PageNumberOffset; pageNo < currentPdfMetaData.NumPagesInSet + currentPdfMetaData.PageNumberOffset - 1; pageNo++)
+                        for (pageNo = currentPdfMetaData.PageNumberOffset; pageNo < currentPdfMetaData.MaxPageNum; pageNo++)
                         {
                             var cacheEntry = w._pageCache.TryAddCacheEntry(pageNo);
                             await cacheEntry.task;

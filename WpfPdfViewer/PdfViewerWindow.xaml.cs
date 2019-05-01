@@ -62,8 +62,7 @@ namespace WpfPdfViewer
 
         private int _CurrentPageNumber;
         /// <summary>
-        /// This is the page number. it ranges from <see cref="PdfMetaData.PageNumberOffset"/> to  <see cref="PdfMetaData.NumPagesInSet"/> + <see cref="PdfMetaData.PageNumberOffset"/> -1
-        /// If PageNumberOffset is 0, it ranges from 0 to <see cref="PdfMetaData.PageNumberOffset"/> -1
+        /// This is the page number. it ranges from <see cref="PdfMetaData.PageNumberOffset"/> to  <see cref="PdfMetaData.MaxPageNum"/>
         /// </summary>
         public int CurrentPageNumber
         {
@@ -74,7 +73,7 @@ namespace WpfPdfViewer
                 OnMyPropertyChanged();
             }
         }
-        public int MaxPageNumber { get { return currentPdfMetaData == null ? 0 : (int)currentPdfMetaData.NumPagesInSet + currentPdfMetaData.PageNumberOffset; } }
+        public int MaxPageNumber { get { return currentPdfMetaData == null ? 0 : (int)currentPdfMetaData.MaxPageNum; } }
         public string PdfTitle { get { return currentPdfMetaData?.GetFullPathFile(volNo: 0, MakeRelative: true); } }
 
         public BitmapImage ImgThumbImage { get { return currentPdfMetaData?.bitmapImageCache; } }
@@ -278,7 +277,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             currentPdfMetaData.InitializeListPdfDocuments();
             _DisableSliderValueChanged = true;
             this.slider.Minimum = currentPdfMetaData.PageNumberOffset;
-            this.slider.Maximum = this.MaxPageNumber;
+            this.slider.Maximum = this.MaxPageNumber - 1;
             this.slider.LargeChange = Math.Max((int)(.1 * (this.MaxPageNumber - this.slider.Minimum)), 1); // 10%
             this.slider.Value = PageNo;
             _DisableSliderValueChanged = false;
@@ -472,7 +471,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                                 {
                                     async Task LoopCurrentBook()
                                     {
-                                        for (int pg = currentPdfMetaData.PageNumberOffset; pg < MaxPageNumber; pg++)
+                                        for (int pg = CurrentPageNumber + NumPagesPerView; pg < MaxPageNumber; pg += NumPagesPerView)
                                         {
                                             if (ctsPageScan.IsCancellationRequested)
                                             {
@@ -495,6 +494,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                                     else
                                     {
                                         await LoopCurrentBook();
+                                        done = true;
                                     }
                                 }
                                 IsTesting = false;
@@ -928,20 +928,23 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 var curdata = currentPdfMetaData;
                 var curpageno = CurrentPageNumber;
                 var w = new MetaDataForm(this);
-                if (w.ShowDialog() == true) 
+                if (w.ShowDialog() == true)
                 {
                     IsShowingMetaDataForm = false;
                     if (w.PageNumberResult.HasValue)
                     {
                         curpageno = w.PageNumberResult.Value;
                     }
-                    if (curpageno < curdata.PageNumberOffset || curpageno >= curdata.PageNumberOffset + curdata.NumPagesInSet)
+                    if (curpageno < curdata.PageNumberOffset || curpageno >= curdata.MaxPageNum)
                     {
                         curpageno = curdata.PageNumberOffset;
                     }
                     await LoadPdfFileAndShowAsync(curdata, curpageno);  // user could have changed the PageNumberOffset, so we need to reload the doc
                 }
-                IsShowingMetaDataForm = false;
+                else
+                {
+                    IsShowingMetaDataForm = false;
+                }
             }
         }
         private static readonly Stopwatch _doubleTapStopwatch = new Stopwatch();

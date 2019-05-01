@@ -34,6 +34,7 @@ namespace WpfPdfViewer
         [XmlIgnore]
         public int NumPagesInSet => lstVolInfo.Sum(p => p.NPagesInThisVolume);
 
+
         public List<PdfVolumeInfo> lstVolInfo = new List<PdfVolumeInfo>();
         /// <summary>
         /// the page no when this PDF was last opened
@@ -42,6 +43,9 @@ namespace WpfPdfViewer
 
         internal bool IsDirty = false;
         int initialLastPageNo;
+
+        [XmlIgnore]
+        public int MaxPageNum => PageNumberOffset + NumPagesInSet;
 
         /// <summary>
         /// The Table of contents of a songbook shows the physical page numbers, which may not match the actual PDF page numbers (there could be a cover page scanned or could be a multivolume set, or 30 pages of intro, and then page 1 has the 1st song)
@@ -262,7 +266,7 @@ namespace WpfPdfViewer
                         {
                             foreach (var file in Directory.EnumerateFiles(curPath, "*.pdf").OrderBy(f => f.ToLower()))//.Where(f=>f.Contains("Miser"))) // "file" is fullpath
                             {
-                                if (file.Contains("Billy Joel A Coll"))
+                                if (file.Contains("Scott Joplin C"))
                                 {
                                     "".ToString();
                                 }
@@ -272,8 +276,13 @@ namespace WpfPdfViewer
                                         System.IO.Path.GetDirectoryName(lastFile) == System.IO.Path.GetDirectoryName(file)) // same dir
                                 {
                                     var justFnameVol0 = System.IO.Path.GetFileNameWithoutExtension(curPdfFileData._FullPathFile).Trim().ToLower();
-                                    if (justFnameVol0[justFnameVol0.Length - 1] == '0')
+                                    var lastcharVol0 = justFnameVol0.Last();
+                                    if ("01".Contains(lastcharVol0)) // if the last char is 0 or 1
                                     {
+                                        if (lastcharVol0 == '1' && curVolNo == 0)
+                                        {
+                                            curVolNo++;
+                                        }
                                         justFnameVol0 = justFnameVol0.Substring(0, justFnameVol0.Length - 1);
                                     }
                                     var justfnameCurrent = System.IO.Path.GetFileNameWithoutExtension(file).Trim().ToLower();
@@ -284,7 +293,7 @@ namespace WpfPdfViewer
                                         {
                                             if (volNo != curVolNo + 1)
                                             {
-                                                throw new InvalidOperationException($"Vol mismatch Expecred: {curVolNo} Actual: {volNo}  for {file}");
+                                                throw new InvalidOperationException($"Vol mismatch Expected: {curVolNo} Actual: {volNo}  for {file}");
                                             }
                                         }
                                         isContinuation = true;
@@ -332,7 +341,6 @@ namespace WpfPdfViewer
                         catch (Exception ex)
                         {
                             PdfViewerWindow.s_pdfViewerWindow.OnException($"Exception reading files ", ex);
-                            throw;
                         }
                         SaveMetaData(); // last one in dir
                         foreach (var dir in Directory.EnumerateDirectories(curPath))
@@ -380,7 +388,7 @@ namespace WpfPdfViewer
                                 });
                                 pdfFileData.IsDirty = true;
                             }
-                            if (pdfFileData.LastPageNo < pdfFileData.PageNumberOffset || pdfFileData.LastPageNo >= pdfFileData.NumPagesInSet - 1 + pdfFileData.PageNumberOffset) // make sure lastpageno is in range
+                            if (pdfFileData.LastPageNo < pdfFileData.PageNumberOffset || pdfFileData.LastPageNo >= pdfFileData.MaxPageNum) // make sure lastpageno is in range
                             {
                                 pdfFileData.LastPageNo = pdfFileData.PageNumberOffset; // go to first page
                             }
@@ -494,7 +502,7 @@ namespace WpfPdfViewer
         {
             PdfDocument pdfDoc = null;
             var pdfPgNo = 0;
-            if (pageNo < NumPagesInSet + PageNumberOffset)
+            if (pageNo < MaxPageNum)
             {
                 var volno = GetVolNumFromPageNum(pageNo);
                 var pdfDocTask = lstVolInfo[volno].TaskPdfDocument;
