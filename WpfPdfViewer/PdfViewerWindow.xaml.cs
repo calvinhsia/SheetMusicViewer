@@ -74,6 +74,7 @@ namespace WpfPdfViewer
             }
         }
         public int MaxPageNumber { get { return currentPdfMetaData == null ? 0 : (int)currentPdfMetaData.MaxPageNum; } }
+        public int MaxPageNumberMinus1 { get { return currentPdfMetaData == null ? 0 : (int)currentPdfMetaData.MaxPageNum - 1; } }
         public string PdfTitle { get { return currentPdfMetaData?.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true); } }
 
         public BitmapImage ImgThumbImage { get { return currentPdfMetaData?.bitmapImageCache; } }
@@ -288,6 +289,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             OnMyPropertyChanged(nameof(PdfTitle));
             OnMyPropertyChanged(nameof(ImgThumbImage));
             OnMyPropertyChanged(nameof(MaxPageNumber));
+            OnMyPropertyChanged(nameof(MaxPageNumberMinus1));
             await ShowPageAsync(PageNo, ClearCache: true, resetRenderTransform: true);
         }
 
@@ -322,7 +324,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 {
                     pageNo = (int)this.slider.Minimum;
                 }
-                if (pageNo > MaxPageNumber)
+                if (pageNo >= MaxPageNumber)
                 {
                     pageNo -= NumPagesPerView;
                     if (pageNo < 0)
@@ -763,6 +765,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
             this.Title = MyAppName;
             OnMyPropertyChanged(nameof(MaxPageNumber));
+            OnMyPropertyChanged(nameof(MaxPageNumberMinus1));
             OnMyPropertyChanged(nameof(Title));
             OnMyPropertyChanged(nameof(PdfTitle));
             OnMyPropertyChanged(nameof(Description0));
