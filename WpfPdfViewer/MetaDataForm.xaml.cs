@@ -53,6 +53,9 @@ namespace WpfPdfViewer
         {
             InitializeComponent();
             this._pdfViewerWindow = pdfViewerWindow;
+            this.ShowInTaskbar = false;
+//            this.Topmost = true;
+            this.Owner = Application.Current.MainWindow;
             LstTOC = new ObservableCollection<TOCEntry>();
             foreach (var itm in pdfViewerWindow.currentPdfMetaData.lstTocEntries.OrderBy(p => p.PageNo))
             {

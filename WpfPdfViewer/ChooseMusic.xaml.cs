@@ -28,6 +28,9 @@ namespace WpfPdfViewer
         public ChooseMusic(PdfViewerWindow pdfViewerWindow)
         {
             InitializeComponent();
+            this.ShowInTaskbar = false;
+            //this.Topmost = true;
+            this.Owner = Application.Current.MainWindow;
             this._pdfViewerWindow = pdfViewerWindow;
             this.Loaded += ChooseMusic_Loaded;
             this.Top = _pdfViewerWindow.Top;

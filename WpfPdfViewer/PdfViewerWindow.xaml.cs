@@ -717,6 +717,23 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 }
             }
         }
+        private void DpPage_MouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+            {
+                var pos = e.GetPosition(this.dpPage);
+                var matrix = ((MatrixTransform)this.dpPage.RenderTransform).Matrix;
+                pos = matrix.Transform(pos);
+                var delt = 1.3 * (e.Delta / 30.0);
+                if (e.Delta < 0)
+                {
+                    delt = -1 / delt;
+                }
+                matrix.ScaleAt(delt, delt, pos.X, pos.Y);
+                this.dpPage.RenderTransform = new MatrixTransform(matrix);
+                e.Handled = true;
+            }
+        }
 
         private void DpPage_ManipulationInertiaStarting(object sender, ManipulationInertiaStartingEventArgs e)
         {
