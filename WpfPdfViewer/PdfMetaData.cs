@@ -373,7 +373,7 @@ namespace WpfPdfViewer
             }
             return (lstPdfMetaFileData, lstFolders);
         }
-
+        public string PdfMetadataFileName => Path.ChangeExtension(_FullPathFile,"bmk");
         public static async Task<PdfMetaData> ReadPdfMetaDataAsync(string FullPathPdfFile)
         {
             PdfMetaData pdfFileData = null;

@@ -29,5 +29,8 @@
     <Setting Name="EditWindowSize" Type="System.Drawing.Size" Scope="User">
       <Value Profile="(Default)">1000, 800</Value>
     </Setting>
+    <Setting Name="ChooseBooksSort" Type="System.String" Scope="User">
+      <Value Profile="(Default)">ByFolder</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

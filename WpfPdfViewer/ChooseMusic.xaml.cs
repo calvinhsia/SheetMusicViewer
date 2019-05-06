@@ -22,6 +22,7 @@ namespace WpfPdfViewer
         public const string NewFolderDialogString = "New...";
         readonly PdfViewerWindow _pdfViewerWindow;
         TreeView _TreeView;
+        bool doneLoading = false;
         readonly List<Favorite> _lstFavoriteEntries = new List<Favorite>();
 
         public PdfMetaData chosenPdfMetaData = null;
@@ -42,6 +43,16 @@ namespace WpfPdfViewer
         {
             var mruRootFolderItems = Properties.Settings.Default.RootFolderMRU;
             CboEnableCboSelectionChange = false;
+
+            var chooseSortBy = Properties.Settings.Default.ChooseBooksSort;
+            if (chooseSortBy == "ByFolder")
+            {
+                rbtnByFolder.IsChecked = true;
+            }
+            else
+            {
+                rbtnByDate.IsChecked = true;
+            }
             if (!string.IsNullOrEmpty(_pdfViewerWindow._RootMusicFolder))
             {
                 this.cboRootFolder.Items.Add(new ComboBoxItem() { Content = _pdfViewerWindow._RootMusicFolder });
@@ -75,6 +86,7 @@ namespace WpfPdfViewer
                     ActivateTab(tabItemHeader);
                     et.Handled = true;
                 };
+            doneLoading = true;
         }
 
         private void CboRootFolder_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -140,7 +152,6 @@ namespace WpfPdfViewer
 
         private async Task ChangeRootFolderAsync(string selectedPath)
         {
-
             var col = new StringCollection
                 {
                     selectedPath
@@ -276,7 +287,6 @@ namespace WpfPdfViewer
             }
         }
 
-
         private async void FillBooksTab()
         {
             if (this.lbBooks.ItemsSource == null)
@@ -323,89 +333,110 @@ namespace WpfPdfViewer
                    {
                        await FillBookItemsAsync();
                    };
-                await FillBookItemsAsync();
-                async Task FillBookItemsAsync()
+            }
+            await FillBookItemsAsync();
+        }
+        private void Rbtn_Checked(object sender, RoutedEventArgs e)
+        {
+            if (doneLoading) // the load sets the initial btn state which fires the Checked.
+            {
+                FillBooksTab();
+            }
+        }
+
+        async Task FillBookItemsAsync()
+        {
+            var lstBooks = this.lbBooks.ItemsSource as ObservableCollection<UIElement>;
+            var lstFoldrs = this.lbfolders.ItemsSource as ObservableCollection<UIElement>;
+            lstBooks.Clear();
+            var nBooks = 0;
+            var nSongs = 0;
+            var nPages = 0;
+            var nFavs = 0;
+            foreach (var pdfMetaDataItem in
+                    _pdfViewerWindow.
+                    lstPdfMetaFileData.
+                    OrderBy(p =>
+                    {
+                        if (this.rbtnByDate.IsChecked == true)
+                        {
+                            var date = (new System.IO.FileInfo(p.PdfMetadataFileName)).LastWriteTime;
+                            return (DateTime.Now - date).TotalSeconds.ToString("0000000000");
+                        }
+                        else
+                        {
+                            return p.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true);
+                        }
+                    }))
+            {
+                var includeThisItem = false;
+                foreach (CheckBox chk in lstFoldrs)
                 {
-                    lstBooks.Clear();
-                    var nBooks = 0;
-                    var nSongs = 0;
-                    var nPages = 0;
-                    var nFavs = 0;
-                    foreach (var pdfMetaDataItem in
-                            _pdfViewerWindow.
-                            lstPdfMetaFileData.
-                            OrderBy(p => p.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true)))
+                    if (chk.IsChecked == true)
                     {
-                        var includeThisItem = false;
-                        foreach (CheckBox chk in lstFoldrs)
+                        var str = chk.Content as string + System.IO.Path.DirectorySeparatorChar.ToString();
+                        if (pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true).IndexOf(str) >= 0)
                         {
-                            if (chk.IsChecked == true)
-                            {
-                                var str = chk.Content as string + System.IO.Path.DirectorySeparatorChar.ToString();
-                                if (pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true).IndexOf(str) >= 0)
-                                {
-                                    includeThisItem = true;
-                                    break;
-                                }
-                            }
+                            includeThisItem = true;
+                            break;
                         }
-                        if (!includeThisItem)
-                        {
-                            continue;
-                        }
-                        if (tbxFilter.Text.Trim().Length > 0)
-                        {
-                            if (pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true).IndexOf(tbxFilter.Text.Trim(), StringComparison.OrdinalIgnoreCase) < 0)
-                            {
-                                continue;
-                            }
-                        }
-                        var contentControl = new ContentControl(); // ContentControl has doubleclick event
-                        var sp = new StackPanel() { Orientation = Orientation.Vertical };
-                        contentControl.Tag = pdfMetaDataItem;
-                        await pdfMetaDataItem.GetBitmapImageThumbnailAsync();
-                        sp.Children.Add(new Image() { Source = pdfMetaDataItem?.bitmapImageCache });
-                        sp.Children.Add(new TextBlock()
-                        {
-                            Text = pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true),
-                            ToolTip = pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0)
-                        });
-                        var data = $"#Sngs={pdfMetaDataItem.GetSongCount()} Pg={pdfMetaDataItem.GetTotalPageCount()} Fav={pdfMetaDataItem.dictFav.Count}";
-                        sp.Children.Add(new TextBlock()
-                        {
-                            Text = $"#Sngs={pdfMetaDataItem.GetSongCount()} Pg={pdfMetaDataItem.GetTotalPageCount()} Fav={pdfMetaDataItem.dictFav.Count}",
-                            ToolTip = data
-                        });
-                        await Task.Delay(0);
-                        contentControl.Content = sp;
-                        lstBooks.Add(contentControl);
-                        contentControl.MouseDoubleClick += (o, e) =>
-                        {
-                            BtnOk_Click(this, e);
-                        };
-                        contentControl.TouchDown += (o, e) =>
-                        {
-                            if (PdfViewerWindow.IsDoubleTap(this.lbBooks, e))
-                            {
-                                this.lbBooks.SelectedItem = o;
-                                BtnOk_Click(o, e);
-                            }
-                        };
-                        nBooks++;
-                        nSongs += pdfMetaDataItem.lstTocEntries.Count;
-                        nPages += pdfMetaDataItem.NumPagesInSet;
-                        nFavs += pdfMetaDataItem.dictFav.Count;
-                    }
-                    this.tbxTotals.Text = $@"Total #Books = {
-                        nBooks} # Songs = {
-                        nSongs:n0} # Pages = {
-                        nPages:n0} #Fav={
-                        nFavs:n0}";
-                    if (lstBooks.Count > 0)
-                    {
-                        this.lbBooks.ScrollIntoView(lstBooks[0]);
                     }
                 }
+                if (!includeThisItem)
+                {
+                    continue;
+                }
+                if (tbxFilter.Text.Trim().Length > 0)
+                {
+                    if (pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true).IndexOf(tbxFilter.Text.Trim(), StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        continue;
+                    }
+                }
+                var contentControl = new ContentControl(); // ContentControl has doubleclick event
+                var sp = new StackPanel() { Orientation = Orientation.Vertical };
+                contentControl.Tag = pdfMetaDataItem;
+                await pdfMetaDataItem.GetBitmapImageThumbnailAsync();
+                sp.Children.Add(new Image() { Source = pdfMetaDataItem?.bitmapImageCache });
+                sp.Children.Add(new TextBlock()
+                {
+                    Text = pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true),
+                    ToolTip = pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0)
+                });
+                var data = $"#Sngs={pdfMetaDataItem.GetSongCount()} Pg={pdfMetaDataItem.GetTotalPageCount()} Fav={pdfMetaDataItem.dictFav.Count}";
+                sp.Children.Add(new TextBlock()
+                {
+                    Text = $"#Sngs={pdfMetaDataItem.GetSongCount()} Pg={pdfMetaDataItem.GetTotalPageCount()} Fav={pdfMetaDataItem.dictFav.Count}",
+                    ToolTip = data
+                });
+                await Task.Delay(0);
+                contentControl.Content = sp;
+                lstBooks.Add(contentControl);
+                contentControl.MouseDoubleClick += (o, e) =>
+                {
+                    BtnOk_Click(this, e);
+                };
+                contentControl.TouchDown += (o, e) =>
+                {
+                    if (PdfViewerWindow.IsDoubleTap(this.lbBooks, e))
+                    {
+                        this.lbBooks.SelectedItem = o;
+                        BtnOk_Click(o, e);
+                    }
+                };
+                nBooks++;
+                nSongs += pdfMetaDataItem.lstTocEntries.Count;
+                nPages += pdfMetaDataItem.NumPagesInSet;
+                nFavs += pdfMetaDataItem.dictFav.Count;
+            }
+            this.tbxTotals.Text = $@"Total #Books = {
+                nBooks} # Songs = {
+                nSongs:n0} # Pages = {
+                nPages:n0} #Fav={
+                nFavs:n0}";
+            if (lstBooks.Count > 0)
+            {
+                this.lbBooks.ScrollIntoView(lstBooks[0]);
             }
         }
 
@@ -481,6 +512,24 @@ namespace WpfPdfViewer
                     else
                     {
                         // nothing is selected. we'll terminate dialog anyway, but allow nothing to be selected
+                    }
+                    var oldChooseSortby = Properties.Settings.Default.ChooseBooksSort;
+                    var newChooseSortBy = rbtnByDate.IsChecked == true ? "ByDate" : "ByFolder";
+                    if (oldChooseSortby == "ByFolder")
+                    {
+                        if (rbtnByDate.IsChecked == true)
+                        {
+                            newChooseSortBy = "ByDate";
+                        }
+                    }
+                    else if (oldChooseSortby == "Date")
+                    {
+                        newChooseSortBy = "ByFolder";
+                    }
+                    if (newChooseSortBy != oldChooseSortby)
+                    {
+                        Properties.Settings.Default.ChooseBooksSort = newChooseSortBy;
+                        Properties.Settings.Default.Save();
                     }
                     break;
                 case "_Favorites":
