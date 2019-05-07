@@ -787,6 +787,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             OnMyPropertyChanged(nameof(PdfTitle));
             OnMyPropertyChanged(nameof(Description0));
             OnMyPropertyChanged(nameof(Description1));
+            OnMyPropertyChanged(nameof(ImgThumbImage));
             this.PdfUIEnabled = false;
         }
 
