@@ -24,6 +24,7 @@
                             <StackPanel Orientation="Horizontal">
                                 <RadioButton Name="rbtnByDate" ToolTip="Sort by most recently accessed first" GroupName="Sort" Content="ByDate" Checked="Rbtn_Checked" Margin="20,5,0,0"/>
                                 <RadioButton Name="rbtnByFolder" ToolTip="Sort by folder" GroupName="Sort" Content="ByFolder" Checked="Rbtn_Checked" Margin="20,5,0,0"/>
+                                <RadioButton Name="rbtnByNumPages" ToolTip="Sort by # of pages" GroupName="Sort" Content="ByNumPages" Checked="Rbtn_Checked" Margin="20,5,0,0"/>
                                 <Label Content="Filter" Margin="20,0,0,0"/>
                                 <TextBox Name="tbxFilter" Width="100" ToolTip="Filter the books"/>
                             </StackPanel>

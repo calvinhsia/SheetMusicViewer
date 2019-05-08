@@ -97,6 +97,12 @@ namespace WpfPdfViewer
 
         private void BtnSave_Click(object sender, RoutedEventArgs e)
         {
+            // if triggered by hotkey make sure textboxes are updated
+            var bindings = BindingOperations.GetSourceUpdatingBindings(this);
+            foreach (var b in bindings)
+            {
+                b.UpdateSource();
+            }
             _pdfViewerWindow.currentPdfMetaData.InitializeDictToc(LstTOC.ToList());
             _pdfViewerWindow.currentPdfMetaData.Notes = DocNotes?.Trim();
             var delta = _pdfViewerWindow.currentPdfMetaData.PageNumberOffset - PageNumberOffset;

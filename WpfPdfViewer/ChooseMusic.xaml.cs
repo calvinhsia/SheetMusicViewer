@@ -45,13 +45,17 @@ namespace WpfPdfViewer
             CboEnableCboSelectionChange = false;
 
             var chooseSortBy = Properties.Settings.Default.ChooseBooksSort;
-            if (chooseSortBy == "ByFolder")
+            switch (chooseSortBy)
             {
-                rbtnByFolder.IsChecked = true;
-            }
-            else
-            {
-                rbtnByDate.IsChecked = true;
+                case "ByFolder":
+                    rbtnByFolder.IsChecked = true;
+                    break;
+                case "ByDate":
+                    rbtnByDate.IsChecked = true;
+                    break;
+                case "ByNumPages":
+                    rbtnByNumPages.IsChecked = true;
+                    break;
             }
             if (!string.IsNullOrEmpty(_pdfViewerWindow._RootMusicFolder))
             {
@@ -363,9 +367,13 @@ namespace WpfPdfViewer
                             var date = (new System.IO.FileInfo(p.PdfMetadataFileName)).LastWriteTime;
                             return (DateTime.Now - date).TotalSeconds.ToString("0000000000");
                         }
-                        else
+                        else if (this.rbtnByFolder.IsChecked == true)
                         {
                             return p.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true);
+                        }
+                        else
+                        {
+                            return (100000 - p.NumPagesInSet).ToString("00000");
                         }
                     }))
             {
@@ -514,18 +522,7 @@ namespace WpfPdfViewer
                         // nothing is selected. we'll terminate dialog anyway, but allow nothing to be selected
                     }
                     var oldChooseSortby = Properties.Settings.Default.ChooseBooksSort;
-                    var newChooseSortBy = rbtnByDate.IsChecked == true ? "ByDate" : "ByFolder";
-                    if (oldChooseSortby == "ByFolder")
-                    {
-                        if (rbtnByDate.IsChecked == true)
-                        {
-                            newChooseSortBy = "ByDate";
-                        }
-                    }
-                    else if (oldChooseSortby == "Date")
-                    {
-                        newChooseSortBy = "ByFolder";
-                    }
+                    var newChooseSortBy = rbtnByDate.IsChecked == true ? "ByDate" : (rbtnByFolder.IsChecked == true ? "ByFolder" : "ByNumPages");
                     if (newChooseSortBy != oldChooseSortby)
                     {
                         Properties.Settings.Default.ChooseBooksSort = newChooseSortBy;
