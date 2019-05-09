@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
@@ -92,6 +93,13 @@ namespace WpfPdfViewer
                 };
             doneLoading = true;
         }
+        private void CboRootFolder_DropDownOpened(object sender, EventArgs e)
+        {
+            if (this.cboRootFolder.Items.Count == 1)
+            {
+                ShowRootChooseRootFolderDialog();
+            }
+        }
 
         private void CboRootFolder_PreviewKeyDown(object sender, KeyEventArgs e)
         {
@@ -124,33 +132,38 @@ namespace WpfPdfViewer
                     var path = (string)((ComboBoxItem)this.cboRootFolder.SelectedItem).Content;
                     if (path == NewFolderDialogString)
                     {
-                        var d = new System.Windows.Forms.FolderBrowserDialog
-                        {
-                            ShowNewFolderButton = false,
-                            Description = "Choose a root folder with PDF music files",
-                            SelectedPath = this._pdfViewerWindow._RootMusicFolder
-                        };
-                        var res = d.ShowDialog();
-                        if (res == System.Windows.Forms.DialogResult.OK)
-                        {
-                            CboEnableCboSelectionChange = false;
-                            this.cboRootFolder.Items.Insert(0, new ComboBoxItem() { Content = d.SelectedPath });
-                            this.cboRootFolder.SelectedIndex = 0;
-                            CboEnableCboSelectionChange = true;
-                            await ChangeRootFolderAsync(d.SelectedPath);
-                        }
-                        else
-                        {
-                            CboEnableCboSelectionChange = false;
-                            this.cboRootFolder.SelectedIndex = 0;
-                            CboEnableCboSelectionChange = true;
-                        }
+                        ShowRootChooseRootFolderDialog();
                     }
                     else
                     {
                         await ChangeRootFolderAsync(path);
                     }
                 }
+            }
+        }
+
+        private async void ShowRootChooseRootFolderDialog()
+        {
+            var d = new System.Windows.Forms.FolderBrowserDialog
+            {
+                ShowNewFolderButton = false,
+                Description = "Choose a root folder with PDF music files",
+                SelectedPath = this._pdfViewerWindow._RootMusicFolder
+            };
+            var res = d.ShowDialog();
+            if (res == System.Windows.Forms.DialogResult.OK)
+            {
+                CboEnableCboSelectionChange = false;
+                this.cboRootFolder.Items.Insert(0, new ComboBoxItem() { Content = d.SelectedPath });
+                this.cboRootFolder.SelectedIndex = 0;
+                CboEnableCboSelectionChange = true;
+                await ChangeRootFolderAsync(d.SelectedPath);
+            }
+            else
+            {
+                CboEnableCboSelectionChange = false;
+                this.cboRootFolder.SelectedIndex = 0;
+                CboEnableCboSelectionChange = true;
             }
         }
 
@@ -183,7 +196,10 @@ namespace WpfPdfViewer
             CboEnableCboSelectionChange = true;
 
 
-            _pdfViewerWindow._RootMusicFolder = selectedPath;
+            if (Directory.Exists(selectedPath))
+            {
+                _pdfViewerWindow._RootMusicFolder = selectedPath;
+            }
             //            this.cboRootFolder.Text = _pdfViewerWindow._RootMusicFolder;
             this.tabControl.SelectedIndex = 0;
             _pdfViewerWindow.CloseCurrentPdfFile();
@@ -364,7 +380,7 @@ namespace WpfPdfViewer
                     {
                         if (this.rbtnByDate.IsChecked == true)
                         {
-                            var date = (new System.IO.FileInfo(p.PdfMetadataFileName)).LastWriteTime;
+                            var date = (new System.IO.FileInfo(p.PdfMetadataFileName)).LastAccessTime;
                             return (DateTime.Now - date).TotalSeconds.ToString("0000000000");
                         }
                         else if (this.rbtnByFolder.IsChecked == true)
@@ -630,5 +646,6 @@ namespace WpfPdfViewer
 
             e.Handled = true;
         }
+
     }
 }
