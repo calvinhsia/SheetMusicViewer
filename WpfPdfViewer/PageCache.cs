@@ -26,9 +26,8 @@ namespace WpfPdfViewer
     internal class PageCache
     {
         int currentCacheAge;
-        readonly Dictionary<int, PageCacheEntry> dictCache = new Dictionary<int, PageCacheEntry>(); // for either show2pages, pageno ->grid. results in dupes if even, then odd number on show2pages
-
-
+        readonly Dictionary<int, PageCacheEntry> dictCache = new Dictionary<int, PageCacheEntry>(); // pageno => task to get BitMapImage
+        
         private readonly PdfViewerWindow pdfViewerWindow;
 
         public PageCache(PdfViewerWindow pdfViewerWindow)

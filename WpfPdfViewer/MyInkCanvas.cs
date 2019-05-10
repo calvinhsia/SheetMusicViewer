@@ -44,7 +44,7 @@ namespace WpfPdfViewer
                       var res = MeasureArrangeHelper(_availSize);
                       this.Width = res.Width;
                       this.Height = res.Height;
-//                      LoadInk();
+                      //                      LoadInk();
                   };
         }
 
@@ -114,21 +114,16 @@ namespace WpfPdfViewer
             {
                 if (_pdfViewerWindow.currentPdfMetaData.dictInkStrokes.TryGetValue(_PgNo, out var inkStrokeClass))
                 {
-                    if (_pdfViewerWindow.currentPdfMetaData.lstInkStrokeDimensions.Count == 2)
+                    using (var strm = new MemoryStream(inkStrokeClass.StrokeData))
                     {
-                        using (var strm = new MemoryStream(inkStrokeClass.StrokeData))
-                        {
-                            var x = new StrokeCollection(strm);
-                            var brect = x.GetBounds();
-                            var origx = _pdfViewerWindow.currentPdfMetaData.lstInkStrokeDimensions[0];
-                            var origy = _pdfViewerWindow.currentPdfMetaData.lstInkStrokeDimensions[1];
-                            var xscale = this.ActualWidth / origx;
-                            var yscale = this.ActualHeight / origy;
+                        var x = new StrokeCollection(strm);
+                        var brect = x.GetBounds();
+                        var xscale = this.ActualWidth / inkStrokeClass.InkStrokeDimension.X;
+                        var yscale = this.ActualHeight / inkStrokeClass.InkStrokeDimension.Y;
 
-                            var m = new Matrix(xscale, 0, 0, yscale, 0, 0);
-                            x.Transform(m, applyToStylusTip: false);
-                            Strokes = x;
-                        }
+                        var m = new Matrix(xscale, 0, 0, yscale, 0, 0);
+                        x.Transform(m, applyToStylusTip: false);
+                        Strokes = x;
                     }
                 }
             }
@@ -144,20 +139,15 @@ namespace WpfPdfViewer
             {
                 if (this.Strokes.Count > 0)
                 {
-                    //var brect = this.Strokes.GetBounds();
-                    //var xscale = brect.Right / this.ActualWidth;
-                    //var yscale = brect.Bottom / this.ActualHeight;
-                    //var m = new Matrix(xscale, 0, 0, yscale, 0, 0);
-                    //var s = new ScaleTransform(, 1);
-                    //m = s.Value;
-//                    this.Strokes.Transform(m, applyToStylusTip: false);
                     using (var strm = new MemoryStream())
                     {
                         Strokes.Save(strm, compress: true);
-                        _pdfViewerWindow.currentPdfMetaData.dictInkStrokes[_PgNo] = new InkStrokeClass() { PageNo = _PgNo, StrokeData = strm.GetBuffer() };
-                        _pdfViewerWindow.currentPdfMetaData.lstInkStrokeDimensions.Clear();
-                        _pdfViewerWindow.currentPdfMetaData.lstInkStrokeDimensions.Add(this.Width);
-                        _pdfViewerWindow.currentPdfMetaData.lstInkStrokeDimensions.Add(this.Height);
+                        var inkstrokeClass = new InkStrokeClass() {
+                            PageNo = _PgNo,
+                            InkStrokeDimension = new Point(this.Width, this.Height),
+                            StrokeData = strm.GetBuffer()
+                        };
+                        _pdfViewerWindow.currentPdfMetaData.dictInkStrokes[_PgNo] = inkstrokeClass;
                         //_pdfViewerWindow.currentPdfMetaData.IsDirty = true;
                     }
                 }
@@ -165,7 +155,7 @@ namespace WpfPdfViewer
             catch (Exception ex)
             {
                 //RaiseEvent(new PdfViewerWindow.PdfExceptionEventAgs(PdfViewerWindow.PdfExceptionEvent, this, ex));
-                _pdfViewerWindow.OnException($"Save ink {this}",ex);
+                _pdfViewerWindow.OnException($"Save ink {this}", ex);
             }
         }
 

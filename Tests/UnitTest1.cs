@@ -110,7 +110,7 @@ namespace Tests
             {
                 var w = new WpfPdfViewer.PdfViewerWindow
                 {
-//                    _RootMusicFolder = Path.Combine(Rootfolder, "FakeBooks")
+                    //                    _RootMusicFolder = Path.Combine(Rootfolder, "FakeBooks")
                     _RootMusicFolder = Rootfolder
                 };
                 var testw = new Window();
@@ -144,7 +144,7 @@ namespace Tests
                             var bmi = cacheEntry.task.Result;
                             testw.Content = new Image() { Source = bmi };
                             testw.Title = $"{cnt++} {pageNo,8}   bmi={bmi.Width:n0}, {bmi.Height:n0}  {sw.Elapsed.TotalSeconds,8:n4} {currentPdfMetaData} ";
-                            TestContext.WriteLine(testw.Title );
+                            TestContext.WriteLine(testw.Title);
                             //break;
                         }
                     }
@@ -196,11 +196,10 @@ namespace Tests
         }
 
         [TestMethod]
-        [Ignore]
         public async Task TestReadBmkData()
         {
             var //rootfolder = @"C:\Bak\SheetMusic\Poptest";
-            rootfolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic";
+            rootfolder = @"C:\SheetMusic";
             var w = new WpfPdfViewer.PdfViewerWindow
             {
                 _RootMusicFolder = rootfolder
@@ -208,10 +207,20 @@ namespace Tests
             (var lstMetaData, var _) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
             foreach (var pm in lstMetaData)
             {
-                TestContext.WriteLine($"{pm.GetFullPathFileFromVolno(volNo: 0)}");
-                foreach (var vol in pm.lstVolInfo)
+                if (pm.dictInkStrokes.Count > 0)
                 {
-                    TestContext.WriteLine($"   {vol.ToString()}");
+                    TestContext.WriteLine($"{pm.GetFullPathFileFromVolno(volNo: 0)}  {pm.dictInkStrokes.Count}");
+                    if (pm.dictInkStrokes.Count == 1)
+                    {
+                        var pg  = pm.dictInkStrokes.Keys[0];
+                        TestContext.WriteLine($"inkpage = {pg}  ");
+                    }
+                    else
+                    {
+                        pm.dictInkStrokes.Clear();
+                    }
+                    pm.IsDirty = true;
+                    PdfMetaData.SavePdfMetaFileData(pm);
                 }
             }
         }

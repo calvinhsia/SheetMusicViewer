@@ -65,12 +65,6 @@ namespace WpfPdfViewer
 
         public string Notes;
 
-
-        /// <summary>
-        /// 2 numbers, x, then y
-        /// </summary>
-        public List<double> lstInkStrokeDimensions = new List<double>();
-
         public List<InkStrokeClass> LstInkStrokes = new List<InkStrokeClass>();
 
         public List<Favorite> Favorites = new List<Favorite>();
@@ -851,6 +845,8 @@ namespace WpfPdfViewer
     public class InkStrokeClass
     {
         public int PageNo { get; set; }
+
+        public Point InkStrokeDimension;
         public byte[] StrokeData { get; set; }
     }
 
