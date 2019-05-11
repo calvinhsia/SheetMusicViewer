@@ -116,14 +116,13 @@ namespace WpfPdfViewer
                 {
                     using (var strm = new MemoryStream(inkStrokeClass.StrokeData))
                     {
-                        var x = new StrokeCollection(strm);
-                        var brect = x.GetBounds();
+                        var strokes = new StrokeCollection(strm);
                         var xscale = this.ActualWidth / inkStrokeClass.InkStrokeDimension.X;
                         var yscale = this.ActualHeight / inkStrokeClass.InkStrokeDimension.Y;
 
                         var m = new Matrix(xscale, 0, 0, yscale, 0, 0);
-                        x.Transform(m, applyToStylusTip: false);
-                        Strokes = x;
+                        strokes.Transform(m, applyToStylusTip: false);
+                        Strokes = strokes;
                     }
                 }
             }

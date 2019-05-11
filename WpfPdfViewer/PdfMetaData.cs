@@ -48,6 +48,12 @@ namespace WpfPdfViewer
         public int MaxPageNum => PageNumberOffset + NumPagesInSet;
 
         /// <summary>
+        /// to prevent overwriting of data written externally 
+        /// </summary>
+        [XmlIgnore]
+        DateTime dtLastWrite; 
+
+        /// <summary>
         /// The Table of contents of a songbook shows the physical page numbers, which may not match the actual PDF page numbers (there could be a cover page scanned or could be a multivolume set, or 30 pages of intro, and then page 1 has the 1st song)
         /// Also, each scanned page might have the physical page # printed on it. 
         /// We want to keep the scanned OCR TOC true and minimize required editing. This means the page no displayed in the UI is the same as the page # on the scanned page
@@ -377,10 +383,12 @@ namespace WpfPdfViewer
                 try
                 {
                     var serializer = new XmlSerializer(typeof(PdfMetaData));
+                    var dtLastWriteTime = (new FileInfo(bmkFile)).LastWriteTime;
                     using (var sr = new StreamReader(bmkFile))
                     {
                         pdfFileData = (PdfMetaData)serializer.Deserialize(sr);
                         pdfFileData._FullPathFile = FullPathPdfFile;
+                        pdfFileData.dtLastWrite = dtLastWriteTime;
                         pdfFileData.initialLastPageNo = pdfFileData.LastPageNo;
                         if (pdfFileData.HideThisPDFFile)
                         {
@@ -562,6 +570,23 @@ namespace WpfPdfViewer
                 {
                     try
                     {
+                        var bmkFile = Path.ChangeExtension(pdfFileData._FullPathFile, "bmk");
+                        if (File.Exists(bmkFile))
+                        {
+                            var dt = (new FileInfo(bmkFile)).LastWriteTime;
+                            if (dt != pdfFileData.dtLastWrite)
+                            {
+                                if (MessageBox.Show(
+                                    $"{bmkFile} \nOriginal {pdfFileData.dtLastWrite} \nCurrent {dt}",
+                                    $"File already exists",
+                                    MessageBoxButton.YesNo) != MessageBoxResult.Yes)
+                                {
+                                    return;
+                                }
+                            }
+
+                            File.Delete(bmkFile);
+                        }
                         var serializer = new XmlSerializer(typeof(PdfMetaData));
                         var settings = new XmlWriterSettings()
                         {
@@ -573,11 +598,6 @@ namespace WpfPdfViewer
                         {
                             pdfFileData.LstInkStrokes = pdfFileData.dictInkStrokes.Values.ToList();
                         }
-                        var bmkFile = Path.ChangeExtension(pdfFileData._FullPathFile, "bmk");
-                        if (File.Exists(bmkFile))
-                        {
-                            File.Delete(bmkFile);
-                        }
                         using (var strm = File.Create(bmkFile))
                         {
                             using (var w = XmlWriter.Create(strm, settings))
@@ -585,6 +605,8 @@ namespace WpfPdfViewer
                                 serializer.Serialize(w, pdfFileData);
                             }
                         }
+                        var newdt = (new FileInfo(bmkFile)).LastWriteTime;
+                        pdfFileData.dtLastWrite = newdt;
                     }
                     catch (Exception ex)
                     {

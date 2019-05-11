@@ -335,11 +335,9 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 _DisableSliderValueChanged = true;
                 this.CurrentPageNumber = pageNo;
                 _DisableSliderValueChanged = false;
-                PageCacheEntry cacheEntryCurrentPage = null;
-                PageCacheEntry cacheEntryNextPage = null;
                 // we want to add items to the cache, but in a priority order: high pri are the 1 or 2 current pages.
-                cacheEntryCurrentPage = _pageCache.TryAddCacheEntry(pageNo);
-                cacheEntryNextPage = _pageCache.TryAddCacheEntry(pageNo + 1);
+                var cacheEntryCurrentPage = _pageCache.TryAddCacheEntry(pageNo);
+                var cacheEntryNextPage = _pageCache.TryAddCacheEntry(pageNo + 1);
                 if (NumPagesPerView == 1)
                 {
                     _pageCache.TryAddCacheEntry(pageNo + 2);
@@ -347,34 +345,29 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 }
                 else
                 {
-                    _pageCache.TryAddCacheEntry(pageNo + 2);
+                    _pageCache.TryAddCacheEntry(pageNo + 2); // order is important
                     _pageCache.TryAddCacheEntry(pageNo + 3);
                     _pageCache.TryAddCacheEntry(pageNo - 1);
                     _pageCache.TryAddCacheEntry(pageNo - 2);
                 }
-                //for (int i = -NumPagesPerView; i <= NumPagesPerView + 1; i++) // lookahead,lookbehind cache
-                //{
-                //    var val = _pageCache.TryAddCacheEntry(pageNo + i);
-                //    switch (i)
-                //    {
-                //        case 0:
-                //            cacheEntryCurrentPage = val;
-                //            break;
-                //        case 1:
-                //            cacheEntryNextPage = val;
-                //            break;
-                //    }
-                //}
-                if (this.CurrentPageNumber == pageNo && cacheEntryCurrentPage != null) // user might have typed ahead
+                if (this.CurrentPageNumber == pageNo) // user might have typed ahead
                 {
                     try
                     {
-                        if (cacheEntryCurrentPage.task.IsCanceled)
+                        if (cacheEntryCurrentPage != null && cacheEntryCurrentPage.task.IsCanceled)
                         {
                             cacheEntryCurrentPage = _pageCache.TryAddCacheEntry(pageNo);
                         }
+                        if (cacheEntryCurrentPage == null)
+                        {
+                            return;
+                        }
                         var gridContainer = new Grid();
                         var bitmapimageCurPage = await cacheEntryCurrentPage.task;
+                        if (!cacheEntryCurrentPage.task.IsCompleted)
+                        {
+                            return;
+                        }
                         var imageCurPage = new Image() { Source = bitmapimageCurPage };
                         inkCanvas[0] = new MyInkCanvas(bitmapimageCurPage, this, chkInk0, CurrentPageNumber);
                         var gridCurPage = new Grid();
@@ -382,11 +375,19 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                         gridContainer.Children.Add(gridCurPage);
                         if (NumPagesPerView != 1)
                         {
+                            if (cacheEntryNextPage!= null && cacheEntryNextPage.task.IsCanceled)
+                            {
+                                cacheEntryNextPage = _pageCache.TryAddCacheEntry(pageNo + 1);
+                            }
                             if (cacheEntryNextPage != null)
                             {
                                 gridContainer.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
                                 gridContainer.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(this.dpPage.ActualWidth / NumPagesPerView) });
                                 var bitmapimageNextPage = await cacheEntryNextPage.task;
+                                if (!cacheEntryNextPage.task.IsCompleted)
+                                {
+                                    return;
+                                }
                                 inkCanvas[1] = new MyInkCanvas(bitmapimageNextPage, this, chkInk1, CurrentPageNumber + 1);
                                 inkCanvas[0].HorizontalAlignment = HorizontalAlignment.Right;
                                 inkCanvas[1].HorizontalAlignment = HorizontalAlignment.Left; // put righthand page close to middle
@@ -481,7 +482,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                                                 break;
                                             }
                                             await ShowPageAsync(pg, ClearCache: false);
-                                            await Task.Delay(270); // allow enough time to render
+//                                            await Task.Delay(270); // allow enough time to render
                                         }
                                     }
                                     if (e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Alt))
