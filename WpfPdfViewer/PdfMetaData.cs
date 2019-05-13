@@ -584,7 +584,6 @@ namespace WpfPdfViewer
                                     return;
                                 }
                             }
-
                             File.Delete(bmkFile);
                         }
                         var serializer = new XmlSerializer(typeof(PdfMetaData));
@@ -633,7 +632,7 @@ namespace WpfPdfViewer
         }
 
         /// <summary>
-        /// Total page count across volume
+        /// Total page count across volumes
         /// </summary>
         /// <returns></returns>
         public int GetTotalPageCount()
@@ -642,7 +641,7 @@ namespace WpfPdfViewer
         }
 
         /// <summary>
-        /// Total song count across volume
+        /// Total song count across volumes
         /// </summary>
         /// <returns></returns>
         public int GetSongCount()
@@ -734,19 +733,6 @@ namespace WpfPdfViewer
                         DestinationHeight = (uint)225
                     };
                     bmi = await GetBitMapImageFromPdfPage(pdfPage, GetRotation(PageNumberOffset), renderOpts, cts: null);
-
-                    //using (var strm = new InMemoryRandomAccessStream())
-                    //{
-
-                    //    await pdfPage.RenderToStreamAsync(strm, renderOpts);
-                    //    //var enc = new PngBitmapEncoder();
-                    //    //enc.Frames.Add(BitmapFrame.Create)
-                    //    bmi.BeginInit();
-                    //    bmi.StreamSource = strm.AsStream();
-                    //    bmi.CacheOption = BitmapCacheOption.OnLoad;
-                    //    bmi.Rotation = (Rotation)GetRotation(pgNo: PageNumberOffset);
-                    //    bmi.EndInit();
-                    //}
                 }
                 bitmapImageCache = bmi;
                 if (PdfViewerWindow.s_pdfViewerWindow.currentPdfMetaData?._FullPathFile == _FullPathFile)
@@ -790,19 +776,6 @@ namespace WpfPdfViewer
                 }
             }
         }
-
-        //public int GetPdfVolPageNo(int Pgno)
-        //{
-        //    var res = Pgno;
-        //    var volno = GetVolNumFromPageNum(Pgno);
-        //    for (int i = 0; i < volno; i++)
-        //    {
-        //        res -= lstVolInfo[i].NPagesInThisVolume;
-        //    }
-        //    Debug.Assert(res >= 0, "page must be >=0");
-        //    return res;
-        //}
-
 
         internal Rotation GetRotation(int pgNo)
         {

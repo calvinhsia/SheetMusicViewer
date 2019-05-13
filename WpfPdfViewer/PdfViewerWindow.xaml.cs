@@ -369,13 +369,13 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                             return;
                         }
                         var imageCurPage = new Image() { Source = bitmapimageCurPage };
-                        inkCanvas[0] = new MyInkCanvas(bitmapimageCurPage, this, chkInk0, CurrentPageNumber);
+                        inkCanvas[0] = new MyInkCanvas(bitmapimageCurPage, this, chkInk0.IsChecked == true, CurrentPageNumber);
                         var gridCurPage = new Grid();
                         gridCurPage.Children.Add(inkCanvas[0]);
                         gridContainer.Children.Add(gridCurPage);
                         if (NumPagesPerView != 1)
                         {
-                            if (cacheEntryNextPage!= null && cacheEntryNextPage.task.IsCanceled)
+                            if (cacheEntryNextPage != null && cacheEntryNextPage.task.IsCanceled)
                             {
                                 cacheEntryNextPage = _pageCache.TryAddCacheEntry(pageNo + 1);
                             }
@@ -388,7 +388,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                                 {
                                     return;
                                 }
-                                inkCanvas[1] = new MyInkCanvas(bitmapimageNextPage, this, chkInk1, CurrentPageNumber + 1);
+                                inkCanvas[1] = new MyInkCanvas(bitmapimageNextPage, this, chkInk1.IsChecked == true, CurrentPageNumber + 1);
                                 inkCanvas[0].HorizontalAlignment = HorizontalAlignment.Right;
                                 inkCanvas[1].HorizontalAlignment = HorizontalAlignment.Left; // put righthand page close to middle
                                 var gridNextPage = new Grid();
@@ -482,7 +482,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                                                 break;
                                             }
                                             await ShowPageAsync(pg, ClearCache: false);
-//                                            await Task.Delay(270); // allow enough time to render
+                                            //                                            await Task.Delay(270); // allow enough time to render
                                         }
                                     }
                                     if (e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Alt))

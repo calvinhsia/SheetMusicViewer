@@ -19,12 +19,12 @@ namespace WpfPdfViewer
         readonly int _PgNo;
         Size _availSize;
 
-        public MyInkCanvas(BitmapImage bmImage, PdfViewerWindow pdfViewerWindow, CheckBox chkInk, int PgNo)
+        public MyInkCanvas(BitmapImage bmImage, PdfViewerWindow pdfViewerWindow, bool IsInking, int PgNo)
         {
             this._pdfViewerWindow = pdfViewerWindow;
             this._PgNo = PgNo;
             _bmImage = bmImage;
-            if (chkInk.IsChecked == false)
+            if (!IsInking)
             {
                 this.EditingMode = InkCanvasEditingMode.None; // if we're not inking, then let mouse events change the page
             }
