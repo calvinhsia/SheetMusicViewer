@@ -535,7 +535,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             {
                 var nameSender = ((CheckBox)sender).Name;
                 var pgno = CurrentPageNumber + (nameSender == "chkInk0" ? 0 : 1);
-                var isChked = e.RoutedEvent.Name == "Checked";
                 var curCanvas = inkCanvas[pgno - CurrentPageNumber];
                 curCanvas.ChkInkToggled(sender, e);
                 await ShowPageAsync(CurrentPageNumber, ClearCache: false, forceRedraw: true);
