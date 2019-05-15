@@ -251,8 +251,8 @@ namespace WpfPdfViewer
                     {
                         if (curPdfFileData != null)
                         {
-                            // for single songs: if no TOC and # pages < 7, create a new TOC entry with 1 song: same as file name
-                            if (curPdfFileData.lstTocEntries.Count == 0 && curPdfFileData.NumPagesInSet < 7)
+                            // for single songs: if no TOC and # pages < 11, create a new TOC entry with 1 song: same as file name
+                            if (curPdfFileData.lstTocEntries.Count == 0 && curPdfFileData.NumPagesInSet < 11)
                             {
                                 curPdfFileData.lstTocEntries.Add(new TOCEntry()
                                 {
@@ -361,10 +361,13 @@ namespace WpfPdfViewer
                         SaveMetaData(); // last one in dir
                         foreach (var dir in Directory.EnumerateDirectories(curPath))
                         {
-                            if (await recurDirsAsync(dir) > 0)
+                            if (!dir.EndsWith("hidden", StringComparison.InvariantCultureIgnoreCase))
                             {
-                                var justdir = dir.Substring(rootMusicFolder.Length + 1);
-                                lstFolders.Add(justdir);
+                                if (await recurDirsAsync(dir) > 0)
+                                {
+                                    var justdir = dir.Substring(rootMusicFolder.Length + 1);
+                                    lstFolders.Add(justdir);
+                                }
                             }
                         }
                         return cntItems;
