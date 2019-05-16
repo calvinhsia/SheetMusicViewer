@@ -199,6 +199,7 @@ namespace Tests
         public async Task TestReadBmkData()
         {
             var //rootfolder = @"C:\Bak\SheetMusic\Poptest";
+            rootfolder = @"C:\SheetMusic\Classical";
             rootfolder = @"C:\SheetMusic";
             var w = new WpfPdfViewer.PdfViewerWindow
             {
@@ -219,8 +220,8 @@ namespace Tests
                     {
                         pm.dictInkStrokes.Clear();
                     }
-                    pm.IsDirty = true;
-                    PdfMetaData.SavePdfMetaFileData(pm);
+                    //pm.IsDirty = true;
+                    //PdfMetaData.SavePdfMetaFileData(pm);
                 }
             }
         }

@@ -406,7 +406,7 @@ namespace WpfPdfViewer
                         }
                     }
                 }
-                if (!includeThisItem)
+                if (!includeThisItem && !pdfMetaDataItem.IsSinglesFolder)
                 {
                     continue;
                 }

@@ -54,7 +54,7 @@
 
                         </StackPanel>
                         <Label Content="VolInfo" />
-                        <ListView Width="250" ItemsSource="{Binding LstVolInfo}"/>
+                        <ListView Width="250" ItemsSource="{Binding LstVolInfo}" MaxHeight="100"/>
                     </StackPanel>
                     <StackPanel Orientation="Vertical" Grid.Column="1">
                         <Label Content="PageNo" HorizontalContentAlignment="Right" Height="25"/>
