@@ -310,27 +310,34 @@ namespace WpfPdfViewer
                                     };
                                 }
                                 lstPdfMetaFileData.Add(curPdfFileData);
-                                var singlesPageNo = 0;
+                                var lstNewFiles = new List<string>();
+                                // find the new files. Add to end so page nos of existing don't change so fav, ink works
                                 foreach (var single in Directory.EnumerateFiles(curPath))
                                 {
                                     var JustFileName = Path.GetFileName(single);
                                     if (!curPdfFileData.lstVolInfo.Where(v => v.FileNameVolume.ToLower() == JustFileName.ToLower()).Any())
                                     {
-                                        var newVolInfo = new PdfVolumeInfo()
-                                        {
-                                            FileNameVolume = JustFileName,
-                                            NPagesInThisVolume = (int)(await GetPdfDocumentForFileAsync(single)).PageCount
-                                        };
-                                        curPdfFileData.IsDirty = true;
-                                        curPdfFileData.lstVolInfo.Add(newVolInfo);
-                                        var tocEntry = new TOCEntry()
-                                        {
-                                            SongName = Path.GetFileNameWithoutExtension(JustFileName),
-                                            PageNo = singlesPageNo
-                                        };
-                                        curPdfFileData.lstTocEntries.Add(tocEntry);
-                                        singlesPageNo += newVolInfo.NPagesInThisVolume;
+                                        lstNewFiles.Add(single);
                                     }
+                                }
+                                var singlesPageNo = 0;
+                                foreach (var single in lstNewFiles)
+                                {
+                                    var JustFileName = Path.GetFileName(single);
+                                    var newVolInfo = new PdfVolumeInfo()
+                                    {
+                                        FileNameVolume = JustFileName,
+                                        NPagesInThisVolume = (int)(await GetPdfDocumentForFileAsync(single)).PageCount
+                                    };
+                                    curPdfFileData.IsDirty = true;
+                                    curPdfFileData.lstVolInfo.Add(newVolInfo);
+                                    var tocEntry = new TOCEntry()
+                                    {
+                                        SongName = Path.GetFileNameWithoutExtension(JustFileName),
+                                        PageNo = singlesPageNo
+                                    };
+                                    curPdfFileData.lstTocEntries.Add(tocEntry);
+                                    singlesPageNo += newVolInfo.NPagesInThisVolume;
                                 }
                                 curPdfFileData.InitializeDictToc(curPdfFileData.lstTocEntries);
                             }
