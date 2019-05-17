@@ -33,7 +33,7 @@ namespace Tests
         readonly string root2 = @"f:\Sheetmusic";
         string Rootfolder { get { if (Directory.Exists(root1)) { return root1; } return root2; } }
         //string testbmk = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.bmk";
-        readonly string testPdf = @"C:\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
+//        readonly string testPdf = @"C:\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
 
         [TestMethod]
         [Ignore]
@@ -202,7 +202,7 @@ namespace Tests
         public async Task TestReadBmkData()
         {
             var //rootfolder = @"C:\Bak\SheetMusic\Poptest";
-            rootfolder = @"C:\SheetMusic\Classical";
+            //rootfolder = @"C:\SheetMusic\Classical";
             rootfolder = @"C:\SheetMusic";
             var w = new WpfPdfViewer.PdfViewerWindow
             {
@@ -252,42 +252,59 @@ namespace Tests
                 File.Copy(file, Path.Combine(singlesFolder, Path.GetFileName(file)));
             }
             var c = CreateExecutionContext();
+            var failMessage = string.Empty;
             await c.Dispatcher.InvokeAsync(async () =>
             {
-                var w = new WpfPdfViewer.PdfViewerWindow
+                try
                 {
-                    _RootMusicFolder = testdir
-                };
-                TestContext.WriteLine($"starting with {testdir}");
-                {
-                    (var lstPdfMetaFileData, var lstFolders) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
-                    var curmetadata = lstPdfMetaFileData[0];
-                    TestContext.WriteLine($"metadata cnt = {lstPdfMetaFileData.Count}= {curmetadata}");
-                    curmetadata.ToggleFavorite(PageNo: 2, IsFavorite: true);
-                    PdfMetaData.SavePdfMetaFileData(curmetadata, ForceSave: true);
-                    TestContext.WriteLine(File.ReadAllText(curmetadata.PdfBmkMetadataFileName));
-                    foreach (var vol in curmetadata.lstVolInfo)
+                    var w = new WpfPdfViewer.PdfViewerWindow
                     {
-                        TestContext.WriteLine($" vol = {vol}");
+                        _RootMusicFolder = testdir
+                    };
+                    TestContext.WriteLine($"starting with {testdir}");
+                    {
+                        (var lstPdfMetaFileData, var lstFolders) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
+                        var curmetadata = lstPdfMetaFileData[0];
+                        TestContext.WriteLine($"metadata cnt = {lstPdfMetaFileData.Count}= {curmetadata}");
+                        Assert.AreEqual(1, lstPdfMetaFileData.Count);
+                        Assert.AreEqual(curmetadata.lstVolInfo.Count, 2);
+                        Assert.AreEqual(curmetadata.lstTocEntries.Count, 2);
+                        curmetadata.ToggleFavorite(PageNo: 2, IsFavorite: true);
+                        PdfMetaData.SavePdfMetaFileData(curmetadata, ForceSave: true);
+                        TestContext.WriteLine(File.ReadAllText(curmetadata.PdfBmkMetadataFileName));
+                        foreach (var vol in curmetadata.lstVolInfo)
+                        {
+                            TestContext.WriteLine($" vol = {vol}");
+                        }
+                    }
+                    {
+                        TestContext.WriteLine($"Adding file  = {sourceFiles.First()}");
+                        File.Copy(sourceFiles.First(),
+                            Path.Combine(singlesFolder, Path.GetFileName(sourceFiles.First()))
+                            );
+                        (var lstPdfMetaFileData, var lstFolders) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
+                        var curmetadata = lstPdfMetaFileData[0];
+                        TestContext.WriteLine(File.ReadAllText(curmetadata.PdfBmkMetadataFileName));
+                        Assert.AreEqual(1, lstPdfMetaFileData.Count);
+                        Assert.AreEqual(curmetadata.lstVolInfo.Count, 3);
+                        Assert.AreEqual(curmetadata.lstTocEntries.Count, 3);
+                        var lastone = string.Empty;
+                        foreach (var vol in curmetadata.lstVolInfo)
+                        {
+                            Assert.IsTrue(string.Compare(lastone, vol.FileNameVolume) < 0);
+                            TestContext.WriteLine($" vol = {vol}");
+                            lastone = vol.FileNameVolume;
+                        }
                     }
                 }
+                catch (Exception ex)
                 {
-                    TestContext.WriteLine($"Adding file  = {sourceFiles.First()}");
-                    File.Copy(sourceFiles.First(), 
-                        Path.Combine(singlesFolder, Path.GetFileName(sourceFiles.First()))
-                        );
-                    (var lstPdfMetaFileData, var lstFolders) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
-                    var curmetadata = lstPdfMetaFileData[0];
-                    TestContext.WriteLine(File.ReadAllText(curmetadata.PdfBmkMetadataFileName));
-                    foreach (var vol in curmetadata.lstVolInfo)
-                    {
-                        TestContext.WriteLine($" vol = {vol}");
-                    }
+                    failMessage = ex.ToString();
                 }
-
                 ev.Set();
             });
             ev.Wait();
+            Assert.IsTrue(string.IsNullOrEmpty(failMessage), failMessage);
         }
 
 

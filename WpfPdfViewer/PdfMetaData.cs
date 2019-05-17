@@ -327,25 +327,35 @@ namespace WpfPdfViewer
                                         sortedListSingles.Add(JustFileName); // we actually don't need to add it
                                     }
                                 }
-                                var singlesPageNo = 0;
-                                foreach (var single in lstNewFiles)
+                                if (lstNewFiles.Count > 0) // there is least one new file. Need to insert into current TOC, LstVol in alpha order, move everything else down, adjust ink/fav/toc pagenos
                                 {
+                                    var origsortedSettVolInfo = new SortedSet<PdfVolumeInfo>(curPdfFileData.lstVolInfo, new PdfVolumeInfoComparer());
+                                    var sortedSettVolInfo = new SortedSet<PdfVolumeInfo>(curPdfFileData.lstVolInfo, new PdfVolumeInfoComparer());
+                                    var origsortedSetToc = new SortedSet<TOCEntry>(curPdfFileData.lstTocEntries, new TocEntryComparer());
+                                    var sortedSetToc = new SortedSet<TOCEntry>(curPdfFileData.lstTocEntries, new TocEntryComparer());
                                     curPdfFileData.IsDirty = true;
-                                    var JustFileName = Path.GetFileName(single);
-                                    var newVolInfo = new PdfVolumeInfo()
+                                    foreach (var single in lstNewFiles)
                                     {
-                                        FileNameVolume = JustFileName,
-                                        NPagesInThisVolume = (int)(await GetPdfDocumentForFileAsync(single)).PageCount
-                                    };
-                                    curPdfFileData.IsDirty = true;
-                                    curPdfFileData.lstVolInfo.Add(newVolInfo);
-                                    var tocEntry = new TOCEntry()
+                                        var JustFileName = Path.GetFileName(single);
+                                        var newVolInfo = new PdfVolumeInfo()
+                                        {
+                                            FileNameVolume = JustFileName,
+                                            NPagesInThisVolume = (int)(await GetPdfDocumentForFileAsync(single)).PageCount
+                                        };
+                                        sortedSettVolInfo.Add(newVolInfo);
+                                        var tocEntry = new TOCEntry()
+                                        {
+                                            SongName = Path.GetFileNameWithoutExtension(JustFileName),
+                                        };
+                                        sortedSetToc.Add(tocEntry);
+                                    }
+                                    var singlesPageNo = 0;
+                                    foreach (var vol in sortedSettVolInfo)
                                     {
-                                        SongName = Path.GetFileNameWithoutExtension(JustFileName),
-                                        PageNo = singlesPageNo
-                                    };
-                                    curPdfFileData.lstTocEntries.Add(tocEntry);
-                                    singlesPageNo += newVolInfo.NPagesInThisVolume;
+
+                                        singlesPageNo += vol.NPagesInThisVolume;
+                                    }
+
                                 }
                                 curPdfFileData.InitializeDictToc(curPdfFileData.lstTocEntries);
                             }
@@ -898,6 +908,25 @@ namespace WpfPdfViewer
             return $"{Path.GetFileNameWithoutExtension(_FullPathFile)} Vol={lstVolInfo.Count} Toc={lstTocEntries.Count} Fav={dictFav.Count}";
         }
     }
+
+    /// <summary>
+    /// comparer used for singles 
+    /// </summary>
+    public class PdfVolumeInfoComparer : IComparer<PdfVolumeInfo>
+    {
+        public int Compare(PdfVolumeInfo x, PdfVolumeInfo y)
+        {
+            return string.Compare(x.FileNameVolume, y.FileNameVolume);
+        }
+    }
+    public class TocEntryComparer : IComparer<TOCEntry>
+    {
+        public int Compare(TOCEntry x, TOCEntry y)
+        {
+            return string.Compare(x.SongName, y.SongName);
+        }
+    }
+
     [Serializable]
     public class PdfVolumeInfo
     {
