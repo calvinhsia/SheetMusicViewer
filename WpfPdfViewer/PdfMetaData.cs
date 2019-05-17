@@ -48,12 +48,12 @@ namespace WpfPdfViewer
         int initialLastPageNo;
 
         /// <summary>
-        /// A Singles Folder is treated differently: there is only one BMK file next to the Singles directory "Singles.bmk"
-        /// Each PDF is treated as a single song (perhaps with a few pages). 
+        /// A Singles Folder is treated differently: there is only one BMK file next to the Singles directory "Singles.bmk" next to dir "Singles" (not in dir "Singles")
+        /// Each PDF is treated as a single song (perhaps with a few pages). SongName is Name of file
         /// The Table Of Contents is read in from the BMK if it exists
-        /// Then the dir is enumerated and the TOC is checked against the contents. 
-        /// If user added more items, then they are added at the end of the TOC so that the page numbers remain constant , so that Inking and Favorites work
-        /// The VolInfo structure needs to know the file name
+        /// Then the dir is enumerated in alpha order and the TOC is checked against the contents. 
+        /// If user added more items, then they are inserted and the TOC is updated so that the page numbers are adjusted, so that Inking and Favorites work
+        /// The VolInfo structure contains the file name (no path)
         /// </summary>
         [XmlIgnore]
         public bool IsSinglesFolder;
@@ -293,12 +293,17 @@ namespace WpfPdfViewer
                         try
                         {
                             if (curPath.EndsWith("singles", StringComparison.InvariantCultureIgnoreCase))
-                            {// we treat Singles as a volume with multiple songs.
+                            {// we treat Singles as a book with multiple songs.
 
                                 var bmkFile = Path.ChangeExtension(curPath, "bmk");
+                                var sortedListSingles = new SortedSet<string>();
                                 if (File.Exists(bmkFile))
                                 {
                                     curPdfFileData = await PdfMetaData.ReadPdfMetaDataAsync(curPath, IsSingles: true);
+                                    foreach (var vol in curPdfFileData.lstVolInfo)
+                                    {
+                                        sortedListSingles.Add(vol.FileNameVolume.ToLower());
+                                    }
                                 }
                                 else
                                 {
@@ -311,18 +316,21 @@ namespace WpfPdfViewer
                                 }
                                 lstPdfMetaFileData.Add(curPdfFileData);
                                 var lstNewFiles = new List<string>();
-                                // find the new files. Add to end so page nos of existing don't change so fav, ink works
-                                foreach (var single in Directory.EnumerateFiles(curPath))
+                                // find the new files that haven't been added yet. If we insert, then we need to renumber all subsequent entries to keep fav/ink/TOC data sync'd
+                                foreach (var single in Directory.EnumerateFiles(curPath, "*.pdf").OrderBy(f=>f))
                                 {
-                                    var JustFileName = Path.GetFileName(single);
-                                    if (!curPdfFileData.lstVolInfo.Where(v => v.FileNameVolume.ToLower() == JustFileName.ToLower()).Any())
+                                    var JustFileName = Path.GetFileName(single).ToLower();
+                                    if (!sortedListSingles.Contains(JustFileName))
+//                                    if (!curPdfFileData.lstVolInfo.Where(v => v.FileNameVolume.ToLower() == JustFileName.ToLower()).Any()) // optimize o(n^2)
                                     {
                                         lstNewFiles.Add(single);
+                                        sortedListSingles.Add(JustFileName); // we actually don't need to add it
                                     }
                                 }
                                 var singlesPageNo = 0;
                                 foreach (var single in lstNewFiles)
                                 {
+                                    curPdfFileData.IsDirty = true;
                                     var JustFileName = Path.GetFileName(single);
                                     var newVolInfo = new PdfVolumeInfo()
                                     {
@@ -459,15 +467,15 @@ namespace WpfPdfViewer
             }
             return (lstPdfMetaFileData, lstFolders);
         }
-        public string PdfMetadataFileName => Path.ChangeExtension(_FullPathFile, "bmk");
-        public static async Task<PdfMetaData> ReadPdfMetaDataAsync(string FullPathPdfFile, bool IsSingles = false)
+        public string PdfBmkMetadataFileName => Path.ChangeExtension(_FullPathFile, "bmk");
+        public static async Task<PdfMetaData> ReadPdfMetaDataAsync(string FullPathPdfFileOrSinglesFolder, bool IsSingles = false)
         {
-            if (FullPathPdfFile.ToLower().Contains("singles"))
+            if (FullPathPdfFileOrSinglesFolder.ToLower().Contains("singles"))
             {
                 "asdf".ToString();
             }
             PdfMetaData pdfFileData = null;
-            var bmkFile = Path.ChangeExtension(FullPathPdfFile, "bmk");
+            var bmkFile = Path.ChangeExtension(FullPathPdfFileOrSinglesFolder, "bmk");
             if (File.Exists(bmkFile))
             {
                 try
@@ -477,16 +485,16 @@ namespace WpfPdfViewer
                     using (var sr = new StreamReader(bmkFile))
                     {
                         pdfFileData = (PdfMetaData)serializer.Deserialize(sr);
-                        pdfFileData._FullPathFile = FullPathPdfFile;
+                        pdfFileData._FullPathFile = FullPathPdfFileOrSinglesFolder;
                         pdfFileData.dtLastWrite = dtLastWriteTime;
                         pdfFileData.initialLastPageNo = pdfFileData.LastPageNo;
                         pdfFileData.IsSinglesFolder = IsSingles;
                         if (pdfFileData.lstVolInfo.Count == 0) // There should be at least one for each PDF in a series. If no series, there should be 1 for itself.
                         {
-                            var doc = await GetPdfDocumentForFileAsync(FullPathPdfFile);
+                            var doc = await GetPdfDocumentForFileAsync(FullPathPdfFileOrSinglesFolder);
                             pdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
                             {
-                                FileNameVolume = Path.GetFileName(FullPathPdfFile),
+                                FileNameVolume = Path.GetFileName(FullPathPdfFileOrSinglesFolder),
                                 NPagesInThisVolume = (int)doc.PageCount,
                                 Rotation = 0
                             });
@@ -494,7 +502,7 @@ namespace WpfPdfViewer
                         }
                         if (string.IsNullOrEmpty(pdfFileData.lstVolInfo[0].FileNameVolume))
                         {
-                            pdfFileData.lstVolInfo[0].FileNameVolume = Path.GetFileName(FullPathPdfFile); //temptemp
+                            pdfFileData.lstVolInfo[0].FileNameVolume = Path.GetFileName(FullPathPdfFileOrSinglesFolder); //temptemp
                             pdfFileData.IsDirty = true;
                         }
                         if (pdfFileData.LastPageNo < pdfFileData.PageNumberOffset || pdfFileData.LastPageNo >= pdfFileData.MaxPageNum) // make sure lastpageno is in range
@@ -514,14 +522,14 @@ namespace WpfPdfViewer
             {
                 pdfFileData = new PdfMetaData()
                 {
-                    _FullPathFile = FullPathPdfFile,
+                    _FullPathFile = FullPathPdfFileOrSinglesFolder,
                     IsSinglesFolder = IsSingles,
                     IsDirty = true
                 };
-                var doc = await GetPdfDocumentForFileAsync(FullPathPdfFile);
+                var doc = await GetPdfDocumentForFileAsync(FullPathPdfFileOrSinglesFolder);
                 pdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
                 {
-                    FileNameVolume = Path.GetFileName(FullPathPdfFile),
+                    FileNameVolume = Path.GetFileName(FullPathPdfFileOrSinglesFolder),
                     NPagesInThisVolume = (int)doc.PageCount,
                     Rotation = 0
                 });
@@ -666,7 +674,7 @@ namespace WpfPdfViewer
                         {
                             "adf".ToString();
                         }
-                        var bmkFile = Path.ChangeExtension(pdfFileData._FullPathFile, "bmk");
+                        var bmkFile = pdfFileData.PdfBmkMetadataFileName;
                         if (File.Exists(bmkFile))
                         {
                             var dt = (new FileInfo(bmkFile)).LastWriteTime;

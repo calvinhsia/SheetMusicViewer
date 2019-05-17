@@ -36,6 +36,7 @@ namespace Tests
         readonly string testPdf = @"C:\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
 
         [TestMethod]
+        [Ignore]
         public async Task TestStress()
         {
             var w = new WpfPdfViewer.PdfViewerWindow
@@ -93,6 +94,7 @@ namespace Tests
 
         }
         [TestMethod]
+        [Ignore]
         public async Task TestCache()
         {
             var ev = new ManualResetEventSlim();
@@ -196,6 +198,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [Ignore]
         public async Task TestReadBmkData()
         {
             var //rootfolder = @"C:\Bak\SheetMusic\Poptest";
@@ -213,7 +216,7 @@ namespace Tests
                     TestContext.WriteLine($"{pm.GetFullPathFileFromVolno(volNo: 0)}  {pm.dictInkStrokes.Count}");
                     if (pm.dictInkStrokes.Count == 1)
                     {
-                        var pg  = pm.dictInkStrokes.Keys[0];
+                        var pg = pm.dictInkStrokes.Keys[0];
                         TestContext.WriteLine($"inkpage = {pg}  ");
                     }
                     else
@@ -227,13 +230,69 @@ namespace Tests
         }
 
         [TestMethod]
-        public void TestCreatePdfMetaData()
+        public async Task TestSingles()
         {
-            var pdfData = PdfMetaData.ReadPdfMetaDataAsync(testPdf);
-            TestContext.WriteLine($"pdfdata = {pdfData}");
+            var ev = new ManualResetEventSlim();
+            var testdir = Path.Combine(Environment.CurrentDirectory, "testdir");
+            TestContext.WriteLine($"Test dir {testdir}");
+            var singlesFolder = Path.Combine(testdir, "singles");
+            foreach (var dir in new[] { singlesFolder, testdir })
+            {
+                if (Directory.Exists(dir))
+                {
+                    Directory.Delete(dir, recursive: true);
+                }
+            }
+            Directory.CreateDirectory(testdir);
+            Directory.CreateDirectory(singlesFolder);
+            //            File.Copy(Path.Combine(root1, @"Ragtime\singles.bmk"), Path.Combine(testdir, "singles.bmk"));
+            var sourceFiles = Directory.GetFiles(Path.Combine(root1, @"ragtime\singles"), "*.pdf").OrderBy(p => p);
+            foreach (var file in sourceFiles.Skip(1).Take(2))
+            {
+                File.Copy(file, Path.Combine(singlesFolder, Path.GetFileName(file)));
+            }
+            var c = CreateExecutionContext();
+            await c.Dispatcher.InvokeAsync(async () =>
+            {
+                var w = new WpfPdfViewer.PdfViewerWindow
+                {
+                    _RootMusicFolder = testdir
+                };
+                TestContext.WriteLine($"starting with {testdir}");
+                {
+                    (var lstPdfMetaFileData, var lstFolders) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
+                    var curmetadata = lstPdfMetaFileData[0];
+                    TestContext.WriteLine($"metadata cnt = {lstPdfMetaFileData.Count}= {curmetadata}");
+                    curmetadata.ToggleFavorite(PageNo: 2, IsFavorite: true);
+                    PdfMetaData.SavePdfMetaFileData(curmetadata, ForceSave: true);
+                    TestContext.WriteLine(File.ReadAllText(curmetadata.PdfBmkMetadataFileName));
+                    foreach (var vol in curmetadata.lstVolInfo)
+                    {
+                        TestContext.WriteLine($" vol = {vol}");
+                    }
+                }
+                {
+                    TestContext.WriteLine($"Adding file  = {sourceFiles.First()}");
+                    File.Copy(sourceFiles.First(), 
+                        Path.Combine(singlesFolder, Path.GetFileName(sourceFiles.First()))
+                        );
+                    (var lstPdfMetaFileData, var lstFolders) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
+                    var curmetadata = lstPdfMetaFileData[0];
+                    TestContext.WriteLine(File.ReadAllText(curmetadata.PdfBmkMetadataFileName));
+                    foreach (var vol in curmetadata.lstVolInfo)
+                    {
+                        TestContext.WriteLine($" vol = {vol}");
+                    }
+                }
+
+                ev.Set();
+            });
+            ev.Wait();
         }
 
+
         [TestMethod]
+        [Ignore]
         public async Task TestCreateBmpCache()
         {
             var w = new WpfPdfViewer.PdfViewerWindow
