@@ -117,7 +117,7 @@ namespace WpfPdfViewer
                 _pdfViewerWindow.currentPdfMetaData.InitializeFavList();
             }
             _pdfViewerWindow.currentPdfMetaData.PageNumberOffset = PageNumberOffset;
-            PdfMetaData.SavePdfMetaFileData(_pdfViewerWindow.currentPdfMetaData, ForceSave: true);
+            _pdfViewerWindow.currentPdfMetaData.SaveIfDirty(ForceDirty: true);
             this.DialogResult = true;
             this.Close();
         }

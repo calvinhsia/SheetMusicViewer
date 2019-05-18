@@ -776,7 +776,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             if (currentPdfMetaData != null)
             {
                 currentPdfMetaData.LastPageNo = CurrentPageNumber;
-                PdfMetaData.SavePdfMetaFileData(currentPdfMetaData);
+                currentPdfMetaData.SaveIfDirty();
                 currentPdfMetaData = null;
                 CurrentPageNumber = 0;
             }

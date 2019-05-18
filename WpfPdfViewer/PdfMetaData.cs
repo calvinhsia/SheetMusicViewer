@@ -238,7 +238,7 @@ namespace WpfPdfViewer
                 lstPdfMetaFileData.Clear();
                 await Task.Run(async () =>
                 {
-                    PdfMetaData curPdfFileData = null;
+                    PdfMetaData curmetadata = null;
                     int nContinuations = 0;
                     await recurDirsAsync(pathCurrentMusicFolder);
                     async Task<bool> TryAddFileAsync(string curFullPathFile)
@@ -246,10 +246,10 @@ namespace WpfPdfViewer
                         var retval = false;
                         try
                         {
-                            curPdfFileData = await PdfMetaData.ReadPdfMetaDataAsync(curFullPathFile);
-                            if (curPdfFileData != null)
+                            curmetadata = await PdfMetaData.ReadPdfMetaDataAsync(curFullPathFile);
+                            if (curmetadata != null)
                             {
-                                lstPdfMetaFileData.Add(curPdfFileData);
+                                lstPdfMetaFileData.Add(curmetadata);
                             }
                             retval = true;
                         }
@@ -261,25 +261,25 @@ namespace WpfPdfViewer
                     }
                     void SaveMetaData() // if we created a new one or modified it (added volumes), save it
                     {
-                        if (curPdfFileData != null)
+                        if (curmetadata != null)
                         {
-                            // for single songs: if no TOC and # pages < 11, create a new TOC entry with 1 song: same as file name
-                            if (curPdfFileData.lstTocEntries.Count == 0 && curPdfFileData.NumPagesInSet < 11)
+                            // for single songs not in SinglesFolder: if no TOC and # pages < 11, create a new TOC entry with 1 song: same as file name
+                            if (!curmetadata.IsSinglesFolder && curmetadata.lstTocEntries.Count == 0 && curmetadata.NumPagesInSet < 11)
                             {
-                                curPdfFileData.lstTocEntries.Add(new TOCEntry()
+                                curmetadata.lstTocEntries.Add(new TOCEntry()
                                 {
-                                    SongName = Path.GetFileNameWithoutExtension(curPdfFileData._FullPathFile)
+                                    SongName = Path.GetFileNameWithoutExtension(curmetadata._FullPathFile)
                                 });
-                                curPdfFileData.IsDirty = true;
+                                curmetadata.IsDirty = true;
                             }
                         }
-                        if (curPdfFileData?.IsDirty == true)
+                        if (curmetadata?.IsDirty == true)
                         {
-                            if (curPdfFileData.lstVolInfo.Count != nContinuations + 1) // +1 for root
+                            if (curmetadata.lstVolInfo.Count != nContinuations + 1) // +1 for root
                             {
                                 "adf".ToString();
                             }
-                            SavePdfMetaFileData(curPdfFileData);
+                            curmetadata.SaveIfDirty();
                         }
                         nContinuations = 0;
                     }
@@ -294,70 +294,7 @@ namespace WpfPdfViewer
                         {
                             if (curPath.EndsWith("singles", StringComparison.InvariantCultureIgnoreCase))
                             {// we treat Singles as a book with multiple songs.
-
-                                var bmkFile = Path.ChangeExtension(curPath, "bmk");
-                                var sortedListSingles = new SortedSet<string>();
-                                if (File.Exists(bmkFile))
-                                {
-                                    curPdfFileData = await PdfMetaData.ReadPdfMetaDataAsync(curPath, IsSingles: true);
-                                    foreach (var vol in curPdfFileData.lstVolInfo)
-                                    {
-                                        sortedListSingles.Add(vol.FileNameVolume.ToLower());
-                                    }
-                                }
-                                else
-                                {
-                                    curPdfFileData = new PdfMetaData()
-                                    {
-                                        _FullPathFile = curPath,
-                                        IsSinglesFolder = true,
-                                        IsDirty = true
-                                    };
-                                }
-                                lstPdfMetaFileData.Add(curPdfFileData);
-                                var lstNewFiles = new List<string>();
-                                // find the new files that haven't been added yet. If we insert, then we need to renumber all subsequent entries to keep fav/ink/TOC data sync'd
-                                foreach (var single in Directory.EnumerateFiles(curPath, "*.pdf").OrderBy(f=>f))
-                                {
-                                    var JustFileName = Path.GetFileName(single).ToLower();
-                                    if (!sortedListSingles.Contains(JustFileName))
-//                                    if (!curPdfFileData.lstVolInfo.Where(v => v.FileNameVolume.ToLower() == JustFileName.ToLower()).Any()) // optimize o(n^2)
-                                    {
-                                        lstNewFiles.Add(single);
-                                        sortedListSingles.Add(JustFileName); // we actually don't need to add it
-                                    }
-                                }
-                                if (lstNewFiles.Count > 0) // there is least one new file. Need to insert into current TOC, LstVol in alpha order, move everything else down, adjust ink/fav/toc pagenos
-                                {
-                                    var origsortedSettVolInfo = new SortedSet<PdfVolumeInfo>(curPdfFileData.lstVolInfo, new PdfVolumeInfoComparer());
-                                    var sortedSettVolInfo = new SortedSet<PdfVolumeInfo>(curPdfFileData.lstVolInfo, new PdfVolumeInfoComparer());
-                                    var origsortedSetToc = new SortedSet<TOCEntry>(curPdfFileData.lstTocEntries, new TocEntryComparer());
-                                    var sortedSetToc = new SortedSet<TOCEntry>(curPdfFileData.lstTocEntries, new TocEntryComparer());
-                                    curPdfFileData.IsDirty = true;
-                                    foreach (var single in lstNewFiles)
-                                    {
-                                        var JustFileName = Path.GetFileName(single);
-                                        var newVolInfo = new PdfVolumeInfo()
-                                        {
-                                            FileNameVolume = JustFileName,
-                                            NPagesInThisVolume = (int)(await GetPdfDocumentForFileAsync(single)).PageCount
-                                        };
-                                        sortedSettVolInfo.Add(newVolInfo);
-                                        var tocEntry = new TOCEntry()
-                                        {
-                                            SongName = Path.GetFileNameWithoutExtension(JustFileName),
-                                        };
-                                        sortedSetToc.Add(tocEntry);
-                                    }
-                                    var singlesPageNo = 0;
-                                    foreach (var vol in sortedSettVolInfo)
-                                    {
-
-                                        singlesPageNo += vol.NPagesInThisVolume;
-                                    }
-
-                                }
-                                curPdfFileData.InitializeDictToc(curPdfFileData.lstTocEntries);
+                                lstPdfMetaFileData.Add(await HandleSinglesFolderAsync(curPath));
                             }
                             else
                             {
@@ -371,10 +308,10 @@ namespace WpfPdfViewer
                                     var isContinuation = false;
                                     curVolIsOneBased = false;
                                     if (!string.IsNullOrEmpty(lastFile) &&
-                                            curPdfFileData != null &&
+                                            curmetadata != null &&
                                             System.IO.Path.GetDirectoryName(lastFile) == System.IO.Path.GetDirectoryName(file)) // same dir
                                     {
-                                        var justFnameVol0 = System.IO.Path.GetFileNameWithoutExtension(curPdfFileData._FullPathFile).Trim().ToLower();
+                                        var justFnameVol0 = System.IO.Path.GetFileNameWithoutExtension(curmetadata._FullPathFile).Trim().ToLower();
                                         var lastcharVol0 = justFnameVol0.Last();
                                         if ("01".Contains(lastcharVol0)) // if the last char is 0 or 1
                                         {
@@ -406,9 +343,9 @@ namespace WpfPdfViewer
                                         curVolNo++;
                                         nContinuations++;
                                         // add to current
-                                        if (curPdfFileData != null && curPdfFileData.IsDirty) // dirty: we're creating a new one
+                                        if (curmetadata != null && curmetadata.IsDirty) // dirty: we're creating a new one
                                         {
-                                            if (curPdfFileData.lstVolInfo.Count <= curVolNo)
+                                            if (curmetadata.lstVolInfo.Count <= curVolNo)
                                             {
                                                 var newvolInfo = new PdfVolumeInfo()
                                                 {
@@ -423,12 +360,12 @@ namespace WpfPdfViewer
                                                 {
                                                     newvolInfo.Rotation = (int)Rotation.Rotate0;  // assume if single page, it's upside up
                                                 }
-                                                curPdfFileData.lstVolInfo.Add(newvolInfo);
+                                                curmetadata.lstVolInfo.Add(newvolInfo);
                                             }
                                         }
-                                        if (curPdfFileData != null && string.IsNullOrEmpty(curPdfFileData.lstVolInfo[curVolNo].FileNameVolume))
+                                        if (curmetadata != null && string.IsNullOrEmpty(curmetadata.lstVolInfo[curVolNo].FileNameVolume))
                                         {
-                                            curPdfFileData.lstVolInfo[curVolNo].FileNameVolume = Path.GetFileName(file); // temptemp
+                                            curmetadata.lstVolInfo[curVolNo].FileNameVolume = Path.GetFileName(file); // temptemp
                                         }
                                     }
                                     else
@@ -440,9 +377,9 @@ namespace WpfPdfViewer
                                             curVolIsOneBased = false;
                                             cntItems++;
                                         }
-                                        if (curPdfFileData != null)
+                                        if (curmetadata != null)
                                         {
-                                            pgOffset = curPdfFileData.lstVolInfo[0].NPagesInThisVolume;
+                                            pgOffset = curmetadata.lstVolInfo[0].NPagesInThisVolume;
                                         }
                                     }
                                     lastFile = file;
@@ -477,13 +414,119 @@ namespace WpfPdfViewer
             }
             return (lstPdfMetaFileData, lstFolders);
         }
+
+        internal static async Task<PdfMetaData> HandleSinglesFolderAsync(string curPath)
+        {
+            PdfMetaData curmetadata = null;
+            var bmkFile = Path.ChangeExtension(curPath, "bmk");
+            var sortedListSingles = new SortedSet<string>(); //tolower justfname
+            var sortedListDeletedSingles = new SortedSet<string>();//tolower justfname
+            if (File.Exists(bmkFile))
+            {
+                curmetadata = await PdfMetaData.ReadPdfMetaDataAsync(curPath, IsSingles: true);
+                foreach (var vol in curmetadata.lstVolInfo)
+                {
+                    if (!File.Exists(Path.Combine(curPath, vol.FileNameVolume)))
+                    {
+                        sortedListDeletedSingles.Add(vol.FileNameVolume.ToLower());
+                    }
+                    else
+                    {
+                        sortedListSingles.Add(vol.FileNameVolume.ToLower());
+                    }
+                }
+            }
+            else
+            {
+                curmetadata = new PdfMetaData()
+                {
+                    _FullPathFile = curPath,
+                    IsSinglesFolder = true,
+                    IsDirty = true
+                };
+            }
+            var lstNewFiles = new List<string>(); //fullpath
+                                                  // find the new files that haven't been added yet. If we insert, then we need to renumber all subsequent entries to keep fav/ink/TOC data sync'd
+            foreach (var single in Directory.EnumerateFiles(curPath, "*.pdf").OrderBy(f => f))
+            {
+                var JustFileName = Path.GetFileName(single).ToLower();
+                if (!sortedListSingles.Contains(JustFileName))
+                //                                    if (!curPdfFileData.lstVolInfo.Where(v => v.FileNameVolume.ToLower() == JustFileName.ToLower()).Any()) // optimize o(n^2)
+                {
+                    lstNewFiles.Add(single);
+                    sortedListSingles.Add(JustFileName); // we actually don't need to add it
+                }
+            }
+            if (lstNewFiles.Count > 0 || sortedListDeletedSingles.Count > 0) // there is least one new or deleted file. Need to recreate LstVol in alpha order, preserve TOC, adjust ink/fav/toc pagenos
+            {// VolInfo has no user editable data. TOC has user info (user can edit TOC) so we need to preserve the edited content. Ink/Fav only need to adjust pagenos.
+                curmetadata.IsDirty = true;
+                var origsortedSetVolInfo = new SortedSet<PdfVolumeInfo>(curmetadata.lstVolInfo, new PdfVolumeInfoComparer());
+                var origsortedSetToc = new SortedSet<TOCEntry>(curmetadata.lstTocEntries, new TocEntryComparer());
+                var origsortedSetFav = new SortedSet<Favorite>(curmetadata.dictFav.Values.ToList(), new PageNoBaseClassComparer());
+                foreach (var fav in origsortedSetFav) // for pageno info like fav, temporarily normalize pageno: make it a page from a single. Then afer all the singles are rearranged, rebase based on new page no
+                {
+
+                }
+                //                var x = origFav.GetViewBetween(new Favorite() { Pageno = 3 }, new Favorite { Pageno = 6 });
+                var origsortedSetInk = new SortedSet<InkStrokeClass>(curmetadata.dictInkStrokes.Values.ToList(), new PageNoBaseClassComparer());
+                foreach (var delfile in sortedListDeletedSingles)
+                {
+                    var delvol = origsortedSetVolInfo.Where(v => string.Compare(v.FileNameVolume, delfile, StringComparison.InvariantCultureIgnoreCase) == 0).FirstOrDefault();
+                    if (delvol != null)
+                    {
+                        origsortedSetVolInfo.Remove(delvol);
+                    }
+                    var delToc = origsortedSetToc.Where(t => string.Compare(t.SongName, delfile, StringComparison.InvariantCultureIgnoreCase) == 0).FirstOrDefault();
+                    if (delToc != null)
+                    {
+                        origsortedSetToc.Remove(delToc);
+                    }
+                }
+                foreach (var newfile in lstNewFiles)
+                {
+                    var newVolInfo = new PdfVolumeInfo()
+                    {
+                        FileNameVolume = Path.GetFileName(newfile),
+                        NPagesInThisVolume = (int)(await GetPdfDocumentForFileAsync(newfile)).PageCount
+                    };
+                    origsortedSetVolInfo.Add(newVolInfo);
+                }
+                // update VolInfo.
+                curmetadata.lstVolInfo = origsortedSetVolInfo.ToList();
+
+                // now fix TOC
+                var singlesPageNo = 0;
+                curmetadata.lstTocEntries.Clear();
+                foreach (var vol in origsortedSetVolInfo)
+                {
+                    var toc = origsortedSetToc.Where(t => vol.FileNameVolume.ToLower().Contains(t.SongName.ToLower())).FirstOrDefault();
+                    if (toc == null)
+                    {
+                        toc = new TOCEntry()
+                        {
+                            SongName = Path.GetFileNameWithoutExtension(vol.FileNameVolume),
+                            PageNo = singlesPageNo
+                        };
+                    }
+                    curmetadata.lstTocEntries.Add(toc);
+                    singlesPageNo += vol.NPagesInThisVolume;
+                }
+                // now fix favorites
+                singlesPageNo = 0;
+                foreach (var vol in origsortedSetVolInfo)
+                {
+
+                    singlesPageNo += vol.NPagesInThisVolume;
+                }
+
+            }
+            curmetadata.InitializeDictToc(curmetadata.lstTocEntries);
+            return curmetadata;
+        }
+
         public string PdfBmkMetadataFileName => Path.ChangeExtension(_FullPathFile, "bmk");
         public static async Task<PdfMetaData> ReadPdfMetaDataAsync(string FullPathPdfFileOrSinglesFolder, bool IsSingles = false)
         {
-            if (FullPathPdfFileOrSinglesFolder.ToLower().Contains("singles"))
-            {
-                "asdf".ToString();
-            }
             PdfMetaData pdfFileData = null;
             var bmkFile = Path.ChangeExtension(FullPathPdfFileOrSinglesFolder, "bmk");
             if (File.Exists(bmkFile))
@@ -572,7 +615,7 @@ namespace WpfPdfViewer
             dictInkStrokes.Clear();
             foreach (var ink in LstInkStrokes)
             {
-                dictInkStrokes[ink.PageNo] = ink;
+                dictInkStrokes[ink.Pageno] = ink;
             }
             LstInkStrokes.Clear();
         }
@@ -660,7 +703,24 @@ namespace WpfPdfViewer
             }
             return (pdfDoc, pdfPgNo);
         }
+
         public static async Task<PdfDocument> GetPdfDocumentForFileAsync(string pathPdfFileVol)
+        {
+            using (var fstrm = await FileRandomAccessStream.OpenAsync(pathPdfFileVol, FileAccessMode.Read))
+            {
+                var pdfDoc = await PdfDocument.LoadFromStreamAsync(fstrm);
+                return pdfDoc;
+            }
+            //    StorageFile f = await StorageFile.GetFileFromPathAsync(pathPdfFileVol);
+            //var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
+            //if (pdfDoc.IsPasswordProtected)
+            //{
+            //    //    this.dpPage.Children.Add(new TextBlock() { Text = $"Password Protected {pathPdfFileVol}" });
+            //}
+        }
+
+
+        public static async Task<PdfDocument> GetPdfDocumentForFileAsyncOrig(string pathPdfFileVol)
         {
             StorageFile f = await StorageFile.GetFileFromPathAsync(pathPdfFileVol);
             var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
@@ -671,27 +731,27 @@ namespace WpfPdfViewer
             return pdfDoc;
         }
 
-        public static void SavePdfMetaFileData(PdfMetaData pdfFileData, bool ForceSave = false)
+        public void SaveIfDirty(bool ForceDirty = false)
         {
-            pdfFileData.InitializeListPdfDocuments(); // reinit list to clear out results to save mem
+            InitializeListPdfDocuments(); // reinit list to clear out results to save mem
             if (!PdfViewerWindow.s_pdfViewerWindow.IsTesting)
             {
-                if (pdfFileData.IsDirty || ForceSave || pdfFileData.initialLastPageNo != pdfFileData.LastPageNo)
+                if (IsDirty || ForceDirty || initialLastPageNo != LastPageNo)
                 {
                     try
                     {
-                        if (pdfFileData._FullPathFile.Contains("Everybody"))
+                        if (_FullPathFile.Contains("Everybody"))
                         {
                             "adf".ToString();
                         }
-                        var bmkFile = pdfFileData.PdfBmkMetadataFileName;
+                        var bmkFile = PdfBmkMetadataFileName;
                         if (File.Exists(bmkFile))
                         {
                             var dt = (new FileInfo(bmkFile)).LastWriteTime;
-                            if (dt != pdfFileData.dtLastWrite)
+                            if (dt != dtLastWrite)
                             {
                                 if (MessageBox.Show(
-                                    $"{bmkFile} \nOriginal {pdfFileData.dtLastWrite} \nCurrent {dt}",
+                                    $"{bmkFile} \nOriginal {dtLastWrite} \nCurrent {dt}",
                                     $"File already exists",
                                     MessageBoxButton.YesNo) != MessageBoxResult.Yes)
                                 {
@@ -706,20 +766,20 @@ namespace WpfPdfViewer
                             Indent = true,
                             IndentChars = " "
                         };
-                        pdfFileData.Favorites = pdfFileData.dictFav.Values.ToList();
-                        if (pdfFileData.dictInkStrokes.Count > 0)
+                        Favorites = dictFav.Values.ToList();
+                        if (dictInkStrokes.Count > 0)
                         {
-                            pdfFileData.LstInkStrokes = pdfFileData.dictInkStrokes.Values.ToList();
+                            LstInkStrokes = dictInkStrokes.Values.ToList();
                         }
                         using (var strm = File.Create(bmkFile))
                         {
                             using (var w = XmlWriter.Create(strm, settings))
                             {
-                                serializer.Serialize(w, pdfFileData);
+                                serializer.Serialize(w, this);
                             }
                         }
                         var newdt = (new FileInfo(bmkFile)).LastWriteTime;
-                        pdfFileData.dtLastWrite = newdt;
+                        dtLastWrite = newdt;
                     }
                     catch (Exception ex)
                     {
@@ -728,7 +788,6 @@ namespace WpfPdfViewer
                 }
             }
         }
-
         internal int GetVolumeFromPageNo(int pageNo)
         {
             var volno = 0;
@@ -870,14 +929,22 @@ namespace WpfPdfViewer
             return isFav;
         }
 
-        internal void ToggleFavorite(int PageNo, bool IsFavorite)
+        internal void ToggleFavorite(int PageNo, bool IsFavorite, string FavoriteName = null)
         {
             this.IsDirty = true;
             if (IsFavorite)
             {
                 if (!dictFav.ContainsKey(PageNo))
                 {
-                    dictFav[PageNo] = new Favorite() { Pageno = PageNo };
+                    var fav = new Favorite()
+                    {
+                        Pageno = PageNo
+                    };
+                    if (!string.IsNullOrEmpty(FavoriteName))
+                    {
+                        fav.FavoriteName = FavoriteName;
+                    }
+                    dictFav[PageNo] = fav;
                     IsDirty = true;
                 }
             }
@@ -927,6 +994,14 @@ namespace WpfPdfViewer
         }
     }
 
+    public class PageNoBaseClassComparer : IComparer<PageNoBaseClass>
+    {
+        public int Compare(PageNoBaseClass x, PageNoBaseClass y)
+        {
+            return x.Pageno == y.Pageno ? 0 : (x.Pageno < y.Pageno ? -1 : 1);
+        }
+    }
+
     [Serializable]
     public class PdfVolumeInfo
     {
@@ -952,22 +1027,26 @@ namespace WpfPdfViewer
         }
     }
 
+    public class PageNoBaseClass
+    {
+        public int Pageno { get; set; }
+    }
+
     [Serializable]
-    public class Favorite : ICloneable
+    public class Favorite : PageNoBaseClass //: ICloneable
     {
         public string FavoriteName { get; set; }
-        public int Pageno { get; set; }
         [XmlIgnore]
         public object Tag;
 
-        public object Clone()
-        {
-            return new Favorite()
-            {
-                FavoriteName = this.FavoriteName,
-                Pageno = this.Pageno
-            };
-        }
+        //public object Clone()
+        //{
+        //    return new Favorite()
+        //    {
+        //        FavoriteName = this.FavoriteName,
+        //        Pageno = this.Pageno
+        //    };
+        //}
 
         public override string ToString()
         {
@@ -976,10 +1055,8 @@ namespace WpfPdfViewer
     }
 
     [Serializable]
-    public class InkStrokeClass
+    public class InkStrokeClass : PageNoBaseClass
     {
-        public int PageNo { get; set; }
-
         public Point InkStrokeDimension;
         public byte[] StrokeData { get; set; }
     }

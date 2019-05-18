@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -24,6 +26,10 @@ namespace Tests
         {
             TestContext.WriteLine($"{DateTime.Now.ToString()} Starting test {TestContext.TestName}");
         }
+        public void AddLogEntry(string msg)
+        {
+            TestContext.WriteLine(DateTime.Now.ToString("hh:mm:ss:fff") + msg);
+        }
     }
 
     [TestClass]
@@ -33,7 +39,7 @@ namespace Tests
         readonly string root2 = @"f:\Sheetmusic";
         string Rootfolder { get { if (Directory.Exists(root1)) { return root1; } return root2; } }
         //string testbmk = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.bmk";
-//        readonly string testPdf = @"C:\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
+        //        readonly string testPdf = @"C:\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
 
         [TestMethod]
         [Ignore]
@@ -135,7 +141,7 @@ namespace Tests
                     //await cacheEntry.task;
                     //// calling thread must be STA, UIThread
                     //var res = cacheEntry.task.Result;
-                    TestContext.WriteLine($"Starting book {w.currentPdfMetaData}");
+                    AddLogEntry($"Starting book {w.currentPdfMetaData}");
                     for (var iter = 0; iter < 1; iter++)
                     {
                         var pageNo = 0;
@@ -146,12 +152,12 @@ namespace Tests
                             var bmi = cacheEntry.task.Result;
                             testw.Content = new Image() { Source = bmi };
                             testw.Title = $"{cnt++} {pageNo,8}   bmi={bmi.Width:n0}, {bmi.Height:n0}  {sw.Elapsed.TotalSeconds,8:n4} {currentPdfMetaData} ";
-                            TestContext.WriteLine(testw.Title);
+                            AddLogEntry(testw.Title);
                             //break;
                         }
                     }
                 }
-                TestContext.WriteLine($"Done with all");
+                AddLogEntry($"Done with all");
                 ev.Set();
             });
             ev.Wait();
@@ -177,15 +183,15 @@ namespace Tests
                 });
 
                 // Start the Dispatcher Processing
-                TestContext.WriteLine($"{Threadname}  dispatcher run");
+                AddLogEntry($"{Threadname}  dispatcher run");
                 Dispatcher.Run();
-                TestContext.WriteLine($"{Threadname} done");
+                AddLogEntry($"{Threadname} done");
                 "".ToString();
             });
 
             mockUIThread.SetApartmentState(ApartmentState.STA);
             mockUIThread.Name = Threadname;
-            TestContext.WriteLine($"{Threadname} start");
+            AddLogEntry($"{Threadname} start");
             mockUIThread.Start();
 
             return tcs.Task.Result;
@@ -213,16 +219,11 @@ namespace Tests
             {
                 if (pm.dictInkStrokes.Count > 0)
                 {
-                    TestContext.WriteLine($"{pm.GetFullPathFileFromVolno(volNo: 0)}  {pm.dictInkStrokes.Count}");
-                    if (pm.dictInkStrokes.Count == 1)
-                    {
-                        var pg = pm.dictInkStrokes.Keys[0];
-                        TestContext.WriteLine($"inkpage = {pg}  ");
-                    }
-                    else
-                    {
-                        pm.dictInkStrokes.Clear();
-                    }
+                    //foreach (var kvp in pm.dictInkStrokes)
+                    //{
+                    //    kvp.Value.Pageno = kvp.Value.Pageno;
+                    //}
+                    //pm.SaveIfDirty(ForceDirty: true);
                     //pm.IsDirty = true;
                     //PdfMetaData.SavePdfMetaFileData(pm);
                 }
@@ -232,68 +233,152 @@ namespace Tests
         [TestMethod]
         public async Task TestSingles()
         {
-            var ev = new ManualResetEventSlim();
             var testdir = Path.Combine(Environment.CurrentDirectory, "testdir");
-            TestContext.WriteLine($"Test dir {testdir}");
             var singlesFolder = Path.Combine(testdir, "singles");
-            foreach (var dir in new[] { singlesFolder, testdir })
+            for (int i = 0; i < 20; i++)
             {
-                if (Directory.Exists(dir))
+                AddLogEntry($"Iter {i}");
+                if (!Directory.Exists(testdir))
                 {
-                    Directory.Delete(dir, recursive: true);
+                    Directory.CreateDirectory(testdir);
+                }
+                foreach (var file in Directory.EnumerateFiles(testdir))
+                {
+                    AddLogEntry($"Del {file}");
+                    File.Delete(file);
+                }
+                if (Directory.Exists(singlesFolder))
+                {
+                    foreach (var file in Directory.EnumerateFiles(singlesFolder))
+                    {
+                        AddLogEntry($"Del {file}");
+                        File.Delete(file);
+                    }
+                    Directory.Delete(singlesFolder, recursive: true);
+                }
+                Directory.CreateDirectory(singlesFolder);
+                var sourceFiles = Directory.GetFiles(Path.Combine(root1, @"ragtime\singles"), "*.pdf").OrderBy(p => p);
+                foreach (var file in sourceFiles.Take(2))
+                {
+                    File.Copy(file, Path.Combine(singlesFolder, Path.GetFileName(file)));
+                }
+
+                foreach (var testfile in Directory.EnumerateFiles(singlesFolder))
+                {
+                    var pdfdoc = await PdfMetaData.GetPdfDocumentForFileAsync(testfile);
                 }
             }
-            Directory.CreateDirectory(testdir);
-            Directory.CreateDirectory(singlesFolder);
-            //            File.Copy(Path.Combine(root1, @"Ragtime\singles.bmk"), Path.Combine(testdir, "singles.bmk"));
-            var sourceFiles = Directory.GetFiles(Path.Combine(root1, @"ragtime\singles"), "*.pdf").OrderBy(p => p);
-            foreach (var file in sourceFiles.Skip(1).Take(2))
+        }
+
+
+        class SinglesTesthelper : IDisposable
+        {
+            public string testdir;
+            public string singlesFolder;
+            public IEnumerable<string> sourceFiles;
+            public PdfViewerWindow pdfViewerWindow;
+            UnitTest1 test;
+            public SinglesTesthelper(UnitTest1 test, Func<string, bool> funcFilter)
             {
-                File.Copy(file, Path.Combine(singlesFolder, Path.GetFileName(file)));
+                this.test = test;
+                testdir = Path.Combine(Environment.CurrentDirectory, "testdir");
+                singlesFolder = Path.Combine(testdir, "singles");
+                test.AddLogEntry($"Test dir {testdir}");
+                if (!Directory.Exists(testdir))
+                {
+                    Directory.CreateDirectory(testdir);
+                }
+                foreach (var file in Directory.EnumerateFiles(testdir))
+                {
+                    File.Delete(file);
+                }
+                if (Directory.Exists(singlesFolder))
+                {
+                    foreach (var file in Directory.EnumerateFiles(singlesFolder))
+                    {
+                        File.Delete(file);
+                    }
+                    Directory.Delete(singlesFolder, recursive: true);
+                }
+                Directory.CreateDirectory(singlesFolder);
+                sourceFiles = Directory.GetFiles(Path.Combine(test.root1, @"ragtime\singles"), "*.pdf").OrderBy(p => p);
+                foreach (var file in sourceFiles.OrderBy(f => f).Where(f => funcFilter(f)))
+                {
+                    File.Copy(file, Path.Combine(singlesFolder, Path.GetFileName(file)));
+                }
+                pdfViewerWindow = new WpfPdfViewer.PdfViewerWindow
+                {
+                    _RootMusicFolder = testdir
+                };
             }
-            var c = CreateExecutionContext();
+            public async Task<PdfMetaData> CreateAndSaveBmkAsync()
+            {
+                (var lstPdfMetaFileData, var lstFolders) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(pdfViewerWindow._RootMusicFolder);
+                var curmetadata = lstPdfMetaFileData[0];
+                test.AddLogEntry($"metadata cnt = {lstPdfMetaFileData.Count}= {curmetadata}");
+                Assert.AreEqual(1, lstPdfMetaFileData.Count);
+                curmetadata.ToggleFavorite(PageNo: 2, IsFavorite: true);
+                curmetadata.SaveIfDirty(ForceDirty: true);
+                //                test.AddLogEntry(File.ReadAllText(curmetadata.PdfBmkMetadataFileName));
+                foreach (var vol in curmetadata.lstVolInfo)
+                {
+                    test.AddLogEntry($" vol = {vol}");
+                }
+                return curmetadata;
+            }
+
+            public void Dispose()
+            {
+            }
+        }
+
+        [TestMethod]
+        public async Task TestSinglesInsert1File()
+        {
             var failMessage = string.Empty;
+            var ev = new ManualResetEventSlim();
+            var c = CreateExecutionContext();
             await c.Dispatcher.InvokeAsync(async () =>
             {
                 try
                 {
-                    var w = new WpfPdfViewer.PdfViewerWindow
+                    foreach (var nskip in new[] { 0, 20, 55 })
                     {
-                        _RootMusicFolder = testdir
-                    };
-                    TestContext.WriteLine($"starting with {testdir}");
-                    {
-                        (var lstPdfMetaFileData, var lstFolders) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
-                        var curmetadata = lstPdfMetaFileData[0];
-                        TestContext.WriteLine($"metadata cnt = {lstPdfMetaFileData.Count}= {curmetadata}");
-                        Assert.AreEqual(1, lstPdfMetaFileData.Count);
-                        Assert.AreEqual(curmetadata.lstVolInfo.Count, 2);
-                        Assert.AreEqual(curmetadata.lstTocEntries.Count, 2);
-                        curmetadata.ToggleFavorite(PageNo: 2, IsFavorite: true);
-                        PdfMetaData.SavePdfMetaFileData(curmetadata, ForceSave: true);
-                        TestContext.WriteLine(File.ReadAllText(curmetadata.PdfBmkMetadataFileName));
-                        foreach (var vol in curmetadata.lstVolInfo)
+                        AddLogEntry($"Doing nskip = {nskip}");
+                        int num = 0;
+                        using (var helper = new SinglesTesthelper(this, (str) =>
                         {
-                            TestContext.WriteLine($" vol = {vol}");
-                        }
-                    }
-                    {
-                        TestContext.WriteLine($"Adding file  = {sourceFiles.First()}");
-                        File.Copy(sourceFiles.First(),
-                            Path.Combine(singlesFolder, Path.GetFileName(sourceFiles.First()))
-                            );
-                        (var lstPdfMetaFileData, var lstFolders) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
-                        var curmetadata = lstPdfMetaFileData[0];
-                        TestContext.WriteLine(File.ReadAllText(curmetadata.PdfBmkMetadataFileName));
-                        Assert.AreEqual(1, lstPdfMetaFileData.Count);
-                        Assert.AreEqual(curmetadata.lstVolInfo.Count, 3);
-                        Assert.AreEqual(curmetadata.lstTocEntries.Count, 3);
-                        var lastone = string.Empty;
-                        foreach (var vol in curmetadata.lstVolInfo)
+                            var include = false;
+                            if (num == 14 || num == 40)
+                            {
+                                include = true;
+                            }
+                            num++;
+                            return include;
+                        }))
                         {
-                            Assert.IsTrue(string.Compare(lastone, vol.FileNameVolume) < 0);
-                            TestContext.WriteLine($" vol = {vol}");
-                            lastone = vol.FileNameVolume;
+                            var curmetadata = await helper.CreateAndSaveBmkAsync();
+                            Assert.AreEqual(2, curmetadata.lstVolInfo.Count);
+                            Assert.AreEqual(2, curmetadata.lstTocEntries.Count);
+
+                            AddLogEntry($"Adding file  = {helper.sourceFiles.Skip(nskip).First()}");
+                            File.Copy(helper.sourceFiles.Skip(nskip).First(),
+                                Path.Combine(helper.singlesFolder, Path.GetFileName(helper.sourceFiles.Skip(nskip).First()))
+                                );
+                            (var lstPdfMetaFileData, var lstFolders) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(helper.pdfViewerWindow._RootMusicFolder);
+                            Assert.AreEqual(1, lstPdfMetaFileData.Count);
+                            curmetadata = lstPdfMetaFileData[0];
+                            Assert.AreEqual(3, curmetadata.lstVolInfo.Count);
+                            Assert.AreEqual(3, curmetadata.lstTocEntries.Count);
+                            var lastone = string.Empty;
+                            foreach (var vol in curmetadata.lstVolInfo)
+                            {
+                                Assert.IsTrue(string.Compare(lastone, vol.FileNameVolume) < 0, $"sequence {lastone} {vol}");
+                                AddLogEntry($" vol = {vol}");
+                                lastone = vol.FileNameVolume;
+                            }
+                            curmetadata.SaveIfDirty(ForceDirty: true);
+                            AddLogEntry(File.ReadAllText(curmetadata.PdfBmkMetadataFileName));
                         }
                     }
                 }
@@ -301,9 +386,163 @@ namespace Tests
                 {
                     failMessage = ex.ToString();
                 }
+                AddLogEntry("set event");
                 ev.Set();
             });
             ev.Wait();
+            AddLogEntry("Done wait event");
+            Assert.IsTrue(string.IsNullOrEmpty(failMessage), failMessage);
+        }
+
+        [TestMethod]
+        public async Task TestSinglesPreserveTOC()
+        {
+            var failMessage = string.Empty;
+            var ev = new ManualResetEventSlim();
+            var c = CreateExecutionContext();
+            await c.Dispatcher.InvokeAsync(async () =>
+            {
+                try
+                {
+                    foreach (var nskip in new[] {
+                        0,
+                        20,
+                        55
+                    })
+                    {
+                        AddLogEntry($"Doing nskip = {nskip}");
+                        int num = 0;
+                        using (var helper = new SinglesTesthelper(this, (str) =>
+                        {
+                            var include = false;
+                            if (num == 14 || num == 40)
+                            {
+                                include = true;
+                            }
+                            num++;
+                            return include;
+                        }))
+                        {
+                            var strComposer = "Charles L Johnson GREAT COMPOSER GREAT COMPOSER GREAT COMPOSER";
+                            {
+                                var curmetadata = await helper.CreateAndSaveBmkAsync();
+
+                                Assert.AreEqual(2, curmetadata.lstVolInfo.Count);
+                                Assert.AreEqual(2, curmetadata.lstTocEntries.Count);
+                                curmetadata.lstTocEntries.Where(t => t.SongName.Substring(0, 5) == "Crazy").First().Composer = strComposer;
+                                curmetadata.SaveIfDirty(ForceDirty: true);
+                                AddLogEntry($"Adding file  = {helper.sourceFiles.Skip(nskip).First()}");
+                                File.Copy(helper.sourceFiles.Skip(nskip).First(),
+                                    Path.Combine(helper.singlesFolder, Path.GetFileName(helper.sourceFiles.Skip(nskip).First()))
+                                    );
+                            }
+                            {
+                                (var lstPdfMetaFileData, var lstFolders) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(helper.pdfViewerWindow._RootMusicFolder);
+                                Assert.AreEqual(1, lstPdfMetaFileData.Count);
+                                var curmetadata = lstPdfMetaFileData[0];
+                                Assert.AreEqual(3, curmetadata.lstVolInfo.Count);
+                                Assert.AreEqual(3, curmetadata.lstTocEntries.Count);
+                                Assert.AreEqual(strComposer, curmetadata.lstTocEntries.Where(t => t.SongName.Substring(0, 5) == "Crazy").First().Composer);
+                                var lastone = string.Empty;
+                                foreach (var vol in curmetadata.lstVolInfo)
+                                {
+                                    Assert.IsTrue(string.Compare(lastone, vol.FileNameVolume) < 0, $"sequence {lastone} {vol}");
+                                    AddLogEntry($" vol = {vol}");
+                                    lastone = vol.FileNameVolume;
+                                }
+                                curmetadata.SaveIfDirty(ForceDirty: true);
+                                AddLogEntry(File.ReadAllText(curmetadata.PdfBmkMetadataFileName));
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    failMessage = ex.ToString();
+                }
+                AddLogEntry("set event");
+                ev.Set();
+            });
+            ev.Wait();
+            AddLogEntry("Done wait event");
+            Assert.IsTrue(string.IsNullOrEmpty(failMessage), failMessage);
+        }
+
+        [TestMethod]
+        public async Task TestSinglesPreserveFavAndInk()
+        {
+            var failMessage = string.Empty;
+            var ev = new ManualResetEventSlim();
+            var c = CreateExecutionContext();
+            await c.Dispatcher.InvokeAsync(async () =>
+            {
+                try
+                {
+                    foreach (var nskip in new[] {
+                        0,
+                        20,
+                        55
+                    })
+                    {
+                        AddLogEntry($"Doing nskip = {nskip}");
+                        int num = 0;
+                        using (var helper = new SinglesTesthelper(this, (str) =>
+                        {
+                            var include = false;
+                            if (num == 14 || num == 40)
+                            {
+                                include = true;
+                            }
+                            num++;
+                            return include;
+                        }))
+                        {
+                            var strComposer = "Charles L Johnson GREAT COMPOSER GREAT COMPOSER GREAT COMPOSER";
+                            {
+                                var curmetadata = await helper.CreateAndSaveBmkAsync();
+
+                                Assert.AreEqual(2, curmetadata.lstVolInfo.Count);
+                                Assert.AreEqual(2, curmetadata.lstTocEntries.Count);
+                                for (int i = 0; i < curmetadata.MaxPageNum; i += 2)
+                                {
+                                    curmetadata.ToggleFavorite(i, IsFavorite: true, FavoriteName: "FavPage"+i.ToString());
+                                }
+                                curmetadata.lstTocEntries.Where(t => t.SongName.Substring(0, 5) == "Crazy").First().Composer = strComposer;
+                                curmetadata.SaveIfDirty(ForceDirty: true);
+                                AddLogEntry($"Adding file  = {helper.sourceFiles.Skip(nskip).First()}");
+                                File.Copy(helper.sourceFiles.Skip(nskip).First(),
+                                    Path.Combine(helper.singlesFolder, Path.GetFileName(helper.sourceFiles.Skip(nskip).First()))
+                                    );
+                            }
+                            {
+                                (var lstPdfMetaFileData, var lstFolders) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(helper.pdfViewerWindow._RootMusicFolder);
+                                Assert.AreEqual(1, lstPdfMetaFileData.Count);
+                                var curmetadata = lstPdfMetaFileData[0];
+                                Assert.AreEqual(3, curmetadata.lstVolInfo.Count);
+                                Assert.AreEqual(3, curmetadata.lstTocEntries.Count);
+                                Assert.AreEqual(strComposer, curmetadata.lstTocEntries.Where(t => t.SongName.Substring(0, 5) == "Crazy").First().Composer);
+                                var lastone = string.Empty;
+                                foreach (var vol in curmetadata.lstVolInfo)
+                                {
+                                    Assert.IsTrue(string.Compare(lastone, vol.FileNameVolume) < 0, $"sequence {lastone} {vol}");
+                                    AddLogEntry($" vol = {vol}");
+                                    lastone = vol.FileNameVolume;
+                                }
+                                curmetadata.SaveIfDirty(ForceDirty: true);
+                                AddLogEntry(File.ReadAllText(curmetadata.PdfBmkMetadataFileName));
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    failMessage = ex.ToString();
+                }
+                AddLogEntry("set event");
+                ev.Set();
+            });
+            ev.Wait();
+            AddLogEntry("Done wait event");
             Assert.IsTrue(string.IsNullOrEmpty(failMessage), failMessage);
         }
 
@@ -324,12 +563,12 @@ namespace Tests
         }
         void GetBMPs(WpfPdfViewer.PdfViewerWindow w)
         {
-            TestContext.WriteLine($"Got PDFMetaDataCnt={w.lstPdfMetaFileData.Count}");
+            AddLogEntry($"Got PDFMetaDataCnt={w.lstPdfMetaFileData.Count}");
             foreach (var pdfMetaData in w.lstPdfMetaFileData)
             {
                 var bmi = pdfMetaData.GetBitmapImageThumbnailAsync();
                 pdfMetaData.bitmapImageCache = null;
-                //                TestContext.WriteLine($" {pdfMetaData} {bmi.PixelWidth} {bmi.PixelHeight}");
+                //                AddLogEntry($" {pdfMetaData} {bmi.PixelWidth} {bmi.PixelHeight}");
             }
             //var classicalPdf = w.lstPdfMetaFileData[0];
             // with no renderoptions,wh=(794,1122), pixelHeight= (1589, 2245 )
