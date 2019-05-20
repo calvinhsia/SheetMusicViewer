@@ -212,7 +212,7 @@ namespace WpfPdfViewer
             return retval;
         }
 
-        private int GetVolNumFromPageNum(int pageNo)
+        public int GetVolNumFromPageNum(int pageNo)
         {
             var volno = 0;
             var pSum = PageNumberOffset;
@@ -226,6 +226,16 @@ namespace WpfPdfViewer
                 volno++;
             }
             return volno;
+        }
+        public int GetPagenoOfVolume(int volno)
+        {
+            var pgno = PageNumberOffset;
+            Debug.Assert(volno < lstVolInfo.Count);
+            for (int i = 0; i < volno; i++)
+            {
+                pgno += lstVolInfo[i].NPagesInThisVolume;
+            }
+            return pgno;
         }
 
         internal static async Task<(List<PdfMetaData>, List<string>)> LoadAllPdfMetaDataFromDiskAsync(string rootMusicFolder)
@@ -460,26 +470,46 @@ namespace WpfPdfViewer
             if (lstNewFiles.Count > 0 || sortedListDeletedSingles.Count > 0) // there is least one new or deleted file. Need to recreate LstVol in alpha order, preserve TOC, adjust ink/fav/toc pagenos
             {// VolInfo has no user editable data. TOC has user info (user can edit TOC) so we need to preserve the edited content. Ink/Fav only need to adjust pagenos.
                 curmetadata.IsDirty = true;
-                var origsortedSetVolInfo = new SortedSet<PdfVolumeInfo>(curmetadata.lstVolInfo, new PdfVolumeInfoComparer());
-                var origsortedSetToc = new SortedSet<TOCEntry>(curmetadata.lstTocEntries, new TocEntryComparer());
-                var origsortedSetFav = new SortedSet<Favorite>(curmetadata.dictFav.Values.ToList(), new PageNoBaseClassComparer());
-                foreach (var fav in origsortedSetFav) // for pageno info like fav, temporarily normalize pageno: make it a page from a single. Then afer all the singles are rearranged, rebase based on new page no
+                // we deal with the fav/ink first by storing per vol, then rebasing pagenos
+                var dictVolToLstFav = new Dictionary<string, List<Favorite>>(); // volname =>lstFav (a vol (which is a single song), can have multiple favs)
+                var dictVolToLstInk = new Dictionary<string, List<InkStrokeClass>>();
+                foreach (var fav in curmetadata.dictFav.Values)
                 {
-
+                    var volNo = curmetadata.GetVolNumFromPageNum(fav.Pageno);
+                    var vol = curmetadata.lstVolInfo[volNo];
+                    if (!dictVolToLstFav.TryGetValue(vol.FileNameVolume, out var lstFavPerVol))
+                    {
+                        lstFavPerVol = new List<Favorite>();
+                        dictVolToLstFav[vol.FileNameVolume] = lstFavPerVol;
+                    }
+                    fav.Pageno -= curmetadata.GetPagenoOfVolume(volNo);
+                    lstFavPerVol.Add(fav);
                 }
-                //                var x = origFav.GetViewBetween(new Favorite() { Pageno = 3 }, new Favorite { Pageno = 6 });
-                var origsortedSetInk = new SortedSet<InkStrokeClass>(curmetadata.dictInkStrokes.Values.ToList(), new PageNoBaseClassComparer());
+                foreach (var ink in curmetadata.dictInkStrokes.Values)
+                {
+                    var volNo = curmetadata.GetVolNumFromPageNum(ink.Pageno);
+                    var vol = curmetadata.lstVolInfo[volNo];
+                    if (!dictVolToLstInk.TryGetValue(vol.FileNameVolume, out var lstInkPerVol))
+                    {
+                        lstInkPerVol = new List<InkStrokeClass>();
+                        dictVolToLstInk[vol.FileNameVolume] = lstInkPerVol;
+                    }
+                    ink.Pageno -= curmetadata.GetPagenoOfVolume(volNo);
+                    lstInkPerVol.Add(ink);
+                }
+                var sortedSetVolInfo = new SortedSet<PdfVolumeInfo>(curmetadata.lstVolInfo, new PdfVolumeInfoComparer());
+                var sortedSetToc = new SortedSet<TOCEntry>(curmetadata.lstTocEntries, new TocEntryComparer());
                 foreach (var delfile in sortedListDeletedSingles)
                 {
-                    var delvol = origsortedSetVolInfo.Where(v => string.Compare(v.FileNameVolume, delfile, StringComparison.InvariantCultureIgnoreCase) == 0).FirstOrDefault();
+                    var delvol = sortedSetVolInfo.Where(v => string.Compare(v.FileNameVolume, delfile, StringComparison.InvariantCultureIgnoreCase) == 0).FirstOrDefault();
                     if (delvol != null)
                     {
-                        origsortedSetVolInfo.Remove(delvol);
+                        sortedSetVolInfo.Remove(delvol);
                     }
-                    var delToc = origsortedSetToc.Where(t => string.Compare(t.SongName, delfile, StringComparison.InvariantCultureIgnoreCase) == 0).FirstOrDefault();
+                    var delToc = sortedSetToc.Where(t => string.Compare(t.SongName, delfile, StringComparison.InvariantCultureIgnoreCase) == 0).FirstOrDefault();
                     if (delToc != null)
                     {
-                        origsortedSetToc.Remove(delToc);
+                        sortedSetToc.Remove(delToc);
                     }
                 }
                 foreach (var newfile in lstNewFiles)
@@ -489,17 +519,17 @@ namespace WpfPdfViewer
                         FileNameVolume = Path.GetFileName(newfile),
                         NPagesInThisVolume = (int)(await GetPdfDocumentForFileAsync(newfile)).PageCount
                     };
-                    origsortedSetVolInfo.Add(newVolInfo);
+                    sortedSetVolInfo.Add(newVolInfo);
                 }
                 // update VolInfo.
-                curmetadata.lstVolInfo = origsortedSetVolInfo.ToList();
+                curmetadata.lstVolInfo = sortedSetVolInfo.ToList();
 
                 // now fix TOC
                 var singlesPageNo = 0;
                 curmetadata.lstTocEntries.Clear();
-                foreach (var vol in origsortedSetVolInfo)
+                foreach (var vol in sortedSetVolInfo)
                 {
-                    var toc = origsortedSetToc.Where(t => vol.FileNameVolume.ToLower().Contains(t.SongName.ToLower())).FirstOrDefault();
+                    var toc = sortedSetToc.Where(t => vol.FileNameVolume.ToLower().Contains(t.SongName.ToLower())).FirstOrDefault();
                     if (toc == null)
                     {
                         toc = new TOCEntry()
@@ -508,19 +538,51 @@ namespace WpfPdfViewer
                             PageNo = singlesPageNo
                         };
                     }
+                    else
+                    {
+                        toc.PageNo = singlesPageNo;
+                    }
+                    sortedSetToc.Remove(toc);
                     curmetadata.lstTocEntries.Add(toc);
                     singlesPageNo += vol.NPagesInThisVolume;
                 }
-                // now fix favorites
+                // update toc
+                curmetadata.InitializeDictToc(curmetadata.lstTocEntries);
+                // now fix favorites.
                 singlesPageNo = 0;
-                foreach (var vol in origsortedSetVolInfo)
+                curmetadata.Favorites.Clear();
+                for (int volno = 0; volno < curmetadata.lstVolInfo.Count; volno++)
                 {
-
+                    var vol = curmetadata.lstVolInfo[volno];
+                    if (dictVolToLstFav.TryGetValue(vol.FileNameVolume, out var lstFavPerVol))
+                    {
+                        foreach (var fav in lstFavPerVol)
+                        {
+                            fav.Pageno += singlesPageNo;
+                            curmetadata.Favorites.Add(fav);
+                        }
+                    }
                     singlesPageNo += vol.NPagesInThisVolume;
                 }
-
+                curmetadata.InitializeFavList();
+                // now handle ink
+                singlesPageNo = 0;
+                curmetadata.LstInkStrokes.Clear();
+                for (int volno = 0; volno < curmetadata.lstVolInfo.Count; volno++)
+                {
+                    var vol = curmetadata.lstVolInfo[volno];
+                    if (dictVolToLstInk.TryGetValue(vol.FileNameVolume, out var lstInkPerVol))
+                    {
+                        foreach (var ink in lstInkPerVol)
+                        {
+                            ink.Pageno += singlesPageNo;
+                            curmetadata.LstInkStrokes.Add(ink);
+                        }
+                    }
+                    singlesPageNo += vol.NPagesInThisVolume;
+                }
+                curmetadata.InitializeInkStrokes();
             }
-            curmetadata.InitializeDictToc(curmetadata.lstTocEntries);
             return curmetadata;
         }
 
@@ -706,19 +768,18 @@ namespace WpfPdfViewer
 
         public static async Task<PdfDocument> GetPdfDocumentForFileAsync(string pathPdfFileVol)
         {
+            //    StorageFile f = await StorageFile.GetFileFromPathAsync(pathPdfFileVol);
+            //var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
             using (var fstrm = await FileRandomAccessStream.OpenAsync(pathPdfFileVol, FileAccessMode.Read))
             {
                 var pdfDoc = await PdfDocument.LoadFromStreamAsync(fstrm);
+                //if (pdfDoc.IsPasswordProtected)
+                //{
+                //    //    this.dpPage.Children.Add(new TextBlock() { Text = $"Password Protected {pathPdfFileVol}" });
+                //}
                 return pdfDoc;
             }
-            //    StorageFile f = await StorageFile.GetFileFromPathAsync(pathPdfFileVol);
-            //var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
-            //if (pdfDoc.IsPasswordProtected)
-            //{
-            //    //    this.dpPage.Children.Add(new TextBlock() { Text = $"Password Protected {pathPdfFileVol}" });
-            //}
         }
-
 
         public static async Task<PdfDocument> GetPdfDocumentForFileAsyncOrig(string pathPdfFileVol)
         {
@@ -787,21 +848,6 @@ namespace WpfPdfViewer
                     }
                 }
             }
-        }
-        internal int GetVolumeFromPageNo(int pageNo)
-        {
-            var volno = 0;
-            var sumpg = 0;
-            foreach (var vol in lstVolInfo)
-            {
-                if (pageNo < vol.NPagesInThisVolume)
-                {
-                    break;
-                }
-                sumpg += vol.NPagesInThisVolume;
-                volno++;
-            }
-            return volno;
         }
 
         /// <summary>

@@ -47,29 +47,28 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <StackPanel>
+                    <StackPanel Orientation="Vertical" Grid.Column="0">
+                        <Label Content="PageNo" HorizontalContentAlignment="Right" Height="25"/>
+                        <Label Content="SongName" HorizontalContentAlignment="Right" Height="25"/>
+                        <Label Content="Composer" HorizontalContentAlignment="Right" Height="25"/>
+                        <Label Content="Date" HorizontalContentAlignment="Right" Height="25"/>
+                        <Label Content="Notes" HorizontalContentAlignment="Right" Height="25"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Vertical" Grid.Column="1">
+                        <TextBox Width="50" Text="{Binding ElementName=lvTOC, Path=SelectedItem.PageNo}" HorizontalAlignment="Left"  Height="25" TextChanged="TbxNumeric_TextChanged"/>
+                        <TextBox Width="400" Text="{Binding ElementName=lvTOC, Path=SelectedItem.SongName}" HorizontalAlignment="Left"  Height="25"/>
+                        <TextBox Width="400" Text="{Binding ElementName=lvTOC, Path=SelectedItem.Composer}" HorizontalAlignment="Left"  Height="25"/>
+                        <TextBox Width="400" Text="{Binding ElementName=lvTOC, Path=SelectedItem.Date}" HorizontalAlignment="Left"  Height="25"/>
+                        <TextBox Width="400" Text="{Binding ElementName=lvTOC, Path=SelectedItem.Notes}" HorizontalAlignment="Left"  Height="25"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
                         <StackPanel Orientation="Horizontal">
                             <Label Content="Notes" ToolTip="Notes for entire collection of volumes" />
                             <TextBox Text="{Binding DocNotes}" Width="200"/>
 
                         </StackPanel>
                         <Label Content="VolInfo" />
-                        <ListView Width="250" ItemsSource="{Binding LstVolInfo}" MaxHeight="100"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Vertical" Grid.Column="1">
-                        <Label Content="PageNo" HorizontalContentAlignment="Right" Height="25"/>
-                        <Label Content="SongName" HorizontalContentAlignment="Right" Height="25"/>
-                        <Label Content="Composer" HorizontalContentAlignment="Right" Height="25"/>
-                        <Label Content="Date" HorizontalContentAlignment="Right" Height="25"/>
-                        <Label Content="Notes" HorizontalContentAlignment="Right" Height="25"/>
-
-                    </StackPanel>
-                    <StackPanel Orientation="Vertical" Grid.Column="2">
-                        <TextBox Width="50" Text="{Binding ElementName=lvTOC, Path=SelectedItem.PageNo}" HorizontalAlignment="Left"  Height="25" TextChanged="TbxNumeric_TextChanged"/>
-                        <TextBox Width="400" Text="{Binding ElementName=lvTOC, Path=SelectedItem.SongName}" HorizontalAlignment="Left"  Height="25"/>
-                        <TextBox Width="400" Text="{Binding ElementName=lvTOC, Path=SelectedItem.Composer}" HorizontalAlignment="Left"  Height="25"/>
-                        <TextBox Width="400" Text="{Binding ElementName=lvTOC, Path=SelectedItem.Date}" HorizontalAlignment="Left"  Height="25"/>
-                        <TextBox Width="400" Text="{Binding ElementName=lvTOC, Path=SelectedItem.Notes}" HorizontalAlignment="Left"  Height="25"/>
+                        <ListView Width="500" ItemsSource="{Binding LstVolInfo}" MaxHeight="200"/>
                     </StackPanel>
 
                 </Grid>
