@@ -442,7 +442,7 @@ namespace WpfPdfViewer
                     }
                     else
                     {
-                        sortedListSingles.Add(vol.FileNameVolume.ToLower());
+                        sortedListSingles.Add(vol.FileNameVolume.ToLower()); 
                     }
                 }
             }
@@ -464,7 +464,7 @@ namespace WpfPdfViewer
                 //                                    if (!curPdfFileData.lstVolInfo.Where(v => v.FileNameVolume.ToLower() == JustFileName.ToLower()).Any()) // optimize o(n^2)
                 {
                     lstNewFiles.Add(single);
-                    sortedListSingles.Add(JustFileName); // we actually don't need to add it
+                    sortedListSingles.Add(JustFileName); // if it's already in the list, will return false and not add it. that's ok.
                 }
             }
             if (lstNewFiles.Count > 0 || sortedListDeletedSingles.Count > 0) // there is least one new or deleted file. Need to recreate LstVol in alpha order, preserve TOC, adjust ink/fav/toc pagenos
