@@ -776,7 +776,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             if (currentPdfMetaData != null)
             {
                 currentPdfMetaData.LastPageNo = CurrentPageNumber;
-                PdfMetaData.SavePdfMetaFileData(currentPdfMetaData);
+                currentPdfMetaData.SaveIfDirty();
                 currentPdfMetaData = null;
                 CurrentPageNumber = 0;
             }
@@ -791,7 +791,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             this.PdfUIEnabled = false;
         }
 
-        async static Task<DocumentViewer> CombinePDFsToASinglePdfAsync(string pathPdf)
+        internal async static Task<DocumentViewer> CombinePDFsToASinglePdfAsync(string pathPdf)
         {
             await CombinePDFsToASinglePdfAsync("to quiet warning about unused func");
             //             //pdfSourceDoc = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Ragtime\Collections\The Music of James Scott001.pdf";

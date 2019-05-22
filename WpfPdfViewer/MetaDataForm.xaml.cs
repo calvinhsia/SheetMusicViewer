@@ -27,13 +27,14 @@ namespace WpfPdfViewer
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
-
         public BitmapImage ImgThumb { get { return _pdfViewerWindow.currentPdfMetaData?.bitmapImageCache; } }
 
         public int PageNumberOffset { get; set; }
         public List<string> LstVolInfo { get; set; }
 
         public string DocNotes { get; set; }
+
+        public bool SongNameIsEnabled =>!_pdfViewerWindow.currentPdfMetaData.IsSinglesFolder;
 
         ObservableCollection<TOCEntry> _lstToc;
         public ObservableCollection<TOCEntry> LstTOC { get { return _lstToc; } set { _lstToc = value; OnMyPropertyChanged(); } }
@@ -117,7 +118,7 @@ namespace WpfPdfViewer
                 _pdfViewerWindow.currentPdfMetaData.InitializeFavList();
             }
             _pdfViewerWindow.currentPdfMetaData.PageNumberOffset = PageNumberOffset;
-            PdfMetaData.SavePdfMetaFileData(_pdfViewerWindow.currentPdfMetaData, ForceSave: true);
+            _pdfViewerWindow.currentPdfMetaData.SaveIfDirty(ForceDirty: true);
             this.DialogResult = true;
             this.Close();
         }

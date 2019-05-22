@@ -142,7 +142,7 @@ namespace WpfPdfViewer
                     {
                         Strokes.Save(strm, compress: true);
                         var inkstrokeClass = new InkStrokeClass() {
-                            PageNo = _PgNo,
+                            Pageno = _PgNo,
                             InkStrokeDimension = new Point(this.Width, this.Height),
                             StrokeData = strm.GetBuffer()
                         };

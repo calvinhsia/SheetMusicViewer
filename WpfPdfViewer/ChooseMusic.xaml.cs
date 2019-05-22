@@ -231,7 +231,7 @@ namespace WpfPdfViewer
                     {
                     }
                     break;
-                case "_Favorites":
+                case "Fa_vorites":
                     FillFavoritesTab();
                     if (this.tabControl.SelectedIndex != 1)
                     {
@@ -380,7 +380,7 @@ namespace WpfPdfViewer
                     {
                         if (this.rbtnByDate.IsChecked == true)
                         {
-                            var date = (new System.IO.FileInfo(p.PdfMetadataFileName)).LastAccessTime;
+                            var date = (new System.IO.FileInfo(p.PdfBmkMetadataFileName)).LastAccessTime;
                             return (DateTime.Now - date).TotalSeconds.ToString("0000000000");
                         }
                         else if (this.rbtnByFolder.IsChecked == true)
@@ -406,7 +406,7 @@ namespace WpfPdfViewer
                         }
                     }
                 }
-                if (!includeThisItem)
+                if (!includeThisItem && !pdfMetaDataItem.IsSinglesFolder)
                 {
                     continue;
                 }
@@ -496,6 +496,7 @@ namespace WpfPdfViewer
                         var sp = new StackPanel() { Orientation = Orientation.Horizontal };
                         sp.Children.Add(new Image() { Source = await ((PdfMetaData)favEntry.Tag).GetBitmapImageThumbnailAsync(), Height = 80, Width = 50 });
                         sp.Children.Add(new TextBlock() { Text = ((PdfMetaData)favEntry.Tag).GetDescription(favEntry.Pageno) });
+                        sp.Children.Add(new TextBlock() { Text = $" Page {favEntry.Pageno}" });
                         var tvItem = new TreeViewItem()
                         {
                             Header = sp,
@@ -545,7 +546,7 @@ namespace WpfPdfViewer
                         Properties.Settings.Default.Save();
                     }
                     break;
-                case "_Favorites":
+                case "Fa_vorites":
                     if (_TreeView.SelectedItem != null)
                     {
                         var tg = ((TreeViewItem)_TreeView.SelectedItem).Tag;
