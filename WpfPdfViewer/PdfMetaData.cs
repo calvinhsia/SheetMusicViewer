@@ -813,7 +813,7 @@ namespace WpfPdfViewer
                             {
                                 if (MessageBox.Show(
                                     $"{bmkFile} \nOriginal {dtLastWrite} \nCurrent {dt}",
-                                    $"File already exists",
+                                    $"File already exists. Replace original?",
                                     MessageBoxButton.YesNo) != MessageBoxResult.Yes)
                                 {
                                     return;
