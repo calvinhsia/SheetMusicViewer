@@ -905,9 +905,10 @@ namespace WpfPdfViewer
                     }
                     if (pdfPage.Rotation != PdfPageRotation.Normal)
                     {
-                        renderOpts.DestinationHeight = (uint)rect.Width;
                         renderOpts.DestinationWidth = (uint)rect.Height;
+                        renderOpts.DestinationHeight = (uint)rect.Width;
                     }
+//                    renderOpts.BackgroundColor = Windows.UI.Color.FromArgb(0xf, 0, 0xff, 0);
                     bmi = await GetBitMapImageFromPdfPage(pdfPage, GetRotation(PageNo), renderOpts, cts);
                 }
             }

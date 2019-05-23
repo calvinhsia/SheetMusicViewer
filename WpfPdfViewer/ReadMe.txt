@@ -1,15 +1,15 @@
 PDF Music Viewer by Calvin Hsia 2019
 
-I have a few hundred piano music books, singles, etc. that I've collected over the last 45 years.
+I have a few hundred piano music books, singles, etc. that I've collected over the last several decades.
 Most of the books were "perfect bound" which means they didn't stay open on the piano music stand.
-Several decades ago I chopped off the bindings of the books and rebound them using plastic comb binding. This made playing the music much easier on the piano.
+Many decades ago I chopped off the bindings of the books and rebound them using plastic comb binding. This made playing the music much easier on the piano.
 Since then I bought my own book binding cutter (HFS New Heavy Duty Guillotine Paper Cutter) and comb binding machine (Marigold 19-Hole Letter Size Comb Ring Binding Machine) 
 to rebind more books.
 
 About 3 months ago, I obtained a Microsoft Surface Book 2, which had a display large enough to trigger me digitizing my music collection.
-I used a few Xerox WorkCenter 7855i or similar models available at work.
-The doc sheetfeeder allowed me to scan up to 100 pages at a time. However, because of the age and use of the books (putting on the piano, paging), the pages were pretty worn.
-The binding edges of the pages were much less uniformly smooth than the opposite edge because of the binding, so I scannned most of them smooth edge first (upside down).
+I used a few Xerox WorkCentre 7855i or similar models available at work.
+The doc sheetfeeder allowed me to scan up to 100 pages at a time. However, because of the age and wear and tear of the books (putting on the piano, turning pages), the pages were pretty worn.
+The binding edges of the pages were much less uniformly smooth than the opposite edge because of the binding, so I fed them smooth edge first (upside down) through the document feeder.
 Luckily it's pretty simple to have software rotate the page.
 I tried various software sheet music viewers available, but wasn't at all satisfied, so I wrote my own to view my 30,000 pages of music.
 
@@ -71,6 +71,9 @@ You can take a screenshot of the TOC of a book, then run Optical Character Recog
 I really love Ragtime. I suspect most people who like computer software like Ragtime. There's something so binary about it: powers of 2. 16 measures per verse, 2/4 time, syncopation.
 
 calvin_hsia@alum.mit.edu
+
+
+https://calvinhsia.visualstudio.com/DefaultCollection/MyPdfViewer/_git/MyPdfViewer
 
 
 Rescan:
