@@ -280,7 +280,7 @@ namespace WpfPdfViewer
                             itm.Date,
                             itm.Notes,
                             itm.PageNo,
-                            FileName = ((PdfMetaData)itm.Tag).GetFullPathFileFromVolno(volNo: 0, MakeRelative: true),
+                            BookName = ((PdfMetaData)itm.Tag).GetFullPathFileFromVolno(volNo: 0, MakeRelative: true),
                             _TocEntry = itm
                         };
 

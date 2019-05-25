@@ -645,7 +645,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             // a touch sends both a touch and a mouse, (even if touch is handled) so we need to filter
             var thresh = System.Windows.Forms.SystemInformation.DoubleClickTime;// == 500
             lastTouchTimeStamp = e.Timestamp;
-            if (diff > thresh)
+            if (e is MouseButtonEventArgs || diff > thresh)
             {
                 if (e is MouseButtonEventArgs || pos.Y > .75 * dpPage.ActualHeight) // must be bottom portion of page for touch: top part is for zooming
                 {
@@ -731,8 +731,12 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 }
                 matrix.ScaleAt(delt, delt, pos.X, pos.Y);
                 this.dpPage.RenderTransform = new MatrixTransform(matrix);
-                e.Handled = true;
             }
+            else
+            {
+                this.dpPage.RenderTransform = Transform.Identity;
+            }
+            e.Handled = true;
         }
 
         private void DpPage_ManipulationInertiaStarting(object sender, ManipulationInertiaStartingEventArgs e)

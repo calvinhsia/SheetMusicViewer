@@ -17,6 +17,15 @@ Choose a path to a root folder which contains PDF music files. PDF files can be 
 The PDFs are never altered by the program. All data is stored in the BMKs. However, the program needs write permission to write the BMK files.
 Some books scan to multiple PDFs. e.g. I have several books > 100 pages and scan them in smaller chunks to PDF. 
 Some of the bindings of these books are well-worn, so scanning works best in smaller chunks. 
+If you have multiple named files e.g. Book1.pdf, Book2.pdf, etc., then they will be treated as one entire book. The root name is the 1st one without any trailing 0 or 1.
+The first one of a series:
+	1. does not end in a digit "book.pdf" root name = "book"
+	2. does end in a digit  "book0.pdf" root name = "book"
+
+Subsequent ones must have the same root name as the 1st and must have a digit after the rotoname e.g. "book1.pdf", "book1a.pdf", "book2.pdf". As long as they sort in order, the digits don't matter.
+Thus, book1, book1a, book2 are all treated together as one
+but not SonatenI, SonatenI1, SonatenII: this is 2 books: "SonatenI" and "SonatenI1" are the 1st Sonaten, and "SonatenII" is the second.
+This allows rescan of missing pages without needing to renumber subsequent volumes.
 
 Also, the document sheet feeder works best with the non-bound edge leading, so you can mark them with a Rotation settings, which will be persisted.
 Name these book0.pdf, book1.pdf, etc. and they will be treated as a single book with multiple volumes
@@ -40,7 +49,7 @@ The left-right arrows move the page by 1 screenful.
 The bottom quarter of the display is used to do page turning by click or touch. In 1 page per screen mode, the right half will move right 1 page, and the left half will move left 1 page.
 In 2 page per screen mode, the bottom quareter is divided into 4 quarters. The outer 2 quarters will advance 1 screenful (2 pages), and the inner quarters will advance 1 page.
 E.g. from showing page 3 on the left and 4 on the right, to page 4 on the left to page 5 on the right. This allows right hand pages to be shown on the left, and repeats, etc. to be seen more easily.
-The top 3/4 of the page is used for moving zooming, rotating the display. You can use 2 fingers to zoom into a paticular point.
+The top 3/4 of the page is used for moving zooming, rotating the display. You can use 2 fingers to zoom into a paticular point. Similarly with ctrl mouse-wheel
 
 Inking is off by default. To ink, click the Ink checkbox for the page (in 2 page mode, there is a checkbox for each page). 
 A mouse or pen or your finger can draw in red, black, or highlight. To save the ink on that page, click the Ink checkbox again.
@@ -81,4 +90,4 @@ grinch
 Piano classics 2
 Les Mis
 Broadway Fake book
-
+the ultimate fake book  28,29    36,37  116-118   164, 165   thru phys pg 250. Pg 251 starts vol4

@@ -57,6 +57,7 @@ namespace WpfPdfViewer
             this.ShowInTaskbar = false;
 //            this.Topmost = true;
             this.Owner = Application.Current.MainWindow;
+            this.Title = pdfViewerWindow.currentPdfMetaData.GetFullPathFileFromVolno(0);
             LstTOC = new ObservableCollection<TOCEntry>();
             foreach (var itm in pdfViewerWindow.currentPdfMetaData.lstTocEntries.OrderBy(p => p.PageNo))
             {

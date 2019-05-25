@@ -215,6 +215,11 @@ namespace Tests
             var //rootfolder = @"C:\Bak\SheetMusic\Poptest";
             //rootfolder = @"C:\SheetMusic\Classical";
             rootfolder = @"C:\SheetMusic";
+            rootfolder = @"c:\temp";
+            //for (int i = 0;i <10000; i++)
+            //{
+            //    TestContext.WriteLine($"adfadf {i}");
+            //}
             var w = new WpfPdfViewer.PdfViewerWindow
             {
                 _RootMusicFolder = rootfolder
