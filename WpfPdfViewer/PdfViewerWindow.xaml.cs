@@ -626,46 +626,54 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             }
         }
 
+        int lastTouchTimeStamp = 0; //msecs wraps neg in 24.9 days  
+        private void DpPage_TouchDown(object sender, TouchEventArgs e)
+        {
+            var diff = Math.Abs(e.Timestamp - lastTouchTimeStamp);
+            if (diff > System.Windows.Forms.SystemInformation.DoubleClickTime) // == 500) // debounce
+            {
+                var pos = e.GetTouchPoint(this.dpPage).Position;
+                e.Handled = OnMouseOrTouchDown(pos, e);
+            }
+            lastTouchTimeStamp = e.Timestamp;
+        }
         private void DpPage_MouseDown(object sender, MouseButtonEventArgs e)
         {
-            var pos = e.GetPosition(this.dpPage);
-            e.Handled = OnMouseOrTouchDown(pos, e);
+            var diff = Math.Abs(e.Timestamp - lastTouchTimeStamp);
+            if (diff > System.Windows.Forms.SystemInformation.DoubleClickTime) // == 500) // a touch can also send mousedown events. So filter out mousedown immediately after a touch
+            {
+                var pos = e.GetPosition(this.dpPage);
+                e.Handled = OnMouseOrTouchDown(pos, e);
+            }
         }
 
-        int lastTouchTimeStamp = 0; //msecs wraps neg in 24.9 days  
         private bool OnMouseOrTouchDown(Point pos, InputEventArgs e)
         {
             var handled = false;
-            var diff = Math.Abs(e.Timestamp - lastTouchTimeStamp);
             //            var thresh = 100;
             //if (e is TouchEventArgs) // for mouse input we don't do anything on double click, so 2 quick clicks should be 2 single clicks. For touch, we need to de-bounce (filter out 2 touches within 2 msecs)
             //{
             //    handled = true;
             //}
             // a touch sends both a touch and a mouse, (even if touch is handled) so we need to filter
-            var thresh = System.Windows.Forms.SystemInformation.DoubleClickTime;// == 500
-            lastTouchTimeStamp = e.Timestamp;
-            if (e is MouseButtonEventArgs || diff > thresh)
+            if (e is MouseButtonEventArgs || pos.Y > .75 * dpPage.ActualHeight) // must be bottom portion of page for touch: top part is for zooming
             {
-                if (e is MouseButtonEventArgs || pos.Y > .75 * dpPage.ActualHeight) // must be bottom portion of page for touch: top part is for zooming
+                var delta = NumPagesPerView;
+                if (NumPagesPerView > 1)
                 {
-                    var delta = NumPagesPerView;
-                    if (NumPagesPerView > 1)
+                    var distToMiddle = Math.Abs(this.dpPage.ActualWidth / 2 - pos.X);
+                    if (distToMiddle < this.dpPage.ActualWidth / 4)
                     {
-                        var distToMiddle = Math.Abs(this.dpPage.ActualWidth / 2 - pos.X);
-                        if (distToMiddle < this.dpPage.ActualWidth / 4)
-                        {
-                            delta = 1;
-                        }
+                        delta = 1;
                     }
-                    var leftSide = pos.X < this.dpPage.ActualWidth / 2;
-                    if (leftSide)
-                    {
-                        delta = -delta;
-                    }
-                    NavigateAsync(delta);
-                    handled = true;
                 }
+                var leftSide = pos.X < this.dpPage.ActualWidth / 2;
+                if (leftSide)
+                {
+                    delta = -delta;
+                }
+                NavigateAsync(delta);
+                handled = true;
             }
             return handled;
         }
@@ -676,11 +684,6 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             e.ManipulationContainer = this;
             e.Handled = true;
 
-        }
-        private void DpPage_TouchDown(object sender, TouchEventArgs e)
-        {
-            var pos = e.GetTouchPoint(this.dpPage).Position;
-            e.Handled = OnMouseOrTouchDown(pos, e);
         }
 
         private void DpPage_ManipulationDelta(object sender, ManipulationDeltaEventArgs e)

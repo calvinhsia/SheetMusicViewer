@@ -9,7 +9,8 @@ to rebind more books.
 About 3 months ago, I obtained a Microsoft Surface Book 2, which had a display large enough to trigger me digitizing my music collection.
 I used a few Xerox WorkCentre 7855i or similar models available at work.
 The doc sheetfeeder allowed me to scan up to 100 pages at a time. However, because of the age and wear and tear of the books (putting on the piano, turning pages), the pages were pretty worn.
-The binding edges of the pages were much less uniformly smooth than the opposite edge because of the binding, so I fed them smooth edge first (upside down) through the document feeder.
+The binding edges of the pages were much less uniformly smooth (some had residual adhesive) than the opposite edge because of the binding, so I fed them smooth edge first (upside down) through the document feeder.
+Many of my books are quite old, with disintegrating pages.
 Luckily it's pretty simple to have software rotate the page.
 I tried various software sheet music viewers available, but wasn't at all satisfied, so I wrote my own to view my 30,000 pages of music.
 
@@ -87,7 +88,7 @@ https://calvinhsia.visualstudio.com/DefaultCollection/MyPdfViewer/_git/MyPdfView
 
 Rescan:
 grinch
-Piano classics 2
+Piano classics 2. p161 to end  vol4, 5
 Les Mis
 Broadway Fake book
 the ultimate fake book  28,29    36,37  116-118   164, 165   thru phys pg 250. Pg 251 starts vol4
