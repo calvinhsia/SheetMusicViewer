@@ -121,10 +121,16 @@ namespace WpfPdfViewer
             }
             if (lstTocs != null)
             {
+                int cnt = 0;
                 foreach (var toce in lstTocs)
                 {
-                    var val = $"{toce.SongName} {toce.Composer} {toce.Date} {toce.Notes}".Trim();
-                    str += val + " ";
+                    var val = $"{toce.SongName} {toce.Composer} {toce.Date} {toce.Notes}".Trim(); //without page num
+                    if (cnt++ > 0)
+                    {
+                        str += " | ";
+                    }
+                    str += val;
+                    
                 }
             }
             else
@@ -925,6 +931,7 @@ namespace WpfPdfViewer
             {
                 await pdfPage.RenderToStreamAsync(strm, renderOpts);
                 cts?.Token.ThrowIfCancellationRequested();
+                bmi.CreateOptions = BitmapCreateOptions.DelayCreation;
                 bmi.BeginInit();
                 bmi.StreamSource = strm.AsStream();
                 bmi.Rotation = rotation;

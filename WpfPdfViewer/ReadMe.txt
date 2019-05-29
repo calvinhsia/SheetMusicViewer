@@ -10,8 +10,8 @@ About 3 months ago, I obtained a Microsoft Surface Book 2, which had a display l
 I used a few Xerox WorkCentre 7855i or similar models available at work.
 The doc sheetfeeder allowed me to scan up to 100 pages at a time. However, because of the age and wear and tear of the books (putting on the piano, turning pages), the pages were pretty worn.
 The binding edges of the pages were much less uniformly smooth (some had residual adhesive) than the opposite edge because of the binding, so I fed them smooth edge first (upside down) through the document feeder.
-Many of my books are quite old, with disintegrating pages.
 Luckily it's pretty simple to have software rotate the page.
+Many of my books are quite old, with disintegrating pages.
 I tried various software sheet music viewers available, but wasn't at all satisfied, so I wrote my own to view my 30,000 pages of music.
 
 Choose a path to a root folder which contains PDF music files. PDF files can be 0-N pages. 
@@ -65,7 +65,8 @@ For the boundary between volumes (e.g. a book contains 1000 pages, volume 1 is p
 The thumb of the slider at the top can be used to navigate the entire 1000 pages. 
 The controls at the top are transparent so that the music can use more vertical screen space.
 
-Each page has a description which is calculated from the TOC.
+Each page has a description which is calculated from the TOC. If a song is many pages, the description is 
+calculated from the closest TOC entry. If there are multiple songs on a a page, the description includes all songs on that page.
 
 The Table of contents of a songbook shows the physical page numbers, which may not match the actual PDF page numbers (there could be a cover page scanned or could be a multivolume set, or 30 pages of intro, and then page 1 has the 1st song)
 Also, each scanned page might have the physical page # printed on it.
@@ -91,4 +92,6 @@ grinch
 Piano classics 2. p161 to end  vol4, 5
 Les Mis
 Broadway Fake book
-the ultimate fake book  28,29    36,37  116-118   164, 165   thru phys pg 250. Pg 251 starts vol4
+//the ultimate fake book  28,29    36,37  116-118   164, 165   thru phys pg 250. Pg 251 starts vol4
+Ultimate Fake Book Volume II
+Grest Songs of the Seventies2.pdf: rescan [63,118] 

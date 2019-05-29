@@ -34,7 +34,7 @@ namespace WpfPdfViewer
 
         public string DocNotes { get; set; }
 
-        public bool SongNameIsEnabled =>!_pdfViewerWindow.currentPdfMetaData.IsSinglesFolder;
+        public bool SongNameIsEnabled => !_pdfViewerWindow.currentPdfMetaData.IsSinglesFolder;
 
         ObservableCollection<TOCEntry> _lstToc;
         public ObservableCollection<TOCEntry> LstTOC { get { return _lstToc; } set { _lstToc = value; OnMyPropertyChanged(); } }
@@ -55,7 +55,7 @@ namespace WpfPdfViewer
             InitializeComponent();
             this._pdfViewerWindow = pdfViewerWindow;
             this.ShowInTaskbar = false;
-//            this.Topmost = true;
+            //            this.Topmost = true;
             this.Owner = Application.Current.MainWindow;
             this.Title = pdfViewerWindow.currentPdfMetaData.GetFullPathFileFromVolno(0);
             LstTOC = new ObservableCollection<TOCEntry>();
@@ -136,10 +136,10 @@ namespace WpfPdfViewer
                     var lines = clipText.Split("\r\n".ToArray(), StringSplitOptions.RemoveEmptyEntries);
                     foreach (var line in lines)
                     {
-                        var parts = line.Split("\t".ToArray());
+                        var parts = line.Trim().Split("\t".ToArray());
                         var newEntry = new TOCEntry();
 
-                        if (parts.Length > 0)
+                        if (parts.Length > 0 && parts[0].Length > 0)
                         {
                             newEntry.PageNo = int.Parse(parts[0]);
                         }
