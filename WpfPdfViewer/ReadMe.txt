@@ -8,14 +8,14 @@ to rebind more books.
 
 About 3 months ago, I obtained a Microsoft Surface Book 2, which had a display large enough to trigger me digitizing my music collection.
 I used a few Xerox WorkCentre 7855i or similar models available at work.
-The doc sheetfeeder allowed me to scan up to 100 pages at a time. However, because of the age and wear and tear of the books (putting on the piano, turning pages), the pages were pretty worn.
-The binding edges of the pages were much less uniformly smooth (some had residual adhesive) than the opposite edge because of the binding, so I fed them smooth edge first (upside down) through the document feeder.
+The doc sheetfeeder allowed me to scan up to 100 pages at a time. However, because of the age and wear and tear of the books (putting on the piano, turning pages), some of the pages were pretty worn.
+The binding edges of the pages were much less uniformly smooth (some had residual adhesive) than the non-binding edge because of the binding, so I fed them smooth edge first (upside down) through the document feeder.
 Luckily it's pretty simple to have software rotate the page.
-Many of my books are quite old, with disintegrating pages.
+
 I tried various software sheet music viewers available, but wasn't at all satisfied, so I wrote my own to view my 30,000 pages of music.
 
-Choose a path to a root folder which contains PDF music files. PDF files can be 0-N pages. 
-The PDFs are never altered by the program. All data is stored in the BMKs. However, the program needs write permission to write the BMK files.
+Run the program. Choose a path to a root folder which contains PDF music files. PDF files can contain 1-N pages. 
+The PDFs are never altered by the program. All auxiliary data, such as Table Of Contents, Favorites, Inking, LastPageNumberViewed) is stored in the BMKs. However, the program needs write permission to write the BMK files.
 Some books scan to multiple PDFs. e.g. I have several books > 100 pages and scan them in smaller chunks to PDF. 
 Some of the bindings of these books are well-worn, so scanning works best in smaller chunks. 
 If you have multiple named files e.g. Book1.pdf, Book2.pdf, etc., then they will be treated as one entire book. The root name is the 1st one without any trailing 0 or 1.
@@ -79,6 +79,10 @@ Another way to think about it: find a page with a printed page no on it, e.g. pa
 You can edit/display the TOC via clicking or tapping the thumbnail to the right of the slider. Or Alt-E. From there you can export/import to/from the clipboard in Excel format.
 You can take a screenshot of the TOC of a book, then run Optical Character Recognition (OCR) on it to convert it to text for Excel=>clipboard=>TOC.
 
+How I got started:
+I've neer had a piano lesson: Our Junior High School had a PDP-8 computer, which would emit radio interference on the AM dial. Making the computer flash the blinking lights (yes computers had blinking lights back then) with a pattern,
+it could actually make music. I remember hearing Maple Leaf Rag from the computer on an AM radio. In college, there was a piano in my fraternity. I started on the piano with the music to Maple Leaf Rag, and I 
+started trying to pick my way through the notes. 
 I really love Ragtime. I suspect most people who like computer software like Ragtime. There's something so binary about it: powers of 2. 16 measures per verse, 2/4 time, syncopation.
 
 calvin_hsia@alum.mit.edu
@@ -95,3 +99,4 @@ Broadway Fake book
 //the ultimate fake book  28,29    36,37  116-118   164, 165   thru phys pg 250. Pg 251 starts vol4
 Ultimate Fake Book Volume II
 Grest Songs of the Seventies2.pdf: rescan [63,118] 
+Billy Joel A Collection Of Songs12.pdf [130, 177] (to end)

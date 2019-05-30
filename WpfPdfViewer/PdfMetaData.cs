@@ -931,7 +931,7 @@ namespace WpfPdfViewer
             {
                 await pdfPage.RenderToStreamAsync(strm, renderOpts);
                 cts?.Token.ThrowIfCancellationRequested();
-                bmi.CreateOptions = BitmapCreateOptions.DelayCreation;
+//                bmi.CreateOptions = BitmapCreateOptions.DelayCreation;
                 bmi.BeginInit();
                 bmi.StreamSource = strm.AsStream();
                 bmi.Rotation = rotation;
