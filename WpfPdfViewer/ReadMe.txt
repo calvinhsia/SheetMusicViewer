@@ -91,12 +91,12 @@ calvin_hsia@alum.mit.edu
 https://calvinhsia.visualstudio.com/DefaultCollection/MyPdfViewer/_git/MyPdfViewer
 
 
-Rescan:
 grinch
 Piano classics 2. p161 to end  vol4, 5
 Les Mis
 Broadway Fake book
-//the ultimate fake book  28,29    36,37  116-118   164, 165   thru phys pg 250. Pg 251 starts vol4
 Ultimate Fake Book Volume II
 Grest Songs of the Seventies2.pdf: rescan [63,118] 
 Billy Joel A Collection Of Songs12.pdf [130, 177] (to end)
+//done :
+the ultimate fake book  28,29    36,37  116-118   164, 165   thru phys pg 250. Pg 251 starts vol4
