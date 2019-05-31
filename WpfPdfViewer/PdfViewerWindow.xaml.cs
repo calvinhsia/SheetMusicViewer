@@ -370,6 +370,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                         }
                         var imageCurPage = new Image() { Source = bitmapimageCurPage };
                         inkCanvas[0] = new MyInkCanvas(bitmapimageCurPage, this, chkInk0.IsChecked == true, CurrentPageNumber);
+                        // chkInk0.Checked +=inkCanvas[0].ChkInkToggled; //cause leak
                         var gridCurPage = new Grid();
                         gridCurPage.Children.Add(inkCanvas[0]);
                         gridContainer.Children.Add(gridCurPage);
@@ -389,6 +390,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                                     return;
                                 }
                                 inkCanvas[1] = new MyInkCanvas(bitmapimageNextPage, this, chkInk1.IsChecked == true, CurrentPageNumber + 1);
+                                //chkInk1.Checked += inkCanvas[1].ChkInkToggled;  // cause leak
                                 inkCanvas[0].HorizontalAlignment = HorizontalAlignment.Right;
                                 inkCanvas[1].HorizontalAlignment = HorizontalAlignment.Left; // put righthand page close to middle
                                 var gridNextPage = new Grid();
