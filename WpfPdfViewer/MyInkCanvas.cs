@@ -23,7 +23,7 @@ namespace WpfPdfViewer
         {
             this._pdfViewerWindow = pdfViewerWindow;
             this._PgNo = PgNo;
-            _bmImage = bmImage;
+            _bmImage = bmImage ?? throw new ArgumentNullException("bmImage");
             if (!IsInking)
             {
                 this.EditingMode = InkCanvasEditingMode.None; // if we're not inking, then let mouse events change the page

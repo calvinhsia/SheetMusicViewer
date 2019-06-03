@@ -130,7 +130,7 @@ namespace WpfPdfViewer
                         str += " | ";
                     }
                     str += val;
-                    
+
                 }
             }
             else
@@ -415,7 +415,7 @@ namespace WpfPdfViewer
                         }
                         catch (Exception ex)
                         {
-                            PdfViewerWindow.s_pdfViewerWindow.OnException($"Exception reading files {curPath} ", ex);
+                            PdfViewerWindow.s_pdfViewerWindow.OnException($"Exception reading files {curPath} near {lastFile}", ex);
                         }
                         SaveMetaData(); // last one in dir
                         foreach (var dir in Directory.EnumerateDirectories(curPath))
@@ -921,6 +921,10 @@ namespace WpfPdfViewer
                     bmi = await GetBitMapImageFromPdfPage(pdfPage, GetRotation(PageNo), renderOpts, cts);
                 }
             }
+            if (bmi == null)
+            {
+                throw new InvalidDataException($"No bitmapimage for Pg={PageNo} PdfPg={pdfPgno} PdfPgCnt={pdfDoc?.PageCount} {this} ");
+            }
             return bmi;
         }
 
@@ -931,7 +935,7 @@ namespace WpfPdfViewer
             {
                 await pdfPage.RenderToStreamAsync(strm, renderOpts);
                 cts?.Token.ThrowIfCancellationRequested();
-//                bmi.CreateOptions = BitmapCreateOptions.DelayCreation;
+                //                bmi.CreateOptions = BitmapCreateOptions.DelayCreation;
                 bmi.BeginInit();
                 bmi.StreamSource = strm.AsStream();
                 bmi.Rotation = rotation;
