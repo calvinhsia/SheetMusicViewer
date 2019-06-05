@@ -23,6 +23,10 @@ namespace WpfPdfViewer
         {
             this._pdfViewerWindow = pdfViewerWindow;
             this._PgNo = PgNo;
+            //this._pdfViewerWindow.PdfExceptionEvent += (o, e) =>
+            //      {
+            //          "Cause a leak".ToString();
+            //      };
             _bmImage = bmImage ?? throw new ArgumentNullException("bmImage");
             if (!IsInking)
             {
@@ -141,7 +145,8 @@ namespace WpfPdfViewer
                     using (var strm = new MemoryStream())
                     {
                         Strokes.Save(strm, compress: true);
-                        var inkstrokeClass = new InkStrokeClass() {
+                        var inkstrokeClass = new InkStrokeClass()
+                        {
                             Pageno = _PgNo,
                             InkStrokeDimension = new Point(this.Width, this.Height),
                             StrokeData = strm.GetBuffer()
