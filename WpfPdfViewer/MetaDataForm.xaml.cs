@@ -184,11 +184,6 @@ namespace WpfPdfViewer
             }
         }
 
-        private void BtnClearTOC_Click(object sender, RoutedEventArgs e)
-        {
-            this.LstTOC.Clear();
-        }
-
         private void TbxNumeric_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (sender is TextBox txtbox)
