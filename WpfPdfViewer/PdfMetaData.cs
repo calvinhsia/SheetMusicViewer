@@ -121,10 +121,16 @@ namespace WpfPdfViewer
             }
             if (lstTocs != null)
             {
+                int cnt = 0;
                 foreach (var toce in lstTocs)
                 {
-                    var val = $"{toce.SongName} {toce.Composer} {toce.Date} {toce.Notes}".Trim();
-                    str += val + " ";
+                    var val = $"{toce.SongName} {toce.Composer} {toce.Date} {toce.Notes}".Trim(); //without page num
+                    if (cnt++ > 0)
+                    {
+                        str += " | ";
+                    }
+                    str += val;
+
                 }
             }
             else
@@ -197,9 +203,10 @@ namespace WpfPdfViewer
                 if (retval != null)
                 {
                     retval = retval.Substring(PdfViewerWindow.s_pdfViewerWindow._RootMusicFolder.Length + 1).Replace(".pdf", string.Empty);
-                    while (retval.EndsWith("0") || retval.EndsWith("1"))
+                    var lastcharVol0 = retval.Last();
+                    if ("01".Contains(lastcharVol0)) // if the last char is 0 or 1
                     {
-                        retval = retval.Substring(0, retval.Length - 2);
+                        retval = retval.Substring(0, retval.Length - 1);
                     }
                 }
             }
@@ -296,7 +303,6 @@ namespace WpfPdfViewer
                     async Task<int> recurDirsAsync(string curPath)
                     {
                         var lastFile = string.Empty;
-                        var pgOffset = 0;
                         nContinuations = 0;
                         var cntItems = 0;
                         int curVolNo = 0; // 
@@ -332,20 +338,27 @@ namespace WpfPdfViewer
                                         if (justFnameVol0.Length < justfnameCurrent.Length &&
                                             justFnameVol0 == justfnameCurrent.Substring(0, justFnameVol0.Length))
                                         {
-                                            if (int.TryParse(justfnameCurrent.Substring(justFnameVol0.Length), out var volNo))
+                                            if (char.IsDigit(justfnameCurrent.Substring(justFnameVol0.Length)[0]))
                                             {
-                                                if (volNo != curVolNo + 1 + (curVolIsOneBased ? 1 : 0))
-                                                {
-                                                    throw new InvalidOperationException($"Vol mismatch Expected: {curVolNo} Actual: {volNo}  for {file}");
-                                                }
-                                            }
-                                            if (curVolNo > 0 && volNo == 0)
-                                            {
-                                            }
-                                            else
-                                            {
+                                                /// all continuations must have file length > base name (without trailing minus "0" or "1")
+                                                /// and must be extended with at least one digit.
+                                                /// Thus, book1, book1a, book2 are all treated together as one
+                                                /// but not bookI, bookI1, bookII: this is 2 books: "bookI" and "bookI1" are the 1st part, and "bookII" is the second.
                                                 isContinuation = true;
                                             }
+                                            //if (int.TryParse(justfnameCurrent.Substring(justFnameVol0.Length), out var volNo))
+                                            //{
+                                            //    if (volNo != curVolNo + 1 + (curVolIsOneBased ? 1 : 0))
+                                            //    {
+                                            //        throw new InvalidOperationException($"Vol mismatch Expected: {curVolNo} Actual: {volNo}  for {file}");
+                                            //    }
+                                            //}
+                                            //if (curVolNo > 0 && volNo == 0)
+                                            //{
+                                            //}
+                                            //else
+                                            //{
+                                            //}
                                         }
                                     }
                                     if (isContinuation)
@@ -387,10 +400,6 @@ namespace WpfPdfViewer
                                             curVolIsOneBased = false;
                                             cntItems++;
                                         }
-                                        if (curmetadata != null)
-                                        {
-                                            pgOffset = curmetadata.lstVolInfo[0].NPagesInThisVolume;
-                                        }
                                     }
                                     lastFile = file;
                                 }
@@ -406,7 +415,7 @@ namespace WpfPdfViewer
                         }
                         catch (Exception ex)
                         {
-                            PdfViewerWindow.s_pdfViewerWindow.OnException($"Exception reading files {curPath} ", ex);
+                            PdfViewerWindow.s_pdfViewerWindow.OnException($"Exception reading files {curPath} near {lastFile}", ex);
                         }
                         SaveMetaData(); // last one in dir
                         foreach (var dir in Directory.EnumerateDirectories(curPath))
@@ -442,7 +451,7 @@ namespace WpfPdfViewer
                     }
                     else
                     {
-                        sortedListSingles.Add(vol.FileNameVolume.ToLower()); 
+                        sortedListSingles.Add(vol.FileNameVolume.ToLower());
                     }
                 }
             }
@@ -905,11 +914,16 @@ namespace WpfPdfViewer
                     }
                     if (pdfPage.Rotation != PdfPageRotation.Normal)
                     {
-                        renderOpts.DestinationHeight = (uint)rect.Width;
                         renderOpts.DestinationWidth = (uint)rect.Height;
+                        renderOpts.DestinationHeight = (uint)rect.Width;
                     }
+                    //                    renderOpts.BackgroundColor = Windows.UI.Color.FromArgb(0xf, 0, 0xff, 0);
                     bmi = await GetBitMapImageFromPdfPage(pdfPage, GetRotation(PageNo), renderOpts, cts);
                 }
+            }
+            if (bmi == null)
+            {
+                throw new InvalidDataException($"No bitmapimage for Pg={PageNo} PdfPg={pdfPgno} PdfPgCnt={pdfDoc?.PageCount} {this} ");
             }
             return bmi;
         }
@@ -921,6 +935,7 @@ namespace WpfPdfViewer
             {
                 await pdfPage.RenderToStreamAsync(strm, renderOpts);
                 cts?.Token.ThrowIfCancellationRequested();
+                //                bmi.CreateOptions = BitmapCreateOptions.DelayCreation;
                 bmi.BeginInit();
                 bmi.StreamSource = strm.AsStream();
                 bmi.Rotation = rotation;

@@ -280,7 +280,7 @@ namespace WpfPdfViewer
                             itm.Date,
                             itm.Notes,
                             itm.PageNo,
-                            FileName = ((PdfMetaData)itm.Tag).GetFullPathFileFromVolno(volNo: 0, MakeRelative: true),
+                            BookName = ((PdfMetaData)itm.Tag).GetFullPathFileFromVolno(volNo: 0, MakeRelative: true),
                             _TocEntry = itm
                         };
 
@@ -394,15 +394,23 @@ namespace WpfPdfViewer
                     }))
             {
                 var includeThisItem = false;
-                foreach (CheckBox chk in lstFoldrs)
+                if (lstFoldrs.Count == 0)
                 {
-                    if (chk.IsChecked == true)
+                    includeThisItem = true;
+                }
+                else
+                {
+
+                    foreach (CheckBox chk in lstFoldrs)
                     {
-                        var str = chk.Content as string + System.IO.Path.DirectorySeparatorChar.ToString();
-                        if (pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true).IndexOf(str) >= 0)
+                        if (chk.IsChecked == true)
                         {
-                            includeThisItem = true;
-                            break;
+                            var str = chk.Content as string + System.IO.Path.DirectorySeparatorChar.ToString();
+                            if (pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true).IndexOf(str) >= 0)
+                            {
+                                includeThisItem = true;
+                                break;
+                            }
                         }
                     }
                 }

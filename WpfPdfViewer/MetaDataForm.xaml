@@ -35,9 +35,8 @@
                             </StackPanel>
                         </TextBox.ToolTip>
                     </TextBox>
-                    <Button Content="Clear TOC" Margin="10,0,0,0" ToolTip="Clear the TOC table" Click="BtnClearTOC_Click"/>
-                    <Button Content="_Import from clipboard" Margin="10,0,0,0" ToolTip="Import from clipboard tab separted values (e.g. copy multi columns from Excel). &#10;Column order= PageNo,Songname, Composer, Date, Notes. Empty columns are fine. Will append to existing data" Click="BtnImport_Click" />
-                    <Button Content="_Export to clipboard" Margin="10,0,0,0" ToolTip="Export to clipboard" Click="BtnExport_Click" />
+                    <Button Content="_Import from clipboard" Margin="10,0,0,0" ToolTip="Import TOC from clipboard tab separated values (will clear TOC first) Copy multi columns from Excel &#10;Column order= PageNo,Songname, Composer, Date, Notes. Empty columns are fine. Will append to existing data" Click="BtnImport_Click" />
+                    <Button Content="_Export to clipboard" Margin="10,0,0,0" ToolTip="Export TOC to clipboard to paste to Excel" Click="BtnExport_Click" />
                     <Button Content="_Cancel" Margin="10,0,0,0" ToolTip="Discard all changes"  Click="BtnCancel_Click" IsCancel="True"/>
                     <Button Content="_Save" Margin="10,0,40,1" ToolTip="Save all changes"  Click="BtnSave_Click" Width="50" IsDefault="True"/>
                 </StackPanel>

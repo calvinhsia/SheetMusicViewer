@@ -47,65 +47,83 @@ namespace Tests
         //        readonly string testPdf = @"C:\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
 
         [TestMethod]
-        [Ignore]
+//        [Ignore]
         public async Task TestStress()
         {
-            var w = new WpfPdfViewer.PdfViewerWindow
+            var ev = new ManualResetEventSlim();
+            var c = CreateExecutionContext();
+            await c.Dispatcher.InvokeAsync(async () =>
             {
-                _RootMusicFolder = Rootfolder
-            };
-            (var lstMetaData, var _) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
-            var currentPdfMetaData = lstMetaData.Where(m => m.GetFullPathFileFromVolno(volNo: 0).Contains("Fake")).First();
-            w.currentPdfMetaData = currentPdfMetaData;
-            w.currentPdfMetaData.InitializeListPdfDocuments();
-            //var cacheEntry = PdfViewerWindow.CacheEntry.TryAddCacheEntry(mpdf.PageNumberOffset);
-            //await cacheEntry.task;
-            //// calling thread must be STA, UIThread
-            //var res = cacheEntry.task.Result;
-            for (var iter = 0; iter < 12; iter++)
-            {
-                var pageNo = 0;
-                for (pageNo = currentPdfMetaData.PageNumberOffset; pageNo < currentPdfMetaData.NumPagesInSet + currentPdfMetaData.PageNumberOffset - 1; pageNo++)
-
+                var w = new WpfPdfViewer.PdfViewerWindow
                 {
-                    var (pdfDoc, pdfPgno) = await currentPdfMetaData.GetPdfDocumentForPageno(pageNo);
-                    //                    var pdfPgNo = currentPdfMetaData.GetPdfVolPageNo(pageNo + i);
-                    if (pdfDoc != null && pdfPgno >= 0 && pdfPgno < pdfDoc.PageCount)
+                    _RootMusicFolder = Rootfolder
+                };
+                (var lstMetaData, var _) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
+                var testw = new Window();
+                testw.Show();
+                foreach (var currentPdfMetaData in lstMetaData)
+                {
+                    AddLogEntry($"Starting {currentPdfMetaData}");
+
+                    w.currentPdfMetaData = currentPdfMetaData;
+                    w.currentPdfMetaData.InitializeListPdfDocuments();
+                    //var cacheEntry = PdfViewerWindow.CacheEntry.TryAddCacheEntry(mpdf.PageNumberOffset);
+                    //await cacheEntry.task;
+                    //// calling thread must be STA, UIThread
+                    //var res = cacheEntry.task.Result;
+                    for (var iter = 0; iter < 1; iter++)
                     {
-                        using (var pdfPage = pdfDoc.GetPage((uint)(pdfPgno)))
+                        for (var pageNo = currentPdfMetaData.PageNumberOffset; pageNo < currentPdfMetaData.MaxPageNum; pageNo++)
                         {
-                            using (var strm = new InMemoryRandomAccessStream())
+                            var (pdfDoc, pdfPgno) = await currentPdfMetaData.GetPdfDocumentForPageno(pageNo);
+                            //                    var pdfPgNo = currentPdfMetaData.GetPdfVolPageNo(pageNo + i);
+                            if (pdfDoc != null && pdfPgno >= 0 && pdfPgno < pdfDoc.PageCount)
                             {
-                                var rect = pdfPage.Dimensions.ArtBox;
-                                var renderOpts = new PdfPageRenderOptions()
+                                using (var pdfPage = pdfDoc.GetPage((uint)(pdfPgno)))
                                 {
-                                    DestinationWidth = (uint)rect.Width,
-                                    DestinationHeight = (uint)rect.Height,
-                                };
-                                if (pdfPage.Rotation != PdfPageRotation.Normal)
-                                {
-                                    renderOpts.DestinationHeight = (uint)rect.Width;
-                                    renderOpts.DestinationWidth = (uint)rect.Height;
+                                    using (var strm = new InMemoryRandomAccessStream())
+                                    {
+                                        var rect = pdfPage.Dimensions.ArtBox;
+                                        var renderOpts = new PdfPageRenderOptions()
+                                        {
+                                            DestinationWidth = (uint)rect.Width,
+                                            DestinationHeight = (uint)rect.Height,
+                                        };
+                                        if (pdfPage.Rotation != PdfPageRotation.Normal)
+                                        {
+                                            renderOpts.DestinationHeight = (uint)rect.Width;
+                                            renderOpts.DestinationWidth = (uint)rect.Height;
+                                        }
+
+                                        await pdfPage.RenderToStreamAsync(strm, renderOpts);
+                                        var bmi = new BitmapImage();
+                                        bmi.BeginInit();
+                                        bmi.StreamSource = strm.AsStream();
+                                        bmi.Rotation = (Rotation)currentPdfMetaData.GetRotation(pageNo);
+                                        bmi.CacheOption = BitmapCacheOption.OnLoad;
+                                        bmi.EndInit();
+                                        //testw.Content = new Image()
+                                        //{
+                                        //    Source = bmi
+                                        //};
+                                        //if (pdfPage.Rotation != PdfPageRotation.Rotate270 && pdfPage.Rotation != PdfPageRotation.Rotate90)
+                                        //{
+                                        //    AddLogEntry($"got page {pageNo,5}   strms={strm.Size,10:n0} {pdfPage.Rotation,10} {rect}  {currentPdfMetaData} ");
+                                        //}
+                                    }
                                 }
-
-                                await pdfPage.RenderToStreamAsync(strm, renderOpts);
-                                var bmi = new BitmapImage();
-                                bmi.BeginInit();
-                                bmi.StreamSource = strm.AsStream();
-                                //                                bmi.Rotation = (Rotation)currentPdfMetaData.GetRotation(cacheEntry.pageNo);
-                                bmi.CacheOption = BitmapCacheOption.OnLoad;
-                                bmi.EndInit();
-
-                                TestContext.WriteLine($"got page {pageNo,5}   strms={strm.Size,10:n0} {currentPdfMetaData} ");
                             }
                         }
                     }
                 }
-            }
-
+                AddLogEntry("Done all");
+                ev.Set();
+            });
+            ev.Wait();
         }
+
         [TestMethod]
-        [Ignore]
+       // [Ignore]
         public async Task TestCache()
         {
             var ev = new ManualResetEventSlim();
@@ -152,12 +170,21 @@ namespace Tests
                         var pageNo = 0;
                         for (pageNo = currentPdfMetaData.PageNumberOffset; pageNo < currentPdfMetaData.NumPagesInSet + currentPdfMetaData.PageNumberOffset - 1; pageNo++)
                         {
-                            var cacheEntry = w._pageCache.TryAddCacheEntry(pageNo);
-                            await cacheEntry.task;
-                            var bmi = cacheEntry.task.Result;
-                            testw.Content = new Image() { Source = bmi };
-                            testw.Title = $"{cnt++} {pageNo,8}   bmi={bmi.Width:n0}, {bmi.Height:n0}  {sw.Elapsed.TotalSeconds,8:n4} {currentPdfMetaData} ";
-                            AddLogEntry(testw.Title);
+                            if (false)
+                            {
+                                var cacheEntry = w._pageCache.TryAddCacheEntry(pageNo);
+                                var bmi = await cacheEntry.task;
+//                                var bmi = cacheEntry.task.Result;
+                                testw.Content = new Image() { Source = bmi };
+                            }
+                            if (true)
+                            {
+                                var bmi = await currentPdfMetaData.CalculateBitMapImageForPageAsync(pageNo, cts:null, SizeDesired:null);
+                                testw.Content = new Image() { Source = bmi };
+                            }
+                            //testw.Title = $"{cnt++} {pageNo,8}   bmi={bmi.Width:n0}, {bmi.Height:n0}  {sw.Elapsed.TotalSeconds,8:n4} {currentPdfMetaData} ";
+                            testw.Title = $"{cnt++} {pageNo,8}   {sw.Elapsed.TotalSeconds,8:n4} {currentPdfMetaData} ";
+//                            AddLogEntry(testw.Title);
                             //break;
                         }
                     }
@@ -215,6 +242,11 @@ namespace Tests
             var //rootfolder = @"C:\Bak\SheetMusic\Poptest";
             //rootfolder = @"C:\SheetMusic\Classical";
             rootfolder = @"C:\SheetMusic";
+            //rootfolder = @"c:\temp";
+            //for (int i = 0;i <10000; i++)
+            //{
+            //    TestContext.WriteLine($"adfadf {i}");
+            //}
             var w = new WpfPdfViewer.PdfViewerWindow
             {
                 _RootMusicFolder = rootfolder
@@ -447,7 +479,7 @@ namespace Tests
             {
                 try
                 {
-                    foreach (var fileToAdd in new[] { "12th Street","Black Cat","Freckles"}) // insert before, between and after 14,40
+                    foreach (var fileToAdd in new[] { "12th Street", "Black Cat", "Freckles" }) // insert before, between and after 14,40
                     {
                         AddLogEntry($"Doing = {fileToAdd}");
                         int num = 0;
@@ -496,7 +528,7 @@ namespace Tests
                                     Assert.IsTrue(string.Compare(lastone, vol.FileNameVolume) < 0, $"sequence {lastone} {vol}");
                                     lastone = vol.FileNameVolume;
                                 }
-                                Assert.AreEqual("Crazy Bone Rag.pdf",curmetadata.dictFav.Values.ToList()[2].FavoriteName);
+                                Assert.AreEqual("Crazy Bone Rag.pdf", curmetadata.dictFav.Values.ToList()[2].FavoriteName);
                                 curmetadata.SaveIfDirty(ForceDirty: true);
                                 AddLogEntry(File.ReadAllText(curmetadata.PdfBmkMetadataFileName));
                             }

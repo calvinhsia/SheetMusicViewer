@@ -1,22 +1,32 @@
 PDF Music Viewer by Calvin Hsia 2019
 
-I have a few hundred piano music books, singles, etc. that I've collected over the last 45 years.
+I have a few hundred piano music books, singles, etc. that I've collected over the last several decades.
 Most of the books were "perfect bound" which means they didn't stay open on the piano music stand.
-Several decades ago I chopped off the bindings of the books and rebound them using plastic comb binding. This made playing the music much easier on the piano.
+Many decades ago I chopped off the bindings of the books and rebound them using plastic comb binding. This made playing the music much easier on the piano.
 Since then I bought my own book binding cutter (HFS New Heavy Duty Guillotine Paper Cutter) and comb binding machine (Marigold 19-Hole Letter Size Comb Ring Binding Machine) 
 to rebind more books.
 
 About 3 months ago, I obtained a Microsoft Surface Book 2, which had a display large enough to trigger me digitizing my music collection.
-I used a few Xerox WorkCenter 7855i or similar models available at work.
-The doc sheetfeeder allowed me to scan up to 100 pages at a time. However, because of the age and use of the books (putting on the piano, paging), the pages were pretty worn.
-The binding edges of the pages were much less uniformly smooth than the opposite edge because of the binding, so I scannned most of them smooth edge first (upside down).
+I used a few Xerox WorkCentre 7855i or similar models available at work.
+The doc sheetfeeder allowed me to scan up to 100 pages at a time. However, because of the age and wear and tear of the books (putting on the piano, turning pages), some of the pages were pretty worn.
+The binding edges of the pages were much less uniformly smooth (some had residual adhesive) than the non-binding edge because of the binding, so I fed them smooth edge first (upside down) through the document feeder.
 Luckily it's pretty simple to have software rotate the page.
+
 I tried various software sheet music viewers available, but wasn't at all satisfied, so I wrote my own to view my 30,000 pages of music.
 
-Choose a path to a root folder which contains PDF music files. PDF files can be 0-N pages. 
-The PDFs are never altered by the program. All data is stored in the BMKs. However, the program needs write permission to write the BMK files.
+Run the program. Choose a path to a root folder which contains PDF music files. PDF files can contain 1-N pages. 
+The PDFs are never altered by the program. All auxiliary data, such as Table Of Contents, Favorites, Inking, LastPageNumberViewed) is stored in the BMKs. However, the program needs write permission to write the BMK files.
 Some books scan to multiple PDFs. e.g. I have several books > 100 pages and scan them in smaller chunks to PDF. 
 Some of the bindings of these books are well-worn, so scanning works best in smaller chunks. 
+If you have multiple named files e.g. Book1.pdf, Book2.pdf, etc., then they will be treated as one entire book. The root name is the 1st one without any trailing 0 or 1.
+The first one of a series:
+	1. does not end in a digit "book.pdf" root name = "book"
+	2. does end in a digit  "book0.pdf" root name = "book"
+
+Subsequent ones must have the same root name as the 1st and must have a digit after the rotoname e.g. "book1.pdf", "book1a.pdf", "book2.pdf". As long as they sort in order, the digits don't matter.
+Thus, book1, book1a, book2 are all treated together as one
+but not SonatenI, SonatenI1, SonatenII: this is 2 books: "SonatenI" and "SonatenI1" are the 1st Sonaten, and "SonatenII" is the second.
+This allows rescan of missing pages without needing to renumber subsequent volumes.
 
 Also, the document sheet feeder works best with the non-bound edge leading, so you can mark them with a Rotation settings, which will be persisted.
 Name these book0.pdf, book1.pdf, etc. and they will be treated as a single book with multiple volumes
@@ -40,7 +50,7 @@ The left-right arrows move the page by 1 screenful.
 The bottom quarter of the display is used to do page turning by click or touch. In 1 page per screen mode, the right half will move right 1 page, and the left half will move left 1 page.
 In 2 page per screen mode, the bottom quareter is divided into 4 quarters. The outer 2 quarters will advance 1 screenful (2 pages), and the inner quarters will advance 1 page.
 E.g. from showing page 3 on the left and 4 on the right, to page 4 on the left to page 5 on the right. This allows right hand pages to be shown on the left, and repeats, etc. to be seen more easily.
-The top 3/4 of the page is used for moving zooming, rotating the display. You can use 2 fingers to zoom into a paticular point.
+The top 3/4 of the page is used for moving zooming, rotating the display. You can use 2 fingers to zoom into a paticular point. Similarly with ctrl mouse-wheel
 
 Inking is off by default. To ink, click the Ink checkbox for the page (in 2 page mode, there is a checkbox for each page). 
 A mouse or pen or your finger can draw in red, black, or highlight. To save the ink on that page, click the Ink checkbox again.
@@ -55,7 +65,8 @@ For the boundary between volumes (e.g. a book contains 1000 pages, volume 1 is p
 The thumb of the slider at the top can be used to navigate the entire 1000 pages. 
 The controls at the top are transparent so that the music can use more vertical screen space.
 
-Each page has a description which is calculated from the TOC.
+Each page has a description which is calculated from the TOC. If a song is many pages, the description is 
+calculated from the closest TOC entry. If there are multiple songs on a a page, the description includes all songs on that page.
 
 The Table of contents of a songbook shows the physical page numbers, which may not match the actual PDF page numbers (there could be a cover page scanned or could be a multivolume set, or 30 pages of intro, and then page 1 has the 1st song)
 Also, each scanned page might have the physical page # printed on it.
@@ -68,14 +79,24 @@ Another way to think about it: find a page with a printed page no on it, e.g. pa
 You can edit/display the TOC via clicking or tapping the thumbnail to the right of the slider. Or Alt-E. From there you can export/import to/from the clipboard in Excel format.
 You can take a screenshot of the TOC of a book, then run Optical Character Recognition (OCR) on it to convert it to text for Excel=>clipboard=>TOC.
 
+How I got started:
+I've neer had a piano lesson: Our Junior High School had a PDP-8 computer, which would emit radio interference on the AM dial. Making the computer flash the blinking lights (yes computers had blinking lights back then) with a pattern,
+it could actually make music. I remember hearing Maple Leaf Rag from the computer on an AM radio. In college, there was a piano in my fraternity. I started on the piano with the music to Maple Leaf Rag, and I 
+started trying to pick my way through the notes. 
 I really love Ragtime. I suspect most people who like computer software like Ragtime. There's something so binary about it: powers of 2. 16 measures per verse, 2/4 time, syncopation.
 
 calvin_hsia@alum.mit.edu
 
 
-Rescan:
-grinch
-Piano classics 2
-Les Mis
-Broadway Fake book
+https://calvinhsia.visualstudio.com/DefaultCollection/MyPdfViewer/_git/MyPdfViewer
 
+The Movie Fake Book
+//Great Songs of the Seventies2.pdf: rescan [63,118] 
+//Classical Fake
+//Ultimate Fake Book Volume II2.pdf [17 (ira gershwin) 84 (Christmas is acomin)]//
+//Broadway Fake book
+//Billy Joel A Collection Of Songs12.pdf [130, 177] (to end)
+//the ultimate fake book  28,29    36,37  116-118   164, 165   thru phys pg 250. Pg 251 starts vol4
+//grinch
+//Piano classics 2. p161 to end  vol4, 5
+//Les Mis
