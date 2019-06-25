@@ -23,10 +23,21 @@ namespace WpfPdfViewer
         {
             this._pdfViewerWindow = pdfViewerWindow;
             this._PgNo = PgNo;
-            //this._pdfViewerWindow.PdfExceptionEvent += (o, e) =>
-            //      {
-            //          "Cause a leak".ToString();
-            //      };
+//            this._pdfViewerWindow.PdfExceptionEvent += (o, e) =>
+//                  { // attempt to cause leak via non-WPF RoutedEvents: just plain C# events
+
+//                      "this won't cause a leak because no lifting of local members in this lambda".ToString();
+//                      this._availSize.ToString(); // this will cause a leak because ref to local member lifted in closure
+//                      /*
+//Children of "->PdfExceptionEvent = System.EventHandler`1<WpfPdfViewer.PdfViewerWindow.PdfExceptionEventAgs>(Target=<self> 0x03a69570) 0x03a69570 (32)"
+//->PdfExceptionEvent = System.EventHandler`1<WpfPdfViewer.PdfViewerWindow.PdfExceptionEventAgs>(Target=<self> 0x03a69570) 0x03a69570 (32)
+// ->_invocationList = System.Object[](Count=64) 0x039fe47c (268)
+//  ->System.EventHandler`1<WpfPdfViewer.PdfViewerWindow.PdfExceptionEventAgs>(Target=WpfPdfViewer.MyInkCanvas.<>c__DisplayClass4_0 0x038b5ad0) 0x038be868 (32)
+//  ->System.EventHandler`1<WpfPdfViewer.PdfViewerWindow.PdfExceptionEventAgs>(Target=WpfPdfViewer.MyInkCanvas.<>c__DisplayClass4_0 0x038bedd0) 0x038c2180 (32)
+//  ->System.EventHandler`1<WpfPdfViewer.PdfViewerWindow.PdfExceptionEventAgs>(Target=WpfPdfViewer.MyInkCanvas.<>c__DisplayClass4_0 0x038c5b38) 0x038c8edc (32)
+//  ->System.EventHandler`1<WpfPdfViewer.PdfViewerWindow.PdfExceptionEventAgs>(Target=WpfPdfViewer.MyInkCanvas.<>c__DisplayClass4_0 0x038c9408) 0x038cc7b8 (32)
+//                       * */
+//                  };
             _bmImage = bmImage ?? throw new ArgumentNullException("bmImage");
             if (!IsInking)
             {
