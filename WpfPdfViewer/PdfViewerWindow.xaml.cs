@@ -295,13 +295,26 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             _DisableSliderValueChanged = false;
             //this.slider.IsDirectionReversed = true;
             this.PdfUIEnabled = true;
-            this.Title = $"{MyAppName} {currentPdfMetaData.GetFullPathFileFromVolno(volNo: 0, MakeRelative: false)}";
-            OnMyPropertyChanged(nameof(Title));
+            this.SetTitle();
             OnMyPropertyChanged(nameof(PdfTitle));
             OnMyPropertyChanged(nameof(ImgThumbImage));
             OnMyPropertyChanged(nameof(MaxPageNumber));
             OnMyPropertyChanged(nameof(MaxPageNumberMinus1));
             await ShowPageAsync(PageNo, ClearCache: true, resetRenderTransform: true);
+        }
+
+        internal void SetTitle()
+        {
+            var strTitle = $"{MyAppName} {currentPdfMetaData.GetFullPathFileFromVolno(volNo: 0, MakeRelative: false)}";
+#if DEBUG
+
+            if (MyInkCanvas._NumInstances > 2)
+            {
+                strTitle += $" InkInstances= {MyInkCanvas._NumInstances}";
+            }
+#endif //DEBUG
+            this.Title = strTitle;
+            OnMyPropertyChanged(nameof(Title));
         }
 
 
