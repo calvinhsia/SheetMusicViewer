@@ -77,7 +77,11 @@ namespace WpfPdfViewer
         ~MyInkCanvas()
         {
             _NumInstances--;
-            _pdfViewerWindow.SetTitle();
+            this._pdfViewerWindow.Dispatcher.InvokeAsync(() =>
+            {
+                _pdfViewerWindow.SetTitle();
+
+            });
         }
 
         public void ChkInkToggled(object sender, RoutedEventArgs e)
