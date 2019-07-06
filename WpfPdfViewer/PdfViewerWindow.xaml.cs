@@ -52,7 +52,9 @@ namespace WpfPdfViewer
         public bool IsTesting; // if testing, we don't want to save bookmarks, lastpageno, etc.
         public void OnException(string Message, Exception ex)
         {
-            PdfExceptionEvent?.Invoke(this, new PdfExceptionEventAgs(Message, ex));
+            var args = new PdfExceptionEventAgs(Message, ex);
+            // Debugger.Break();
+            PdfExceptionEvent.Invoke(this, args);
         }
 
         public void OnMyPropertyChanged([CallerMemberName] string propertyName = "")
@@ -394,7 +396,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                         }
                         var imageCurPage = new Image() { Source = bitmapimageCurPage };
                         inkCanvas[0] = new MyInkCanvas(bitmapimageCurPage, this, chkInk0.IsChecked == true, CurrentPageNumber);
-                        //chkInk0.Checked +=inkCanvas[0].ChkInkToggled; //cause leak via WPF RoutedEvents
+                        //chkInk0.Checked += inkCanvas[0].ChkInkToggledOnCanvas; //cause leak via WPF RoutedEvents
                         /*
 ->chkInk0 = System.Windows.Controls.CheckBox 0x03148ed8 (248)
  ->_dispatcher = System.Windows.Threading.Dispatcher 0x030cac08 (132)
@@ -592,7 +594,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 var nameSender = ((CheckBox)sender).Name;
                 var pgno = CurrentPageNumber + (nameSender == "chkInk0" ? 0 : 1);
                 var curCanvas = inkCanvas[pgno - CurrentPageNumber];
-                curCanvas.ChkInkToggled(sender, e);
+                curCanvas.ChkInkToggledOnCanvas(sender, e);
                 await ShowPageAsync(CurrentPageNumber, ClearCache: false, forceRedraw: true);
             }
             catch (Exception)
