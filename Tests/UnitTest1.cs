@@ -164,18 +164,19 @@ namespace Tests
                         for (pageNo = currentPdfMetaData.PageNumberOffset; pageNo < currentPdfMetaData.NumPagesInSet + currentPdfMetaData.PageNumberOffset - 1; pageNo++)
                         {
                             await w.ShowPageAsync(pageNo, ClearCache: false);
-                            var bmi = await currentPdfMetaData.CalculateBitMapImageForPageAsync(pageNo, cts: null, SizeDesired: null);
+//                            var bmi = await currentPdfMetaData.CalculateBitMapImageForPageAsync(pageNo, cts: null, SizeDesired: null);
+//                            await Task.Delay(1000);
                             //                            AddLogEntry(testw.Title);
                             //break;
                         }
                     }
                     w.CloseCurrentPdfFile();
-                    for (int i = 0; i < 5; i++)
-                    {
-                        GC.Collect(4, GCCollectionMode.Forced);
-                        GC.WaitForPendingFinalizers();
-                        Marshal.CleanupUnusedObjectsInCurrentContext();
-                    }
+                    //for (int i = 0; i < 5; i++)
+                    //{
+                    //    GC.Collect(4, GCCollectionMode.Forced);
+                    //    GC.WaitForPendingFinalizers();
+                    //    Marshal.CleanupUnusedObjectsInCurrentContext();
+                    //}
                 }
                 AddLogEntry($"Done with all");
                 ev.Set();
