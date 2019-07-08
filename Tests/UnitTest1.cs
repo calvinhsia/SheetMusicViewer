@@ -147,7 +147,7 @@ namespace Tests
                 };
                 w.Show();
                 (var lstMetaData, var _) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
-                foreach (var currentPdfMetaData in lstMetaData)
+                foreach (var currentPdfMetaData in lstMetaData.Where(d => d._FullPathFile.Contains(@"Ragtime\Singles")))
                 {
                     //                    var currentPdfMetaData = lstMetaData.Where(m => m.GetFullPathFile(volNo: 0).Contains("Fake")).First();
                     w.currentPdfMetaData = currentPdfMetaData;
@@ -164,18 +164,18 @@ namespace Tests
                         for (pageNo = currentPdfMetaData.PageNumberOffset; pageNo < currentPdfMetaData.NumPagesInSet + currentPdfMetaData.PageNumberOffset - 1; pageNo++)
                         {
                             await w.ShowPageAsync(pageNo, ClearCache: false);
-                            var bmi = await currentPdfMetaData.CalculateBitMapImageForPageAsync(pageNo, cts: null, SizeDesired: null);
+                            //                            var bmi = await currentPdfMetaData.CalculateBitMapImageForPageAsync(pageNo, cts: null, SizeDesired: null);
                             //                            AddLogEntry(testw.Title);
                             //break;
                         }
                     }
                     w.CloseCurrentPdfFile();
-                    for (int i = 0; i < 5; i++)
-                    {
-                        GC.Collect(4, GCCollectionMode.Forced);
-                        GC.WaitForPendingFinalizers();
-                        Marshal.CleanupUnusedObjectsInCurrentContext();
-                    }
+                    //for (int i = 0; i < 5; i++)
+                    //{
+                    //    GC.Collect(4, GCCollectionMode.Forced);
+                    //    GC.WaitForPendingFinalizers();
+                    //    Marshal.CleanupUnusedObjectsInCurrentContext();
+                    //}
                 }
                 AddLogEntry($"Done with all");
                 ev.Set();
