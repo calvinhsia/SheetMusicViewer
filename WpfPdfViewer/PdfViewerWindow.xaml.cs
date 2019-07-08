@@ -307,7 +307,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 
         internal void SetTitle()
         {
-            var strTitle = $"{MyAppName} {currentPdfMetaData.GetFullPathFileFromVolno(volNo: 0, MakeRelative: false)}";
+            var strTitle = $"{MyAppName} {currentPdfMetaData?.GetFullPathFileFromVolno(volNo: 0, MakeRelative: false)}";
 #if DEBUG
 
             if (MyInkCanvas._NumInstances > 2)
@@ -394,7 +394,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                         {
                             return;
                         }
-                        var imageCurPage = new Image() { Source = bitmapimageCurPage };
+//                        var imageCurPage = new Image() { Source = bitmapimageCurPage };
                         inkCanvas[0] = new MyInkCanvas(bitmapimageCurPage, this, chkInk0.IsChecked == true, CurrentPageNumber);
                         //chkInk0.Checked += inkCanvas[0].ChkInkToggledOnCanvas; //cause leak via WPF RoutedEvents
                         /*

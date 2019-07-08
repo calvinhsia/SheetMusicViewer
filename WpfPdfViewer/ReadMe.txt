@@ -65,6 +65,9 @@ For the boundary between volumes (e.g. a book contains 1000 pages, volume 1 is p
 The thumb of the slider at the top can be used to navigate the entire 1000 pages. 
 The controls at the top are transparent so that the music can use more vertical screen space.
 
+(Note: some PDF files consume a lot of memory per page, perhaps because they were captured at very high resolution. 
+The size can be reduced If you print the PDF to "Microsoft Print To PDF" printer driver or use an online PDFResizer tool)
+
 Each page has a description which is calculated from the TOC. If a song is many pages, the description is 
 calculated from the closest TOC entry. If there are multiple songs on a a page, the description includes all songs on that page.
 
