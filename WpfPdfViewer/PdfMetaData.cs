@@ -415,6 +415,10 @@ namespace WpfPdfViewer
                         }
                         catch (Exception ex)
                         {
+                            if (ex.Data.Contains("Filename"))
+                            {
+                                lastFile += " "+ ex.Data["Filename"];
+                            }
                             PdfViewerWindow.s_pdfViewerWindow.OnException($"Exception reading files {curPath} near {lastFile}", ex);
                         }
                         SaveMetaData(); // last one in dir
@@ -523,12 +527,21 @@ namespace WpfPdfViewer
                 }
                 foreach (var newfile in lstNewFiles)
                 {
-                    var newVolInfo = new PdfVolumeInfo()
+                    try
                     {
-                        FileNameVolume = Path.GetFileName(newfile),
-                        NPagesInThisVolume = (int)(await GetPdfDocumentForFileAsync(newfile)).PageCount
-                    };
-                    sortedSetVolInfo.Add(newVolInfo);
+                        var newVolInfo = new PdfVolumeInfo()
+                        {
+                            FileNameVolume = Path.GetFileName(newfile),
+                            NPagesInThisVolume = (int)(await GetPdfDocumentForFileAsync(newfile)).PageCount
+                        };
+                        sortedSetVolInfo.Add(newVolInfo);
+                    }
+                    catch (Exception ex)
+                    {
+                        ex.Data["Filename"] = newfile;
+                        throw ex;
+
+                    }
                 }
                 // update VolInfo.
                 curmetadata.lstVolInfo = sortedSetVolInfo.ToList();
