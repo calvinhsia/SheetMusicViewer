@@ -77,11 +77,26 @@ namespace WpfPdfViewer
         }
         public int MaxPageNumber { get { return currentPdfMetaData == null ? 0 : (int)currentPdfMetaData.MaxPageNum; } }
         public int MaxPageNumberMinus1 { get { return currentPdfMetaData == null ? 0 : (int)currentPdfMetaData.MaxPageNum - 1; } }
-        public string PdfTitle { get { return currentPdfMetaData?.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true); } }
+        public string PdfTitle
+        {
+            get
+            {
+                var title = string.Empty;
+                if (currentPdfMetaData != null)
+                {
+                    title = currentPdfMetaData?.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true);
+                    if (currentPdfMetaData.IsSinglesFolder)
+                    {
+                        title = System.IO.Path.GetDirectoryName(title);
+                    }
+                }
+                return title;
+            }
+        }
 
         public BitmapImage ImgThumbImage { get { return currentPdfMetaData?.bitmapImageCache; } }
-        public string Description0 { get { return currentPdfMetaData?.GetDescription(CurrentPageNumber); } }
-        public string Description1 { get { return currentPdfMetaData?.GetDescription(CurrentPageNumber + 1); } }
+        public string Description0 => currentPdfMetaData?.GetDescription(CurrentPageNumber);
+        public string Description1 => currentPdfMetaData?.GetDescription(CurrentPageNumber + 1);
         internal bool _fShow2Pages = true;
         public bool Show2Pages
         {
@@ -394,7 +409,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                         {
                             return;
                         }
-//                        var imageCurPage = new Image() { Source = bitmapimageCurPage };
+                        //                        var imageCurPage = new Image() { Source = bitmapimageCurPage };
                         inkCanvas[0] = new MyInkCanvas(bitmapimageCurPage, this, chkInk0.IsChecked == true, CurrentPageNumber);
                         //chkInk0.Checked += inkCanvas[0].ChkInkToggledOnCanvas; //cause leak via WPF RoutedEvents
                         /*

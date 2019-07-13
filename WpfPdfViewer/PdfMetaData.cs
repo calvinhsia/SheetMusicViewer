@@ -310,7 +310,7 @@ namespace WpfPdfViewer
                         {
                             if (curPath.EndsWith("singles", StringComparison.InvariantCultureIgnoreCase))
                             {// we treat Singles as a book with multiple songs.
-                                lstPdfMetaFileData.Add(await HandleSinglesFolderAsync(curPath));
+                                lstPdfMetaFileData.Add(await LoadSinglesFolderAsync(curPath));
                             }
                             else
                             {
@@ -438,7 +438,7 @@ namespace WpfPdfViewer
             return (lstPdfMetaFileData, lstFolders);
         }
 
-        internal static async Task<PdfMetaData> HandleSinglesFolderAsync(string curPath)
+        internal static async Task<PdfMetaData> LoadSinglesFolderAsync(string curPath)
         {
             PdfMetaData curmetadata = null;
             var bmkFile = Path.ChangeExtension(curPath, "bmk");
@@ -540,7 +540,6 @@ namespace WpfPdfViewer
                     {
                         ex.Data["Filename"] = newfile;
                         throw ex;
-
                     }
                 }
                 // update VolInfo.
@@ -605,6 +604,7 @@ namespace WpfPdfViewer
                 }
                 curmetadata.InitializeInkStrokes();
             }
+            curmetadata?.SaveIfDirty();
             return curmetadata;
         }
 
