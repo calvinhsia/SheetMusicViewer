@@ -510,7 +510,8 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         {
             base.OnPreviewKeyDown(e);
             var elmWithFocus = Keyboard.FocusedElement;
-            if (!(elmWithFocus is TextBox) && !(elmWithFocus is Slider))
+            var isCtrlKeyDown = e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Control);
+            if (isCtrlKeyDown || !(elmWithFocus is TextBox) && !(elmWithFocus is Slider)) // tbx and slider should get the keystroke and process it 
             {
                 switch (e.Key)
                 {
@@ -536,7 +537,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     case Key.Down:
                     case Key.PageDown:
                     case Key.Right:
-                        if (e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Control))
+                        if (isCtrlKeyDown)
                         {
                             if (ctsPageScan == null)
                             {
