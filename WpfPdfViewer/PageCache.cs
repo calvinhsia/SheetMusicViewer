@@ -15,7 +15,7 @@ namespace WpfPdfViewer
     {
         internal CancellationTokenSource cts = new CancellationTokenSource();
         public int pageNo;
-        public Task<BitmapImage> task;
+        public Task<(BitmapImage, ulong)> task;
         public int age; // just a growing int
         public override string ToString()
         {
