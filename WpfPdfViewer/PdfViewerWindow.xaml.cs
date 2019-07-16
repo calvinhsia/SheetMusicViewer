@@ -52,7 +52,9 @@ namespace WpfPdfViewer
         public bool IsTesting; // if testing, we don't want to save bookmarks, lastpageno, etc.
         public void OnException(string Message, Exception ex)
         {
-            PdfExceptionEvent?.Invoke(this, new PdfExceptionEventAgs(Message, ex));
+            var args = new PdfExceptionEventAgs(Message, ex);
+            // Debugger.Break();
+            PdfExceptionEvent.Invoke(this, args);
         }
 
         public void OnMyPropertyChanged([CallerMemberName] string propertyName = "")
@@ -75,12 +77,27 @@ namespace WpfPdfViewer
         }
         public int MaxPageNumber { get { return currentPdfMetaData == null ? 0 : (int)currentPdfMetaData.MaxPageNum; } }
         public int MaxPageNumberMinus1 { get { return currentPdfMetaData == null ? 0 : (int)currentPdfMetaData.MaxPageNum - 1; } }
-        public string PdfTitle { get { return currentPdfMetaData?.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true); } }
+        public string PdfTitle
+        {
+            get
+            {
+                var title = string.Empty;
+                if (currentPdfMetaData != null)
+                {
+                    title = currentPdfMetaData?.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true);
+                    if (currentPdfMetaData.IsSinglesFolder)
+                    {
+                        title = System.IO.Path.GetDirectoryName(title);
+                    }
+                }
+                return title;
+            }
+        }
 
         public BitmapImage ImgThumbImage { get { return currentPdfMetaData?.bitmapImageCache; } }
-        public string Description0 { get { return currentPdfMetaData?.GetDescription(CurrentPageNumber); } }
-        public string Description1 { get { return currentPdfMetaData?.GetDescription(CurrentPageNumber + 1); } }
-        bool _fShow2Pages = true;
+        public string Description0 => currentPdfMetaData?.GetDescription(CurrentPageNumber);
+        public string Description1 => currentPdfMetaData?.GetDescription(CurrentPageNumber + 1);
+        internal bool _fShow2Pages = true;
         public bool Show2Pages
         {
             get { return _fShow2Pages; }
@@ -108,9 +125,13 @@ namespace WpfPdfViewer
         internal MyInkCanvas[] inkCanvas = new MyInkCanvas[2];
 
         internal PageCache _pageCache;
+        public PdfViewerWindow(string rootFolderForTesting)
+        {
+            this._RootMusicFolder = rootFolderForTesting;
+            this.InitializePdfViewerWindow();
+        }
 
-
-        public PdfViewerWindow()
+        private void InitializePdfViewerWindow()
         {
             InitializeComponent();
             s_pdfViewerWindow = this;
@@ -120,15 +141,17 @@ namespace WpfPdfViewer
             this.Height = Properties.Settings.Default.MainWindowSize.Height;
             this.Top = Properties.Settings.Default.MainWindowPos.Height;
             this.Left = Properties.Settings.Default.MainWindowPos.Width;
-            var mruRootFolder = Properties.Settings.Default.RootFolderMRU;
-            if (mruRootFolder != null && mruRootFolder.Count > 0)
+            if (string.IsNullOrEmpty(this._RootMusicFolder))
             {
-                this._RootMusicFolder = Properties.Settings.Default.RootFolderMRU[0];
+                var mruRootFolder = Properties.Settings.Default.RootFolderMRU;
+                if (mruRootFolder != null && mruRootFolder.Count > 0)
+                {
+                    this._RootMusicFolder = Properties.Settings.Default.RootFolderMRU[0];
+                }
+                //            this._RootMusicFolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Jazz";
+                this.Show2Pages = Properties.Settings.Default.Show2Pages;
+                this.chkFullScreen.IsChecked = Properties.Settings.Default.IsFullScreen;
             }
-            //            this._RootMusicFolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Jazz";
-            this.Show2Pages = Properties.Settings.Default.Show2Pages;
-            this.chkFullScreen.IsChecked = Properties.Settings.Default.IsFullScreen;
-
             PdfExceptionEvent += (o, e) =>
             {
                 var logfile = System.IO.Path.Combine(_RootMusicFolder, $"{MyAppName}.log");
@@ -224,6 +247,11 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             this.Loaded += MainWindow_LoadedAsync;
         }
 
+        public PdfViewerWindow()
+        {
+            this.InitializePdfViewerWindow();
+        }
+
         private async void MainWindow_LoadedAsync(object sender, RoutedEventArgs e)
         {
             // https://blogs.windows.com/buildingapps/2017/01/25/calling-windows-10-apis-desktop-application/#RWYkd5C4WTeEybol.97
@@ -284,13 +312,26 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             _DisableSliderValueChanged = false;
             //this.slider.IsDirectionReversed = true;
             this.PdfUIEnabled = true;
-            this.Title = $"{MyAppName} {currentPdfMetaData.GetFullPathFileFromVolno(volNo: 0, MakeRelative: false)}";
-            OnMyPropertyChanged(nameof(Title));
+            this.SetTitle();
             OnMyPropertyChanged(nameof(PdfTitle));
             OnMyPropertyChanged(nameof(ImgThumbImage));
             OnMyPropertyChanged(nameof(MaxPageNumber));
             OnMyPropertyChanged(nameof(MaxPageNumberMinus1));
             await ShowPageAsync(PageNo, ClearCache: true, resetRenderTransform: true);
+        }
+
+        internal void SetTitle()
+        {
+            var strTitle = $"{MyAppName} {currentPdfMetaData?.GetFullPathFileFromVolno(volNo: 0, MakeRelative: false)}";
+#if DEBUG
+
+            if (MyInkCanvas._NumInstances > 2)
+            {
+                strTitle += $" InkInstances= {MyInkCanvas._NumInstances}";
+            }
+#endif //DEBUG
+            this.Title = strTitle;
+            OnMyPropertyChanged(nameof(Title));
         }
 
 
@@ -368,9 +409,39 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                         {
                             return;
                         }
-                        var imageCurPage = new Image() { Source = bitmapimageCurPage };
-                        inkCanvas[0] = new MyInkCanvas(bitmapimageCurPage, this, chkInk0.IsChecked == true, CurrentPageNumber);
-                        // chkInk0.Checked +=inkCanvas[0].ChkInkToggled; //cause leak
+                        //                        var imageCurPage = new Image() { Source = bitmapimageCurPage };
+                        inkCanvas[0] = new MyInkCanvas(bitmapimageCurPage.Item1, this, chkInk0.IsChecked == true, CurrentPageNumber);
+                        //chkInk0.Checked += inkCanvas[0].ChkInkToggledOnCanvas; //cause leak via WPF RoutedEvents
+                        /*
+->chkInk0 = System.Windows.Controls.CheckBox 0x03148ed8 (248)
+ ->_dispatcher = System.Windows.Threading.Dispatcher 0x030cac08 (132)
+ ->_dType = System.Windows.DependencyObjectType 0x03122cf4 (20)
+ ->_effectiveValues = ValueType[](Count=22) 0x031d2680 (188)
+  ->MS.Utility.FrugalMap 0x031d2790 (12)
+  ->System.Boolean 0x030efcb4 (12)
+  ->System.Boolean 0x031490a8 (12)
+  ->System.Collections.Generic.List`1<System.Windows.DependencyObject>(Count=8) 0x031acbe4 (24)
+  ->System.Collections.Hashtable 0x0319aad4 (52)
+  ->System.String 0x03149078 (28)  chkInk0
+  ->System.String 0x03149094 (20)  Ink
+  ->System.String 0x03149308 (86)  Turn on/off inking with mouse or pen
+  ->System.Windows.Controls.ControlTemplate 0x03144eac (132)
+  ->System.Windows.DeferredThemeResourceReference 0x0313c09c (24)
+  ->System.Windows.EventHandlersStore 0x03148ffc (12)
+   ->_entries = MS.Utility.ThreeObjectMap 0x03149054 (36)
+    ->_entry0 = MS.Utility.FrugalObjectList`1<System.Windows.RoutedEventHandlerInfo> 0x03149008 (12)
+     ->_listStore = MS.Utility.ArrayItemList`1<System.Windows.RoutedEventHandlerInfo> 0x034bb3d4 (16)
+      ->_entries = ValueType[](Count=9) 0x034bb3e4 (84)
+       ->System.Windows.RoutedEventHandler(Target=WpfPdfViewer.MyInkCanvas 0x03445c94) 0x0344ec34 (32)
+       ->System.Windows.RoutedEventHandler(Target=WpfPdfViewer.MyInkCanvas 0x03455c00) 0x0345919c (32)
+       ->System.Windows.RoutedEventHandler(Target=WpfPdfViewer.MyInkCanvas 0x0345eba8) 0x03462144 (32)
+       ->System.Windows.RoutedEventHandler(Target=WpfPdfViewer.MyInkCanvas 0x03487b38) 0x0348b0e0 (32)
+       ->System.Windows.RoutedEventHandler(Target=WpfPdfViewer.MyInkCanvas 0x03490c64) 0x034942cc (32)
+       ->System.Windows.RoutedEventHandler(Target=WpfPdfViewer.MyInkCanvas 0x034b7ccc) 0x034bb3b4 (32)
+       ->System.Windows.RoutedEventHandler(Target=WpfPdfViewer.MyInkCanvas 0x034c46e0) 0x034c7c7c (32)
+       ->System.Windows.RoutedEventHandler(Target=WpfPdfViewer.MyInkCanvas 0x034fe118) 0x035016c0 (32)
+                         * */
+                        //WeakEventManager<CheckBox, RoutedEventArgs>.AddHandler(chkInk0, "Checked", inkCanvas[0].ChkInkToggled); // this will use WeakEvents and thus won't leak.
                         var gridCurPage = new Grid();
                         gridCurPage.Children.Add(inkCanvas[0]);
                         gridContainer.Children.Add(gridCurPage);
@@ -389,7 +460,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                                 {
                                     return;
                                 }
-                                inkCanvas[1] = new MyInkCanvas(bitmapimageNextPage, this, chkInk1.IsChecked == true, CurrentPageNumber + 1);
+                                inkCanvas[1] = new MyInkCanvas(bitmapimageNextPage.Item1, this, chkInk1.IsChecked == true, CurrentPageNumber + 1);
                                 //chkInk1.Checked += inkCanvas[1].ChkInkToggled;  // cause leak
                                 inkCanvas[0].HorizontalAlignment = HorizontalAlignment.Right;
                                 inkCanvas[1].HorizontalAlignment = HorizontalAlignment.Left; // put righthand page close to middle
@@ -439,7 +510,8 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         {
             base.OnPreviewKeyDown(e);
             var elmWithFocus = Keyboard.FocusedElement;
-            if (!(elmWithFocus is TextBox) && !(elmWithFocus is Slider))
+            var isCtrlKeyDown = e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Control);
+            if (isCtrlKeyDown || !(elmWithFocus is TextBox) && !(elmWithFocus is Slider)) // tbx and slider should get the keystroke and process it 
             {
                 switch (e.Key)
                 {
@@ -465,7 +537,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     case Key.Down:
                     case Key.PageDown:
                     case Key.Right:
-                        if (e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Control))
+                        if (isCtrlKeyDown)
                         {
                             if (ctsPageScan == null)
                             {
@@ -538,7 +610,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 var nameSender = ((CheckBox)sender).Name;
                 var pgno = CurrentPageNumber + (nameSender == "chkInk0" ? 0 : 1);
                 var curCanvas = inkCanvas[pgno - CurrentPageNumber];
-                curCanvas.ChkInkToggled(sender, e);
+                curCanvas.ChkInkToggledOnCanvas(sender, e);
                 await ShowPageAsync(CurrentPageNumber, ClearCache: false, forceRedraw: true);
             }
             catch (Exception)

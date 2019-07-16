@@ -65,6 +65,9 @@ For the boundary between volumes (e.g. a book contains 1000 pages, volume 1 is p
 The thumb of the slider at the top can be used to navigate the entire 1000 pages. 
 The controls at the top are transparent so that the music can use more vertical screen space.
 
+(Note: some PDF files consume a lot of memory per page, perhaps because they were captured at very high resolution. 
+The size can be reduced If you print the PDF to "Microsoft Print To PDF" printer driver or use an online PDFResizer tool)
+
 Each page has a description which is calculated from the TOC. If a song is many pages, the description is 
 calculated from the closest TOC entry. If there are multiple songs on a a page, the description includes all songs on that page.
 
@@ -90,11 +93,12 @@ calvin_hsia@alum.mit.edu
 
 https://calvinhsia.visualstudio.com/DefaultCollection/MyPdfViewer/_git/MyPdfViewer
 
-Ultimate Fake Book Volume II2.pdf [17 (ira gershwin) 84 (Christmas is acomin)]
-Great Songs of the Seventies2.pdf: rescan [63,118] 
-Broadway Fake book
-Billy Joel A Collection Of Songs12.pdf [130, 177] (to end)
-//done :
+The Movie Fake Book
+//Great Songs of the Seventies2.pdf: rescan [63,118] 
+//Classical Fake
+//Ultimate Fake Book Volume II2.pdf [17 (ira gershwin) 84 (Christmas is acomin)]//
+//Broadway Fake book
+//Billy Joel A Collection Of Songs12.pdf [130, 177] (to end)
 //the ultimate fake book  28,29    36,37  116-118   164, 165   thru phys pg 250. Pg 251 starts vol4
 //grinch
 //Piano classics 2. p161 to end  vol4, 5

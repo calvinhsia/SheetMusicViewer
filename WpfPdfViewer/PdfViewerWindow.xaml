@@ -43,7 +43,7 @@
                 <Button x:Name="btnPrev" Content="&lt;" Width="25" HorizontalAlignment="Left" Margin="30,0,0,0" VerticalAlignment="Top" 
                         Click="BtnPrevNext_Click" IsEnabled="{Binding PdfUIEnabled}" 
                         ToolTip="If there are any favorites, goes back to prior favorite, if any. Else go back 1 screenful"/>
-                <TextBox x:Name="txtPageNo" HorizontalAlignment="Left" Width="25" Margin="5,0,5,0" Text="{Binding CurrentPageNumber}" VerticalAlignment="Top" IsEnabled="{Binding PdfUIEnabled}" />
+                <TextBox x:Name="txtPageNo" HorizontalAlignment="Left" Width="30" Margin="5,0,5,0" Text="{Binding CurrentPageNumber}" VerticalAlignment="Top" IsEnabled="{Binding PdfUIEnabled}" />
                 <Button x:Name="btnNext" Content="&gt;" Width="25" HorizontalAlignment="Left" VerticalAlignment="Top" Click="BtnPrevNext_Click" 
                         IsEnabled="{Binding PdfUIEnabled}" ToolTip="If there are any favorites, goes forward to next favorite, if any. Else go forward 1 screenful"/>
                 <Label Content="of" HorizontalAlignment="Left" Margin="0,-3,0,0" VerticalAlignment="Top" IsEnabled="{Binding PdfUIEnabled}"/>

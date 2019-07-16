@@ -14,6 +14,8 @@ namespace WpfPdfViewer
 {
     public class MyInkCanvas : InkCanvas
     {
+        internal static int _NumInstances = 0;
+
         private readonly PdfViewerWindow _pdfViewerWindow;
         readonly BitmapImage _bmImage;
         readonly int _PgNo;
@@ -21,8 +23,44 @@ namespace WpfPdfViewer
 
         public MyInkCanvas(BitmapImage bmImage, PdfViewerWindow pdfViewerWindow, bool IsInking, int PgNo)
         {
+            _NumInstances++;
+            pdfViewerWindow.SetTitle();
             this._pdfViewerWindow = pdfViewerWindow;
             this._PgNo = PgNo;
+            //this._pdfViewerWindow.PdfExceptionEvent += _pdfViewerWindow_PdfExceptionEvent;  //this form always leaks, even if "_pdfViewerWindow_PdfExceptionEvent" is empty
+            //this._pdfViewerWindow.PdfExceptionEvent += (o, e) =>
+            //      { // attempt to cause leak via non-WPF RoutedEvents: just plain C# events
+
+            //          "this won't cause a leak because no lifting of local members in this lambda".ToString();
+            //          this._availSize.ToString(); // this will cause a leak because ref to local member lifted in closure
+            //                                      /*
+            //                Children of "->PdfExceptionEvent = System.EventHandler`1<WpfPdfViewer.PdfViewerWindow.PdfExceptionEventAgs>(Target=<self> 0x03a69570) 0x03a69570 (32)"
+            //                ->PdfExceptionEvent = System.EventHandler`1<WpfPdfViewer.PdfViewerWindow.PdfExceptionEventAgs>(Target=<self> 0x03a69570) 0x03a69570 (32)
+            //                 ->_invocationList = System.Object[](Count=64) 0x039fe47c (268)
+            //                  ->System.EventHandler`1<WpfPdfViewer.PdfViewerWindow.PdfExceptionEventAgs>(Target=WpfPdfViewer.MyInkCanvas.<>c__DisplayClass4_0 0x038b5ad0) 0x038be868 (32)
+            //                  ->System.EventHandler`1<WpfPdfViewer.PdfViewerWindow.PdfExceptionEventAgs>(Target=WpfPdfViewer.MyInkCanvas.<>c__DisplayClass4_0 0x038bedd0) 0x038c2180 (32)
+            //                  ->System.EventHandler`1<WpfPdfViewer.PdfViewerWindow.PdfExceptionEventAgs>(Target=WpfPdfViewer.MyInkCanvas.<>c__DisplayClass4_0 0x038c5b38) 0x038c8edc (32)
+            //                  ->System.EventHandler`1<WpfPdfViewer.PdfViewerWindow.PdfExceptionEventAgs>(Target=WpfPdfViewer.MyInkCanvas.<>c__DisplayClass4_0 0x038c9408) 0x038cc7b8 (32)
+            //                                       * */
+            //      };
+
+            var wpfEvhandlerList = GetRoutedEventHandlerList<CheckBox>(_pdfViewerWindow.chkInk0, CheckBox.CheckedEvent);
+            foreach (var wpfEvHandler in wpfEvhandlerList)
+            {
+                var targ = wpfEvHandler.Target;
+                var meth = wpfEvHandler.Method;
+            }
+            var eventHandlerList = GetEventHandlerList<PdfViewerWindow, PdfViewerWindow.PdfExceptionEventAgs>(_pdfViewerWindow, nameof(PdfViewerWindow.PdfExceptionEvent));
+            foreach (var eventHandler in eventHandlerList)
+            {
+                var targ = eventHandler.Target;
+                var meth = eventHandler.Method.Name;
+            }
+
+            //WeakEventManager<PdfViewerWindow, PdfViewerWindow.PdfExceptionEventAgs>.AddHandler(pdfViewerWindow, "PdfExceptionEvent", (o, e) =>
+            //  {
+            //      this._availSize.ToString(); // this will cause a leak because ref to local member lifted in closure
+            //  });
             _bmImage = bmImage ?? throw new ArgumentNullException("bmImage");
             if (!IsInking)
             {
@@ -48,7 +86,65 @@ namespace WpfPdfViewer
                   };
         }
 
-        public void ChkInkToggled(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// Get list of event handlers for Wpf RoutedEvents
+        /// e.g.  var eventHandlerList = GetRoutedEventHandlerList<CheckBox>(_pdfViewerWindow.chkInk0, CheckBox.CheckedEvent);
+        ///      var cntEvHandlers = eventHandlerList.Length;
+        ///     foreach (var evHandler in eventHandlerList)
+        ///     {
+        ///         var targ = evHandler.Target;
+        ///         var meth = evHandler.Method;
+        ///     }
+        /// </summary>
+        /// <typeparamref name="TEventPublisher">The type of the event publisher: e.g. Button </typeparamref>
+        /// <returns>Array of delegates or null</returns>
+        internal static Delegate[] GetRoutedEventHandlerList<TEventPublisher>(TEventPublisher instance, RoutedEvent routedEvent)
+        {
+            var evHandlersStore = typeof(TEventPublisher)
+                .GetProperty("EventHandlersStore", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                .GetValue(instance, index: null);
+            var miGetEvHandlers = evHandlersStore.GetType().GetMethod("GetRoutedEventHandlers", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+            var lstRoutedEvents = miGetEvHandlers.Invoke(evHandlersStore, new object[] { routedEvent }) as RoutedEventHandlerInfo[];
+            var lstDelegates = new List<Delegate>();
+            foreach (var handler in lstRoutedEvents)
+            {
+                lstDelegates.Add(handler.Handler);
+            }
+            return lstDelegates.ToArray(); ;
+        }
+
+        /// <summary>
+        /// Get list of event handlers. These are normal eventhandlers (System.EventHandler and generic) not RoutedEventHandlers (a la WPF)
+        /// e.g. var eventHandlerList = GetEventHandlerList<PdfViewerWindow, PdfViewerWindow.PdfExceptionEventAgs>(_pdfViewerWindow, nameof(PdfViewerWindow.PdfExceptionEvent));
+        ///      var cntEvHandlers = eventHandlerList.Length;
+        ///     foreach (var evHandler in eventHandlerList)
+        ///     {
+        ///         var targ = evHandler.Target;
+        ///         var meth = evHandler.Method;
+        ///     }
+        /// </summary>
+        /// <returns>Array of delegates or null</returns>
+        internal static Delegate[] GetEventHandlerList<TEventPublisher, TEventArgs>(TEventPublisher instance, string eventName)
+        {
+            var evFld = (typeof(TEventPublisher)
+                .GetField(eventName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic));
+            var evList = (evFld
+                ?.GetValue(instance) as EventHandler<TEventArgs>)
+                ?.GetInvocationList();
+            return evList;
+        }
+
+        ~MyInkCanvas()
+        {
+            _NumInstances--;
+            this._pdfViewerWindow.Dispatcher.InvokeAsync(() =>
+            {
+                _pdfViewerWindow.SetTitle();
+
+            });
+        }
+
+        public void ChkInkToggledOnCanvas(object sender, RoutedEventArgs e)
         {
             var isChked = e.RoutedEvent.Name == "Checked";
             if (isChked)
@@ -112,7 +208,7 @@ namespace WpfPdfViewer
         {
             try
             {
-                if (_pdfViewerWindow.currentPdfMetaData.dictInkStrokes.TryGetValue(_PgNo, out var inkStrokeClass))
+                if (_pdfViewerWindow.currentPdfMetaData.dictInkStrokes.TryGetValue(_PgNo, out var inkStrokeClass) && inkStrokeClass.InkStrokeDimension.X > 0 && inkStrokeClass.InkStrokeDimension.Y > 0)
                 {
                     using (var strm = new MemoryStream(inkStrokeClass.StrokeData))
                     {
@@ -136,12 +232,13 @@ namespace WpfPdfViewer
         {
             try
             {
-                if (this.Strokes.Count > 0)
+                if (this.Strokes.Count > 0 && this.Width > 0 && this.Height > 0)
                 {
                     using (var strm = new MemoryStream())
                     {
                         Strokes.Save(strm, compress: true);
-                        var inkstrokeClass = new InkStrokeClass() {
+                        var inkstrokeClass = new InkStrokeClass()
+                        {
                             Pageno = _PgNo,
                             InkStrokeDimension = new Point(this.Width, this.Height),
                             StrokeData = strm.GetBuffer()

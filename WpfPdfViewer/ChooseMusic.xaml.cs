@@ -301,7 +301,7 @@ namespace WpfPdfViewer
                 };
                 br._BrowseList.KeyUp += (o, e) =>
                 {
-                    BtnOk_Click(o, e);
+//                    BtnOk_Click(o, e);
                 };
                 this.dpQuery.Children.Add(br);
             }
@@ -400,6 +400,7 @@ namespace WpfPdfViewer
                 }
                 else
                 {
+
                     foreach (CheckBox chk in lstFoldrs)
                     {
                         if (chk.IsChecked == true)

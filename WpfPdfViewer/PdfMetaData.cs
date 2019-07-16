@@ -310,7 +310,7 @@ namespace WpfPdfViewer
                         {
                             if (curPath.EndsWith("singles", StringComparison.InvariantCultureIgnoreCase))
                             {// we treat Singles as a book with multiple songs.
-                                lstPdfMetaFileData.Add(await HandleSinglesFolderAsync(curPath));
+                                lstPdfMetaFileData.Add(await LoadSinglesFolderAsync(curPath));
                             }
                             else
                             {
@@ -415,6 +415,10 @@ namespace WpfPdfViewer
                         }
                         catch (Exception ex)
                         {
+                            if (ex.Data.Contains("Filename"))
+                            {
+                                lastFile += " "+ ex.Data["Filename"];
+                            }
                             PdfViewerWindow.s_pdfViewerWindow.OnException($"Exception reading files {curPath} near {lastFile}", ex);
                         }
                         SaveMetaData(); // last one in dir
@@ -434,7 +438,7 @@ namespace WpfPdfViewer
             return (lstPdfMetaFileData, lstFolders);
         }
 
-        internal static async Task<PdfMetaData> HandleSinglesFolderAsync(string curPath)
+        internal static async Task<PdfMetaData> LoadSinglesFolderAsync(string curPath)
         {
             PdfMetaData curmetadata = null;
             var bmkFile = Path.ChangeExtension(curPath, "bmk");
@@ -523,12 +527,20 @@ namespace WpfPdfViewer
                 }
                 foreach (var newfile in lstNewFiles)
                 {
-                    var newVolInfo = new PdfVolumeInfo()
+                    try
                     {
-                        FileNameVolume = Path.GetFileName(newfile),
-                        NPagesInThisVolume = (int)(await GetPdfDocumentForFileAsync(newfile)).PageCount
-                    };
-                    sortedSetVolInfo.Add(newVolInfo);
+                        var newVolInfo = new PdfVolumeInfo()
+                        {
+                            FileNameVolume = Path.GetFileName(newfile),
+                            NPagesInThisVolume = (int)(await GetPdfDocumentForFileAsync(newfile)).PageCount
+                        };
+                        sortedSetVolInfo.Add(newVolInfo);
+                    }
+                    catch (Exception ex)
+                    {
+                        ex.Data["Filename"] = newfile;
+                        throw ex;
+                    }
                 }
                 // update VolInfo.
                 curmetadata.lstVolInfo = sortedSetVolInfo.ToList();
@@ -592,6 +604,7 @@ namespace WpfPdfViewer
                 }
                 curmetadata.InitializeInkStrokes();
             }
+            curmetadata?.SaveIfDirty();
             return curmetadata;
         }
 
@@ -886,9 +899,10 @@ namespace WpfPdfViewer
         //    return bmi;
         //}
 
-        internal async Task<BitmapImage> CalculateBitMapImageForPageAsync(int PageNo, CancellationTokenSource cts, Size? SizeDesired)
+        internal async Task<(BitmapImage, ulong)> CalculateBitMapImageForPageAsync(int PageNo, CancellationTokenSource cts, Size? SizeDesired)
         {
             BitmapImage bmi = null;
+            var size = 0ul;
             cts?.Token.Register(() =>
             {
                 PageNo.ToString();
@@ -918,19 +932,20 @@ namespace WpfPdfViewer
                         renderOpts.DestinationHeight = (uint)rect.Width;
                     }
                     //                    renderOpts.BackgroundColor = Windows.UI.Color.FromArgb(0xf, 0, 0xff, 0);
-                    bmi = await GetBitMapImageFromPdfPage(pdfPage, GetRotation(PageNo), renderOpts, cts);
+                    (bmi, size) = await GetBitMapImageFromPdfPage(pdfPage, GetRotation(PageNo), renderOpts, cts);
                 }
             }
             if (bmi == null)
             {
                 throw new InvalidDataException($"No bitmapimage for Pg={PageNo} PdfPg={pdfPgno} PdfPgCnt={pdfDoc?.PageCount} {this} ");
             }
-            return bmi;
+            return (bmi, size);
         }
 
-        private async Task<BitmapImage> GetBitMapImageFromPdfPage(PdfPage pdfPage, Rotation rotation, PdfPageRenderOptions renderOpts, CancellationTokenSource cts)
+        private async Task<(BitmapImage, ulong)> GetBitMapImageFromPdfPage(PdfPage pdfPage, Rotation rotation, PdfPageRenderOptions renderOpts, CancellationTokenSource cts)
         {
             var bmi = new BitmapImage();
+            var size = 0ul;
             using (var strm = new InMemoryRandomAccessStream())
             {
                 await pdfPage.RenderToStreamAsync(strm, renderOpts);
@@ -941,10 +956,11 @@ namespace WpfPdfViewer
                 bmi.Rotation = rotation;
                 bmi.CacheOption = BitmapCacheOption.OnLoad;
                 bmi.EndInit();
+                size = strm.Size;
                 //                        bmi.Freeze();
                 //                        bmi.StreamSource = null;
             }
-            return bmi;
+            return (bmi, size);
         }
 
         /// <summary>
@@ -955,6 +971,7 @@ namespace WpfPdfViewer
         public async Task<BitmapImage> GetBitmapImageThumbnailAsync()
         {
             var bmi = bitmapImageCache; // first see if we have one 
+            var size = 0ul;
             if (bmi == null)
             {
                 var pdfDoc = await GetPdfDocumentForFileAsync(GetFullPathFileFromVolno(volNo: 0));
@@ -966,7 +983,7 @@ namespace WpfPdfViewer
                         DestinationWidth = (uint)150, // match these with choose.xaml
                         DestinationHeight = (uint)225
                     };
-                    bmi = await GetBitMapImageFromPdfPage(pdfPage, GetRotation(PageNumberOffset), renderOpts, cts: null);
+                    (bmi, size) = await GetBitMapImageFromPdfPage(pdfPage, GetRotation(PageNumberOffset), renderOpts, cts: null);
                 }
                 bitmapImageCache = bmi;
                 if (PdfViewerWindow.s_pdfViewerWindow.currentPdfMetaData?._FullPathFile == _FullPathFile)
