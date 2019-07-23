@@ -544,8 +544,10 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                                 ctsPageScan = new CancellationTokenSource();
                                 var done = false;
                                 IsTesting = true;
+                                _pageCache.ClearCache();
                                 while (!done)
                                 {
+                                    CurrentPageNumber = currentPdfMetaData.PageNumberOffset;
                                     async Task LoopCurrentBook()
                                     {
                                         for (int pg = CurrentPageNumber + NumPagesPerView; pg < MaxPageNumber; pg += NumPagesPerView)

@@ -932,7 +932,7 @@ namespace WpfPdfViewer
                         renderOpts.DestinationHeight = (uint)rect.Width;
                     }
                     //                    renderOpts.BackgroundColor = Windows.UI.Color.FromArgb(0xf, 0, 0xff, 0);
-                    (bmi, size) = await GetBitMapImageFromPdfPage(pdfPage, GetRotation(PageNo), renderOpts, cts);
+                    (bmi, size) = await GetBitMapImageFromPdfPage(pdfPage, PageNo, renderOpts, cts);
                 }
             }
             if (bmi == null)
@@ -942,8 +942,9 @@ namespace WpfPdfViewer
             return (bmi, size);
         }
 
-        private async Task<(BitmapImage, ulong)> GetBitMapImageFromPdfPage(PdfPage pdfPage, Rotation rotation, PdfPageRenderOptions renderOpts, CancellationTokenSource cts)
+        private async Task<(BitmapImage, ulong)> GetBitMapImageFromPdfPage(PdfPage pdfPage, int PageNoLogical, PdfPageRenderOptions renderOpts, CancellationTokenSource cts)
         {
+            var rotation = GetRotation(PageNoLogical);
             var bmi = new BitmapImage();
             var size = 0ul;
             using (var strm = new InMemoryRandomAccessStream())
@@ -983,7 +984,7 @@ namespace WpfPdfViewer
                         DestinationWidth = (uint)150, // match these with choose.xaml
                         DestinationHeight = (uint)225
                     };
-                    (bmi, size) = await GetBitMapImageFromPdfPage(pdfPage, GetRotation(PageNumberOffset), renderOpts, cts: null);
+                    (bmi, size) = await GetBitMapImageFromPdfPage(pdfPage, PageNumberOffset, renderOpts, cts: null);
                 }
                 bitmapImageCache = bmi;
                 if (PdfViewerWindow.s_pdfViewerWindow.currentPdfMetaData?._FullPathFile == _FullPathFile)
