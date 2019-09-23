@@ -301,7 +301,7 @@ namespace WpfPdfViewer
                 };
                 br._BrowseList.KeyUp += (o, e) =>
                 {
-                    BtnOk_Click(o, e);
+//                    BtnOk_Click(o, e);
                 };
                 this.dpQuery.Children.Add(br);
             }

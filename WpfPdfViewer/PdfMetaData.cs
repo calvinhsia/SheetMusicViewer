@@ -310,7 +310,7 @@ namespace WpfPdfViewer
                         {
                             if (curPath.EndsWith("singles", StringComparison.InvariantCultureIgnoreCase))
                             {// we treat Singles as a book with multiple songs.
-                                lstPdfMetaFileData.Add(await HandleSinglesFolderAsync(curPath));
+                                lstPdfMetaFileData.Add(await LoadSinglesFolderAsync(curPath));
                             }
                             else
                             {
@@ -415,6 +415,10 @@ namespace WpfPdfViewer
                         }
                         catch (Exception ex)
                         {
+                            if (ex.Data.Contains("Filename"))
+                            {
+                                lastFile += " "+ ex.Data["Filename"];
+                            }
                             PdfViewerWindow.s_pdfViewerWindow.OnException($"Exception reading files {curPath} near {lastFile}", ex);
                         }
                         SaveMetaData(); // last one in dir
@@ -434,7 +438,7 @@ namespace WpfPdfViewer
             return (lstPdfMetaFileData, lstFolders);
         }
 
-        internal static async Task<PdfMetaData> HandleSinglesFolderAsync(string curPath)
+        internal static async Task<PdfMetaData> LoadSinglesFolderAsync(string curPath)
         {
             PdfMetaData curmetadata = null;
             var bmkFile = Path.ChangeExtension(curPath, "bmk");
@@ -523,12 +527,20 @@ namespace WpfPdfViewer
                 }
                 foreach (var newfile in lstNewFiles)
                 {
-                    var newVolInfo = new PdfVolumeInfo()
+                    try
                     {
-                        FileNameVolume = Path.GetFileName(newfile),
-                        NPagesInThisVolume = (int)(await GetPdfDocumentForFileAsync(newfile)).PageCount
-                    };
-                    sortedSetVolInfo.Add(newVolInfo);
+                        var newVolInfo = new PdfVolumeInfo()
+                        {
+                            FileNameVolume = Path.GetFileName(newfile),
+                            NPagesInThisVolume = (int)(await GetPdfDocumentForFileAsync(newfile)).PageCount
+                        };
+                        sortedSetVolInfo.Add(newVolInfo);
+                    }
+                    catch (Exception ex)
+                    {
+                        ex.Data["Filename"] = newfile;
+                        throw ex;
+                    }
                 }
                 // update VolInfo.
                 curmetadata.lstVolInfo = sortedSetVolInfo.ToList();
@@ -592,6 +604,7 @@ namespace WpfPdfViewer
                 }
                 curmetadata.InitializeInkStrokes();
             }
+            curmetadata?.SaveIfDirty();
             return curmetadata;
         }
 
@@ -886,9 +899,10 @@ namespace WpfPdfViewer
         //    return bmi;
         //}
 
-        internal async Task<BitmapImage> CalculateBitMapImageForPageAsync(int PageNo, CancellationTokenSource cts, Size? SizeDesired)
+        internal async Task<(BitmapImage, ulong)> CalculateBitMapImageForPageAsync(int PageNo, CancellationTokenSource cts, Size? SizeDesired)
         {
             BitmapImage bmi = null;
+            var size = 0ul;
             cts?.Token.Register(() =>
             {
                 PageNo.ToString();
@@ -918,21 +932,74 @@ namespace WpfPdfViewer
                         renderOpts.DestinationHeight = (uint)rect.Width;
                     }
                     //                    renderOpts.BackgroundColor = Windows.UI.Color.FromArgb(0xf, 0, 0xff, 0);
-                    bmi = await GetBitMapImageFromPdfPage(pdfPage, GetRotation(PageNo), renderOpts, cts);
+                    (bmi, size) = await GetBitMapImageFromPdfPage(pdfPage, PageNo, renderOpts, cts);
                 }
             }
             if (bmi == null)
             {
                 throw new InvalidDataException($"No bitmapimage for Pg={PageNo} PdfPg={pdfPgno} PdfPgCnt={pdfDoc?.PageCount} {this} ");
             }
-            return bmi;
+            return (bmi, size);
         }
 
-        private async Task<BitmapImage> GetBitMapImageFromPdfPage(PdfPage pdfPage, Rotation rotation, PdfPageRenderOptions renderOpts, CancellationTokenSource cts)
+        private async Task<(BitmapImage, ulong)> GetBitMapImageFromPdfPage(PdfPage pdfPage, int PageNoLogical, PdfPageRenderOptions renderOpts, CancellationTokenSource cts)
         {
+            var rotation = GetRotation(PageNoLogical);
             var bmi = new BitmapImage();
+            var size = 0ul;
             using (var strm = new InMemoryRandomAccessStream())
             {
+                /*
+>	KernelBase.dll!RaiseException(unsigned long dwExceptionCode, unsigned long dwExceptionFlags, unsigned long nNumberOfArguments, const unsigned long * lpArguments) Line 938	C
+ 	msvcrt.dll!_CxxThrowException(void * pExceptionObject, const _s__ThrowInfo * pThrowInfo) Line 170	C++
+ 	d3d11.dll!ThrowFailure(HRESULT hr) Line 17	C++
+ 	d3d11.dll!NDXGI::CDevice::CreateContextVirtual2(D3DWDDM2_0DDICB_CREATECONTEXTVIRTUAL * pArgs) Line 9853	C++
+ 	d3d11.dll!NDXGI::CDevice::CreateContextVirtualCB(void * hDevice, _D3DDDICB_CREATECONTEXTVIRTUAL * pArgs) Line 9795	C++
+ 	nvwgf2um.dll!6953935e()	Unknown
+ 	nvwgf2um.dll![Frames below may be incorrect and/or missing, no symbols loaded for nvwgf2um.dll]	Unknown
+ 	nvwgf2um.dll!695cab4e()	Unknown
+ 	nvwgf2um.dll!68eea40f()	Unknown
+
+
+ 	KernelBase.dll!RaiseException(unsigned long dwExceptionCode, unsigned long dwExceptionFlags, unsigned long nNumberOfArguments, const unsigned long * lpArguments) Line 938	C
+ 	msvcrt.dll!_CxxThrowException(void * pExceptionObject, const _s__ThrowInfo * pThrowInfo) Line 170	C++
+ 	d3d11.dll!ThrowFailure(HRESULT hr) Line 17	C++
+ 	d3d11.dll!NDXGI::CDevice::CreateDriverInstance(void * DDIInterface, void * DDIHandle, void * CoreLayerHandle, void * pUMCallbacks, bool bLegacyDDIThreading, bool bDisableGpuTimeout, D3D_FEATURE_LEVEL FeatureLevel, unsigned int DDIFlags, HRESULT(__stdcall*)(D3D10DDI_HDEVICE, unsigned int, unsigned long, void *, unsigned long, void *) * ppRetrieveSubObject) Line 1223	C++
+ 	d3d11.dll!CDevice::CreateDriverInstance(CContext * pCtx, void * DDIInterface, void * DDIHandle, void * CoreLayerHandle, void * pUMCallbacks, unsigned int DDIFlags, HRESULT(__stdcall*)(D3D10DDI_HDEVICE, unsigned int, unsigned long, void *, unsigned long, void *) * ppRetrieveSubObject) Line 10214	C++
+ 	d3d11.dll!CContext::LUCCompleteLayerConstruction() Line 9953	C++
+ 	d3d11.dll!CBridgeImpl<ILayeredUseCounted,ID3D11LayeredUseCounted,CLayeredObject<CContext> >::LUCCompleteLayerConstruction() Line 147	C++
+ 	d3d11.dll!NOutermost::CDeviceChild::LUCCompleteLayerConstruction() Line 371	C++
+ 	[Inline Frame] d3d11.dll!CUseCountedObject<NOutermost::CDeviceChild>::LUCCompleteLayerConstruction() Line 464	C++
+ 	[Inline Frame] d3d11.dll!NOutermost::CDeviceChild::FinalConstruct(const NOutermost::CDeviceChild::TConstructorArgs &) Line 804	C++
+ 	[Inline Frame] d3d11.dll!CUseCountedObject<NOutermost::CDeviceChild>::{ctor}(void *) Line 245	C++
+ 	[Inline Frame] d3d11.dll!CUseCountedObject<NOutermost::CDeviceChild>::CreateInstance(const NOutermost::CDeviceChild::TConstructorArgs &) Line 523	C++
+ 	d3d11.dll!NOutermost::CDevice::CreateLayeredChild(unsigned int ChildType, const void * pLayeredChildArgs, unsigned long uiArgSize, ID3D11LayeredUseCounted * pOuterUnk, const _GUID & iid, void * * ppUnk) Line 151	C++
+ 	d3d11.dll!CDevice::LLOCompleteLayerConstruction() Line 9209	C++
+ 	d3d11.dll!CBridgeImpl<ILayeredLockOwner,ID3D11LayeredDevice,CLayeredObject<CDevice> >::LLOCompleteLayerConstruction() Line 136	C++
+ 	d3d11.dll!NDXGI::CDevice::LLOCompleteLayerConstruction() Line 344	C++
+ 	d3d11.dll!CBridgeImpl<ILayeredLockOwner,ID3D11LayeredDevice,CLayeredObject<NDXGI::CDevice> >::LLOCompleteLayerConstruction() Line 136	C++
+ 	d3d11.dll!NOutermost::CDevice::LLOCompleteLayerConstruction() Line 71	C++
+ 	d3d11.dll!NOutermost::CDevice::FinalConstruct(const NOutermost::CDevice::TConstructorArgs & args) Line 171	C++
+ 	d3d11.dll!TComObject<NOutermost::CDevice>::TComObject<NOutermost::CDevice>(void * args, const NOutermost::CDevice::TConstructorArgs & riid, const _GUID & ppv, void * *) Line 35	C++
+ 	[Inline Frame] d3d11.dll!TComObject<NOutermost::CDevice>::CreateInstance(const NOutermost::CDevice::TConstructorArgs & pMemLocation, void *) Line 112	C++
+ 	d3d11.dll!D3D11CreateLayeredDevice(unsigned int uiLayerID, const void * pLayeredDeviceArgs, unsigned long uiArgSize, ID3D11LayeredDevice * pOuterUnk, const _GUID & iid, void * * ppUnk) Line 568	C++
+ 	d3d11.dll!D3D11CoreCreateLayeredDevice(const void * pLayeredDeviceArgs, unsigned long uiArgSize, ID3D11LayeredDevice * pOuterUnk, const _GUID & iid, void * * ppUnk) Line 856	C++
+ 	d3d11.dll!D3D11RegisterLayersAndCreateDevice(const D3D11_EXTENSIONS & Ext, NDXGI::CUMDAdapter * HardwareFL, D3D_FEATURE_LEVEL APIFeatureLevel, D3D_FEATURE_LEVEL DDIVersion, unsigned __int64 Flags, unsigned int ppDevice, ID3D11Device * *) Line 2603	C++
+ 	d3d11.dll!D3D11CoreCreateDevice(const D3D11_EXTENSIONS * pExtensions, IDXGIAdapter * pAdapter, D3D_DRIVER_TYPE DriverType, HINSTANCE__ * Software, unsigned int Flags, const D3D_FEATURE_LEVEL * pRequestedFeatureLevels, unsigned int RequestedFeatureLevels, unsigned int __formal, ID3D11Device * * ppDevice, D3D_FEATURE_LEVEL * pFeatureLevel) Line 2985	C++
+ 	d3d11.dll!D3D11CreateDeviceAndSwapChainImpl(IDXGIAdapter * pAdapter, D3D_DRIVER_TYPE DriverType, HINSTANCE__ * Software, unsigned int Flags, const D3D_FEATURE_LEVEL * pFeatureLevels, unsigned int FeatureLevels, unsigned int SDKVersion, const DXGI_SWAP_CHAIN_DESC * pSwapChainDesc, IDXGISwapChain * * ppSwapChain, ID3D11Device * * ppDevice, D3D_FEATURE_LEVEL * pFeatureLevel, ID3D11DeviceContext * * ppImmediateContext) Line 4126	C++
+ 	[Inline Frame] d3d11.dll!D3D11CreateDeviceAndSwapChain(IDXGIAdapter *) Line 4207	C++
+ 	d3d11.dll!D3D11CreateDeviceImpl(IDXGIAdapter * pAdapter, D3D_DRIVER_TYPE DriverType, HINSTANCE__ * Software, unsigned int Flags, const D3D_FEATURE_LEVEL * pFeatureLevels, unsigned int FeatureLevels, unsigned int SDKVersion, ID3D11Device * * ppDevice, D3D_FEATURE_LEVEL * pFeatureLevel, ID3D11DeviceContext * * ppImmediateContext) Line 3071	C++
+ 	Windows.Data.Pdf.dll!Windows::Data::Pdf::CPdfStreamRenderer::_CreateDevices(const Microsoft::WRL::ComPtr<ID2D1Factory1> & spD2DFactory, const std::shared_ptr<Graphics::IGraphicsFactory> &) Line 445	C++
+ 	[Inline Frame] Windows.Data.Pdf.dll!Windows::Data::Pdf::CPdfStreamRenderer::Initialize(const Microsoft::WRL::ComPtr<ID2D1Factory1> &) Line 38	C++
+ 	Windows.Data.Pdf.dll!Windows::Data::Pdf::CPdfStatics::_CreateStreamRenderer() Line 173	C++
+ 	Windows.Data.Pdf.dll!Windows::Data::Pdf::CPdfStatics::GetStreamRenderer() Line 108	C++
+ 	Windows.Data.Pdf.dll!Windows::Data::Pdf::CPdfPage::RenderWithOptionsToStreamAsync(Windows::Storage::Streams::IRandomAccessStream * pOutputStream, Windows::Data::Pdf::IPdfPageRenderOptions * pOptions, Windows::Foundation::IAsyncAction * * ppAsyncInfo) Line 105	C++
+ 	[Managed to Native Transition]	
+>	WpfPdfViewer.exe!WpfPdfViewer.PdfMetaData.GetBitMapImageFromPdfPage(Windows.Data.Pdf.PdfPage pdfPage, int PageNoLogical, Windows.Data.Pdf.PdfPageRenderOptions renderOpts, System.Threading.CancellationTokenSource cts) Line 952	C#
+ 	WpfPdfViewer.exe!WpfPdfViewer.PdfMetaData.CalculateBitMapImageForPageAsync(int PageNo, System.Threading.CancellationTokenSource cts, System.Windows.Size? SizeDesired) Line 935	C#
+
+
+                */
                 await pdfPage.RenderToStreamAsync(strm, renderOpts);
                 cts?.Token.ThrowIfCancellationRequested();
                 //                bmi.CreateOptions = BitmapCreateOptions.DelayCreation;
@@ -941,10 +1008,11 @@ namespace WpfPdfViewer
                 bmi.Rotation = rotation;
                 bmi.CacheOption = BitmapCacheOption.OnLoad;
                 bmi.EndInit();
+                size = strm.Size;
                 //                        bmi.Freeze();
                 //                        bmi.StreamSource = null;
             }
-            return bmi;
+            return (bmi, size);
         }
 
         /// <summary>
@@ -955,6 +1023,7 @@ namespace WpfPdfViewer
         public async Task<BitmapImage> GetBitmapImageThumbnailAsync()
         {
             var bmi = bitmapImageCache; // first see if we have one 
+            var size = 0ul;
             if (bmi == null)
             {
                 var pdfDoc = await GetPdfDocumentForFileAsync(GetFullPathFileFromVolno(volNo: 0));
@@ -966,7 +1035,7 @@ namespace WpfPdfViewer
                         DestinationWidth = (uint)150, // match these with choose.xaml
                         DestinationHeight = (uint)225
                     };
-                    bmi = await GetBitMapImageFromPdfPage(pdfPage, GetRotation(PageNumberOffset), renderOpts, cts: null);
+                    (bmi, size) = await GetBitMapImageFromPdfPage(pdfPage, PageNumberOffset, renderOpts, cts: null);
                 }
                 bitmapImageCache = bmi;
                 if (PdfViewerWindow.s_pdfViewerWindow.currentPdfMetaData?._FullPathFile == _FullPathFile)

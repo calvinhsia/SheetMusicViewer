@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -47,7 +48,7 @@ namespace Tests
         //        readonly string testPdf = @"C:\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
 
         [TestMethod]
-//        [Ignore]
+        //        [Ignore]
         public async Task TestStress()
         {
             var ev = new ManualResetEventSlim();
@@ -123,7 +124,7 @@ namespace Tests
         }
 
         [TestMethod]
-       // [Ignore]
+        // [Ignore]
         public async Task TestCache()
         {
             var ev = new ManualResetEventSlim();
@@ -139,24 +140,15 @@ namespace Tests
             var c = CreateExecutionContext();
             await c.Dispatcher.InvokeAsync(async () =>
             {
-                var w = new WpfPdfViewer.PdfViewerWindow
+                var w = new WpfPdfViewer.PdfViewerWindow(Rootfolder)
                 {
                     //                    _RootMusicFolder = Path.Combine(Rootfolder, "FakeBooks")
-                    _RootMusicFolder = Rootfolder
+                    IsTesting = true
                 };
-                var testw = new Window();
-                //var sp = new StackPanel() { Orientation = Orientation.Vertical };
-                //var tbTxt = new TextBlock();
-                //sp.Children.Add(tbTxt);
-                //var im = new Image();
-                //sp.Children.Add(im);
-                //testw.Content = sp;
-                testw.Show();
+                w.Show();
                 (var lstMetaData, var _) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
-                int cnt = 0;
-                foreach (var currentPdfMetaData in lstMetaData)
+                foreach (var currentPdfMetaData in lstMetaData.Where(d => d._FullPathFile.Contains(@"Ragtime\Singles")))
                 {
-                    var sw = Stopwatch.StartNew();
                     //                    var currentPdfMetaData = lstMetaData.Where(m => m.GetFullPathFile(volNo: 0).Contains("Fake")).First();
                     w.currentPdfMetaData = currentPdfMetaData;
                     w.currentPdfMetaData.InitializeListPdfDocuments();
@@ -165,29 +157,25 @@ namespace Tests
                     //// calling thread must be STA, UIThread
                     //var res = cacheEntry.task.Result;
                     AddLogEntry($"Starting book {w.currentPdfMetaData}");
+                    w._fShow2Pages = false;
                     for (var iter = 0; iter < 1; iter++)
                     {
                         var pageNo = 0;
                         for (pageNo = currentPdfMetaData.PageNumberOffset; pageNo < currentPdfMetaData.NumPagesInSet + currentPdfMetaData.PageNumberOffset - 1; pageNo++)
                         {
-                            if (false)
-                            {
-                                var cacheEntry = w._pageCache.TryAddCacheEntry(pageNo);
-                                var bmi = await cacheEntry.task;
-//                                var bmi = cacheEntry.task.Result;
-                                testw.Content = new Image() { Source = bmi };
-                            }
-                            if (true)
-                            {
-                                var bmi = await currentPdfMetaData.CalculateBitMapImageForPageAsync(pageNo, cts:null, SizeDesired:null);
-                                testw.Content = new Image() { Source = bmi };
-                            }
-                            //testw.Title = $"{cnt++} {pageNo,8}   bmi={bmi.Width:n0}, {bmi.Height:n0}  {sw.Elapsed.TotalSeconds,8:n4} {currentPdfMetaData} ";
-                            testw.Title = $"{cnt++} {pageNo,8}   {sw.Elapsed.TotalSeconds,8:n4} {currentPdfMetaData} ";
-//                            AddLogEntry(testw.Title);
+                            await w.ShowPageAsync(pageNo, ClearCache: false);
+                            //                            var bmi = await currentPdfMetaData.CalculateBitMapImageForPageAsync(pageNo, cts: null, SizeDesired: null);
+                            //                            AddLogEntry(testw.Title);
                             //break;
                         }
                     }
+                    w.CloseCurrentPdfFile();
+                    //for (int i = 0; i < 5; i++)
+                    //{
+                    //    GC.Collect(4, GCCollectionMode.Forced);
+                    //    GC.WaitForPendingFinalizers();
+                    //    Marshal.CleanupUnusedObjectsInCurrentContext();
+                    //}
                 }
                 AddLogEntry($"Done with all");
                 ev.Set();
