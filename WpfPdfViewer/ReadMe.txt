@@ -23,7 +23,7 @@ The first one of a series:
 	1. does not end in a digit "book.pdf" root name = "book"
 	2. does end in a digit  "book0.pdf" root name = "book"
 
-Subsequent ones must have the same root name as the 1st and must have a digit after the rotoname e.g. "book1.pdf", "book1a.pdf", "book2.pdf". As long as they sort in order, the digits don't matter.
+Subsequent ones must have the same root name as the 1st and must have a digit after the rootname e.g. "book1.pdf", "book1a.pdf", "book2.pdf". As long as they sort in order, the digits don't matter.
 Thus, book1, book1a, book2 are all treated together as one
 but not SonatenI, SonatenI1, SonatenII: this is 2 books: "SonatenI" and "SonatenI1" are the 1st Sonaten, and "SonatenII" is the second.
 This allows rescan of missing pages without needing to renumber subsequent volumes.
@@ -36,7 +36,7 @@ The BMK file is read upon program start, or upon setting a new 'Music Folder Pat
 The 1st page of A PDF file (or a set of PDF with consecutive numbered names) is used as the 'icon' to represent the music in the Choose dialog, the Table Of Contents Dialog, etc.
 So if the PDF has a cover page it will be the icon. For a singles folder, you can create a custom PDF title page.
 You can use any program that can print, and print to the "Microsoft Print to PDF" printer. That will create a PDF document.
-Make sure it's named earlier in alpahbetical order than any other single in the folder
+Make sure it's named earlier in alphabetical order than any other single in the folder
 
 
 A subfolder called 'Hidden' will not be searched.
@@ -48,9 +48,9 @@ There are 2 display modes: single page at a time and 2 pages (side by side) per 
 The thumb left and right arrows at the top move a screenful at a time. (if there are favorites in the currently open book, they jump to the next favorite left or right, if any)
 The left-right arrows move the page by 1 screenful.
 The bottom quarter of the display is used to do page turning by click or touch. In 1 page per screen mode, the right half will move right 1 page, and the left half will move left 1 page.
-In 2 page per screen mode, the bottom quareter is divided into 4 quarters. The outer 2 quarters will advance 1 screenful (2 pages), and the inner quarters will advance 1 page.
+In 2 page per screen mode, the bottom quarter is divided into 4 quarters. The outer 2 quarters will advance 1 screenful (2 pages), and the inner quarters will advance 1 page.
 E.g. from showing page 3 on the left and 4 on the right, to page 4 on the left to page 5 on the right. This allows right hand pages to be shown on the left, and repeats, etc. to be seen more easily.
-The top 3/4 of the page is used for moving zooming, rotating the display. You can use 2 fingers to zoom into a paticular point. Similarly with ctrl mouse-wheel
+The top 3/4 of the page is used for moving zooming, rotating the display. You can use 2 fingers to zoom into a particular point. Similarly with ctrl mouse-wheel
 
 Inking is off by default. To ink, click the Ink checkbox for the page (in 2 page mode, there is a checkbox for each page). 
 A mouse or pen or your finger can draw in red, black, or highlight. To save the ink on that page, click the Ink checkbox again.
@@ -103,3 +103,4 @@ The Movie Fake Book
 //grinch
 //Piano classics 2. p161 to end  vol4, 5
 //Les Mis
+
