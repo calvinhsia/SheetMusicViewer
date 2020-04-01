@@ -1,4 +1,7 @@
 # SheetMusicViewer
+
+PDF Sheet Music Viewer by Calvin Hsia 2019
+
 Allows users to view  downloaded or scanned Sheet Music in PDF format to play on a musical instrument, such as a piano
 
 Runs on Windows 10
@@ -10,11 +13,11 @@ Keep in mind the page size will be roughly the screen size.
 * Mark any page as a Favorite, and scan through favorites
 * Use ink (a stylus, mouse, or your finger) to add any writing/corrections to the view. The original PDFs are not altered in any way
 * Optionally persists views by Date, to see which music viewed recently
+* The SheetMusic/Ragtime folder has sample PDFs which you can use if as samples if you need to.
 
-
-PDF Music Viewer by Calvin Hsia 2019
 
 I have a few hundred piano music books, singles, etc. that I've collected over the last several decades.
+I love to play piano, especially ragtime.
 Most of the books were "perfect bound" which means they didn't stay open on the piano music stand.
 Many decades ago I chopped off the bindings of the books and rebound them using plastic comb binding. This made playing the music much easier on the piano.
 Since then I bought my own book binding cutter (HFS New Heavy Duty Guillotine Paper Cutter) and comb binding machine (Marigold 19-Hole Letter Size Comb Ring Binding Machine) 
@@ -62,14 +65,14 @@ There are 2 display modes: single page at a time and 2 pages (side by side) per 
 The thumb left and right arrows at the top move a screenful at a time. (if there are favorites in the currently open book, they jump to the next favorite left or right, if any)
 The left-right arrows move the page by 1 screenful.
 The bottom quarter of the display is used to do page turning by click or touch. In 1 page per screen mode, the right half will move right 1 page, and the left half will move left 1 page.
-In 2 page per screen mode, the bottom quarter is divided into 4 quarters. The outer 2 quarters will advance 1 screenful (2 pages), and the inner quarters will advance 1 page.
+In 2 page per screen mode, the bottom quarter is logically divided into 4 quarters, from left to right. The outer 2 quarters will advance 1 screenful (2 pages), and the inner quarters will advance 1 page.
 E.g. from showing page 3 on the left and 4 on the right, to page 4 on the left to page 5 on the right. This allows right hand pages to be shown on the left, and repeats, etc. to be seen more easily.
 The top 3/4 of the page is used for moving zooming, rotating the display. You can use 2 fingers to zoom into a particular point. Similarly with ctrl mouse-wheel
 
 Inking is off by default. To ink, click the Ink checkbox for the page (in 2 page mode, there is a checkbox for each page). 
 A mouse or pen or your finger can draw in red, black, or highlight. To save the ink on that page, click the Ink checkbox again.
 For e.g. correcting typos on the musical staff, zoom in before inking to make it easier to draw accurately.
-Ink is stored in the BMK file.
+All ink is stored in the BMK file.
 
 Rendering a PDF page takes time. When advancing to the next page, instantaneous response is desirable.
 In single page mode, as e.g. page 5 is shown, Page 6 is prefetched and prerendered in a cache. So is page 7, and page 4. The cache does nothing if the page is already contained. 
@@ -85,7 +88,7 @@ The size can be reduced If you print the PDF to "Microsoft Print To PDF" printer
 Each page has a description which is calculated from the TOC. If a song is many pages, the description is 
 calculated from the closest TOC entry. If there are multiple songs on a a page, the description includes all songs on that page.
 
-The Table of contents of a songbook shows the physical page numbers, which may not match the actual PDF page numbers (there could be a cover page scanned or could be a multivolume set, or 30 pages of intro, and then page 1 has the 1st song)
+The Table of Contents of a songbook shows the physical page numbers, which may not match the actual PDF page numbers (there could be a cover page scanned or could be a multivolume set, or 30 pages of intro, and then page 1 has the 1st song)
 Also, each scanned page might have the physical page # printed on it.
 We want to keep the scanned OCR TOC true and minimize required editing. This means the page no displayed in the UI is the same as the page # on the scanned page
 PageNumberOffset will map between each so that the imported scanned TOC saved as XML will not need to be adjusted.
@@ -96,7 +99,7 @@ Another way to think about it: find a page with a printed page no on it, e.g. pa
 You can edit/display the TOC via clicking or tapping the thumbnail to the right of the slider. Or Alt-E. From there you can export/import to/from the clipboard in Excel format.
 You can take a screenshot of the TOC of a book, then run Optical Character Recognition (OCR) on it to convert it to text for Excel=>clipboard=>TOC.
 
-How I got started:
+How I got started on the Piano:
 I've neer had a piano lesson: Our Junior High School had a PDP-8 computer, which would emit radio interference on the AM dial. Making the computer flash the blinking lights (yes computers had blinking lights back then) with a pattern,
 it could actually make music. I remember hearing Maple Leaf Rag from the computer on an AM radio. In college, there was a piano in my fraternity. I started on the piano with the music to Maple Leaf Rag, and I 
 started trying to pick my way through the notes. 

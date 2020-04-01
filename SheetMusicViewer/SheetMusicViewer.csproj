@@ -141,11 +141,6 @@
   <ItemGroup>
     <Resource Include="Music.ico" />
   </ItemGroup>
-  <ItemGroup>
-    <Resource Include="ReadMe.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Resource>
-  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>call "$(DevEnvDir)..\..\vc\Auxiliary\build\vcvarsall.bat" x86
