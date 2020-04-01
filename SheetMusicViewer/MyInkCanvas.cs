@@ -10,7 +10,7 @@ using System.Windows.Ink;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
-namespace WpfPdfViewer
+namespace SheetMusicViewer
 {
     public class MyInkCanvas : InkCanvas
     {

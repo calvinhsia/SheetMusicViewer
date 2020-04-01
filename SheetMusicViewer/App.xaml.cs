@@ -6,12 +6,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 
-namespace MyWpfPdfViewer
+namespace SheetMusicViewer
 {
-    /// <summary>
-    /// Interaction logic for App.xaml
-    /// </summary>
-    public partial class App : Application
-    {
-    }
 }

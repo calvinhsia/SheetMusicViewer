@@ -25,7 +25,7 @@ using Windows.Data.Pdf;
 using Windows.Storage;
 using Windows.Storage.Streams;
 
-namespace WpfPdfViewer
+namespace SheetMusicViewer
 {
     public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     {

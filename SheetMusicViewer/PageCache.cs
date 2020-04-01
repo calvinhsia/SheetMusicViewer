@@ -9,7 +9,7 @@ using System.Windows.Media.Imaging;
 using Windows.Data.Pdf;
 using Windows.Storage.Streams;
 
-namespace WpfPdfViewer
+namespace SheetMusicViewer
 {
     internal class PageCacheEntry
     {

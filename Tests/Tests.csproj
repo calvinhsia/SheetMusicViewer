@@ -68,9 +68,9 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\WpfPdfViewer\WpfPdfViewer.csproj">
+    <ProjectReference Include="..\SheetMusicViewer\SheetMusicViewer.csproj">
       <Project>{95e4f137-abd4-4875-9cf8-aa373ea0c80c}</Project>
-      <Name>WpfPdfViewer</Name>
+      <Name>SheetMusicViewer</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets" Condition="Exists('$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets')" />

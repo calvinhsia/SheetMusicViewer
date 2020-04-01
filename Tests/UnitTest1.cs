@@ -14,8 +14,8 @@ using System.Windows.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Windows.Data.Pdf;
 using Windows.Storage.Streams;
-using WpfPdfViewer;
-using static WpfPdfViewer.PdfViewerWindow;
+using SheetMusicViewer;
+using static SheetMusicViewer.PdfViewerWindow;
 
 namespace Tests
 {
@@ -55,7 +55,7 @@ namespace Tests
             var c = CreateExecutionContext();
             await c.Dispatcher.InvokeAsync(async () =>
             {
-                var w = new WpfPdfViewer.PdfViewerWindow
+                var w = new SheetMusicViewer.PdfViewerWindow
                 {
                     _RootMusicFolder = Rootfolder
                 };
@@ -138,16 +138,16 @@ namespace Tests
             //dispThread.SetApartmentState(ApartmentState.STA);
             //dispThread.Start();
             var c = CreateExecutionContext();
-            await c.Dispatcher.InvokeAsync(async () =>
+            await c.Dispatcher.InvokeAsync((Func<Task>)(async () =>
             {
-                var w = new WpfPdfViewer.PdfViewerWindow(Rootfolder)
+                var w = new global::SheetMusicViewer.PdfViewerWindow(Rootfolder)
                 {
                     //                    _RootMusicFolder = Path.Combine(Rootfolder, "FakeBooks")
                     IsTesting = true
                 };
                 w.Show();
-                (var lstMetaData, var _) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
-                foreach (var currentPdfMetaData in lstMetaData.Where(d => d._FullPathFile.Contains(@"Ragtime\Singles")))
+                (var lstMetaData, var _) = await SheetMusicViewer.PdfMetaData.LoadAllPdfMetaDataFromDiskAsync((string)w._RootMusicFolder);
+                foreach (var currentPdfMetaData in Enumerable.Where<SheetMusicViewer.PdfMetaData>(lstMetaData, (Func<SheetMusicViewer.PdfMetaData, bool>)(d => (bool)d._FullPathFile.Contains((string)@"Ragtime\Singles"))))
                 {
                     //                    var currentPdfMetaData = lstMetaData.Where(m => m.GetFullPathFile(volNo: 0).Contains("Fake")).First();
                     w.currentPdfMetaData = currentPdfMetaData;
@@ -179,7 +179,7 @@ namespace Tests
                 }
                 AddLogEntry($"Done with all");
                 ev.Set();
-            });
+            }));
             ev.Wait();
         }
 
@@ -235,7 +235,7 @@ namespace Tests
             //{
             //    TestContext.WriteLine($"adfadf {i}");
             //}
-            var w = new WpfPdfViewer.PdfViewerWindow
+            var w = new SheetMusicViewer.PdfViewerWindow
             {
                 _RootMusicFolder = rootfolder
             };
@@ -332,7 +332,7 @@ namespace Tests
                     var dest = Path.Combine(singlesFolder, Path.GetFileName(file));
                     File.Copy(file, dest);
                 }
-                pdfViewerWindow = new WpfPdfViewer.PdfViewerWindow
+                pdfViewerWindow = new SheetMusicViewer.PdfViewerWindow
                 {
                     _RootMusicFolder = testdir
                 };
@@ -540,7 +540,7 @@ namespace Tests
         [Ignore]
         public async Task TestCreateBmpCache()
         {
-            var w = new WpfPdfViewer.PdfViewerWindow
+            var w = new SheetMusicViewer.PdfViewerWindow
             {
                 _RootMusicFolder = Rootfolder
             };
@@ -550,12 +550,12 @@ namespace Tests
                 GetBMPs(w);
             }
         }
-        void GetBMPs(WpfPdfViewer.PdfViewerWindow w)
+        void GetBMPs(SheetMusicViewer.PdfViewerWindow w)
         {
             AddLogEntry($"Got PDFMetaDataCnt={w.lstPdfMetaFileData.Count}");
             foreach (var pdfMetaData in w.lstPdfMetaFileData)
             {
-                var bmi = pdfMetaData.GetBitmapImageThumbnailAsync();
+                _ = pdfMetaData.GetBitmapImageThumbnailAsync();
                 pdfMetaData.bitmapImageCache = null;
                 //                AddLogEntry($" {pdfMetaData} {bmi.PixelWidth} {bmi.PixelHeight}");
             }

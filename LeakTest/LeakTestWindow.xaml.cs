@@ -17,7 +17,7 @@ using System.Windows.Shapes;
 using Windows.Data.Pdf;
 using Windows.Storage;
 using Windows.Storage.Streams;
-using WpfPdfViewer;
+using SheetMusicViewer;
 
 namespace LeakTest
 {
@@ -38,7 +38,7 @@ namespace LeakTest
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            var w = new WpfPdfViewer.PdfViewerWindow();
+            var w = new SheetMusicViewer.PdfViewerWindow();
             w.ShowDialog();
             Environment.Exit(0);
 
@@ -46,7 +46,7 @@ namespace LeakTest
 
         private async void MainWindow_Loadedtry(object sender, RoutedEventArgs e)
         {
-            var w = new WpfPdfViewer.PdfViewerWindow
+            var w = new SheetMusicViewer.PdfViewerWindow
             {
                 //                    _RootMusicFolder = Path.Combine(Rootfolder, "FakeBooks")
                 _RootMusicFolder = Rootfolder

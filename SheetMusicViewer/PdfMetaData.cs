@@ -15,7 +15,7 @@ using Windows.Data.Pdf;
 using Windows.Storage;
 using Windows.Storage.Streams;
 
-namespace WpfPdfViewer
+namespace SheetMusicViewer
 {
     /// <summary>
     /// The serialized info for a PDF is in a file with the same name as the PDF with the extension changed to ".bmk"
@@ -902,7 +902,6 @@ namespace WpfPdfViewer
         internal async Task<(BitmapImage, ulong)> CalculateBitMapImageForPageAsync(int PageNo, CancellationTokenSource cts, Size? SizeDesired)
         {
             BitmapImage bmi = null;
-            var size = 0ul;
             cts?.Token.Register(() =>
             {
                 PageNo.ToString();
@@ -910,6 +909,7 @@ namespace WpfPdfViewer
             });
             cts?.Token.ThrowIfCancellationRequested();
             var (pdfDoc, pdfPgno) = await GetPdfDocumentForPageno(PageNo);
+            ulong size = 0ul;
             if (pdfDoc != null && pdfPgno >= 0 && pdfPgno < pdfDoc.PageCount)
             {
                 using (var pdfPage = pdfDoc.GetPage((uint)(pdfPgno)))
@@ -1023,7 +1023,6 @@ namespace WpfPdfViewer
         public async Task<BitmapImage> GetBitmapImageThumbnailAsync()
         {
             var bmi = bitmapImageCache; // first see if we have one 
-            var size = 0ul;
             if (bmi == null)
             {
                 var pdfDoc = await GetPdfDocumentForFileAsync(GetFullPathFileFromVolno(volNo: 0));
@@ -1035,6 +1034,7 @@ namespace WpfPdfViewer
                         DestinationWidth = (uint)150, // match these with choose.xaml
                         DestinationHeight = (uint)225
                     };
+                    ulong size;
                     (bmi, size) = await GetBitMapImageFromPdfPage(pdfPage, PageNumberOffset, renderOpts, cts: null);
                 }
                 bitmapImageCache = bmi;
