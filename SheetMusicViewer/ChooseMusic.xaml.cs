@@ -1,5 +1,4 @@
-﻿using MemSpect;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -284,22 +283,20 @@ namespace SheetMusicViewer
                             _TocEntry = itm
                         };
 
-                var br = new Browse(q,
-                    fAllowHeaderClickSort: true,
-                    fAllowBrowFilter: true,
-                    ColWidths: new[] { 300, 300, 200, 200, 60, 500 });
-                br._BrowseList.SelectionChanged += (o, e) =>
+                var br = new BrowsePanel(q,
+                    colWidths: new[] { 300, 300, 200, 200, 60, 500 });
+                br.BrowseList.SelectionChanged += (o, e) =>
                 {
                     e.Handled = true; // prevent bubbling SelectionChanged up to tabcontrol
                 };
-                br._BrowseList.MouseDoubleClick += (o, e) =>
+                br.BrowseList.MouseDoubleClick += (o, e) =>
                 {
-                    if (br._BrowseList.SelectedIndex >= 0)
+                    if (br.BrowseList.SelectedIndex >= 0)
                     {
                         BtnOk_Click(o, e);
                     }
                 };
-                br._BrowseList.KeyUp += (o, e) =>
+                br.BrowseList.KeyUp += (o, e) =>
                 {
 //                    BtnOk_Click(o, e);
                 };
@@ -573,8 +570,8 @@ namespace SheetMusicViewer
                     }
                     break;
                 case "_Query":
-                    var br = (Browse)this.dpQuery.Children[0];
-                    var selitem = br._BrowseList.SelectedItem;
+                    var br = (BrowsePanel)this.dpQuery.Children[0];
+                    var selitem = br.BrowseList.SelectedItem;
                     if (selitem != null)
                     {
                         var tdescitem = TypeDescriptor.GetProperties(selitem)["_TocEntry"];
