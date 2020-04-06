@@ -27,6 +27,8 @@ namespace SheetMusicViewer
             pdfViewerWindow.SetTitle();
             this._pdfViewerWindow = pdfViewerWindow;
             this._PgNo = PgNo;
+
+#if DEBUG
             //this._pdfViewerWindow.PdfExceptionEvent += _pdfViewerWindow_PdfExceptionEvent;  //this form always leaks, even if "_pdfViewerWindow_PdfExceptionEvent" is empty
             //this._pdfViewerWindow.PdfExceptionEvent += (o, e) =>
             //      { // attempt to cause leak via non-WPF RoutedEvents: just plain C# events
@@ -43,7 +45,6 @@ namespace SheetMusicViewer
             //                  ->System.EventHandler`1<WpfPdfViewer.PdfViewerWindow.PdfExceptionEventAgs>(Target=WpfPdfViewer.MyInkCanvas.<>c__DisplayClass4_0 0x038c9408) 0x038cc7b8 (32)
             //                                       * */
             //      };
-
             var wpfEvhandlerList = GetRoutedEventHandlerList<CheckBox>(_pdfViewerWindow.chkInk0, CheckBox.CheckedEvent);
             foreach (var wpfEvHandler in wpfEvhandlerList)
             {
@@ -61,6 +62,8 @@ namespace SheetMusicViewer
             //  {
             //      this._availSize.ToString(); // this will cause a leak because ref to local member lifted in closure
             //  });
+#endif
+
             _bmImage = bmImage ?? throw new ArgumentNullException("bmImage");
             if (!IsInking)
             {
