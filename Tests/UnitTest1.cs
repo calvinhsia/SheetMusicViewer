@@ -51,8 +51,8 @@ namespace Tests
         //        [Ignore]
         public async Task TestStress()
         {
-            var ev = new ManualResetEventSlim();
-            var c = CreateExecutionContext();
+            var tcsStaThread = new TaskCompletionSource<int>();
+            var c = CreateExecutionContext(tcsStaThread);
             await c.Dispatcher.InvokeAsync(async () =>
             {
                 var w = new SheetMusicViewer.PdfViewerWindow
@@ -61,66 +61,79 @@ namespace Tests
                 };
                 (var lstMetaData, var _) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
                 var testw = new Window();
+                var ctsDone = new CancellationTokenSource();
+                testw.Closed += (o, e) =>
+                  {
+                      ctsDone.Cancel();
+                  };
                 testw.Show();
                 foreach (var currentPdfMetaData in lstMetaData)
                 {
                     AddLogEntry($"Starting {currentPdfMetaData}");
-
+                    w.Title = currentPdfMetaData.ToString();
                     w.currentPdfMetaData = currentPdfMetaData;
                     w.currentPdfMetaData.InitializeListPdfDocuments();
                     //var cacheEntry = PdfViewerWindow.CacheEntry.TryAddCacheEntry(mpdf.PageNumberOffset);
                     //await cacheEntry.task;
                     //// calling thread must be STA, UIThread
                     //var res = cacheEntry.task.Result;
-                    for (var iter = 0; iter < 1; iter++)
+                    try
                     {
-                        for (var pageNo = currentPdfMetaData.PageNumberOffset; pageNo < currentPdfMetaData.MaxPageNum; pageNo++)
+                        for (var iter = 0; iter < 1; iter++)
                         {
-                            var (pdfDoc, pdfPgno) = await currentPdfMetaData.GetPdfDocumentForPageno(pageNo);
-                            //                    var pdfPgNo = currentPdfMetaData.GetPdfVolPageNo(pageNo + i);
-                            if (pdfDoc != null && pdfPgno >= 0 && pdfPgno < pdfDoc.PageCount)
+                            for (var pageNo = currentPdfMetaData.PageNumberOffset; pageNo < currentPdfMetaData.MaxPageNum; pageNo++)
                             {
-                                using (var pdfPage = pdfDoc.GetPage((uint)(pdfPgno)))
+                                ctsDone.Token.ThrowIfCancellationRequested();
+                                var (pdfDoc, pdfPgno) = await currentPdfMetaData.GetPdfDocumentForPageno(pageNo);
+                                //                    var pdfPgNo = currentPdfMetaData.GetPdfVolPageNo(pageNo + i);
+                                if (pdfDoc != null && pdfPgno >= 0 && pdfPgno < pdfDoc.PageCount)
                                 {
-                                    using (var strm = new InMemoryRandomAccessStream())
+                                    using (var pdfPage = pdfDoc.GetPage((uint)(pdfPgno)))
                                     {
-                                        var rect = pdfPage.Dimensions.ArtBox;
-                                        var renderOpts = new PdfPageRenderOptions()
+                                        using (var strm = new InMemoryRandomAccessStream())
                                         {
-                                            DestinationWidth = (uint)rect.Width,
-                                            DestinationHeight = (uint)rect.Height,
-                                        };
-                                        if (pdfPage.Rotation != PdfPageRotation.Normal)
-                                        {
-                                            renderOpts.DestinationHeight = (uint)rect.Width;
-                                            renderOpts.DestinationWidth = (uint)rect.Height;
-                                        }
+                                            var rect = pdfPage.Dimensions.ArtBox;
+                                            var renderOpts = new PdfPageRenderOptions()
+                                            {
+                                                DestinationWidth = (uint)rect.Width,
+                                                DestinationHeight = (uint)rect.Height,
+                                            };
+                                            if (pdfPage.Rotation != PdfPageRotation.Normal)
+                                            {
+                                                renderOpts.DestinationHeight = (uint)rect.Width;
+                                                renderOpts.DestinationWidth = (uint)rect.Height;
+                                            }
 
-                                        await pdfPage.RenderToStreamAsync(strm, renderOpts);
-                                        var bmi = new BitmapImage();
-                                        bmi.BeginInit();
-                                        bmi.StreamSource = strm.AsStream();
-                                        bmi.Rotation = (Rotation)currentPdfMetaData.GetRotation(pageNo);
-                                        bmi.CacheOption = BitmapCacheOption.OnLoad;
-                                        bmi.EndInit();
-                                        //testw.Content = new Image()
-                                        //{
-                                        //    Source = bmi
-                                        //};
-                                        //if (pdfPage.Rotation != PdfPageRotation.Rotate270 && pdfPage.Rotation != PdfPageRotation.Rotate90)
-                                        //{
-                                        //    AddLogEntry($"got page {pageNo,5}   strms={strm.Size,10:n0} {pdfPage.Rotation,10} {rect}  {currentPdfMetaData} ");
-                                        //}
+                                            await pdfPage.RenderToStreamAsync(strm, renderOpts);
+                                            var bmi = new BitmapImage();
+                                            bmi.BeginInit();
+                                            bmi.StreamSource = strm.AsStream();
+                                            bmi.Rotation = (Rotation)currentPdfMetaData.GetRotation(pageNo);
+                                            bmi.CacheOption = BitmapCacheOption.OnLoad;
+                                            bmi.EndInit();
+                                            testw.Content = new Image()
+                                            {
+                                                Source = bmi
+                                            };
+                                            if (pdfPage.Rotation != PdfPageRotation.Rotate270 && pdfPage.Rotation != PdfPageRotation.Rotate90)
+                                            {
+                                                AddLogEntry($"got page {pageNo,5}   strms={strm.Size,10:n0} {pdfPage.Rotation,10} {rect}  {currentPdfMetaData} ");
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
+
+                    }
+                    catch (OperationCanceledException)
+                    {
                     }
                 }
+                c.Dispatcher.InvokeShutdown();
                 AddLogEntry("Done all");
-                ev.Set();
             });
-            ev.Wait();
+            await tcsStaThread.Task;
         }
 
         [TestMethod]
@@ -137,7 +150,8 @@ namespace Tests
             //});
             //dispThread.SetApartmentState(ApartmentState.STA);
             //dispThread.Start();
-            var c = CreateExecutionContext();
+            var tcsStaThread = new TaskCompletionSource<int>();
+            var c = CreateExecutionContext(tcsStaThread);
             await c.Dispatcher.InvokeAsync((Func<Task>)(async () =>
             {
                 var w = new global::SheetMusicViewer.PdfViewerWindow(Rootfolder)
@@ -183,12 +197,12 @@ namespace Tests
             ev.Wait();
         }
 
-        private ExecutionContext CreateExecutionContext()
+        private MyExecutionContext CreateExecutionContext(TaskCompletionSource<int> tcsStaThread)
         {
-            const string Threadname = "MyMockUIThread";
-            var tcs = new TaskCompletionSource<ExecutionContext>();
+            const string Threadname = "MySTAThread";
+            var tcs = new TaskCompletionSource<MyExecutionContext>();
 
-            var mockUIThread = new Thread(() =>
+            var mySTAThread = new Thread(() =>
             {
                 // Create the context, and install it:
                 var dispatcher = Dispatcher.CurrentDispatcher;
@@ -196,7 +210,7 @@ namespace Tests
 
                 SynchronizationContext.SetSynchronizationContext(syncContext);
 
-                tcs.SetResult(new ExecutionContext
+                tcs.SetResult(new MyExecutionContext
                 {
                     DispatcherSynchronizationContext = syncContext,
                     Dispatcher = dispatcher
@@ -205,19 +219,19 @@ namespace Tests
                 // Start the Dispatcher Processing
                 AddLogEntry($"{Threadname}  dispatcher run");
                 Dispatcher.Run();
-                AddLogEntry($"{Threadname} done");
-                "".ToString();
+                AddLogEntry($"{Threadname} dispatcher done");
+                tcsStaThread.SetResult(0);
             });
 
-            mockUIThread.SetApartmentState(ApartmentState.STA);
-            mockUIThread.Name = Threadname;
+            mySTAThread.SetApartmentState(ApartmentState.STA);
+            mySTAThread.Name = Threadname;
             AddLogEntry($"{Threadname} start");
-            mockUIThread.Start();
+            mySTAThread.Start();
 
             return tcs.Task.Result;
         }
 
-        internal class ExecutionContext
+        internal class MyExecutionContext
         {
             public DispatcherSynchronizationContext DispatcherSynchronizationContext { get; set; }
             public Dispatcher Dispatcher { get; set; }
@@ -363,7 +377,8 @@ namespace Tests
         {
             var failMessage = string.Empty;
             var ev = new ManualResetEventSlim();
-            var c = CreateExecutionContext();
+            var tcsStaThread = new TaskCompletionSource<int>();
+            var c = CreateExecutionContext(tcsStaThread);
             await c.Dispatcher.InvokeAsync(async () =>
             {
                 try
@@ -462,7 +477,8 @@ namespace Tests
         {
             var failMessage = string.Empty;
             var ev = new ManualResetEventSlim();
-            var c = CreateExecutionContext();
+            var tcsStaThread = new TaskCompletionSource<int>();
+            var c = CreateExecutionContext(tcsStaThread);
             await c.Dispatcher.InvokeAsync(async () =>
             {
                 try
