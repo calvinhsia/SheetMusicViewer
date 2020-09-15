@@ -377,7 +377,7 @@ namespace SheetMusicViewer
                     {
                         if (this.rbtnByDate.IsChecked == true)
                         {
-                            var date = (new System.IO.FileInfo(p.PdfBmkMetadataFileName)).LastAccessTime;
+                            var date = (new System.IO.FileInfo(p.PdfBmkMetadataFileName)).LastWriteTime;
                             return (DateTime.Now - date).TotalSeconds.ToString("0000000000");
                         }
                         else if (this.rbtnByFolder.IsChecked == true)
