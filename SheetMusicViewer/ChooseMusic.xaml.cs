@@ -377,7 +377,7 @@ namespace SheetMusicViewer
                     {
                         if (this.rbtnByDate.IsChecked == true)
                         {
-                            var date = (new System.IO.FileInfo(p.PdfBmkMetadataFileName)).LastWriteTime;
+                            var date = p.dtLastWrite; // (new System.IO.FileInfo(p.PdfBmkMetadataFileName)).LastWriteTime;
                             return (DateTime.Now - date).TotalSeconds.ToString("0000000000");
                         }
                         else if (this.rbtnByFolder.IsChecked == true)
@@ -426,7 +426,9 @@ namespace SheetMusicViewer
                 var sp = new StackPanel() { Orientation = Orientation.Vertical };
                 contentControl.Tag = pdfMetaDataItem;
                 await pdfMetaDataItem.GetBitmapImageThumbnailAsync();
-                sp.Children.Add(new Image() { Source = pdfMetaDataItem?.bitmapImageCache });
+                var img = new Image() { Source = pdfMetaDataItem?.bitmapImageCache };
+                img.ToolTip = $"{pdfMetaDataItem} + {pdfMetaDataItem.dtLastWrite}";
+                sp.Children.Add(img);
                 sp.Children.Add(new TextBlock()
                 {
                     Text = pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true),

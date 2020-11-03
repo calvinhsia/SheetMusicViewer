@@ -64,8 +64,7 @@ namespace SheetMusicViewer
         /// <summary>
         /// to prevent overwriting of data written externally 
         /// </summary>
-        [XmlIgnore]
-        DateTime dtLastWrite;
+        public DateTime dtLastWrite;
 
         /// <summary>
         /// The Table of contents of a songbook shows the physical page numbers, which may not match the actual PDF page numbers (there could be a cover page scanned or could be a multivolume set, or 30 pages of intro, and then page 1 has the 1st song)
@@ -417,7 +416,7 @@ namespace SheetMusicViewer
                         {
                             if (ex.Data.Contains("Filename"))
                             {
-                                lastFile += " "+ ex.Data["Filename"];
+                                lastFile += " " + ex.Data["Filename"];
                             }
                             PdfViewerWindow.s_pdfViewerWindow.OnException($"Exception reading files {curPath} near {lastFile}", ex);
                         }
@@ -618,12 +617,16 @@ namespace SheetMusicViewer
                 try
                 {
                     var serializer = new XmlSerializer(typeof(PdfMetaData));
-                    var dtLastWriteTime = (new FileInfo(bmkFile)).LastWriteTime;
+                    //                    var dtLastWriteTime = (new FileInfo(bmkFile)).LastWriteTime;
                     using (var sr = new StreamReader(bmkFile))
                     {
                         pdfFileData = (PdfMetaData)serializer.Deserialize(sr);
                         pdfFileData._FullPathFile = FullPathPdfFileOrSinglesFolder;
-                        pdfFileData.dtLastWrite = dtLastWriteTime;
+                        //                        pdfFileData.dtLastWrite = dtLastWriteTime;
+                        if (pdfFileData.dtLastWrite.Year < 1900)
+                        {
+                            pdfFileData.dtLastWrite = (new FileInfo(bmkFile)).LastWriteTime;
+                        }
                         pdfFileData.initialLastPageNo = pdfFileData.LastPageNo;
                         pdfFileData.IsSinglesFolder = IsSingles;
                         if (pdfFileData.lstVolInfo.Count == 0) // There should be at least one for each PDF in a series. If no series, there should be 1 for itself.
@@ -661,6 +664,7 @@ namespace SheetMusicViewer
                 {
                     _FullPathFile = FullPathPdfFileOrSinglesFolder,
                     IsSinglesFolder = IsSingles,
+                    dtLastWrite = DateTime.Now,
                     IsDirty = true
                 };
                 var doc = await GetPdfDocumentForFileAsync(FullPathPdfFileOrSinglesFolder);
@@ -819,7 +823,7 @@ namespace SheetMusicViewer
             InitializeListPdfDocuments(); // reinit list to clear out results to save mem
             if (!PdfViewerWindow.s_pdfViewerWindow.IsTesting)
             {
-                if (IsDirty || ForceDirty || initialLastPageNo != LastPageNo)
+                if (IsDirty || ForceDirty ) //|| initialLastPageNo != LastPageNo) // must change pageno to dirty
                 {
                     try
                     {
@@ -861,8 +865,7 @@ namespace SheetMusicViewer
                                 serializer.Serialize(w, this);
                             }
                         }
-                        var newdt = (new FileInfo(bmkFile)).LastWriteTime;
-                        dtLastWrite = newdt;
+                        dtLastWrite = DateTime.Now;
                     }
                     catch (Exception ex)
                     {

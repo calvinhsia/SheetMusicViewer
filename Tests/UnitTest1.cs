@@ -48,6 +48,28 @@ namespace Tests
         //        readonly string testPdf = @"C:\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
 
         [TestMethod]
+        public async Task TestUpdaateBmkWriteTime()
+        {
+            var tcsStaThread = new TaskCompletionSource<int>();
+            var c = CreateExecutionContext(tcsStaThread);
+            await c.Dispatcher.InvokeAsync(async () =>
+                {
+                    var w = new SheetMusicViewer.PdfViewerWindow
+                    {
+                        _RootMusicFolder = Rootfolder
+                    };
+                    (var lstMetaData, var _) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
+                    foreach (var itm in lstMetaData)
+                    {
+//                        itm.SaveIfDirty(ForceDirty: true);
+                    }
+                    c.Dispatcher.InvokeShutdown();
+                    AddLogEntry("Done all");
+                });
+            await tcsStaThread.Task;
+        }
+
+        [TestMethod]
         //        [Ignore]
         public async Task TestStress()
         {
