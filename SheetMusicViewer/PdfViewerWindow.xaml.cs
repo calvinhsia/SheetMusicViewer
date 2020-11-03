@@ -473,12 +473,14 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                         this.dpPage.Children.Clear();
                         this.dpPage.Children.Add(gridContainer);
                         OnMyPropertyChanged(nameof(Description0));
+                        this.chkFavoriteEnabled = false;
                         chkFav0.IsChecked = currentPdfMetaData.IsFavorite(pageNo);
                         if (NumPagesPerView > 1)
                         {
                             OnMyPropertyChanged(nameof(Description1));
                             chkFav1.IsChecked = currentPdfMetaData.IsFavorite(pageNo + 1);
                         }
+                        this.chkFavoriteEnabled = true;
                     }
                     catch (OperationCanceledException ex)
                     {
@@ -599,10 +601,13 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         }
         private void ChkFavToggled(object sender, RoutedEventArgs e)
         {
-            var nameSender = ((CheckBox)sender).Name;
-            var pgno = CurrentPageNumber + (nameSender == "chkFav0" ? 0 : 1);
-            var isChked = e.RoutedEvent.Name == "Checked";
-            currentPdfMetaData.ToggleFavorite(pgno, isChked);
+            if (this.chkFavoriteEnabled)
+            {
+                var nameSender = ((CheckBox)sender).Name;
+                var pgno = CurrentPageNumber + (nameSender == "chkFav0" ? 0 : 1);
+                var isChked = e.RoutedEvent.Name == "Checked";
+                currentPdfMetaData.ToggleFavorite(pgno, isChked);
+            }
         }
 
         private async void ChkInkToggled(object sender, RoutedEventArgs e)
@@ -1057,6 +1062,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         }
         private static readonly Stopwatch _doubleTapStopwatch = new Stopwatch();
         private static Point _lastTapLocation;
+        private bool chkFavoriteEnabled;
 
         public static double GetDistanceBetweenPoints(Point p, Point q)
         {
