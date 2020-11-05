@@ -823,8 +823,9 @@ namespace SheetMusicViewer
             InitializeListPdfDocuments(); // reinit list to clear out results to save mem
             if (!PdfViewerWindow.s_pdfViewerWindow.IsTesting)
             {
-                if (IsDirty || ForceDirty ) //|| initialLastPageNo != LastPageNo) // must change pageno to dirty
+                if (IsDirty || ForceDirty || initialLastPageNo != LastPageNo) // must change pageno to dirty
                 {
+                    var tempfile = Path.ChangeExtension(Path.GetTempFileName(), ".bmk");
                     try
                     {
                         if (_FullPathFile.Contains("Everybody"))
@@ -834,19 +835,21 @@ namespace SheetMusicViewer
                         var bmkFile = PdfBmkMetadataFileName;
                         if (File.Exists(bmkFile))
                         {
-                            var dt = (new FileInfo(bmkFile)).LastWriteTime;
-                            if (dt != dtLastWrite)
-                            {
-                                if (MessageBox.Show(
-                                    $"{bmkFile} \nOriginal {dtLastWrite} \nCurrent {dt}",
-                                    $"File already exists. Replace original?",
-                                    MessageBoxButton.YesNo) != MessageBoxResult.Yes)
-                                {
-                                    return;
-                                }
-                            }
+                            File.Copy(bmkFile, tempfile);
+                            //var dt = (new FileInfo(bmkFile)).LastWriteTime;
+                            //if (dt != dtLastWrite)
+                            //{
+                            //    if (MessageBox.Show(
+                            //        $"{bmkFile} \nOriginal {dtLastWrite} \nCurrent {dt}",
+                            //        $"File already exists. Replace original?",
+                            //        MessageBoxButton.YesNo) != MessageBoxResult.Yes)
+                            //    {
+                            //        return;
+                            //    }
+                            //}
                             File.Delete(bmkFile);
                         }
+                        dtLastWrite = DateTime.Now;
                         var serializer = new XmlSerializer(typeof(PdfMetaData));
                         var settings = new XmlWriterSettings()
                         {
@@ -865,11 +868,14 @@ namespace SheetMusicViewer
                                 serializer.Serialize(w, this);
                             }
                         }
-                        dtLastWrite = DateTime.Now;
                     }
                     catch (Exception ex)
                     {
                         MessageBox.Show("Exception saving file " + ex.ToString());
+                        if (File.Exists(tempfile) && !File.Exists(PdfBmkMetadataFileName))
+                        {
+                            File.Copy(tempfile, PdfBmkMetadataFileName);
+                        }
                     }
                 }
             }
