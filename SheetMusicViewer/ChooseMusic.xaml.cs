@@ -23,7 +23,6 @@ namespace SheetMusicViewer
         readonly PdfViewerWindow _pdfViewerWindow;
         TreeView _TreeView;
         bool doneLoading = false;
-        readonly List<Favorite> _lstFavoriteEntries = new List<Favorite>();
 
         public PdfMetaData chosenPdfMetaData = null;
         public ChooseMusic(PdfViewerWindow pdfViewerWindow)
@@ -259,32 +258,35 @@ namespace SheetMusicViewer
         {
             if (this.dpQuery.Children.Count == 0 && _pdfViewerWindow.lstPdfMetaFileData != null)
             {
-                var uberToc = new List<TOCEntry>();
-                foreach (var pdfMetaDataItem in
-                    _pdfViewerWindow.
-                    lstPdfMetaFileData.
-                    OrderBy(p => p.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true)))
+                var uberToc = new List<Tuple<PdfMetaData, TOCEntry>>();
+                foreach (var pdfMetaDataItem in _pdfViewerWindow.lstPdfMetaFileData)
                 {
                     foreach (var tentry in pdfMetaDataItem.lstTocEntries)
                     {
-                        tentry.Tag = pdfMetaDataItem;
-                        uberToc.Add(tentry);
+                        uberToc.Add(Tuple.Create(pdfMetaDataItem, tentry));
                     }
                 }
-                var q = from itm in uberToc
+                var q = from tup in uberToc
+                        let itm = tup.Item2
+                        let FileInfo = new FileInfo(tup.Item1.GetFullPathFileFromPageNo(itm.PageNo))
+                        orderby itm.SongName
                         select new
                         {
                             itm.SongName,
                             itm.Composer,
-                            itm.Date,
+                            CompositionDate = itm.Date,
+                            Page = itm.PageNo,
+                            Fav = tup.Item1.IsFavorite(itm.PageNo) ? "Fav" : string.Empty,
+                            BookName = tup.Item1.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true),
                             itm.Notes,
-                            itm.PageNo,
-                            BookName = ((PdfMetaData)itm.Tag).GetFullPathFileFromVolno(volNo: 0, MakeRelative: true),
-                            _TocEntry = itm
+                            Acquisition = FileInfo.LastWriteTime,
+                            Access = FileInfo.LastAccessTime,
+                            Created = FileInfo.CreationTime,
+                            _Tup = tup
                         };
 
                 var br = new BrowsePanel(q,
-                    colWidths: new[] { 300, 300, 200, 200, 60, 500 });
+                    colWidths: new[] { 300, 100, 100, 40, 40, 500 });
                 br.BrowseList.SelectionChanged += (o, e) =>
                 {
                     e.Handled = true; // prevent bubbling SelectionChanged up to tabcontrol
@@ -298,7 +300,7 @@ namespace SheetMusicViewer
                 };
                 br.BrowseList.KeyUp += (o, e) =>
                 {
-//                    BtnOk_Click(o, e);
+                    //                    BtnOk_Click(o, e);
                 };
                 this.dpQuery.Children.Add(br);
             }
@@ -422,9 +424,8 @@ namespace SheetMusicViewer
                         continue;
                     }
                 }
-                var contentControl = new ContentControl(); // ContentControl has doubleclick event
+                var contentControl = new MyContentControl(pdfMetaDataItem); // ContentControl has doubleclick event
                 var sp = new StackPanel() { Orientation = Orientation.Vertical };
-                contentControl.Tag = pdfMetaDataItem;
                 await pdfMetaDataItem.GetBitmapImageThumbnailAsync();
                 var img = new Image() { Source = pdfMetaDataItem?.bitmapImageCache };
                 img.ToolTip = $"{pdfMetaDataItem} + {pdfMetaDataItem.dtLastWrite}";
@@ -478,6 +479,7 @@ namespace SheetMusicViewer
                 _TreeView = new TreeView();
                 this.dpTview.Children.Clear();
                 this.dpTview.Children.Add(_TreeView);
+                var lstFavoriteEntries = new List<Tuple<PdfMetaData, Favorite>>();
 
                 var tvitemFavorites = new TreeViewItem()
                 {
@@ -493,21 +495,19 @@ namespace SheetMusicViewer
                     {
                         foreach (var fav in pdfMetaDataItem.dictFav.Values)
                         {
-                            fav.Tag = pdfMetaDataItem;
-                            _lstFavoriteEntries.Add(fav);
+                            lstFavoriteEntries.Add(Tuple.Create(pdfMetaDataItem, fav));
                         }
                     }
 
-                    foreach (var favEntry in _lstFavoriteEntries)
+                    foreach (var tupFav in lstFavoriteEntries)
                     {
                         var sp = new StackPanel() { Orientation = Orientation.Horizontal };
-                        sp.Children.Add(new Image() { Source = await ((PdfMetaData)favEntry.Tag).GetBitmapImageThumbnailAsync(), Height = 80, Width = 50 });
-                        sp.Children.Add(new TextBlock() { Text = ((PdfMetaData)favEntry.Tag).GetDescription(favEntry.Pageno) });
-                        sp.Children.Add(new TextBlock() { Text = $" Page {favEntry.Pageno}" });
-                        var tvItem = new TreeViewItem()
+                        sp.Children.Add(new Image() { Source = await tupFav.Item1.GetBitmapImageThumbnailAsync(), Height = 80, Width = 50 });
+                        sp.Children.Add(new TextBlock() { Text = tupFav.Item1.GetDescription(tupFav.Item2.Pageno) });
+                        sp.Children.Add(new TextBlock() { Text = $" Page {tupFav.Item2.Pageno}" });
+                        var tvItem = new MyTreeViewItem(tupFav.Item1, tupFav.Item2)
                         {
-                            Header = sp,
-                            Tag = favEntry
+                            Header = sp
                         };
                         tvitemFavorites.Items.Add(tvItem);
                     }
@@ -535,11 +535,8 @@ namespace SheetMusicViewer
                 case "_Books":
                     if (this.lbBooks.SelectedIndex >= 0)
                     {
-                        var tg = (this.lbBooks.SelectedItem as FrameworkElement)?.Tag;
-                        if (tg is PdfMetaData pdfMetaDataItem)
-                        {
-                            chosenPdfMetaData = pdfMetaDataItem;
-                        }
+                        var mycontent = this.lbBooks.SelectedItem as MyContentControl;
+                        chosenPdfMetaData = mycontent.pdfMetaDataItem;
                     }
                     else
                     {
@@ -556,18 +553,10 @@ namespace SheetMusicViewer
                 case "Fa_vorites":
                     if (_TreeView.SelectedItem != null)
                     {
-                        var tg = ((TreeViewItem)_TreeView.SelectedItem).Tag;
-                        if (tg != null)
+                        if (_TreeView.SelectedItem is MyTreeViewItem myTreeViewItem)
                         {
-                            if (tg is Favorite favoriteEntry)
-                            {
-                                chosenPdfMetaData = (PdfMetaData)favoriteEntry.Tag;
-                                chosenPdfMetaData.LastPageNo = favoriteEntry.Pageno;
-                            }
-                            else
-                            {
-                                chosenPdfMetaData = (PdfMetaData)tg;
-                            }
+                            chosenPdfMetaData = myTreeViewItem.pdfMetaData;
+                            chosenPdfMetaData.LastPageNo = myTreeViewItem.favEntry.Pageno;
                         }
                     }
                     break;
@@ -576,10 +565,10 @@ namespace SheetMusicViewer
                     var selitem = br.BrowseList.SelectedItem;
                     if (selitem != null)
                     {
-                        var tdescitem = TypeDescriptor.GetProperties(selitem)["_TocEntry"];
-                        var TocEntry = (TOCEntry)tdescitem.GetValue(selitem);
-                        chosenPdfMetaData = (PdfMetaData)TocEntry.Tag;
-                        chosenPdfMetaData.LastPageNo = TocEntry.PageNo;
+                        var tdescitem = TypeDescriptor.GetProperties(selitem)["_Tup"];
+                        Tuple<PdfMetaData, TOCEntry> tup = (Tuple<PdfMetaData, TOCEntry>)tdescitem.GetValue(selitem);
+                        chosenPdfMetaData = tup.Item1;
+                        chosenPdfMetaData.LastPageNo = tup.Item2.PageNo;
                     }
                     break;
                 case "_Playlists":
@@ -655,5 +644,27 @@ namespace SheetMusicViewer
             e.Handled = true;
         }
 
+    }
+    internal class MyContentControl : ContentControl
+    {
+        public PdfMetaData pdfMetaDataItem;
+        public MyContentControl()
+        {
+        }
+
+        public MyContentControl(PdfMetaData pdfMetaDataItem)
+        {
+            this.pdfMetaDataItem = pdfMetaDataItem;
+        }
+    }
+    internal class MyTreeViewItem : TreeViewItem
+    {
+        public readonly PdfMetaData pdfMetaData;
+        public readonly Favorite favEntry;
+        public MyTreeViewItem(PdfMetaData pdfMetaData, Favorite favEntry)
+        {
+            this.pdfMetaData = pdfMetaData;
+            this.favEntry = favEntry;
+        }
     }
 }

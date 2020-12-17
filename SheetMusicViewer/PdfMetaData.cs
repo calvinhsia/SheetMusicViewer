@@ -214,6 +214,10 @@ namespace SheetMusicViewer
         public string GetFullPathFileFromPageNo(int pageNo)
         {
             var volNo = GetVolNumFromPageNum(pageNo);
+            if (volNo >= this.lstVolInfo.Count)
+            {
+                volNo = this.lstVolInfo.Count - 1;
+            }
             var retval = GetFullPathFileFromVolno(volNo);
             return retval;
         }
@@ -1175,8 +1179,6 @@ namespace SheetMusicViewer
     public class Favorite : PageNoBaseClass //: ICloneable
     {
         public string FavoriteName { get; set; }
-        [XmlIgnore]
-        public object Tag;
 
         //public object Clone()
         //{
@@ -1209,11 +1211,11 @@ namespace SheetMusicViewer
         public string SongName { get; set; }
         public string Composer { get; set; }
         public string Notes { get; set; }
+        /// <summary>
+        /// Composition Date
+        /// </summary>
         public string Date { get; set; }
         public int PageNo { get; set; }
-        [XmlIgnore]
-        public object Tag;
-
         public object Clone()
         {
             return new TOCEntry()
