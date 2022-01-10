@@ -35,8 +35,8 @@
                             </StackPanel>
                         </TextBox.ToolTip>
                     </TextBox>
-                    <Button Content="_Import from clipboard" Margin="10,0,0,0" ToolTip="Import TOC from clipboard tab separated values (will clear TOC first) Copy multi columns from Excel &#10;Column order= PageNo,Songname, Composer, Date, Notes. Empty columns are fine. Will append to existing data" Click="BtnImport_Click" />
-                    <Button Content="_Export to clipboard" Margin="10,0,0,0" ToolTip="Export TOC to clipboard to paste to Excel" Click="BtnExport_Click" />
+                    <Button Content="_Import from clipboard" Margin="10,0,0,0" ToolTip="Import TOC from clipboard tab separated values (will clear TOC first. Don't use header) Copy multi columns from Visual Studio or Excel &#10;Column order= PageNo,Songname, Composer, Date, Notes. Empty columns are fine. Will append to existing data" Click="BtnImport_Click" />
+                    <Button Content="_Export to clipboard" Margin="10,0,0,0" ToolTip="Export TOC to clipboard to paste to Excel or Visual Studio" Click="BtnExport_Click" />
                     <Button Content="_Cancel" Margin="10,0,0,0" ToolTip="Discard all changes"  Click="BtnCancel_Click" IsCancel="True"/>
                     <Button Content="_Save" Margin="10,0,40,1" ToolTip="Save all changes"  Click="BtnSave_Click" Width="50" IsDefault="True"/>
                 </StackPanel>
@@ -73,7 +73,12 @@
                 </Grid>
             </StackPanel>
         </Grid>
-        <DockPanel Grid.Row="1" Margin="0,0,0,5">
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="900"/>
+                <ColumnDefinition Width="3"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
             <ListView x:Name="lvTOC" ItemsSource="{Binding LstTOC}" IsSynchronizedWithCurrentItem="False" MouseDoubleClick="LvTOC_MouseDoubleClick" TouchDown="LvTOC_TouchDown" >
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
@@ -113,21 +118,16 @@
                         <GridViewColumn Header="Notes">
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
-                                    <TextBox Text="{Binding Notes}" />
+                                    <TextBox Text="{Binding Notes}" Width="200" ToolTip ="{Binding Notes}"/>
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
                         </GridViewColumn>
-                        <!--<GridViewColumn Header="PageNo" DisplayMemberBinding="{Binding PageNo}"/>
-                        <GridViewColumn Header="SongName" DisplayMemberBinding="{Binding SongName}"/>
-                        <GridViewColumn Header="Composer" DisplayMemberBinding="{Binding Path=Composer}"/>
-                        <GridViewColumn Header="Date" DisplayMemberBinding="{Binding Path=Date}"/>
-                        <GridViewColumn Header="Notes" DisplayMemberBinding="{Binding Path=Notes}"/>-->
-
                     </GridView>
 
                 </ListView.View>
             </ListView>
-            <ListView Name="lvFav" ItemsSource="{Binding LstFavDisp}" TouchDown="LvFav_TouchDown" MouseDoubleClick="LvFav_MouseDoubleClick" >
+            <GridSplitter Grid.Row = "1" Grid.Column = "1" HorizontalAlignment="Center" VerticalAlignment="Stretch" Width = "3"/>
+            <ListView Name="lvFav" ItemsSource="{Binding LstFavDisp}" Grid.Column ="2" TouchDown="LvFav_TouchDown" MouseDoubleClick="LvFav_MouseDoubleClick" >
                 <ListView.View>
                     <GridView>
                         <GridViewColumn Header="Page" DisplayMemberBinding="{Binding Path=PageNo}"/>
@@ -135,7 +135,6 @@
                     </GridView>
                 </ListView.View>
             </ListView>
-        </DockPanel>
-
+        </Grid>
     </Grid>
 </Window>
