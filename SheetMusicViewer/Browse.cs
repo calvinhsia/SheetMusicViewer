@@ -64,12 +64,14 @@ namespace SheetMusicViewer
         readonly TextBox _txtFilter = new TextBox { Width = 200 };
         readonly TextBlock _txtStatus = new TextBlock();
         readonly BrowseList _browse;
+        private static string _LastFilter;
         internal ListFilter(BrowseList browse)
         {
             _browse = browse;
             var spFilter = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Right };
             spFilter.Children.Add(_txtStatus);
             spFilter.Children.Add(new Label { Content = "StringFilter", ToolTip = "Case insenSitive search in character fields. A filter works on current set" });
+            _txtFilter.Text = _LastFilter;
             spFilter.Children.Add(_txtFilter);
             spFilter.Children.Add(_btnApply);
             _btnApply.Click += (oc, ec) => { On_BtnApply_Click(oc, ec); };
@@ -98,6 +100,7 @@ namespace SheetMusicViewer
             {
                 e.Handled = true;
                 var filtText = _txtFilter.Text.Trim().ToLower();
+                _LastFilter = filtText;
                 if (string.IsNullOrEmpty(filtText))
                 {
                     _browse.Items.Filter = null;
