@@ -49,6 +49,10 @@ namespace SheetMusicViewer
                 this.Message = Message;
             }
         }
+
+        private int _TouchCount;
+        public int TouchCount { get { return _TouchCount; } set { _TouchCount = value; OnMyPropertyChanged(); } }
+
         public bool IsTesting; // if testing, we don't want to save bookmarks, lastpageno, etc.
         public void OnException(string Message, Exception ex)
         {
@@ -662,6 +666,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 
         async void BtnPrevNext_Click(object sender, RoutedEventArgs e)
         {
+            TouchCount++;
             var isPrevious = sender is Button b && b.Name == "btnPrev";
             if (currentPdfMetaData.dictFav.Count > 0)
             {
@@ -710,6 +715,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         int lastTouchTimeStamp = 0; //msecs wraps neg in 24.9 days  
         private void DpPage_TouchDown(object sender, TouchEventArgs e)
         {
+            TouchCount++;
             var diff = Math.Abs(e.Timestamp - lastTouchTimeStamp);
             if (diff > System.Windows.Forms.SystemInformation.DoubleClickTime) // == 500) // debounce
             {
@@ -720,6 +726,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         }
         private void DpPage_MouseDown(object sender, MouseButtonEventArgs e)
         {
+            TouchCount++;
             var diff = Math.Abs(e.Timestamp - lastTouchTimeStamp);
             if (diff > System.Windows.Forms.SystemInformation.DoubleClickTime) // == 500) // a touch can also send mousedown events. So filter out mousedown immediately after a touch
             {
@@ -851,6 +858,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         }
         async void BtnChooser_Click(object sender, RoutedEventArgs e)
         {
+            TouchCount++;
             await ChooseMusic();
         }
         void BtnQuit_Click(object sender, RoutedEventArgs e)
