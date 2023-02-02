@@ -865,6 +865,11 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         {
             this.Close();
         }
+        async void BtnInvCache_Click(object sender, RoutedEventArgs e) {
+            //Bug 43106054: PDF RenderToStreamAsync produces different results with same page https://microsoft.visualstudio.com/OS/_workitems/edit/43106054/  
+            await ShowPageAsync(CurrentPageNumber, ClearCache: true, forceRedraw: true, resetRenderTransform: true);
+        }
+
         internal void CloseCurrentPdfFile()
         {
             this.dpPage.Children.Clear();

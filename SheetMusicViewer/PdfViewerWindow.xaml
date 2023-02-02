@@ -81,6 +81,7 @@
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" >
                     <Button Content="_Quit"  Margin="0,0,20,0" Click="BtnQuit_Click"/>
+                    <Button Content="InvCache"  Margin="0,0,20,0" Click="BtnInvCache_Click" ToolTip="Invalidate PDF cache to re-render: Windows bug: can render differently each time"/>
                     <TextBlock Width="17" Text="{Binding TouchCount}"/>
                     <CheckBox Name="chkInk1" Content="Ink" Focusable="False" IsEnabled="{Binding PdfUIEnabled}" ToolTip="Turn on/off inking with mouse or pen" Unchecked="ChkInkToggled" Checked="ChkInkToggled"/>
                     <CheckBox Name="chkFav1" Foreground="Lime" Content="Fav" Checked="ChkFavToggled" Unchecked="ChkFavToggled" Focusable="False" IsEnabled="{Binding PdfUIEnabled}" />
