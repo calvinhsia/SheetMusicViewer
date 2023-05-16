@@ -160,7 +160,7 @@ namespace Tests
         }
 
         [TestMethod]
-        //        [Ignore]
+        [Ignore]
         public async Task TestStress()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -245,7 +245,7 @@ namespace Tests
             AddLogEntry("Done all..exit test");
         }
         [TestMethod]
-        //        [Ignore]
+        [Ignore]
         public async Task TestStressOnePage()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -362,7 +362,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
                 var lvData = (ListView)grid.FindName("lvData");
                 testw.Content = grid;
                 testw.Show();
-                var folder = $@"{GetSheetMusicFolder()}\SheetMusic\Ragtime\Collections";
+                var folder = $@"{GetSheetMusicFolder()}\Ragtime\Collections";
                 var lstdata = new ObservableCollection<string>();
                 lvData.ItemsSource = lstdata;
                 foreach (var pdfFileName in Directory.EnumerateFiles(folder, "*.pdf"))
@@ -432,7 +432,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
 
 
         [TestMethod]
-        // [Ignore]
+        [Ignore]
         public async Task TestCache()
         {
             var ev = new ManualResetEventSlim();

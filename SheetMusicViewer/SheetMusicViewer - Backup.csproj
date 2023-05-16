@@ -1,17 +1,5 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <!-- 
-    1>C:\Program Files\dotnet\sdk\7.0.203\Sdks\Microsoft.NET.Sdk\targets\Microsoft.NET.Sdk.targets(1033,5): 
-    error NETSDK1130: Windows.winmd cannot be referenced. Referencing a Windows Metadata component directly when targeting .NET 5 or higher is not supported. For more information, see https://aka.ms/netsdk1130
-
-    https://learn.microsoft.com/en-us/dotnet/core/tools/sdk-errors/netsdk1130
-    
-https://stackoverflow.com/questions/70266249/referencing-a-windows-metadata-component-directly-when-targeting-net-5-or-highe
-<TargetFramework>net6.0-windows$([Microsoft.Build.Utilities.ToolLocationHelper]::GetLatestSDKTargetPlatformVersion('Windows', '10.0'))</TargetFramework>
-https://blogs.windows.com/windowsdeveloper/2020/09/03/calling-windows-apis-in-net5/
-
-
--->
     <TargetFramework>net7.0-windows10.0.19041.0</TargetFramework>
     <OutputType>WinExe</OutputType>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
@@ -23,12 +11,21 @@ https://blogs.windows.com/windowsdeveloper/2020/09/03/calling-windows-apis-in-ne
     <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <PlatformTarget>x64</PlatformTarget>
     <DebugSymbols>true</DebugSymbols>
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationIcon>Music.ico</ApplicationIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System.Printing" />
+    <Reference Include="System.Runtime.WindowsRuntime, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\..\..\..\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETCore\v4.5\System.Runtime.WindowsRuntime.dll</HintPath>
+    </Reference>
+    <Reference Include="Windows">
+      <HintPath>..\..\..\..\..\..\Program Files (x86)\Windows Kits\10\UnionMetadata\10.0.19041.0\Windows.winmd</HintPath>
+    </Reference>
+  </ItemGroup>
   <ItemGroup>
     <Resource Include="Music.ico" />
   </ItemGroup>
@@ -38,6 +35,16 @@ https://blogs.windows.com/windowsdeveloper/2020/09/03/calling-windows-apis-in-ne
     <PackageReference Include="System.ValueTuple">
       <Version>4.5.0</Version>
     </PackageReference>
+    <PackageReference Include="Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers" Version="0.4.421302">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.Windows.Compatibility" Version="7.0.1" />
   </ItemGroup>
+  <PropertyGroup>
+    <PostBuildEvent>call "$(DevEnvDir)..\..\vc\Auxiliary\build\vcvarsall.bat" x86
+EditBin.exe "$(TargetPath)"  /LARGEADDRESSAWARE
+dumpbin /headers "$(TargetPath)"  | find /i "large"
+echo done
+</PostBuildEvent>
+  </PropertyGroup>
 </Project>
