@@ -93,7 +93,7 @@ namespace Tests
         {
             TestContext.WriteLine($"{DateTime.Now} Starting test {TestContext.TestName}");
         }
-        public string GetSheetMusicFolder()
+        public static string GetSheetMusicFolder()
         {
             var folder = @"C:\Users\calvinh\OneDrive";
             if (!Directory.Exists(folder))
@@ -628,7 +628,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
                     Directory.Delete(singlesFolder, recursive: true);
                 }
                 Directory.CreateDirectory(singlesFolder);
-                sourceFiles = Directory.GetFiles(Path.Combine(test.GetSheetMusicFolder(), @"ragtime\singles"), "*.pdf").OrderBy(p => p);
+                sourceFiles = Directory.GetFiles(Path.Combine(GetSheetMusicFolder(), @"ragtime\singles"), "*.pdf").OrderBy(p => p);
                 foreach (var file in sourceFiles.OrderBy(f => f).Where(f => funcFilter(f)))
                 {
                     var dest = Path.Combine(singlesFolder, Path.GetFileName(file));
@@ -797,7 +797,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
                                 curmetadata.ToggleFavorite(i, IsFavorite: true, FavoriteName: curmetadata.lstVolInfo[volno].FileNameVolume);
                             }
                             DumpVolAndToc("Start", curmetadata);
-                            curmetadata.lstTocEntries.Where(t => t.SongName.Substring(0, 5) == "Crazy").First().Composer = strComposer;
+                            curmetadata.lstTocEntries.Where(t => t.SongName[..5] == "Crazy").First().Composer = strComposer;
                             curmetadata.SaveIfDirty(ForceDirty: true);
                             var fileToAddFullPath = helper.sourceFiles.Where(f => f.Contains(fileToAdd)).First();
                             AddLogEntry($"Adding file  = {fileToAddFullPath}");
@@ -812,7 +812,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
                             DumpVolAndToc("Done", curmetadata);
                             Assert.AreEqual(3, curmetadata.lstVolInfo.Count);
                             Assert.AreEqual(3, curmetadata.lstTocEntries.Count);
-                            Assert.AreEqual(strComposer, curmetadata.lstTocEntries.Where(t => t.SongName.Substring(0, 5) == "Crazy").First().Composer);
+                            Assert.AreEqual(strComposer, curmetadata.lstTocEntries.Where(t => t.SongName[..5] == "Crazy").First().Composer);
                             var lastone = string.Empty;
                             foreach (var vol in curmetadata.lstVolInfo)
                             {

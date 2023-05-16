@@ -400,12 +400,12 @@ namespace SheetMusicViewer
                 else
                 {
 
-                    foreach (CheckBox chk in lstFoldrs)
+                    foreach (CheckBox chk in lstFoldrs.Cast<CheckBox>())
                     {
                         if (chk.IsChecked == true)
                         {
-                            var str = chk.Content as string + System.IO.Path.DirectorySeparatorChar.ToString();
-                            if (pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true).IndexOf(str) >= 0)
+                            var str = (chk.Content as string) + System.IO.Path.DirectorySeparatorChar.ToString();
+                            if (pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true).Contains(str, StringComparison.CurrentCulture))
                             {
                                 includeThisItem = true;
                                 break;
@@ -427,8 +427,11 @@ namespace SheetMusicViewer
                 var contentControl = new MyContentControl(pdfMetaDataItem); // ContentControl has doubleclick event
                 var sp = new StackPanel() { Orientation = Orientation.Vertical };
                 await pdfMetaDataItem.GetBitmapImageThumbnailAsync();
-                var img = new Image() { Source = pdfMetaDataItem?.bitmapImageCache };
-                img.ToolTip = $"{pdfMetaDataItem} + {pdfMetaDataItem.dtLastWrite}";
+                var img = new Image
+                {
+                    Source = pdfMetaDataItem?.bitmapImageCache,
+                    ToolTip = $"{pdfMetaDataItem} + {pdfMetaDataItem.dtLastWrite}"
+                };
                 sp.Children.Add(img);
                 sp.Children.Add(new TextBlock()
                 {
@@ -607,7 +610,7 @@ namespace SheetMusicViewer
                 var deltaManipulation = e.DeltaManipulation;
                 var matrix = ((MatrixTransform)element.RenderTransform).Matrix;
                 // find the old center; arguaby this could be cached 
-                Point center = new Point(element.ActualWidth / 2, element.ActualHeight / 2);
+                Point center = new(element.ActualWidth / 2, element.ActualHeight / 2);
                 // transform it to take into account transforms from previous manipulations 
                 center = matrix.Transform(center);
                 //this will be a Zoom. 
