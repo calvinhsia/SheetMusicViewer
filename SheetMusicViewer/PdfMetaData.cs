@@ -38,7 +38,7 @@ namespace SheetMusicViewer
         public int NumPagesInSet => lstVolInfo.Sum(p => p.NPagesInThisVolume);
 
 
-        public List<PdfVolumeInfo> lstVolInfo = new List<PdfVolumeInfo>();
+        public List<PdfVolumeInfo> lstVolInfo = new();
         /// <summary>
         /// the page no when this PDF was last opened
         /// </summary>
@@ -80,19 +80,19 @@ namespace SheetMusicViewer
 
         public string Notes;
 
-        public List<InkStrokeClass> LstInkStrokes = new List<InkStrokeClass>();
+        public List<InkStrokeClass> LstInkStrokes = new();
 
-        public List<Favorite> Favorites = new List<Favorite>();
+        public List<Favorite> Favorites = new();
 
-        public List<TOCEntry> lstTocEntries = new List<TOCEntry>();
+        public List<TOCEntry> lstTocEntries = new();
 
         [XmlIgnore] // can't serialize dictionaries.Could be multiple TOCEntries for a single page Page #=> List<TOCEntry>
-        public SortedList<int, List<TOCEntry>> dictToc = new SortedList<int, List<TOCEntry>>();
+        public SortedList<int, List<TOCEntry>> dictToc = new();
         [XmlIgnore]
-        public SortedList<int, Favorite> dictFav = new SortedList<int, Favorite>();
+        public SortedList<int, Favorite> dictFav = new();
 
         [XmlIgnore]
-        public SortedList<int, InkStrokeClass> dictInkStrokes = new SortedList<int, InkStrokeClass>();
+        public SortedList<int, InkStrokeClass> dictInkStrokes = new();
 
         [XmlIgnore]
         internal BitmapImage bitmapImageCache;
@@ -201,11 +201,11 @@ namespace SheetMusicViewer
             {
                 if (retval != null)
                 {
-                    retval = retval.Substring(PdfViewerWindow.s_pdfViewerWindow._RootMusicFolder.Length + 1).Replace(".pdf", string.Empty);
+                    retval = retval[(PdfViewerWindow.s_pdfViewerWindow._RootMusicFolder.Length + 1)..].Replace(".pdf", string.Empty);
                     var lastcharVol0 = retval.Last();
                     if ("01".Contains(lastcharVol0)) // if the last char is 0 or 1
                     {
-                        retval = retval.Substring(0, retval.Length - 1);
+                        retval = retval[..^1];
                     }
                 }
             }
@@ -335,13 +335,13 @@ namespace SheetMusicViewer
                                         if ("01".Contains(lastcharVol0)) // if the last char is 0 or 1
                                         {
                                             curVolIsOneBased = lastcharVol0 == '1';
-                                            justFnameVol0 = justFnameVol0.Substring(0, justFnameVol0.Length - 1);
+                                            justFnameVol0 = justFnameVol0[..^1];
                                         }
                                         var justfnameCurrent = System.IO.Path.GetFileNameWithoutExtension(file).Trim().ToLower();
                                         if (justFnameVol0.Length < justfnameCurrent.Length &&
-                                            justFnameVol0 == justfnameCurrent.Substring(0, justFnameVol0.Length))
+                                            justFnameVol0 == justfnameCurrent[..justFnameVol0.Length])
                                         {
-                                            if (char.IsDigit(justfnameCurrent.Substring(justFnameVol0.Length)[0]))
+                                            if (char.IsDigit(justfnameCurrent[justFnameVol0.Length..][0]))
                                             {
                                                 /// all continuations must have file length > base name (without trailing minus "0" or "1")
                                                 /// and must be extended with at least one digit.
@@ -410,7 +410,7 @@ namespace SheetMusicViewer
                                 {
                                     if (rootMusicFolder.Length < curPath.Length)
                                     {
-                                        var justdir = curPath.Substring(rootMusicFolder.Length + 1);
+                                        var justdir = curPath[(rootMusicFolder.Length + 1)..];
                                         lstFolders.Add(justdir);
                                     }
                                 }
@@ -542,7 +542,7 @@ namespace SheetMusicViewer
                     catch (Exception ex)
                     {
                         ex.Data["Filename"] = newfile;
-                        throw ex;
+                        throw;
                     }
                 }
                 // update VolInfo.
@@ -622,37 +622,35 @@ namespace SheetMusicViewer
                 {
                     var serializer = new XmlSerializer(typeof(PdfMetaData));
                     //                    var dtLastWriteTime = (new FileInfo(bmkFile)).LastWriteTime;
-                    using (var sr = new StreamReader(bmkFile))
+                    using var sr = new StreamReader(bmkFile);
+                    pdfFileData = (PdfMetaData)serializer.Deserialize(sr);
+                    pdfFileData._FullPathFile = FullPathPdfFileOrSinglesFolder;
+                    //                        pdfFileData.dtLastWrite = dtLastWriteTime;
+                    if (pdfFileData.dtLastWrite.Year < 1900)
                     {
-                        pdfFileData = (PdfMetaData)serializer.Deserialize(sr);
-                        pdfFileData._FullPathFile = FullPathPdfFileOrSinglesFolder;
-                        //                        pdfFileData.dtLastWrite = dtLastWriteTime;
-                        if (pdfFileData.dtLastWrite.Year < 1900)
+                        pdfFileData.dtLastWrite = (new FileInfo(bmkFile)).LastWriteTime;
+                    }
+                    pdfFileData.initialLastPageNo = pdfFileData.LastPageNo;
+                    pdfFileData.IsSinglesFolder = IsSingles;
+                    if (pdfFileData.lstVolInfo.Count == 0) // There should be at least one for each PDF in a series. If no series, there should be 1 for itself.
+                    {
+                        var doc = await GetPdfDocumentForFileAsync(FullPathPdfFileOrSinglesFolder);
+                        pdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
                         {
-                            pdfFileData.dtLastWrite = (new FileInfo(bmkFile)).LastWriteTime;
-                        }
-                        pdfFileData.initialLastPageNo = pdfFileData.LastPageNo;
-                        pdfFileData.IsSinglesFolder = IsSingles;
-                        if (pdfFileData.lstVolInfo.Count == 0) // There should be at least one for each PDF in a series. If no series, there should be 1 for itself.
-                        {
-                            var doc = await GetPdfDocumentForFileAsync(FullPathPdfFileOrSinglesFolder);
-                            pdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
-                            {
-                                FileNameVolume = Path.GetFileName(FullPathPdfFileOrSinglesFolder),
-                                NPagesInThisVolume = (int)doc.PageCount,
-                                Rotation = 0
-                            });
-                            pdfFileData.IsDirty = true;
-                        }
-                        if (string.IsNullOrEmpty(pdfFileData.lstVolInfo[0].FileNameVolume))
-                        {
-                            pdfFileData.lstVolInfo[0].FileNameVolume = Path.GetFileName(FullPathPdfFileOrSinglesFolder); //temptemp
-                            pdfFileData.IsDirty = true;
-                        }
-                        if (pdfFileData.LastPageNo < pdfFileData.PageNumberOffset || pdfFileData.LastPageNo >= pdfFileData.MaxPageNum) // make sure lastpageno is in range
-                        {
-                            pdfFileData.LastPageNo = pdfFileData.PageNumberOffset; // go to first page
-                        }
+                            FileNameVolume = Path.GetFileName(FullPathPdfFileOrSinglesFolder),
+                            NPagesInThisVolume = (int)doc.PageCount,
+                            Rotation = 0
+                        });
+                        pdfFileData.IsDirty = true;
+                    }
+                    if (string.IsNullOrEmpty(pdfFileData.lstVolInfo[0].FileNameVolume))
+                    {
+                        pdfFileData.lstVolInfo[0].FileNameVolume = Path.GetFileName(FullPathPdfFileOrSinglesFolder); //temptemp
+                        pdfFileData.IsDirty = true;
+                    }
+                    if (pdfFileData.LastPageNo < pdfFileData.PageNumberOffset || pdfFileData.LastPageNo >= pdfFileData.MaxPageNum) // make sure lastpageno is in range
+                    {
+                        pdfFileData.LastPageNo = pdfFileData.PageNumberOffset; // go to first page
                     }
                 }
                 catch (Exception ex)
@@ -749,7 +747,7 @@ namespace SheetMusicViewer
         //    return (int)pdfDoc.PageCount;
         //}
 
-        string RemoveQuotes(string str)
+        static string RemoveQuotes(string str)
         {
             if (!string.IsNullOrEmpty(str))
             {
@@ -800,15 +798,13 @@ namespace SheetMusicViewer
         {
             //    StorageFile f = await StorageFile.GetFileFromPathAsync(pathPdfFileVol);
             //var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
-            using (var fstrm = await FileRandomAccessStream.OpenAsync(pathPdfFileVol, FileAccessMode.Read))
-            {
-                var pdfDoc = await PdfDocument.LoadFromStreamAsync(fstrm);
-                //if (pdfDoc.IsPasswordProtected)
-                //{
-                //    //    this.dpPage.Children.Add(new TextBlock() { Text = $"Password Protected {pathPdfFileVol}" });
-                //}
-                return pdfDoc;
-            }
+            using var fstrm = await FileRandomAccessStream.OpenAsync(pathPdfFileVol, FileAccessMode.Read);
+            var pdfDoc = await PdfDocument.LoadFromStreamAsync(fstrm);
+            //if (pdfDoc.IsPasswordProtected)
+            //{
+            //    //    this.dpPage.Children.Add(new TextBlock() { Text = $"Password Protected {pathPdfFileVol}" });
+            //}
+            return pdfDoc;
         }
 
         public static async Task<PdfDocument> GetPdfDocumentForFileAsyncOrig(string pathPdfFileVol)
@@ -865,13 +861,9 @@ namespace SheetMusicViewer
                         {
                             LstInkStrokes = dictInkStrokes.Values.ToList();
                         }
-                        using (var strm = File.Create(bmkFile))
-                        {
-                            using (var w = XmlWriter.Create(strm, settings))
-                            {
-                                serializer.Serialize(w, this);
-                            }
-                        }
+                        using var strm = File.Create(bmkFile);
+                        using var w = XmlWriter.Create(strm, settings);
+                        serializer.Serialize(w, this);
                     }
                     catch (Exception ex)
                     {
@@ -925,28 +917,26 @@ namespace SheetMusicViewer
             ulong size = 0ul;
             if (pdfDoc != null && pdfPgno >= 0 && pdfPgno < pdfDoc.PageCount)
             {
-                using (var pdfPage = pdfDoc.GetPage((uint)(pdfPgno)))
+                using var pdfPage = pdfDoc.GetPage((uint)(pdfPgno));
+                var rect = pdfPage.Dimensions.ArtBox;
+                var renderOpts = new PdfPageRenderOptions();
+                if (SizeDesired.HasValue)
                 {
-                    var rect = pdfPage.Dimensions.ArtBox;
-                    var renderOpts = new PdfPageRenderOptions();
-                    if (SizeDesired.HasValue)
-                    {
-                        renderOpts.DestinationWidth = (uint)SizeDesired.Value.Width;
-                        renderOpts.DestinationHeight = (uint)SizeDesired.Value.Height;
-                    }
-                    else
-                    {
-                        renderOpts.DestinationWidth = (uint)rect.Width;
-                        renderOpts.DestinationHeight = (uint)rect.Height;
-                    }
-                    if (pdfPage.Rotation != PdfPageRotation.Normal)
-                    {
-                        renderOpts.DestinationWidth = (uint)rect.Height;
-                        renderOpts.DestinationHeight = (uint)rect.Width;
-                    }
-                    //                    renderOpts.BackgroundColor = Windows.UI.Color.FromArgb(0xf, 0, 0xff, 0);
-                    (bmi, size) = await GetBitMapImageFromPdfPage(pdfPage, PageNo, renderOpts, cts);
+                    renderOpts.DestinationWidth = (uint)SizeDesired.Value.Width;
+                    renderOpts.DestinationHeight = (uint)SizeDesired.Value.Height;
                 }
+                else
+                {
+                    renderOpts.DestinationWidth = (uint)rect.Width;
+                    renderOpts.DestinationHeight = (uint)rect.Height;
+                }
+                if (pdfPage.Rotation != PdfPageRotation.Normal)
+                {
+                    renderOpts.DestinationWidth = (uint)rect.Height;
+                    renderOpts.DestinationHeight = (uint)rect.Width;
+                }
+                //                    renderOpts.BackgroundColor = Windows.UI.Color.FromArgb(0xf, 0, 0xff, 0);
+                (bmi, size) = await GetBitMapImageFromPdfPage(pdfPage, PageNo, renderOpts, cts);
             }
             if (bmi == null)
             {

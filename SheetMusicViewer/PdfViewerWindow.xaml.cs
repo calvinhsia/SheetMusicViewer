@@ -113,7 +113,7 @@ namespace SheetMusicViewer
                 txtDesc1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
                 this.Dispatcher.InvokeAsync(async () => await ShowPageAsync(CurrentPageNumber, ClearCache: true, resetRenderTransform: true));
                 OnMyPropertyChanged();
-                OnMyPropertyChanged("NumPagesPerView");
+                OnMyPropertyChanged(nameof(NumPagesPerView));
             }
         }
         public int NumPagesPerView => _fShow2Pages ? 2 : 1;
@@ -121,8 +121,8 @@ namespace SheetMusicViewer
         public bool PdfUIEnabled { get { return currentPdfMetaData != null; } set { OnMyPropertyChanged(); } }
 
         internal string _RootMusicFolder;
-        internal List<PdfMetaData> lstPdfMetaFileData = new List<PdfMetaData>();
-        internal List<string> lstFolders = new List<string>();
+        internal List<PdfMetaData> lstPdfMetaFileData = new();
+        internal List<string> lstFolders = new();
 
         internal PdfMetaData currentPdfMetaData = null;
         internal static PdfViewerWindow s_pdfViewerWindow;
@@ -505,7 +505,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 this.dpPage.Children.Clear();
 
                 //RaiseEvent(new PdfExceptionEventAgs(PdfExceptionEvent, this, null));
-                System.Windows.Forms.MessageBox.Show($"Exception showing {currentPdfMetaData.GetFullPathFileFromPageNo(pageNo)}\r\n {ex.ToString()}");
+                System.Windows.Forms.MessageBox.Show($"Exception showing {currentPdfMetaData.GetFullPathFileFromPageNo(pageNo)}\r\n {ex}");
                 OnException($"Showing {currentPdfMetaData.GetFullPathFileFromPageNo(pageNo)}", ex);
                 CloseCurrentPdfFile();
             }
@@ -517,7 +517,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             base.OnPreviewKeyDown(e);
             var elmWithFocus = Keyboard.FocusedElement;
             var isCtrlKeyDown = e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Control);
-            if (isCtrlKeyDown || !(elmWithFocus is TextBox) && !(elmWithFocus is Slider)) // tbx and slider should get the keystroke and process it 
+            if (isCtrlKeyDown || elmWithFocus is not TextBox && elmWithFocus is not Slider) // tbx and slider should get the keystroke and process it 
             {
                 switch (e.Key)
                 {
@@ -791,7 +791,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     var deltaManipulation = e.DeltaManipulation;
                     var matrix = ((MatrixTransform)element.RenderTransform).Matrix;
                     // find the old center; arguaby this could be cached 
-                    Point center = new Point(e.ManipulationOrigin.X, e.ManipulationOrigin.Y); // new Point(element.ActualWidth / 2, element.ActualHeight / 2);
+                    Point center = new(e.ManipulationOrigin.X, e.ManipulationOrigin.Y); // new Point(element.ActualWidth / 2, element.ActualHeight / 2);
                     // transform it to take into account transforms from previous manipulations 
                     center = matrix.Transform(center);
                     //this will be a Zoom. 
@@ -938,10 +938,8 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 var nPageCount = pdfDoc.PageCount;
                 for (int i = 0; i < nPageCount; i++)
                 {
-                    using (var page = pdfDoc.GetPage((uint)i))
-                    {
-                        await AddPageToDocAsync(fixedDoc, page, (nVolNo == 0 ? Rotation.Rotate0 : Rotation.Rotate180));
-                    }
+                    using var page = pdfDoc.GetPage((uint)i);
+                    await AddPageToDocAsync(fixedDoc, page, (nVolNo == 0 ? Rotation.Rotate0 : Rotation.Rotate180));
                 }
                 if (!vol0.EndsWith("0.pdf"))
                 {
@@ -960,50 +958,48 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         private static async Task AddPageToDocAsync(FixedDocument fixedDoc, PdfPage page, Rotation rotation = Rotation.Rotate0)
         {
             var bmi = new BitmapImage();
-            using (var strm = new InMemoryRandomAccessStream())
+            using var strm = new InMemoryRandomAccessStream();
+            var rect = page.Dimensions.ArtBox;
+            //var renderOpts = new PdfPageRenderOptions()
+            //{
+            //    DestinationWidth = (uint)rect.Height,
+            //    DestinationHeight = (uint)rect.Width,
+            //};
+
+            await page.RenderToStreamAsync(strm);
+            //var enc = new PngBitmapEncoder();
+            //enc.Frames.Add(BitmapFrame.Create)
+            bmi.BeginInit();
+            bmi.StreamSource = strm.AsStream();
+            bmi.CacheOption = BitmapCacheOption.OnLoad;
+            bmi.Rotation = rotation;
+            bmi.EndInit();
+
+            var img = new Image()
             {
-                var rect = page.Dimensions.ArtBox;
-                //var renderOpts = new PdfPageRenderOptions()
-                //{
-                //    DestinationWidth = (uint)rect.Height,
-                //    DestinationHeight = (uint)rect.Width,
-                //};
+                Source = bmi
+            };
 
-                await page.RenderToStreamAsync(strm);
-                //var enc = new PngBitmapEncoder();
-                //enc.Frames.Add(BitmapFrame.Create)
-                bmi.BeginInit();
-                bmi.StreamSource = strm.AsStream();
-                bmi.CacheOption = BitmapCacheOption.OnLoad;
-                bmi.Rotation = rotation;
-                bmi.EndInit();
+            var fixedPage = new FixedPage();
+            fixedPage.Children.Add(img);
+            fixedPage.Height = rect.Width;
+            fixedPage.Width = rect.Height;
+            var pc = new PageContent
+            {
+                Child = fixedPage
+            };
 
-                var img = new Image()
-                {
-                    Source = bmi
-                };
+            fixedDoc.Pages.Add(pc);
 
-                var fixedPage = new FixedPage();
-                fixedPage.Children.Add(img);
-                fixedPage.Height = rect.Width;
-                fixedPage.Width = rect.Height;
-                var pc = new PageContent
-                {
-                    Child = fixedPage
-                };
-
-                fixedDoc.Pages.Add(pc);
-
-                //var sp = new StackPanel();
-                //var img = new Image()
-                //{
-                //    Source = bmi
-                //};
-                //sp.Children.Add(img);
-                //sp.Measure(new Size(pdlg.PrintableAreaWidth, pdlg.PrintableAreaHeight));
-                //sp.Arrange(new Rect(new Point(0, 0), sp.DesiredSize));
-                //pdlg.PrintVisual(sp, "test");
-            }
+            //var sp = new StackPanel();
+            //var img = new Image()
+            //{
+            //    Source = bmi
+            //};
+            //sp.Children.Add(img);
+            //sp.Measure(new Size(pdlg.PrintableAreaWidth, pdlg.PrintableAreaHeight));
+            //sp.Arrange(new Rect(new Point(0, 0), sp.DesiredSize));
+            //pdlg.PrintVisual(sp, "test");
         }
 
         private void Slider_TouchDown(object sender, TouchEventArgs e)
@@ -1073,7 +1069,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 }
             }
         }
-        private static readonly Stopwatch _doubleTapStopwatch = new Stopwatch();
+        private static readonly Stopwatch _doubleTapStopwatch = new();
         private static Point _lastTapLocation;
         private bool chkFavoriteEnabled;
 
