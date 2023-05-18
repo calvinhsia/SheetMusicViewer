@@ -320,10 +320,6 @@ namespace SheetMusicViewer
                                 var curVolIsOneBased = false;// zero based by default
                                 foreach (var file in Directory.EnumerateFiles(curPath, "*.pdf").OrderBy(f => f.ToLower()))//.Where(f=>f.Contains("Miser"))) // "file" is fullpath
                                 {
-                                    if (file.Contains("Treem"))
-                                    {
-                                        "".ToString();
-                                    }
                                     var isContinuation = false;
                                     curVolIsOneBased = false;
                                     if (!string.IsNullOrEmpty(lastFile) &&

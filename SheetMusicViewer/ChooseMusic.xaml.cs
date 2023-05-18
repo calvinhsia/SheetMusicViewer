@@ -322,32 +322,6 @@ namespace SheetMusicViewer
                     e.Handled = true; // prevent bubbling SelectionChanged up to tabcontrol
                 };
 
-                var lstBooks = new ObservableCollection<UIElement>();
-                this.lbBooks.ItemsSource = lstBooks;
-
-                var lstFoldrs = new ObservableCollection<UIElement>();
-                this.lbfolders.ItemsSource = lstFoldrs;
-                //for (int i  = 0; i <100; i++)
-                //{
-                //    _pdfViewerWindow.lstFolders.Add($"folder{i}");
-                //}
-                foreach (var folder in _pdfViewerWindow.lstFolders)
-                {
-                    var chkbox = new CheckBox()
-                    {
-                        Content = folder,
-                        IsChecked = true
-                    };
-                    chkbox.Checked += async (o, e) =>
-                    {
-                        await FillBookItemsAsync();
-                    };
-                    chkbox.Unchecked += async (o, e) =>
-                    {
-                        await FillBookItemsAsync();
-                    };
-                    lstFoldrs.Add(chkbox);
-                }
                 tbxFilter.TextChanged += async (o, e) =>
                    {
                        await FillBookItemsAsync();
@@ -366,7 +340,6 @@ namespace SheetMusicViewer
         async Task FillBookItemsAsync()
         {
             var lstBooks = this.lbBooks.ItemsSource as ObservableCollection<UIElement>;
-            var lstFoldrs = this.lbfolders.ItemsSource as ObservableCollection<UIElement>;
             lstBooks.Clear();
             var nBooks = 0;
             var nSongs = 0;
@@ -393,26 +366,6 @@ namespace SheetMusicViewer
                     }))
             {
                 var includeThisItem = false;
-                if (lstFoldrs.Count == 0)
-                {
-                    includeThisItem = true;
-                }
-                else
-                {
-
-                    foreach (CheckBox chk in lstFoldrs.Cast<CheckBox>())
-                    {
-                        if (chk.IsChecked == true)
-                        {
-                            var str = (chk.Content as string) + System.IO.Path.DirectorySeparatorChar.ToString();
-                            if (pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true).Contains(str, StringComparison.CurrentCulture))
-                            {
-                                includeThisItem = true;
-                                break;
-                            }
-                        }
-                    }
-                }
                 if (!includeThisItem && !pdfMetaDataItem.IsSinglesFolder)
                 {
                     continue;
