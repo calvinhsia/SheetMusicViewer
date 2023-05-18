@@ -2,7 +2,7 @@
 
 PDF Sheet Music Viewer by Calvin Hsia 2019
 
-Allows users to view  downloaded or scanned Sheet Music in PDF format to play on a musical instrument, such as a piano
+Allows users to view downloaded or scanned Sheet Music in PDF format to play on a musical instrument, such as a piano
 
 Runs on Windows 10
 
@@ -16,7 +16,7 @@ Keep in mind the page size will be roughly the screen size.
 * The SheetMusic/Ragtime folder has sample PDFs which you can use if as samples if you need to.
 
 
-I have a few hundred piano music books, singles, etc. that I've collected over the last several decades.
+I have a few hundred piano music books, singles, etc. that I've collected over the last several decades. I keep them on my OneDrive, so that I can access them from any machine
 I love to play piano, especially ragtime.
 Most of the books were "perfect bound" which means they didn't stay open on the piano music stand.
 Many decades ago I chopped off the bindings of the books and rebound them using plastic comb binding. This made playing the music much easier on the piano.
@@ -105,6 +105,11 @@ it could actually make music. I remember hearing Maple Leaf Rag from the compute
 started trying to pick my way through the notes. 
 I really love Ragtime. I suspect most people who like computer software like Ragtime. There's something so binary about it: powers of 2. 16 measures per verse, 2/4 time, syncopation.
 
-calvin_hsia@alum.mit.edu
+To download and run the app on a Windows machine: clicking on the Releases: Download and copy files from SheetMusicViewer*.zip to a local folder.
+Start SheetMusicViewer.exe. It will ask for a folder with PDF files
+
+mailto://calvin_hsia@alum.mit.edu
+
+My Web Site: http://calvinhsia.com
 
 
