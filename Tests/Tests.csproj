@@ -6,7 +6,6 @@
     <TargetFramework>net7.0-windows10.0.19041.0</TargetFramework>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <UseWPF>true</UseWPF>
-    <IsTestProject>true</IsTestProject>
     <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
     <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
