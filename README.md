@@ -105,6 +105,8 @@ it could actually make music. I remember hearing Maple Leaf Rag from the compute
 started trying to pick my way through the notes. 
 I really love Ragtime. I suspect most people who like computer software like Ragtime. There's something so binary about it: powers of 2. 16 measures per verse, 2/4 time, syncopation.
 
+To download and run the app on a Windows machine: clicking on the Releases and download/unzip the latest .zip file, run the executable "SheetMusicViewer.exe"
+
 calvin_hsia@alum.mit.edu
 
 
