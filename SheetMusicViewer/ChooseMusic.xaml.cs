@@ -322,32 +322,6 @@ namespace SheetMusicViewer
                     e.Handled = true; // prevent bubbling SelectionChanged up to tabcontrol
                 };
 
-                var lstBooks = new ObservableCollection<UIElement>();
-                this.lbBooks.ItemsSource = lstBooks;
-
-                var lstFoldrs = new ObservableCollection<UIElement>();
-                this.lbfolders.ItemsSource = lstFoldrs;
-                //for (int i  = 0; i <100; i++)
-                //{
-                //    _pdfViewerWindow.lstFolders.Add($"folder{i}");
-                //}
-                foreach (var folder in _pdfViewerWindow.lstFolders)
-                {
-                    var chkbox = new CheckBox()
-                    {
-                        Content = folder,
-                        IsChecked = true
-                    };
-                    chkbox.Checked += async (o, e) =>
-                    {
-                        await FillBookItemsAsync();
-                    };
-                    chkbox.Unchecked += async (o, e) =>
-                    {
-                        await FillBookItemsAsync();
-                    };
-                    lstFoldrs.Add(chkbox);
-                }
                 tbxFilter.TextChanged += async (o, e) =>
                    {
                        await FillBookItemsAsync();
@@ -366,7 +340,6 @@ namespace SheetMusicViewer
         async Task FillBookItemsAsync()
         {
             var lstBooks = this.lbBooks.ItemsSource as ObservableCollection<UIElement>;
-            var lstFoldrs = this.lbfolders.ItemsSource as ObservableCollection<UIElement>;
             lstBooks.Clear();
             var nBooks = 0;
             var nSongs = 0;
@@ -393,26 +366,6 @@ namespace SheetMusicViewer
                     }))
             {
                 var includeThisItem = false;
-                if (lstFoldrs.Count == 0)
-                {
-                    includeThisItem = true;
-                }
-                else
-                {
-
-                    foreach (CheckBox chk in lstFoldrs)
-                    {
-                        if (chk.IsChecked == true)
-                        {
-                            var str = chk.Content as string + System.IO.Path.DirectorySeparatorChar.ToString();
-                            if (pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true).IndexOf(str) >= 0)
-                            {
-                                includeThisItem = true;
-                                break;
-                            }
-                        }
-                    }
-                }
                 if (!includeThisItem && !pdfMetaDataItem.IsSinglesFolder)
                 {
                     continue;
@@ -427,8 +380,11 @@ namespace SheetMusicViewer
                 var contentControl = new MyContentControl(pdfMetaDataItem); // ContentControl has doubleclick event
                 var sp = new StackPanel() { Orientation = Orientation.Vertical };
                 await pdfMetaDataItem.GetBitmapImageThumbnailAsync();
-                var img = new Image() { Source = pdfMetaDataItem?.bitmapImageCache };
-                img.ToolTip = $"{pdfMetaDataItem} + {pdfMetaDataItem.dtLastWrite}";
+                var img = new Image
+                {
+                    Source = pdfMetaDataItem?.bitmapImageCache,
+                    ToolTip = $"{pdfMetaDataItem} + {pdfMetaDataItem.dtLastWrite}"
+                };
                 sp.Children.Add(img);
                 sp.Children.Add(new TextBlock()
                 {
@@ -607,7 +563,7 @@ namespace SheetMusicViewer
                 var deltaManipulation = e.DeltaManipulation;
                 var matrix = ((MatrixTransform)element.RenderTransform).Matrix;
                 // find the old center; arguaby this could be cached 
-                Point center = new Point(element.ActualWidth / 2, element.ActualHeight / 2);
+                Point center = new(element.ActualWidth / 2, element.ActualHeight / 2);
                 // transform it to take into account transforms from previous manipulations 
                 center = matrix.Transform(center);
                 //this will be a Zoom. 
