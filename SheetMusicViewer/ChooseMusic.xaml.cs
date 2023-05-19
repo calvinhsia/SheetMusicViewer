@@ -310,6 +310,8 @@ namespace SheetMusicViewer
         {
             if (this.lbBooks.ItemsSource == null)
             {
+                var lstBooks = new ObservableCollection<UIElement>();
+                this.lbBooks.ItemsSource = lstBooks;
                 this.lbBooks.KeyUp += (o, e) =>
                  {
                      if (e.Key == Key.Return)
@@ -365,7 +367,7 @@ namespace SheetMusicViewer
                         }
                     }))
             {
-                var includeThisItem = false;
+                var includeThisItem = true;
                 if (!includeThisItem && !pdfMetaDataItem.IsSinglesFolder)
                 {
                     continue;
