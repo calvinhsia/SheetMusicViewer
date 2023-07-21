@@ -824,10 +824,6 @@ namespace SheetMusicViewer
                     var tempfile = Path.ChangeExtension(Path.GetTempFileName(), ".bmk");
                     try
                     {
-                        if (_FullPathFile.Contains("Everybody"))
-                        {
-                            "adf".ToString();
-                        }
                         var bmkFile = PdfBmkMetadataFileName;
                         if (File.Exists(bmkFile))
                         {
@@ -863,7 +859,7 @@ namespace SheetMusicViewer
                     }
                     catch (Exception ex)
                     {
-                        MessageBox.Show("Exception saving file " + ex.ToString());
+//                        MessageBox.Show("Exception saving file " + ex.ToString());
                         if (File.Exists(tempfile) && !File.Exists(PdfBmkMetadataFileName))
                         {
                             File.Copy(tempfile, PdfBmkMetadataFileName);
