@@ -108,6 +108,19 @@ I really love Ragtime. I suspect most people who like computer software like Rag
 To download and run the app on a Windows machine: clicking on the Releases: Download and copy files from SheetMusicViewer*.zip to a local folder.
 Start SheetMusicViewer.exe. It will ask for a folder with PDF files
 
+
+Here's a view of my ChooseMusic screen. This is the more modern way to access my bookcase of hundreds of books. Note, I can choose the Query tab to query any music by composer, title, etc.
+
+![Some of my music books](img/ChooseMusic.png)
+
+Here, the music is displayed in 2 page/screen mode. The left page happends to be artwork. Notice the controls at the top are see through, to maximize the image size on the screen.
+Ophelia is a rag from 1910, by James Scott. This image is from a copy machine of very old sheet music.
+For maximum music  size, switch to 1 page/screen mode and rotate the device to be portrait.
+
+![Ophelia Rag](img/Ophelia.png)
+
+
+
 mailto://calvin_hsia@alum.mit.edu
 
 My Web Site: http://calvinhsia.com

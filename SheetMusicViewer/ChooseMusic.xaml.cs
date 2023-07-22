@@ -30,7 +30,7 @@ namespace SheetMusicViewer
             InitializeComponent();
             this.ShowInTaskbar = false;
             //this.Topmost = true;
-            this.Owner = Application.Current.MainWindow;
+            this.Owner = Application.Current?.MainWindow;
             this._pdfViewerWindow = pdfViewerWindow;
             this.Loaded += ChooseMusic_Loaded;
             this.Top = _pdfViewerWindow.Top;
@@ -323,7 +323,27 @@ namespace SheetMusicViewer
                 {
                     e.Handled = true; // prevent bubbling SelectionChanged up to tabcontrol
                 };
+                var lstBooks = new ObservableCollection<UIElement>();
+                this.lbBooks.ItemsSource = lstBooks;
 
+                var lstFoldrs = new ObservableCollection<UIElement>();
+                foreach (var folder in _pdfViewerWindow.lstFolders)
+                {
+                    var chkbox = new CheckBox()
+                    {
+                        Content = folder,
+                        IsChecked = true
+                    };
+                    chkbox.Checked += async (o, e) =>
+                    {
+                        await FillBookItemsAsync();
+                    };
+                    chkbox.Unchecked += async (o, e) =>
+                    {
+                        await FillBookItemsAsync();
+                    };
+                    lstFoldrs.Add(chkbox);
+                }
                 tbxFilter.TextChanged += async (o, e) =>
                    {
                        await FillBookItemsAsync();
@@ -367,11 +387,6 @@ namespace SheetMusicViewer
                         }
                     }))
             {
-                var includeThisItem = true;
-                if (!includeThisItem && !pdfMetaDataItem.IsSinglesFolder)
-                {
-                    continue;
-                }
                 if (tbxFilter.Text.Trim().Length > 0)
                 {
                     if (pdfMetaDataItem.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true).IndexOf(tbxFilter.Text.Trim(), StringComparison.OrdinalIgnoreCase) < 0)
