@@ -113,7 +113,7 @@ Here's a view of my ChooseMusic screen. This is the more modern way to access my
 
 ![Some of my music books](img/ChooseMusic.png)
 
-Here, the music is displayed in 2 page/screen mode. The left page happends to be artwork. Notice the controls at the top are see through, to maximize the image size on the screen.
+Here, the music is displayed in 2 page/screen mode. The left page happens to be artwork. Notice the controls at the top are see through, to maximize the image size on the screen.
 Ophelia is a rag from 1910, by James Scott. This image is from a copy machine of very old sheet music.
 For maximum music  size, switch to 1 page/screen mode and rotate the device to be portrait.
 
