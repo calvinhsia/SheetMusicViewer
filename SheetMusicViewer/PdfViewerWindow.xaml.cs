@@ -121,6 +121,7 @@ namespace SheetMusicViewer
         public bool PdfUIEnabled { get { return currentPdfMetaData != null; } set { OnMyPropertyChanged(); } }
 
         internal string _RootMusicFolder;
+        internal bool _UseSettings = true; // false for tests
         internal List<PdfMetaData> lstPdfMetaFileData = new();
         internal List<string> lstFolders = new();
 
@@ -129,9 +130,14 @@ namespace SheetMusicViewer
         internal MyInkCanvas[] inkCanvas = new MyInkCanvas[2];
 
         internal PageCache _pageCache;
-        public PdfViewerWindow(string rootFolderForTesting)
+        public PdfViewerWindow(string rootFolderForTesting, bool UseSettings)
         {
             this._RootMusicFolder = rootFolderForTesting;
+            this._UseSettings = UseSettings;
+            this.InitializePdfViewerWindow();
+        }
+        public PdfViewerWindow()
+        {
             this.InitializePdfViewerWindow();
         }
 
@@ -141,20 +147,23 @@ namespace SheetMusicViewer
             s_pdfViewerWindow = this;
             _pageCache = new PageCache(this);
             this.DataContext = this;
-            this.Width = Properties.Settings.Default.MainWindowSize.Width;
-            this.Height = Properties.Settings.Default.MainWindowSize.Height;
-            this.Top = Properties.Settings.Default.MainWindowPos.Height;
-            this.Left = Properties.Settings.Default.MainWindowPos.Width;
-            if (string.IsNullOrEmpty(this._RootMusicFolder))
+            if (_UseSettings)
             {
-                var mruRootFolder = Properties.Settings.Default.RootFolderMRU;
-                if (mruRootFolder != null && mruRootFolder.Count > 0)
+                this.Width = Properties.Settings.Default.MainWindowSize.Width;
+                this.Height = Properties.Settings.Default.MainWindowSize.Height;
+                this.Top = Properties.Settings.Default.MainWindowPos.Height;
+                this.Left = Properties.Settings.Default.MainWindowPos.Width;
+                if (string.IsNullOrEmpty(this._RootMusicFolder))
                 {
-                    this._RootMusicFolder = Properties.Settings.Default.RootFolderMRU[0];
+                    var mruRootFolder = Properties.Settings.Default.RootFolderMRU;
+                    if (mruRootFolder != null && mruRootFolder.Count > 0)
+                    {
+                        this._RootMusicFolder = Properties.Settings.Default.RootFolderMRU[0];
+                    }
+                    //            this._RootMusicFolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Jazz";
+                    this.Show2Pages = Properties.Settings.Default.Show2Pages;
+                    this.chkFullScreen.IsChecked = Properties.Settings.Default.IsFullScreen;
                 }
-                //            this._RootMusicFolder = @"C:\Users\calvinh\OneDrive\Documents\SheetMusic\Jazz";
-                this.Show2Pages = Properties.Settings.Default.Show2Pages;
-                this.chkFullScreen.IsChecked = Properties.Settings.Default.IsFullScreen;
             }
             PdfExceptionEvent += (o, e) =>
             {
@@ -167,13 +176,16 @@ namespace SheetMusicViewer
 
             this.Closed += (o, e) =>
             {
-                Properties.Settings.Default.Show2Pages = Show2Pages;
-                Properties.Settings.Default.LastPDFOpen = currentPdfMetaData?.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true);
-                Properties.Settings.Default.MainWindowPos = new System.Drawing.Size((int)this.Left, (int)this.Top);
-                Properties.Settings.Default.MainWindowSize = new System.Drawing.Size((int)this.ActualWidth, (int)this.ActualHeight);
-                Properties.Settings.Default.IsFullScreen = this.chkFullScreen.IsChecked == true;
-                Properties.Settings.Default.Save();
-                CloseCurrentPdfFile();
+                if (_UseSettings)
+                {
+                    Properties.Settings.Default.Show2Pages = Show2Pages;
+                    Properties.Settings.Default.LastPDFOpen = currentPdfMetaData?.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true);
+                    Properties.Settings.Default.MainWindowPos = new System.Drawing.Size((int)this.Left, (int)this.Top);
+                    Properties.Settings.Default.MainWindowSize = new System.Drawing.Size((int)this.ActualWidth, (int)this.ActualHeight);
+                    Properties.Settings.Default.IsFullScreen = this.chkFullScreen.IsChecked == true;
+                    Properties.Settings.Default.Save();
+                    CloseCurrentPdfFile();
+                }
                 /*
 0:000> k
 # ChildEBP RetAddr  
@@ -248,15 +260,10 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                  */
                 Environment.Exit(0);
             };
-            this.Loaded += MainWindow_LoadedAsync;
+            this.Loaded += PdfViewerWindow_LoadedAsync;
         }
 
-        public PdfViewerWindow()
-        {
-            this.InitializePdfViewerWindow();
-        }
-
-        private async void MainWindow_LoadedAsync(object sender, RoutedEventArgs e)
+        private async void PdfViewerWindow_LoadedAsync(object sender, RoutedEventArgs e)
         {
             // https://blogs.windows.com/buildingapps/2017/01/25/calling-windows-10-apis-desktop-application/#RWYkd5C4WTeEybol.97
             try

@@ -326,7 +326,7 @@ namespace Tests
 
 
         [TestMethod]
-        //        [Ignore]
+        [Ignore]
         public async Task TestStressOnePageMultiChecksum()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -449,7 +449,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
             var c = CreateExecutionContext(tcsStaThread);
             await c.Dispatcher.InvokeAsync((Func<Task>)(async () =>
             {
-                var w = new global::SheetMusicViewer.PdfViewerWindow(GetSheetMusicFolder())
+                var w = new global::SheetMusicViewer.PdfViewerWindow(GetSheetMusicFolder(), UseSettings: false)
                 {
                     //                    _RootMusicFolder = Path.Combine(GetSheetMusicFolder(), "FakeBooks")
                     IsTesting = true
@@ -866,6 +866,24 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
             // with renderops = 150,225 wh= (225,150), pixelhw = (300, 450), dpix = dpiy = 192
             //            var bmi = classicalPdf.GetBitmapImageThumbnail();
 
+        }
+
+        [TestMethod]
+        [Ignore]
+        public async Task TestMainWindow()
+        {
+            await RunInSTAExecutionContextAsync(async () =>
+            {
+                await Task.Yield();
+                var ctsDone = new CancellationTokenSource();
+                var mainwindow = new PdfViewerWindow(rootFolderForTesting: null, UseSettings: false);
+                mainwindow.Closed += (o, e) =>
+                {
+                    ctsDone.Cancel();
+                };
+                mainwindow.ShowDialog();
+
+            });
         }
     }
 }
