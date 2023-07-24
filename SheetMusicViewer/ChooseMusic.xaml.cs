@@ -310,6 +310,8 @@ namespace SheetMusicViewer
         {
             if (this.lbBooks.ItemsSource == null)
             {
+                var lstBooks = new ObservableCollection<UIElement>();
+                this.lbBooks.ItemsSource = lstBooks;
                 this.lbBooks.KeyUp += (o, e) =>
                  {
                      if (e.Key == Key.Return)
@@ -321,8 +323,6 @@ namespace SheetMusicViewer
                 {
                     e.Handled = true; // prevent bubbling SelectionChanged up to tabcontrol
                 };
-                var lstBooks = new ObservableCollection<UIElement>();
-                this.lbBooks.ItemsSource = lstBooks;
 
                 var lstFoldrs = new ObservableCollection<UIElement>();
                 foreach (var folder in _pdfViewerWindow.lstFolders)

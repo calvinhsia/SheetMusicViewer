@@ -76,7 +76,7 @@
                 </StackPanel>
             </DockPanel>
             <DockPanel Grid.Row="0" Grid.Column="2" Background="AliceBlue" Opacity=".5">
-                <StackPanel Orientation="Horizontal" Background="AliceBlue" Opacity=".5">
+                <StackPanel Orientation="Horizontal" Background="AliceBlue" Opacity=".5" HorizontalAlignment="Right">
                     <Button Name="btnChooser" Content="_Chooser" IsEnabled="False" HorizontalAlignment="Right" Margin="10,0,10,0" VerticalAlignment="Top" ToolTip="Open another document, query songs, etc"  Click="BtnChooser_Click"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" >
