@@ -10,9 +10,9 @@ https://stackoverflow.com/questions/70266249/referencing-a-windows-metadata-comp
 <TargetFramework>net6.0-windows$([Microsoft.Build.Utilities.ToolLocationHelper]::GetLatestSDKTargetPlatformVersion('Windows', '10.0'))</TargetFramework>
 https://blogs.windows.com/windowsdeveloper/2020/09/03/calling-windows-apis-in-net5/
 
-
+https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/desktop-to-uwp-enhance#net-6-and-later-use-the-target-framework-moniker-option
 -->
-    <TargetFramework>net7.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <OutputType>WinExe</OutputType>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <UseWindowsForms>true</UseWindowsForms>
@@ -34,10 +34,6 @@ https://blogs.windows.com/windowsdeveloper/2020/09/03/calling-windows-apis-in-ne
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-    <PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
-    <PackageReference Include="System.ValueTuple">
-      <Version>4.5.0</Version>
-    </PackageReference>
-    <PackageReference Include="Microsoft.Windows.Compatibility" Version="7.0.3" />
+    <PackageReference Include="Microsoft.Windows.Compatibility" Version="8.0.4" />
   </ItemGroup>
 </Project>
