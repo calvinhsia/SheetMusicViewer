@@ -14,6 +14,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		README.md = README.md
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WpfApp", "WpfApp\WpfApp.csproj", "{D25AE10D-12AF-42C8-948C-4A25994B50BE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -68,9 +70,32 @@ Global
 		{95E4F137-ABD4-4875-9CF8-AA373EA0C80C}.Release|x64.Build.0 = Release|Any CPU
 		{95E4F137-ABD4-4875-9CF8-AA373EA0C80C}.Release|x86.ActiveCfg = Release|Any CPU
 		{95E4F137-ABD4-4875-9CF8-AA373EA0C80C}.Release|x86.Build.0 = Release|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Debug|ARM.ActiveCfg = Debug|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Debug|ARM.Build.0 = Debug|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Debug|x64.Build.0 = Debug|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Debug|x86.Build.0 = Debug|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Release|ARM.ActiveCfg = Release|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Release|ARM.Build.0 = Release|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Release|ARM64.Build.0 = Release|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Release|x64.ActiveCfg = Release|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Release|x64.Build.0 = Release|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Release|x86.ActiveCfg = Release|Any CPU
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{D25AE10D-12AF-42C8-948C-4A25994B50BE} = {0B0AC1D6-0AD1-434D-AC16-CCDDFC3092E7}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C2970F6E-C89F-4559-8E3B-8443119FCB2E}
