@@ -7,8 +7,8 @@
         mc:Ignorable="d"
         Title="{Binding Title}"
         >
-    <Grid >
-        <Grid Name="dpPage" Background="#FF190808" 
+    <Grid Background="Aqua" >
+        <Grid Name="dpPage" Background="AliceBlue" 
               MouseDown="DpPage_MouseDown" 
               TouchDown="DpPage_TouchDown" 
               ManipulationStarting="DpPage_ManipulationStarting" 
@@ -22,7 +22,7 @@
 
             </InkCanvas>
         </Grid>-->
-        <Grid Background="{x:Null}" VerticalAlignment="Top">
+        <Grid Background="Transparent" VerticalAlignment="Top">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -89,7 +89,7 @@
             </DockPanel>
             <DockPanel Grid.Row="1" Background="AliceBlue" Opacity=".5" >
                 <StackPanel Orientation="Vertical">
-                    <TextBlock Grid.Column="0" Name="txtDesc0" Text="{Binding Description0}"/>
+                    <TextBlock Grid.Column="0" Name="txtDesc0" Text="{Binding Description0}" HorizontalAlignment="Left" MaxWidth="500"/>
                 </StackPanel>
             </DockPanel>
             <DockPanel Grid.Row="1" Grid.Column="2" Background="AliceBlue" Opacity=".5" >
