@@ -66,6 +66,11 @@
                             ValueChanged="OnSliderValueChanged"
                             TouchDown="Slider_TouchDown">
                     </Slider>
+                    <Popup x:Name="SliderPopup" PlacementTarget="{Binding ElementName=slider}" Placement="Relative" HorizontalOffset="-200" VerticalOffset="20">
+                        <Border BorderThickness="1" Background="LightYellow">
+                            <TextBlock x:Name="tbSliderPopup" Foreground="Black" />
+                        </Border>
+                    </Popup>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" >
                     <Grid>
