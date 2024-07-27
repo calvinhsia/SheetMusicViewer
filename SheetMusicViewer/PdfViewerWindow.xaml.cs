@@ -415,6 +415,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                             return;
                         }
                         var gridContainer = new Grid();
+                        //gridContainer.Background = Brushes.Transparent;
                         var bitmapimageCurPage = await cacheEntryCurrentPage.task;
                         if (!cacheEntryCurrentPage.task.IsCompleted)
                         {
@@ -1017,14 +1018,19 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         void OnSliderThumbDragstarted(object sender, RoutedEventArgs e)
         {
             _DisableSliderValueChanged = true;
+            SliderPopup.IsOpen = true;
         }
         void OnSliderThumbDragCompleted(object sender, RoutedEventArgs e)
         {
             _DisableSliderValueChanged = false;
+            SliderPopup.IsOpen = false;
             OnSliderValueChanged(sender, e);
         }
         void OnSliderValueChanged(object sender, RoutedEventArgs e)
         {
+            // now get the title of the page
+            var title =$"{CurrentPageNumber} {currentPdfMetaData?.GetDescription(CurrentPageNumber)}";
+            tbSliderPopup.Text = title;
             if (!_DisableSliderValueChanged)
             {
                 if (currentPdfMetaData != null)

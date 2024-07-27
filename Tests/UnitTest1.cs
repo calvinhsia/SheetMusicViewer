@@ -21,6 +21,7 @@ using System.Reflection;
 using System.Windows.Markup;
 using System.Collections.ObjectModel;
 using System.Runtime.ConstrainedExecution;
+using System.Windows.Controls.Primitives;
 
 namespace Tests
 {
@@ -121,6 +122,7 @@ namespace Tests
         //        readonly string testPdf = @"C:\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
 
         [TestMethod]
+        [Ignore]
         public async Task TestExecContext()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -131,6 +133,92 @@ namespace Tests
                 };
                 (var lstMetaData, var _) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(w._RootMusicFolder);
                 var x = lstMetaData;
+                w.ShowDialog();
+            });
+        }
+        [TestMethod]
+        public async Task SliderTest()
+        {
+            await RunInSTAExecutionContextAsync(async () =>
+            {
+                await Task.Yield();
+                var spXaml = @"
+        <StackPanel x:Name=""sp"" Orientation = ""Vertical"">
+            <TextBlock x:Name=""tbSlider""/>
+            <Slider x:Name=""MySlider"" Maximum = ""100""/>
+        </StackPanel>
+";
+//                var spXamlBindingWorks = @"
+//        <StackPanel x:Name=""sp"" Orientation = ""Vertical"">
+//            <TextBlock x:Name=""tbSlider"" Text = ""{Binding ElementName=MySlider, Path=Value, UpdateSourceTrigger=PropertyChanged}""/>
+//            <Slider x:Name=""MySlider"" Maximum = ""100""/>
+//        </StackPanel>
+//";
+                var strxaml =
+    $@"<Grid
+xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
+xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
+xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetFileNameWithoutExtension(Assembly.GetExecutingAssembly().Location)}"" 
+        Margin=""5,5,5,5"">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width = ""200""/>
+            <ColumnDefinition Width = ""3""/>
+            <ColumnDefinition Width = ""*""/>
+        </Grid.ColumnDefinitions>
+        <ListView x:Name=""lvData""/>
+        <GridSplitter Grid.Column = ""1"" HorizontalAlignment=""Center"" VerticalAlignment=""Stretch"" Width = ""3"" Background=""LightBlue""/>
+        <DockPanel Grid.Column=""2"">
+        {spXaml}
+
+        </DockPanel>
+    </Grid>
+";
+                var grid = (Grid)XamlReader.Parse(strxaml);
+                var slider = (Slider)grid.FindName("MySlider");
+                var tbSlider = (TextBlock)grid.FindName("tbSlider");
+                Popup popupSliderValue = null;
+                TextBlock tbPopup = null;
+                slider.ValueChanged+= (o, e) =>
+                {
+                    tbSlider.Text = $"VC {slider.Value}";
+                    tbPopup.Text = $"VC {slider.Value}";
+                };
+                slider.AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler((o, e) =>
+                {
+                    popupSliderValue = new Popup()
+                    {
+                        PlacementTarget = slider,
+                        Placement = PlacementMode.Relative,
+                        HorizontalOffset = -100,
+                        VerticalOffset = 20
+                    };
+                    popupSliderValue.IsOpen = true;
+                    popupSliderValue.Visibility = Visibility.Visible;
+                    //windSliderValue.Show();
+                    tbPopup = new TextBlock() { Text = $"DragStarted {slider.Value}", Foreground =System.Windows.Media.Brushes.Black };
+                    var border = new Border()
+                    {
+                        BorderThickness = new Thickness(1), 
+                        Background = System.Windows.Media.Brushes.LightYellow
+                    };
+                    border.Child = tbPopup;
+                    popupSliderValue.Child = border;
+                    popupSliderValue.BringIntoView();
+                    //windSliderValue.Content = tbSliderValueWindow;
+                    tbSlider.Text = $"DragStarted {slider.Value}";
+                }), handledEventsToo: true);
+                slider.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler((o, e) =>
+                {
+                    tbSlider.Text = $"DragCompleted {slider.Value}";
+                    //windSliderValue.Close();
+                    popupSliderValue.IsOpen = false;
+                    popupSliderValue = null;
+                }), handledEventsToo: true);
+                var w = new Window();
+                w.Content = grid;
+                w.Show();
+                await Task.Delay(10000);
+
             });
         }
 
