@@ -96,7 +96,8 @@ namespace Tests
         }
         public static string GetSheetMusicFolder()
         {
-            var folder = @"C:\Users\calvinh\OneDrive";
+            var username = Environment.UserName;
+            var folder = $@"C:\Users\{username}\OneDrive";
             if (!Directory.Exists(folder))
             {
                 folder = @"d:\OneDrive";
@@ -333,12 +334,13 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
             AddLogEntry("Done all..exit test");
         }
         [TestMethod]
-        [Ignore]
+        //[Ignore]
         public async Task TestStressOnePage()
         {
             await RunInSTAExecutionContextAsync(async () =>
             {
                 var pdfFileName = $@"{GetSheetMusicFolder()}\Pop\PopSingles\Be Our Guest - G Major - MN0174098.pdf"; var pageNo = 1;
+                TestContext.WriteLine($"Starting {pdfFileName}");
 
                 //var pdfFileName = $@"{GetOneDriveFolder()}\SheetMusic\Pop\PopSingles\Bohemian Rhapsody - Bb Major.pdf";
                 //var pdfFileName = $@"{GetOneDriveFolder()}\SheetMusic\Pop\PopSingles\HisTheme.pdf";
