@@ -273,9 +273,10 @@ namespace SheetMusicViewer
                         select new
                         {
                             itm.SongName,
+                            Page = itm.PageNo,
+                            Vol = tup.Item1.GetVolNumFromPageNum(itm.PageNo),
                             itm.Composer,
                             CompositionDate = itm.Date,
-                            Page = itm.PageNo,
                             Fav = tup.Item1.IsFavorite(itm.PageNo) ? "Fav" : string.Empty,
                             BookName = tup.Item1.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true),
                             itm.Notes,
@@ -286,7 +287,7 @@ namespace SheetMusicViewer
                         };
 
                 var br = new BrowsePanel(q,
-                    colWidths: new[] { 300, 100, 100, 40, 40, 500 });
+                    colWidths: new[] { 300, 40, 30, 100, 80, 30, 200, 500 });
                 br.BrowseList.SelectionChanged += (o, e) =>
                 {
                     e.Handled = true; // prevent bubbling SelectionChanged up to tabcontrol
@@ -432,11 +433,7 @@ namespace SheetMusicViewer
                 nPages += pdfMetaDataItem.NumPagesInSet;
                 nFavs += pdfMetaDataItem.dictFav.Count;
             }
-            this.tbxTotals.Text = $@"Total #Books = {
-                nBooks} # Songs = {
-                nSongs:n0} # Pages = {
-                nPages:n0} #Fav={
-                nFavs:n0}";
+            this.tbxTotals.Text = $@"Total #Books = {nBooks} # Songs = {nSongs:n0} # Pages = {nPages:n0} #Fav={nFavs:n0}";
             if (lstBooks.Count > 0)
             {
                 this.lbBooks.ScrollIntoView(lstBooks[0]);
