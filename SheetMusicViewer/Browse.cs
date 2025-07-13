@@ -451,7 +451,13 @@ namespace SheetMusicViewer
             File.Move(tmpFileName, filename); // rename
             if (fStartIt)
             {
-                Process.Start(filename);
+                try
+                {
+                    Process.Start(new ProcessStartInfo(filename) { UseShellExecute = true });
+                }
+                catch (Exception)
+                {
+                }
             }
             return filename;
         }
