@@ -1,5 +1,24 @@
 # Copilot Instructions for SheetMusicViewer
 
+## CRITICAL: No Summary Markdown Files
+
+**DO NOT create summary or documentation markdown files unless explicitly requested by the user.**
+
+Examples of files NOT to create:
+- `*_SUMMARY.md`
+- `*_COMPLETE.md`
+- `*_REPORT.md`
+- `*_DOCUMENTATION.md`
+- `TEST_COVERAGE_*.md`
+- `GITHUB_ACTIONS_*.md`
+
+When completing work:
+- Report results directly in conversation
+- Update existing documentation if needed
+- Don't create new markdown files for status/summary
+
+---
+
 ## CRITICAL: Avoid Reading Diff/Temp Files Instead of Real Files
 
 ### Problem Description
@@ -86,6 +105,7 @@ SheetMusicViewer/PdfViewerWindow.xaml.cs
 - **Stream Position Management**: Always call `strm.Seek(0)` after write operations and before read operations when working with `InMemoryRandomAccessStream`
 - **STA Threading**: UI tests must run on STA threads using `RunInSTAExecutionContextAsync` helper method
 - **PDF Metadata**: The `PdfMetaData` class manages bookmarks, favorites, ink annotations, and multi-volume PDF sets
+- **Dependency Injection**: Use service pattern for UI dialogs (MessageBox, FileDialog) to enable mocking in tests
 
 ### Code Style
 - Follow existing conventions in the codebase

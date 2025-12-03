@@ -294,7 +294,15 @@ namespace Tests
             {
                 await Task.Yield();
                 // Arrange
-                var window = new PdfViewerWindow(rootFolderForTesting: null, UseSettings: false);
+                var testDir = Path.Combine(Path.GetTempPath(), "PdfViewerWindowTests");
+                Directory.CreateDirectory(testDir);
+                
+                var mockMessageBoxService = new TestMessageBoxService();
+                var window = new PdfViewerWindow(rootFolderForTesting: testDir, UseSettings: false)
+                {
+                    _messageBoxService = mockMessageBoxService
+                };
+                
                 var eventRaised = false;
                 string capturedMessage = null;
                 Exception capturedException = null;
@@ -312,10 +320,24 @@ namespace Tests
                 window.OnException("Test message", testException);
 
                 // Assert
-                Assert.IsTrue(eventRaised);
+                Assert.IsTrue(eventRaised, "PdfExceptionEvent should have been raised");
                 Assert.AreEqual("Test message", capturedMessage);
                 Assert.AreSame(testException, capturedException);
+                Assert.AreEqual(1, mockMessageBoxService.ShowCallCount, "MessageBox should have been shown once");
+                Assert.IsTrue(mockMessageBoxService.LastMessage.Contains("Test message"), "MessageBox should contain the test message");
+                Assert.IsTrue(mockMessageBoxService.LastMessage.Contains(testException.ToString()), "MessageBox should contain the exception details");
                 AddLogEntry($"Exception event raised with message: {capturedMessage}");
+                AddLogEntry($"MessageBox shown {mockMessageBoxService.ShowCallCount} time(s) with message: {mockMessageBoxService.LastMessage}");
+                
+                // Cleanup
+                try
+                {
+                    if (Directory.Exists(testDir))
+                    {
+                        Directory.Delete(testDir, recursive: true);
+                    }
+                }
+                catch { }
             });
         }
 
