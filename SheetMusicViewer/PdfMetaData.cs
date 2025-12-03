@@ -266,6 +266,13 @@ namespace SheetMusicViewer
                         var retval = false;
                         try
                         {
+                            // Skip macOS metadata files
+                            var fileName = Path.GetFileName(curFullPathFile);
+                            if (fileName.StartsWith("._") || curFullPathFile.Contains("__MACOSX"))
+                            {
+                                return true; // Skip but don't treat as error
+                            }
+                            
                             curmetadata = await PdfMetaData.ReadPdfMetaDataAsync(curFullPathFile);
                             if (curmetadata != null)
                             {
