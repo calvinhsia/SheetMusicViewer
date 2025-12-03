@@ -382,8 +382,10 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
                         using var strm = new InMemoryRandomAccessStream();
                         await pdfPage.RenderToStreamAsync(strm, renderOpts);
                         await strm.FlushAsync();
+                        strm.Seek(0);
                         var chksum = 0UL;
                         var st = strm.AsStream();
+                        st.Seek(0, SeekOrigin.Begin);
                         var bytes = new byte[st.Length];
                         st.Read(bytes, 0, (int)st.Length);
                         Array.ForEach(bytes, (b) => { chksum += b; });
@@ -391,7 +393,9 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
 
                         var bmi = new BitmapImage();
                         bmi.BeginInit();
-                        bmi.StreamSource = strm.CloneStream().AsStream();
+                        var clonedStream = strm.CloneStream();
+                        clonedStream.Seek(0);
+                        bmi.StreamSource = clonedStream.AsStream();
                         bmi.Rotation = Rotation.Rotate0;
                         bmi.CacheOption = BitmapCacheOption.OnLoad;
                         bmi.EndInit();
@@ -467,7 +471,6 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
                         {
                             var dictCheckSums = new Dictionary<ulong, int>(); // chksum=>cnt of chksum
                             using var pdfPage = pdfDoc.GetPage((uint)(pageNo));
-                            using var strm = new InMemoryRandomAccessStream();
                             var rect = pdfPage.Dimensions.ArtBox;
                             var renderOpts = new PdfPageRenderOptions()
                             {
@@ -479,31 +482,27 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
                             {
                                 ctsDone.Token.ThrowIfCancellationRequested();
 
+                                using var strm = new InMemoryRandomAccessStream();
                                 await pdfPage.RenderToStreamAsync(strm, renderOpts);
                                 await strm.FlushAsync();
+                                strm.Seek(0);
                                 var chksum = 0UL;
                                 var st = strm.AsStream();
+                                st.Seek(0, SeekOrigin.Begin);
                                 var bytes = new byte[st.Length];
                                 st.Read(bytes, 0, (int)st.Length);
                                 Array.ForEach(bytes, (b) => { chksum += b; });
                                 dictCheckSums[chksum] = dictCheckSums.TryGetValue(chksum, out var val) ? val + 1 : 1;
 
-                                //var bmi = new BitmapImage();
-                                //bmi.BeginInit();
-                                //bmi.StreamSource = strm.CloneStream().AsStream();
-                                //bmi.Rotation = Rotation.Rotate0;
-                                //bmi.CacheOption = BitmapCacheOption.OnLoad;
-                                //bmi.EndInit();
                                 var sp = new StackPanel() { Orientation = Orientation.Vertical };
                                 sp.Children.Add(new TextBlock()
                                 {
                                     Text = $"{pdfFileName}({pageNo}/{pdfDoc.PageCount}) {ctr,5} #chk={dictCheckSums.Count} Chk={chksum:n0} "
                                 });
-                                //sp.Children.Add(new Image() { Source = bmi, Stretch = System.Windows.Media.Stretch.None });
                                 dpPDF.Children.Clear();
                                 dpPDF.Children.Add(sp);
                             }
-                            if (dictCheckSums.Count >= 1)
+                            if (dictCheckSums.Count > 1)
                             {
                                 var str = $"{dictCheckSums.Count} {Path.GetFileName(pdfFileName)}({pageNo}/{pdfDoc.PageCount})";
                                 lstdata.Add(str);
