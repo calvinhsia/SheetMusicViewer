@@ -130,6 +130,8 @@ namespace SheetMusicViewer
         internal MyInkCanvas[] inkCanvas = new MyInkCanvas[2];
 
         internal PageCache _pageCache;
+        internal IMessageBoxService _messageBoxService;
+        
         public PdfViewerWindow(string rootFolderForTesting, bool UseSettings)
         {
             this._RootMusicFolder = rootFolderForTesting;
@@ -146,6 +148,7 @@ namespace SheetMusicViewer
             InitializeComponent();
             s_pdfViewerWindow = this;
             _pageCache = new PageCache(this);
+            _messageBoxService ??= new MessageBoxService(); // Use injected service or default
             this.DataContext = this;
             if (_UseSettings)
             {
@@ -170,7 +173,7 @@ namespace SheetMusicViewer
                 var logfile = System.IO.Path.Combine(_RootMusicFolder, $"{MyAppName}.log");
                 var dt = DateTime.Now.ToString("MM/dd/yy hh:mm:ss");
                 File.AppendAllText(logfile, $"\r\n{dt} {Environment.GetEnvironmentVariable("COMPUTERNAME")} {e.Message} {e.ErrorException} ");
-                MessageBox.Show(e.Message + "\r\r" + e.ErrorException.ToString());
+                _messageBoxService.Show(e.Message + "\r\r" + e.ErrorException.ToString());
             };
 
 
@@ -229,7 +232,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 23 00afef50 0fea6087 Windows_Data_Pdf!Windows::Data::Pdf::CPdfStatics::~CPdfStatics+0xc6
 24 00afef60 77039272 Windows_Data_Pdf!std::_Ref_count_base::_Decref+0x27 [internal\sdk\inc\ucrt\stl120\memory @ 808] 
 25 00afef9c 7703917e ucrtbase!<lambda_f03950bc5685219e0bcd2087efbe011e>::operator()+0xc2 [minkernel\crts\ucrt\src\appcrt\startup\onexit.cpp @ 206] 
-26 00afefd0 7703914a ucrtbase!__crt_seh_guarded_call<int>::operator()<<lambda_69a2805e680e0e292e8ba93315fe43a8>,<lambda_f03950bc5685219e0bcd2087efbe011e> &,<lambda_03fcd07e894ec930e3f35da366ca99d6> >+0x30 [minkernel\crts\ucrt\devdiv\vcruntime\inc\internal_shared.h @ 204] 
+26 00aff0d0 7703914a ucrtbase!__crt_seh_guarded_call<int>::operator()<<lambda_69a2805e680e0e292e8ba93315fe43a8>,<lambda_f03950bc5685219e0bcd2087efbe011e> &,<lambda_03fcd07e894ec930e3f35da366ca99d6> >+0x30 [minkernel\crts\ucrt\devdiv\vcruntime\inc\internal_shared.h @ 204] 
 27 (Inline) -------- ucrtbase!__acrt_lock_and_call+0x17 [minkernel\crts\ucrt\inc\corecrt_internal.h @ 970] 
 28 00afeff0 77037397 ucrtbase!_execute_onexit_table+0x2a [minkernel\crts\ucrt\src\appcrt\startup\onexit.cpp @ 231] 
 29 00aff028 0ff1ec14 ucrtbase!__crt_state_management::wrapped_invoke<int (__cdecl*)(_onexit_table_t *),_onexit_table_t *,int>+0x56 [minkernel\crts\ucrt\inc\corecrt_internal_state_isolation.h @ 362] 
@@ -513,7 +516,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 this.dpPage.Children.Clear();
 
                 //RaiseEvent(new PdfExceptionEventAgs(PdfExceptionEvent, this, null));
-                System.Windows.Forms.MessageBox.Show($"Exception showing {currentPdfMetaData.GetFullPathFileFromPageNo(pageNo)}\r\n {ex}");
+                _messageBoxService.Show($"Exception showing {currentPdfMetaData.GetFullPathFileFromPageNo(pageNo)}\r\n {ex}");
                 OnException($"Showing {currentPdfMetaData.GetFullPathFileFromPageNo(pageNo)}", ex);
                 CloseCurrentPdfFile();
             }
@@ -787,7 +790,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             // if we're inking, we don't want to be zooming too... makes a messs
             if (chkInk0.IsChecked == false && chkInk1.IsChecked == false)
             {
-                //this just gets the source. 
+                //thisjust gets the source. 
                 // I cast it to FE because I wanted to use ActualWidth for Center. You could try RenderSize as alternate
                 if (e.Source is FrameworkElement element)
                 {
@@ -798,7 +801,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 
                     var deltaManipulation = e.DeltaManipulation;
                     var matrix = ((MatrixTransform)element.RenderTransform).Matrix;
-                    // find the old center; arguaby this could be cached 
+                    // find the old center; arguably this could be cached 
                     Point center = new(e.ManipulationOrigin.X, e.ManipulationOrigin.Y); // new Point(element.ActualWidth / 2, element.ActualHeight / 2);
                     // transform it to take into account transforms from previous manipulations 
                     center = matrix.Transform(center);

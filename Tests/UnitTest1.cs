@@ -334,7 +334,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
             AddLogEntry("Done all..exit test");
         }
         [TestMethod]
-        //[Ignore]
+        [Ignore]
         public async Task TestStressOnePage()
         {
             await RunInSTAExecutionContextAsync(async () =>

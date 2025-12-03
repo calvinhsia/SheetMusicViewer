@@ -152,7 +152,9 @@ jobs:
   release:
     runs-on: windows-latest
     needs: [build-and-test, code-analysis]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
     
     steps:
     - name: Checkout code
@@ -181,11 +183,11 @@ jobs:
         path: SheetMusicViewer-*.zip
         retention-days: 90
     
-    # Optional: Create GitHub Release on tag push
-    # - name: Create GitHub Release
-    #   if: startsWith(github.ref, 'refs/tags/')
-    #   uses: softprops/action-gh-release@v1
-    #   with:
-    #     files: SheetMusicViewer-*.zip
-    #   env:
-    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: SheetMusicViewer-*.zip
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
