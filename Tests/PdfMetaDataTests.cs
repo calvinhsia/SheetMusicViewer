@@ -45,6 +45,7 @@ namespace Tests
         #region Basic Property Tests
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_Constructor_InitializesCollections()
         {
             var metadata = new PdfMetaData();
@@ -59,6 +60,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_NumPagesInSet_CalculatesCorrectly()
         {
             var metadata = new PdfMetaData();
@@ -70,6 +72,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_MaxPageNum_CalculatesWithOffset()
         {
             var metadata = new PdfMetaData
@@ -82,6 +85,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_ToString_FormatsCorrectly()
         {
             var metadata = new PdfMetaData
@@ -105,6 +109,7 @@ namespace Tests
         #region Volume Management Tests
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_GetVolNumFromPageNum_SingleVolume()
         {
             var metadata = new PdfMetaData
@@ -119,6 +124,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_GetVolNumFromPageNum_MultiVolume()
         {
             var metadata = new PdfMetaData
@@ -138,6 +144,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_GetVolNumFromPageNum_WithNegativeOffset()
         {
             var metadata = new PdfMetaData
@@ -155,6 +162,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_GetPagenoOfVolume_CalculatesCorrectly()
         {
             var metadata = new PdfMetaData
@@ -175,6 +183,7 @@ namespace Tests
         #region Favorite Management Tests
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_ToggleFavorite_AddsFavorite()
         {
             var metadata = new PdfMetaData();
@@ -187,6 +196,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_ToggleFavorite_RemovesFavorite()
         {
             var metadata = new PdfMetaData();
@@ -201,6 +211,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_ToggleFavorite_WithCustomName()
         {
             var metadata = new PdfMetaData();
@@ -213,6 +224,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_IsFavorite_ReturnsFalseForNonExistent()
         {
             var metadata = new PdfMetaData();
@@ -221,6 +233,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_InitializeFavList_PopulatesDictionary()
         {
             var metadata = new PdfMetaData();
@@ -242,6 +255,7 @@ namespace Tests
         #region TOC Management Tests
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_InitializeDictToc_PopulatesDictionary()
         {
             var metadata = new PdfMetaData();
@@ -261,6 +275,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_InitializeDictToc_HandlesMultipleSongsPerPage()
         {
             var metadata = new PdfMetaData();
@@ -279,6 +294,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_InitializeDictToc_RemovesQuotes()
         {
             var metadata = new PdfMetaData();
@@ -296,6 +312,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_GetDescription_ReturnsExactMatch()
         {
             var metadata = new PdfMetaData
@@ -316,6 +333,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_GetDescription_FindsNearestPreviousEntry()
         {
             var metadata = new PdfMetaData
@@ -336,6 +354,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_GetDescription_HandlesMultipleSongsOnPage()
         {
             var metadata = new PdfMetaData
@@ -357,6 +376,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_GetSongCount_ReturnsCorrectCount()
         {
             var metadata = new PdfMetaData();
@@ -372,6 +392,7 @@ namespace Tests
         #region Rotation Tests
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_GetRotation_ReturnsVolumeRotation()
         {
             var metadata = new PdfMetaData
@@ -386,6 +407,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_Rotate_CyclesThroughRotations()
         {
             var metadata = new PdfMetaData
@@ -408,12 +430,12 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_Rotate_SetsDirty()
         {
             var metadata = new PdfMetaData
             {
-                PageNumberOffset = 0,
-                IsDirty = false
+                PageNumberOffset = 0
             };
             metadata.lstVolInfo.Add(new PdfVolumeInfo { NPagesInThisVolume = 100, Rotation = 0 });
 
@@ -427,6 +449,7 @@ namespace Tests
         #region Ink Strokes Tests
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_InitializeInkStrokes_PopulatesDictionary()
         {
             var metadata = new PdfMetaData();
@@ -446,6 +469,7 @@ namespace Tests
         #region Comparers Tests
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfVolumeInfoComparer_ComparesAlphabetically()
         {
             var comparer = new PdfVolumeInfoComparer();
@@ -458,6 +482,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestTocEntryComparer_ComparesAlphabetically()
         {
             var comparer = new TocEntryComparer();
@@ -470,6 +495,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPageNoBaseClassComparer_ComparesByPageNumber()
         {
             var comparer = new PageNoBaseClassComparer();
@@ -486,6 +512,7 @@ namespace Tests
         #region Helper Class Tests
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestFavorite_ToString_FormatsCorrectly()
         {
             var favorite = new Favorite
@@ -500,6 +527,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestTOCEntry_Clone_CreatesDeepCopy()
         {
             var original = new TOCEntry
@@ -526,6 +554,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestTOCEntry_ToString_FormatsCorrectly()
         {
             var toc = new TOCEntry
@@ -543,6 +572,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfVolumeInfo_ToString_FormatsCorrectly()
         {
             var volInfo = new PdfVolumeInfo
@@ -564,6 +594,7 @@ namespace Tests
         #region Page Calculation Edge Cases
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_GetTotalPageCount_ReturnsCorrectSum()
         {
             var metadata = new PdfMetaData();
@@ -575,6 +606,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_GetTotalPageCount_EmptyVolumes()
         {
             var metadata = new PdfMetaData();
@@ -583,6 +615,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_MaxPageNum_WithLargeNegativeOffset()
         {
             var metadata = new PdfMetaData
@@ -599,6 +632,7 @@ namespace Tests
         #region Dirty Flag Tests
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_IsDirty_InitiallyFalse()
         {
             var metadata = new PdfMetaData();
@@ -607,6 +641,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_ToggleFavorite_SetsDirtyFlag()
         {
             var metadata = new PdfMetaData
@@ -620,6 +655,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestPdfMetaData_Rotate_SetsDirtyFlag()
         {
             var metadata = new PdfMetaData

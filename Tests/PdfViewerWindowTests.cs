@@ -19,6 +19,7 @@ namespace Tests
         #region Static Helper Method Tests
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestGetDistanceBetweenPoints_SamePoint()
         {
             // Arrange
@@ -34,6 +35,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestGetDistanceBetweenPoints_HorizontalDistance()
         {
             // Arrange
@@ -49,6 +51,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestGetDistanceBetweenPoints_VerticalDistance()
         {
             // Arrange
@@ -64,6 +67,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestGetDistanceBetweenPoints_DiagonalDistance()
         {
             // Arrange
@@ -79,6 +83,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestGetDistanceBetweenPoints_NegativeCoordinates()
         {
             // Arrange
@@ -94,6 +99,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestGetDistanceBetweenPoints_LargeValues()
         {
             // Arrange
@@ -113,6 +119,7 @@ namespace Tests
         #region Property Tests
 
         [TestMethod]
+        [TestCategory("Unit")]
         public async Task TestPdfViewerWindow_Construction()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -131,6 +138,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public async Task TestPdfViewerWindow_MaxPageNumber_NoPdfLoaded()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -149,6 +157,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public async Task TestPdfViewerWindow_NumPagesPerView_SinglePage()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -168,6 +177,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public async Task TestPdfViewerWindow_NumPagesPerView_TwoPages()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -187,6 +197,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public async Task TestPdfViewerWindow_PdfTitle_NoPdf()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -205,6 +216,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public async Task TestPdfViewerWindow_PdfUIEnabled_NoPdf()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -227,6 +239,7 @@ namespace Tests
         #region State Management Tests
 
         [TestMethod]
+        [TestCategory("Unit")]
         public async Task TestPdfViewerWindow_TouchCount_Increments()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -247,6 +260,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public async Task TestPdfViewerWindow_CurrentPageNumber_SetsValue()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -265,6 +279,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public async Task TestPdfViewerWindow_Show2Pages_ToggleState()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -288,6 +303,7 @@ namespace Tests
         #region Exception Handling Tests
 
         [TestMethod]
+        [TestCategory("Unit")]
         public async Task TestPdfViewerWindow_OnException_RaisesEvent()
         {
             await RunInSTAExecutionContextAsync(async () =>

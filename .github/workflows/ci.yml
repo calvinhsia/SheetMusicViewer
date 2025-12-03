@@ -42,11 +42,26 @@ jobs:
           --configuration ${{ env.CONFIGURATION }} `
           --no-build `
           --verbosity normal `
-          --logger "trx;LogFileName=test-results.trx" `
+          --logger "trx;LogFileName=unit-test-results.trx" `
           --collect:"XPlat Code Coverage" `
-          --results-directory ./TestResults `
+          --results-directory ./TestResults/Unit `
+          --filter "TestCategory=Unit" `
           -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
       continue-on-error: false
+      shell: powershell
+    
+    - name: Run integration tests (if any)
+      run: |
+        dotnet test ${{ env.SOLUTION_FILE }} `
+          --configuration ${{ env.CONFIGURATION }} `
+          --no-build `
+          --verbosity normal `
+          --logger "trx;LogFileName=integration-test-results.trx" `
+          --collect:"XPlat Code Coverage" `
+          --results-directory ./TestResults/Integration `
+          --filter "TestCategory=Integration" `
+          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
+      continue-on-error: true
       shell: powershell
     
     - name: List coverage files (debug)
@@ -81,14 +96,14 @@ jobs:
       if: always()
       with:
         name: test-results
-        path: '**/test-results.trx'
+        path: '**/*-test-results.trx'
         retention-days: 30
     
     - name: Publish test results summary
       uses: EnricoMi/publish-unit-test-result-action/windows@v2
       if: always()
       with:
-        files: '**/test-results.trx'
+        files: '**/*-test-results.trx'
         check_name: 'Test Results'
     
     - name: Add Coverage PR Comment

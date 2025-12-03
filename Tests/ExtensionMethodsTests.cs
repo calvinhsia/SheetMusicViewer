@@ -15,6 +15,7 @@ namespace Tests
         #region FindIndexOfFirstGTorEQTo Tests
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestFindIndexOfFirstGTorEQTo_EmptyList_ReturnsMinusOne()
         {
             // Arrange
@@ -29,6 +30,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestFindIndexOfFirstGTorEQTo_ExactMatch_ReturnsCorrectIndex()
         {
             // Arrange
@@ -44,6 +46,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestFindIndexOfFirstGTorEQTo_NoExactMatch_ReturnsNextHigher()
         {
             // Arrange
@@ -59,6 +62,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestFindIndexOfFirstGTorEQTo_KeyLessThanAll_ReturnsFirstIndex()
         {
             // Arrange
@@ -74,6 +78,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestFindIndexOfFirstGTorEQTo_KeyGreaterThanAll_ReturnsCount()
         {
             // Arrange
@@ -88,6 +93,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestFindIndexOfFirstGTorEQTo_StringList()
         {
             // Arrange
@@ -103,6 +109,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestFindIndexOfFirstGTorEQTo_NegativeNumbers()
         {
             // Arrange
@@ -122,6 +129,7 @@ namespace Tests
         #region AddMnuItem Tests
 
         [TestMethod]
+        [TestCategory("Unit")]
         public async Task TestAddMnuItem_CreatesMenuItem()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -145,6 +153,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public async Task TestAddMnuItem_HandlerIsAttached()
         {
             await RunInSTAExecutionContextAsync(async () =>
