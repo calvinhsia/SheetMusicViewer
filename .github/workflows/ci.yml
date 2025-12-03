@@ -1,0 +1,191 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, tests, develop ]
+  pull_request:
+    branches: [ main, tests ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  SOLUTION_FILE: SheetMusicViewer.sln
+  CONFIGURATION: Release
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Shallow clones should be disabled for better analysis
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Display .NET info
+      run: dotnet --info
+    
+    - name: Restore dependencies
+      run: dotnet restore ${{ env.SOLUTION_FILE }}
+    
+    - name: Build solution
+      run: dotnet build ${{ env.SOLUTION_FILE }} --configuration ${{ env.CONFIGURATION }} --no-restore
+    
+    - name: Run unit tests with coverage
+      run: |
+        dotnet test ${{ env.SOLUTION_FILE }} `
+          --configuration ${{ env.CONFIGURATION }} `
+          --no-build `
+          --verbosity normal `
+          --logger "trx;LogFileName=test-results.trx" `
+          --collect:"XPlat Code Coverage" `
+          --results-directory ./TestResults `
+          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+      continue-on-error: false
+      shell: powershell
+    
+    - name: Install ReportGenerator
+      run: dotnet tool install --global dotnet-reportgenerator-globaltool
+    
+    - name: Generate Coverage Report
+      run: |
+        reportgenerator `
+          -reports:**/coverage.opencover.xml `
+          -targetdir:./CoverageReport `
+          -reporttypes:"Html;Cobertura;MarkdownSummaryGithub" `
+          -verbosity:Info
+      shell: powershell
+    
+    - name: Upload coverage report to artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: coverage-report
+        path: ./CoverageReport
+        retention-days: 30
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: '**/test-results.trx'
+        retention-days: 30
+    
+    - name: Publish test results summary
+      uses: EnricoMi/publish-unit-test-result-action/windows@v2
+      if: always()
+      with:
+        files: '**/test-results.trx'
+        check_name: 'Test Results'
+    
+    - name: Add Coverage PR Comment
+      uses: marocchino/sticky-pull-request-comment@v2
+      if: github.event_name == 'pull_request'
+      with:
+        recreate: true
+        path: CoverageReport/SummaryGithub.md
+    
+    # Optional: Upload to Codecov
+    # - name: Upload coverage to Codecov
+    #   uses: codecov/codecov-action@v4
+    #   with:
+    #     files: ./CoverageReport/Cobertura.xml
+    #     flags: unittests
+    #     name: codecov-umbrella
+    #     fail_ci_if_error: false
+    #     token: ${{ secrets.CODECOV_TOKEN }}
+    
+    # Optional: Upload to Coveralls
+    # - name: Upload coverage to Coveralls
+    #   uses: coverallsapp/github-action@v2
+    #   with:
+    #     github-token: ${{ secrets.GITHUB_TOKEN }}
+    #     path-to-lcov: ./CoverageReport/lcov.info
+    
+    - name: Build SheetMusicViewer project
+      run: dotnet build SheetMusicViewer/SheetMusicViewer.csproj --configuration ${{ env.CONFIGURATION }} --no-restore
+    
+    - name: Publish application
+      run: dotnet publish SheetMusicViewer/SheetMusicViewer.csproj --configuration ${{ env.CONFIGURATION }} --output ./publish --no-build
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: sheetmusicviewer-build
+        path: ./publish
+        retention-days: 30
+
+  code-analysis:
+    runs-on: windows-latest
+    needs: build-and-test
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Restore dependencies
+      run: dotnet restore ${{ env.SOLUTION_FILE }}
+    
+    - name: Build for analysis
+      run: dotnet build ${{ env.SOLUTION_FILE }} --configuration ${{ env.CONFIGURATION }} --no-restore
+    
+    # Optional: SonarCloud analysis
+    # - name: SonarCloud Scan
+    #   uses: SonarSource/sonarcloud-github-action@master
+    #   env:
+    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  release:
+    runs-on: windows-latest
+    needs: [build-and-test, code-analysis]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: sheetmusicviewer-build
+        path: ./publish
+    
+    - name: Create Release Archive
+      run: |
+        Compress-Archive -Path ./publish/* -DestinationPath SheetMusicViewer-${{ github.sha }}.zip
+      shell: powershell
+    
+    - name: Upload Release Archive
+      uses: actions/upload-artifact@v4
+      with:
+        name: sheetmusicviewer-release
+        path: SheetMusicViewer-*.zip
+        retention-days: 90
+    
+    # Optional: Create GitHub Release on tag push
+    # - name: Create GitHub Release
+    #   if: startsWith(github.ref, 'refs/tags/')
+    #   uses: softprops/action-gh-release@v1
+    #   with:
+    #     files: SheetMusicViewer-*.zip
+    #   env:
+    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
