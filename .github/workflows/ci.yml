@@ -36,84 +36,29 @@ jobs:
     - name: Build solution
       run: dotnet build ${{ env.SOLUTION_FILE }} --configuration ${{ env.CONFIGURATION }} --no-restore
     
-    - name: Run unit tests with coverage
+    - name: Run unit tests
       run: |
         dotnet test ${{ env.SOLUTION_FILE }} `
           --configuration ${{ env.CONFIGURATION }} `
           --no-build `
           --verbosity normal `
           --logger "trx;LogFileName=unit-test-results.trx" `
-          --collect:"XPlat Code Coverage" `
           --results-directory ./TestResults/Unit `
-          --filter "TestCategory=Unit" `
-          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
+          --filter "TestCategory=Unit"
       continue-on-error: false
       shell: powershell
     
-    - name: Run integration tests (if any)
+    - name: Run integration tests
       run: |
         dotnet test ${{ env.SOLUTION_FILE }} `
           --configuration ${{ env.CONFIGURATION }} `
           --no-build `
           --verbosity normal `
           --logger "trx;LogFileName=integration-test-results.trx" `
-          --collect:"XPlat Code Coverage" `
           --results-directory ./TestResults/Integration `
-          --filter "TestCategory=Integration" `
-          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
+          --filter "TestCategory=Integration"
       continue-on-error: true
       shell: powershell
-    
-    - name: List coverage files (debug)
-      if: always()
-      run: |
-        Write-Host "Contents of TestResults folder:"
-        Get-ChildItem -Path ./TestResults -Recurse -Force | Format-Table -AutoSize
-      shell: powershell
-    
-    - name: Install ReportGenerator
-      run: dotnet tool install --global dotnet-reportgenerator-globaltool
-    
-    - name: Generate Coverage Report
-      run: |
-        reportgenerator `
-          -reports:TestResults/**/coverage.cobertura.xml `
-          -targetdir:./CoverageReport `
-          -reporttypes:"Html;Cobertura;MarkdownSummaryGithub;TextSummary" `
-          -verbosity:Info
-      shell: powershell
-    
-    - name: Display Coverage Summary
-      if: always()
-      run: |
-        Write-Host "`n=== CODE COVERAGE SUMMARY ===" -ForegroundColor Cyan
-        if (Test-Path "./CoverageReport/Summary.txt") {
-          Get-Content "./CoverageReport/Summary.txt"
-        } else {
-          Write-Host "Coverage summary not found" -ForegroundColor Yellow
-        }
-      shell: powershell
-    
-    - name: Add Coverage to Job Summary
-      if: always()
-      run: |
-        if (Test-Path "./CoverageReport/SummaryGithub.md") {
-          Write-Host "Adding coverage to job summary"
-          Get-Content "./CoverageReport/SummaryGithub.md" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-        } else {
-          Write-Host "Coverage markdown not found" -ForegroundColor Yellow
-          echo "## Coverage Report" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          echo "Coverage report generation failed or no coverage data available." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-        }
-      shell: powershell
-    
-    - name: Upload coverage report to artifacts
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: coverage-report
-        path: ./CoverageReport
-        retention-days: 30
     
     - name: Upload test results
       uses: actions/upload-artifact@v4
@@ -129,30 +74,6 @@ jobs:
       with:
         files: '**/*-test-results.trx'
         check_name: 'Test Results'
-    
-    - name: Add Coverage PR Comment
-      uses: marocchino/sticky-pull-request-comment@v2
-      if: github.event_name == 'pull_request'
-      with:
-        recreate: true
-        path: CoverageReport/SummaryGithub.md
-    
-    # Optional: Upload to Codecov
-    # - name: Upload coverage to Codecov
-    #   uses: codecov/codecov-action@v4
-    #   with:
-    #     files: ./CoverageReport/Cobertura.xml
-    #     flags: unittests
-    #     name: codecov-umbrella
-    #     fail_ci_if_error: false
-    #     token: ${{ secrets.CODECOV_TOKEN }}
-    
-    # Optional: Upload to Coveralls
-    # - name: Upload coverage to Coveralls
-    #   uses: coverallsapp/github-action@v2
-    #   with:
-    #     github-token: ${{ secrets.GITHUB_TOKEN }}
-    #     path-to-lcov: ./CoverageReport/lcov.info
     
     - name: Build SheetMusicViewer project
       run: dotnet build SheetMusicViewer/SheetMusicViewer.csproj --configuration ${{ env.CONFIGURATION }} --no-restore

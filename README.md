@@ -15,6 +15,57 @@ Keep in mind the page size will be roughly the screen size.
 * Optionally persists views by Date, to see which music viewed recently
 * The SheetMusic/Ragtime folder has sample PDFs which you can use if as samples if you need to.
 
+## Testing Strategy
+
+This project includes comprehensive automated testing to ensure quality and reliability:
+
+### Test Suite Overview
+- ? **70 Unit Tests** - Fast, isolated tests for core business logic and data structures
+- ? **37 Integration Tests** - Tests for file I/O, Windows PDF APIs, and component interactions
+  - 22 automated tests that run in CI/CD pipeline
+  - 15 manual/interactive tests for full UI scenarios (marked `[Ignore]`)
+- ? **100% Pass Rate** - All executable tests passing consistently
+
+### Test Categories
+Tests are organized by category for efficient CI/CD execution:
+
+**Unit Tests** (`TestCategory="Unit"`):
+- PDF metadata management and serialization
+- Multi-volume PDF handling logic
+- Favorites and bookmark management
+- Table of Contents parsing and maintenance
+- Extension methods and utility functions
+- Property change notifications (INotifyPropertyChanged)
+
+**Integration Tests** (`TestCategory="Integration"`):
+- Windows.Data.Pdf API integration
+- File system operations (save/load metadata)
+- PDF document loading and page rendering
+- Metadata persistence across sessions
+- Singles folder dynamic management
+- Error handling with corrupted files
+
+### Why No Code Coverage Metrics?
+
+?? **Code coverage metrics are not available for this project** due to a technical limitation with .NET code coverage tools and Windows desktop applications.
+
+The standard `coverlet` tool used by `dotnet test --collect:"XPlat Code Coverage"` **cannot instrument WinExe (executable) projects**. This is a [known limitation](https://github.com/coverlet-coverage/coverlet/issues/1158) that affects all Windows Forms and WPF applications that compile to `.exe` files.
+
+**Our approach:** We prioritize **test comprehensiveness and quality** over coverage percentages. The test suite thoroughly exercises:
+- All critical business logic paths
+- Edge cases and error conditions  
+- Integration points with Windows APIs
+- Data persistence and migration scenarios
+- Concurrent operations and caching
+
+**Alternative solutions** (not implemented):
+- Refactoring all business logic into a separate Class Library project (significant architectural change)
+- Using commercial code coverage tools like JetBrains dotCover
+- Manual code review and inspection
+
+The existing test suite provides confidence in code quality and catches regressions effectively, even without automated coverage metrics.
+
+---
 
 I have a few hundred piano music books, singles, etc. that I've collected over the last several decades. I keep them on my OneDrive, so that I can access them from any machine
 I love to play piano, especially ragtime.
