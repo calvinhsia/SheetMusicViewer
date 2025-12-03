@@ -45,8 +45,15 @@ jobs:
           --logger "trx;LogFileName=test-results.trx" `
           --collect:"XPlat Code Coverage" `
           --results-directory ./TestResults `
-          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
       continue-on-error: false
+      shell: powershell
+    
+    - name: List coverage files (debug)
+      if: always()
+      run: |
+        Write-Host "Contents of TestResults folder:"
+        Get-ChildItem -Path ./TestResults -Recurse -Force | Format-Table -AutoSize
       shell: powershell
     
     - name: Install ReportGenerator
@@ -55,7 +62,7 @@ jobs:
     - name: Generate Coverage Report
       run: |
         reportgenerator `
-          -reports:**/coverage.opencover.xml `
+          -reports:TestResults/**/coverage.cobertura.xml `
           -targetdir:./CoverageReport `
           -reporttypes:"Html;Cobertura;MarkdownSummaryGithub" `
           -verbosity:Info
