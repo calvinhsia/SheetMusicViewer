@@ -282,7 +282,7 @@ namespace SheetMusicViewer
                         }
                         catch (Exception ex)
                         {
-                            PdfViewerWindow.s_pdfViewerWindow.OnException($"Reading {curFullPathFile}", ex);
+                            PdfViewerWindow.s_pdfViewerWindow?.OnException($"Reading {curFullPathFile}", ex);
                         }
                         return retval;
                     }
@@ -425,7 +425,7 @@ namespace SheetMusicViewer
                             {
                                 lastFile += " " + ex.Data["Filename"];
                             }
-                            PdfViewerWindow.s_pdfViewerWindow.OnException($"Exception reading files {curPath} near {lastFile}", ex);
+                            PdfViewerWindow.s_pdfViewerWindow?.OnException($"Exception reading files {curPath} near {lastFile}", ex);
                         }
                         SaveMetaData(); // last one in dir
                         foreach (var dir in Directory.EnumerateDirectories(curPath))
@@ -658,7 +658,7 @@ namespace SheetMusicViewer
                 }
                 catch (Exception ex)
                 {
-                    PdfViewerWindow.s_pdfViewerWindow.OnException($"Reading {bmkFile}", ex);
+                    PdfViewerWindow.s_pdfViewerWindow?.OnException($"Reading {bmkFile}", ex);
                     // we don't want to delete the file because the user might have valuable bookmarks/favorites.
                     // let the user have an opportunity to fix it.
                 }
@@ -824,7 +824,7 @@ namespace SheetMusicViewer
         public void SaveIfDirty(bool ForceDirty = false)
         {
             InitializeListPdfDocuments(); // reinit list to clear out results to save mem
-            if (!PdfViewerWindow.s_pdfViewerWindow.IsTesting)
+            if (PdfViewerWindow.s_pdfViewerWindow?.IsTesting != false)
             {
                 if (IsDirty || ForceDirty || initialLastPageNo != LastPageNo) // must change pageno to dirty
                 {

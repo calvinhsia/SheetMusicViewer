@@ -123,6 +123,7 @@ namespace Tests
         //        readonly string testPdf = @"C:\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.pdf";
 
         [TestMethod]
+        [TestCategory("Integration")]
         [Ignore]
         public async Task TestExecContext()
         {
@@ -138,6 +139,8 @@ namespace Tests
             });
         }
         [TestMethod]
+        [TestCategory("Integration")]
+        [Ignore]
         public async Task SliderTest()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -226,6 +229,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
 
 
         [TestMethod]
+        [TestCategory("Integration")]
         [Ignore]
         public async Task TestUpdaateBmkWriteTime()
         {
@@ -249,6 +253,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
         }
 
         [TestMethod]
+        [TestCategory("Integration")]
         [Ignore]
         public async Task TestStress()
         {
@@ -334,6 +339,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
             AddLogEntry("Done all..exit test");
         }
         [TestMethod]
+        [TestCategory("Integration")]
         [Ignore]
         public async Task TestStressOnePage()
         {
@@ -420,6 +426,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
 
 
         [TestMethod]
+        [TestCategory("Integration")]
         [Ignore]
         public async Task TestStressOnePageMultiChecksum()
         {
@@ -521,6 +528,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
 
 
         [TestMethod]
+        [TestCategory("Integration")]
         [Ignore]
         public async Task TestCache()
         {
@@ -622,6 +630,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
         }
 
         [TestMethod]
+        [TestCategory("Integration")]
         [Ignore]
         public async Task TestReadBmkData()
         {
@@ -646,6 +655,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
         }
 
         [TestMethod]
+        [TestCategory("Integration")]
         [Ignore]
         public async Task TestSingles()
         {
@@ -750,6 +760,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
         }
 
         [TestMethod]
+        [TestCategory("Integration")]
         [Ignore]
         public async Task TestSinglesInsert1File()
         {
@@ -849,6 +860,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
         }
 
         [TestMethod]
+        [TestCategory("Integration")]
         [Ignore]
         public async Task TestSinglesPreserveFavAndInk()
         {
@@ -928,6 +940,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
 
 
         [TestMethod]
+        [TestCategory("Integration")]
         [Ignore]
         public async Task TestCreateBmpCache()
         {
@@ -958,6 +971,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
         }
 
         [TestMethod]
+        [TestCategory("Integration")]
         [Ignore]
         public async Task TestMainWindow()
         {

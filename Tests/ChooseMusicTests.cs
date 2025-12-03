@@ -17,6 +17,7 @@ namespace Tests
         #region Constant Tests
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestChooseMusic_NewFolderDialogString_IsCorrect()
         {
             // Arrange & Act
@@ -32,6 +33,7 @@ namespace Tests
         #region Helper Class Tests - MyContentControl
 
         [TestMethod]
+        [TestCategory("Unit")]
         public async Task TestMyContentControl_DefaultConstructor()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -48,6 +50,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public async Task TestMyContentControl_ConstructorWithPdfMetaData()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -81,6 +84,7 @@ namespace Tests
         #region Helper Class Tests - MyTreeViewItem
 
         [TestMethod]
+        [TestCategory("Unit")]
         public async Task TestMyTreeViewItem_Constructor()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -117,6 +121,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public async Task TestMyTreeViewItem_PropertiesAreReadonly()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -223,6 +228,7 @@ namespace Tests
         #region Documentation Tests
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestChooseMusic_HasRequiredTypes()
         {
             // Verify that the required types exist and are accessible
@@ -238,6 +244,7 @@ namespace Tests
         }
 
         [TestMethod]
+        [TestCategory("Unit")]
         public void TestChooseMusic_HelperClassInheritance()
         {
             // Verify inheritance hierarchy
