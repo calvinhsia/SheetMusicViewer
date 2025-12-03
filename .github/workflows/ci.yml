@@ -79,8 +79,32 @@ jobs:
         reportgenerator `
           -reports:TestResults/**/coverage.cobertura.xml `
           -targetdir:./CoverageReport `
-          -reporttypes:"Html;Cobertura;MarkdownSummaryGithub" `
+          -reporttypes:"Html;Cobertura;MarkdownSummaryGithub;TextSummary" `
           -verbosity:Info
+      shell: powershell
+    
+    - name: Display Coverage Summary
+      if: always()
+      run: |
+        Write-Host "`n=== CODE COVERAGE SUMMARY ===" -ForegroundColor Cyan
+        if (Test-Path "./CoverageReport/Summary.txt") {
+          Get-Content "./CoverageReport/Summary.txt"
+        } else {
+          Write-Host "Coverage summary not found" -ForegroundColor Yellow
+        }
+      shell: powershell
+    
+    - name: Add Coverage to Job Summary
+      if: always()
+      run: |
+        if (Test-Path "./CoverageReport/SummaryGithub.md") {
+          Write-Host "Adding coverage to job summary"
+          Get-Content "./CoverageReport/SummaryGithub.md" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+        } else {
+          Write-Host "Coverage markdown not found" -ForegroundColor Yellow
+          echo "## Coverage Report" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          echo "Coverage report generation failed or no coverage data available." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+        }
       shell: powershell
     
     - name: Upload coverage report to artifacts
