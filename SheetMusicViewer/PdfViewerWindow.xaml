@@ -91,6 +91,8 @@
                             <MenuItem Header="Show _2 Pages" IsCheckable="True" IsChecked="{Binding Show2Pages}" IsEnabled="{Binding PdfUIEnabled}" ToolTip="Show 1 or 2 pages at a time"/>
                             <MenuItem x:Name="mnuFullScreen" Header="_Full Screen" IsCheckable="True" IsChecked="{Binding ElementName=chkFullScreen, Path=IsChecked}" Checked="ChkfullScreenToggled" Unchecked="ChkfullScreenToggled" ToolTip="Toggle Full Screen mode"/>
                             <Separator/>
+                            <MenuItem Header="Convert BMK to _JSON" Click="BtnConvertInkToJson_Click" ToolTip="Convert all BMK files from XML format to portable JSON format"/>
+                            <Separator/>
                             <MenuItem Header="_About" Click="BtnAbout_Click" ToolTip="Show build information"/>
                             <MenuItem Header="_Quit" Click="BtnQuit_Click" ToolTip="Exit application"/>
                         </MenuItem>

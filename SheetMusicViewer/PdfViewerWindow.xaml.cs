@@ -896,6 +896,43 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                               $"Build Time: {BuildInfo.BuildTime}";
             _messageBoxService.Show(aboutMessage, "About", MessageBoxButton.OK);
         }
+        
+        async void BtnConvertInkToJson_Click(object sender, RoutedEventArgs e)
+        {
+            TouchCount++;
+            
+            try
+            {
+                var result = _messageBoxService.Show(
+                    "This will convert all BMK files from XML format to JSON format.\n\n" +
+                    "The original XML files will be backed up with .xml.backup extension.\n\n" +
+                    "Continue?",
+                    "Convert BMK Files to JSON",
+                    MessageBoxButton.YesNo);
+                
+                if (result != MessageBoxResult.Yes)
+                    return;
+                
+                // Convert all BMK files to JSON format
+                var (total, converted) = BmkJsonConverter.ConvertAllBmksToJson(lstPdfMetaFileData);
+                
+                // Count how many had ink strokes
+                int bmksWithInk = lstPdfMetaFileData.Count(m => m.dictInkStrokes.Count > 0);
+                
+                // Show results
+                var message = $"Conversion complete!\n\n" +
+                             $"Total BMKs processed: {total}\n" +
+                             $"BMKs converted to JSON: {converted}\n" +
+                             $"BMKs with ink annotations: {bmksWithInk}\n\n" +
+                             $"Original XML files backed up as *.bmk.xml.backup";
+                _messageBoxService.Show(message, "BMK Conversion Results", MessageBoxButton.OK);
+            }
+            catch (Exception ex)
+            {
+                _messageBoxService.Show($"Error converting BMK files:\n\n{ex.Message}", "Conversion Error", MessageBoxButton.OK);
+            }
+        }
+        
         async void BtnInvCache_Click(object sender, RoutedEventArgs e) {
             //Bug 43106054: PDF RenderToStreamAsync produces different results with same page https://microsoft.visualstudio.com/OS/_workitems/edit/43106054/  
             await ShowPageAsync(CurrentPageNumber, ClearCache: true, forceRedraw: true, resetRenderTransform: true);
