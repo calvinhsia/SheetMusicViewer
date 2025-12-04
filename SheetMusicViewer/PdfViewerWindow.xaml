@@ -7,6 +7,9 @@
         mc:Ignorable="d"
         Title="{Binding Title}"
         >
+    <Window.InputBindings>
+        <KeyBinding Key="C" Modifiers="Alt" Command="{Binding ChooserCommand}"/>
+    </Window.InputBindings>
     <Grid Background="Aqua" >
         <Grid Name="dpPage" Background="AliceBlue" 
               MouseDown="DpPage_MouseDown" 
@@ -35,9 +38,9 @@
             <StackPanel Orientation="Horizontal" Background="AliceBlue" Opacity=".5" Grid.RowSpan="2">
                 <CheckBox Name ="chkFav0" Foreground="Lime" HorizontalAlignment="Left" Content="Fav" Checked="ChkFavToggled" Unchecked="ChkFavToggled" Focusable="False" IsEnabled="{Binding PdfUIEnabled}" />
                 <CheckBox Name="chkInk0" Content="Ink" Focusable="False" IsEnabled="{Binding PdfUIEnabled}" ToolTip="Turn on/off inking with mouse or pen" Checked="ChkInkToggled" Unchecked="ChkInkToggled"/>
-                <CheckBox ToolTip="Show 1 or 2 pages at a a time" IsChecked="{Binding Show2Pages}" Content="Show_2Pages" IsEnabled="{Binding PdfUIEnabled}"/>
                 <Button Content="_Rotate" HorizontalAlignment="Right" Margin="10,0,00,0" VerticalAlignment="Top" ToolTip="rotate the document 90 degreess right"  Click="BtnRotate_Click" IsEnabled="{Binding PdfUIEnabled}"/>
-                <CheckBox x:Name="chkFullScreen" Content="_Full Screen"  ToolTip="Full Screen" HorizontalAlignment="Left" Margin="10,0,0,0" Checked="ChkfullScreenToggled"  Unchecked="ChkfullScreenToggled" />
+                
+                <CheckBox x:Name="chkFullScreen" Content="_Full Screen" Visibility="Collapsed" ToolTip="Full Screen" HorizontalAlignment="Left" Margin="10,0,0,0" Checked="ChkfullScreenToggled"  Unchecked="ChkfullScreenToggled" />
 
                 <TextBlock Name="txtBoxTitle"  Text="{Binding PdfTitle}" Foreground="DarkBlue" HorizontalAlignment="Center" FontSize="14"/>
                 <Button x:Name="btnPrev" Content="&lt;" Width="25" HorizontalAlignment="Left" Margin="30,0,0,0" VerticalAlignment="Top" 
@@ -81,11 +84,17 @@
                 </StackPanel>
             </DockPanel>
             <DockPanel Grid.Row="0" Grid.Column="2" Background="AliceBlue" Opacity=".5">
-                <StackPanel Orientation="Horizontal" Background="AliceBlue" Opacity=".5" HorizontalAlignment="Right">
-                    <Button Name="btnChooser" Content="_Chooser" IsEnabled="False" HorizontalAlignment="Right" Margin="10,0,10,0" VerticalAlignment="Top" ToolTip="Open another document, query songs, etc"  Click="BtnChooser_Click"/>
-                </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" >
-                    <Button Content="_Quit"  Margin="0,0,20,0" Click="BtnQuit_Click"/>
+                    <Menu Background="Transparent" VerticalAlignment="Center">
+                        <MenuItem x:Name="mnuMain" Header="_Menu">
+                            <MenuItem x:Name="mnuChooser" Header="_Chooser" Click="BtnChooser_Click" ToolTip="Open another document, query songs, etc"/>
+                            <MenuItem Header="Show _2 Pages" IsCheckable="True" IsChecked="{Binding Show2Pages}" IsEnabled="{Binding PdfUIEnabled}" ToolTip="Show 1 or 2 pages at a time"/>
+                            <MenuItem x:Name="mnuFullScreen" Header="_Full Screen" IsCheckable="True" IsChecked="{Binding ElementName=chkFullScreen, Path=IsChecked}" Checked="ChkfullScreenToggled" Unchecked="ChkfullScreenToggled" ToolTip="Toggle Full Screen mode"/>
+                            <Separator/>
+                            <MenuItem Header="_About" Click="BtnAbout_Click" ToolTip="Show build information"/>
+                            <MenuItem Header="_Quit" Click="BtnQuit_Click" ToolTip="Exit application"/>
+                        </MenuItem>
+                    </Menu>
                     <Button Content="InvCache"  Margin="0,0,20,0" Click="BtnInvCache_Click" ToolTip="Invalidate PDF cache to re-render: Windows bug: can render differently each time"/>
                     <TextBlock Width="17" Text="{Binding TouchCount}"/>
                     <CheckBox Name="chkInk1" Content="Ink" Focusable="False" IsEnabled="{Binding PdfUIEnabled}" ToolTip="Turn on/off inking with mouse or pen" Unchecked="ChkInkToggled" Checked="ChkInkToggled"/>
