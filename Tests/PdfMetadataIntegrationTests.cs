@@ -1,9 +1,13 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SheetMusicViewer;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Media;
 using Windows.Data.Pdf;
 using Windows.Storage;
@@ -49,79 +53,6 @@ namespace Tests
                 }
             }
         }
-
-        #region Test PDF Creation Helper
-
-        /// <summary>
-        /// Creates a minimal valid PDF file for testing purposes
-        /// This is a simple PDF 1.4 structure with one blank page
-        /// </summary>
-        private async Task CreateMinimalTestPdfAsync(string path)
-        {
-            // Minimal PDF 1.4 structure with one page
-            var pdfContent = @"%PDF-1.4
-1 0 obj
-<<
-/Type /Catalog
-/Pages 2 0 R
->>
-endobj
-2 0 obj
-<<
-/Type /Pages
-/Kids [3 0 R]
-/Count 1
->>
-endobj
-3 0 obj
-<<
-/Type /Page
-/Parent 2 0 R
-/Resources <<
-/Font <<
-/F1 <<
-/Type /Font
-/Subtype /Type1
-/BaseFont /Helvetica
->>
->>
->>
-/MediaBox [0 0 612 792]
-/Contents 4 0 R
->>
-endobj
-4 0 obj
-<<
-/Length 44
->>
-stream
-BT
-/F1 12 Tf
-100 700 Td
-(Test PDF) Tj
-ET
-endstream
-endobj
-xref
-0 5
-0000000000 65535 f 
-0000000009 00000 n 
-0000000058 00000 n 
-0000000115 00000 n 
-0000000317 00000 n 
-trailer
-<<
-/Size 5
-/Root 1 0 R
->>
-startxref
-410
-%%EOF";
-
-            await File.WriteAllTextAsync(path, pdfContent);
-        }
-
-        #endregion
 
         #region File System Integration Tests
 
@@ -479,6 +410,201 @@ startxref
             Assert.AreEqual("1779", reloadedToc.Date);
             Assert.AreEqual("Classic hymn", reloadedToc.Notes);
             AddLogEntry($"TOC entry persisted: {reloadedToc}");
+        }
+
+        #endregion
+
+        #region Ink Conversion Tests
+
+        [TestMethod]
+        [TestCategory("Integration")]
+        public async Task TestConvertInkToJson_WithWpfStrokes_ConvertsSuccessfully()
+        {
+            await RunInSTAExecutionContextAsync(async () =>
+            {
+                await Task.Yield();
+                
+                // Arrange - Create metadata with WPF ISF ink data
+                var metadata = new PdfMetaData
+                {
+                    _FullPathFile = testPdfPath,
+                    PageNumberOffset = 0
+                };
+                metadata.lstVolInfo.Add(new PdfVolumeInfo
+                {
+                    FileNameVolume = Path.GetFileName(testPdfPath),
+                    NPagesInThisVolume = 1,
+                    Rotation = 0
+                });
+
+                // Create WPF ink strokes
+                var strokeCollection = new System.Windows.Ink.StrokeCollection();
+                var points = new System.Windows.Input.StylusPointCollection
+                {
+                    new System.Windows.Input.StylusPoint(10, 10),
+                    new System.Windows.Input.StylusPoint(100, 100)
+                };
+                var stroke = new System.Windows.Ink.Stroke(points);
+                stroke.DrawingAttributes.Color = Colors.Red;
+                stroke.DrawingAttributes.Width = 3.0;
+                strokeCollection.Add(stroke);
+
+                // Save as ISF
+                using (var ms = new MemoryStream())
+                {
+                    strokeCollection.Save(ms, compress: true);
+                    var inkData = new InkStrokeClass
+                    {
+                        Pageno = 0,
+                        InkStrokeDimension = new Point(800, 600),
+                        StrokeData = ms.ToArray()
+                    };
+                    metadata.dictInkStrokes[0] = inkData;
+                }
+
+                // Act - Convert to JSON
+                int convertedCount = BmkJsonConverter.ConvertPdfMetadataInkToJson(metadata);
+
+                // Assert
+                Assert.AreEqual(1, convertedCount, "Should convert 1 page");
+                Assert.IsTrue(metadata.IsDirty, "Metadata should be marked dirty");
+                
+                // Verify it's now JSON format
+                var convertedInk = metadata.dictInkStrokes[0];
+                var jsonText = System.Text.Encoding.UTF8.GetString(convertedInk.StrokeData);
+                Assert.IsTrue(jsonText.StartsWith("{"), "Should be JSON format");
+                Assert.IsTrue(jsonText.Contains("strokes"), "Should contain strokes property"); // camelCase now
+                
+                // Verify data is preserved using JsonSerializer.Deserialize
+                var portable = JsonSerializer.Deserialize<PortableInkStrokeCollection>(jsonText);
+                Assert.IsNotNull(portable);
+                Assert.AreEqual(1, portable.Strokes.Count);
+                Assert.AreEqual(2, portable.Strokes[0].Points.Count);
+                Assert.AreEqual("#FF0000", portable.Strokes[0].Color); // Red
+                Assert.AreEqual(3.0, portable.Strokes[0].Thickness);
+                
+                AddLogEntry($"Successfully converted ISF to JSON: {portable.Strokes.Count} strokes");
+            });
+        }
+
+        [TestMethod]
+        [TestCategory("Integration")]
+        public async Task TestConvertInkToJson_AlreadyJson_SkipsConversion()
+        {
+            // Arrange - Create metadata with JSON ink data
+            var metadata = new PdfMetaData
+            {
+                _FullPathFile = testPdfPath,
+                PageNumberOffset = 0
+            };
+            metadata.lstVolInfo.Add(new PdfVolumeInfo
+            {
+                FileNameVolume = Path.GetFileName(testPdfPath),
+                NPagesInThisVolume = 1,
+                Rotation = 0
+            });
+
+            var portableStrokes = new PortableInkStrokeCollection
+            {
+                CanvasWidth = 800,
+                CanvasHeight = 600
+            };
+            portableStrokes.Strokes.Add(new PortableInkStroke
+            {
+                Color = "#0000FF",
+                Thickness = 2.0,
+                Points = new List<PortablePoint>
+                {
+                    new PortablePoint { X = 20, Y = 20 },
+                    new PortablePoint { X = 200, Y = 200 }
+                }
+            });
+
+            var json = JsonSerializer.Serialize(portableStrokes, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            });
+            var inkData = new InkStrokeClass
+            {
+                Pageno = 0,
+                InkStrokeDimension = new Point(800, 600),
+                StrokeData = System.Text.Encoding.UTF8.GetBytes(json)
+            };
+            metadata.dictInkStrokes[0] = inkData;
+
+            // Act
+            int convertedCount = BmkJsonConverter.ConvertPdfMetadataInkToJson(metadata);
+
+            // Assert
+            Assert.AreEqual(0, convertedCount, "Should not convert already-JSON data");
+            AddLogEntry($"Correctly skipped JSON data: {convertedCount} converted");
+        }
+
+        [TestMethod]
+        [TestCategory("Integration")]
+        public async Task TestConvertInkToJson_SaveAndReload_PreservesJsonFormat()
+        {
+            await RunInSTAExecutionContextAsync(async () =>
+            {
+                await Task.Yield();
+                
+                // Arrange - Create and convert
+                var metadata = new PdfMetaData
+                {
+                    _FullPathFile = testPdfPath,
+                    PageNumberOffset = 0
+                };
+                metadata.lstVolInfo.Add(new PdfVolumeInfo
+                {
+                    FileNameVolume = Path.GetFileName(testPdfPath),
+                    NPagesInThisVolume = 1,
+                    Rotation = 0
+                });
+
+                var strokeCollection = new System.Windows.Ink.StrokeCollection();
+                var points = new System.Windows.Input.StylusPointCollection
+                {
+                    new System.Windows.Input.StylusPoint(50, 50),
+                    new System.Windows.Input.StylusPoint(150, 150)
+                };
+                var stroke = new System.Windows.Ink.Stroke(points);
+                stroke.DrawingAttributes.Color = Colors.Green;
+                strokeCollection.Add(stroke);
+
+                using (var ms = new MemoryStream())
+                {
+                    strokeCollection.Save(ms, compress: true);
+                    metadata.dictInkStrokes[0] = new InkStrokeClass
+                    {
+                        Pageno = 0,
+                        InkStrokeDimension = new Point(800, 600),
+                        StrokeData = ms.ToArray()
+                    };
+                }
+
+                BmkJsonConverter.ConvertPdfMetadataInkToJson(metadata);
+                metadata.SaveIfDirty(ForceDirty: true);
+
+                // Act - Reload
+                var (reloadedList, _) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(testDirectory);
+
+                // Assert
+                Assert.AreEqual(1, reloadedList.Count);
+                var reloaded = reloadedList[0];
+                Assert.AreEqual(1, reloaded.dictInkStrokes.Count);
+                
+                var reloadedInk = reloaded.dictInkStrokes[0];
+                var jsonText = System.Text.Encoding.UTF8.GetString(reloadedInk.StrokeData);
+                Assert.IsTrue(jsonText.StartsWith("{"), "Should remain JSON after save/reload");
+                
+                var portable = JsonSerializer.Deserialize<PortableInkStrokeCollection>(jsonText);
+                Assert.AreEqual(1, portable.Strokes.Count);
+                Assert.AreEqual(2, portable.Strokes[0].Points.Count);
+                Assert.AreEqual("#008000", portable.Strokes[0].Color); // Green (WPF Colors.Green is #008000)
+                
+                AddLogEntry($"JSON format preserved after save/reload");
+            });
         }
 
         #endregion
