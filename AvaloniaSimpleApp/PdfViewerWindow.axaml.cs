@@ -56,14 +56,20 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         
         if (chkInk0 != null)
         {
-            chkInk0.Checked += (s, e) => { if (_inkCanvas0 != null) _inkCanvas0.IsInkingEnabled = true; };
-            chkInk0.Unchecked += (s, e) => { if (_inkCanvas0 != null) _inkCanvas0.IsInkingEnabled = false; };
+            chkInk0.IsCheckedChanged += (s, e) => 
+            { 
+                if (_inkCanvas0 != null) 
+                    _inkCanvas0.IsInkingEnabled = chkInk0.IsChecked == true; 
+            };
         }
         
         if (chkInk1 != null)
         {
-            chkInk1.Checked += (s, e) => { if (_inkCanvas1 != null) _inkCanvas1.IsInkingEnabled = true; };
-            chkInk1.Unchecked += (s, e) => { if (_inkCanvas1 != null) _inkCanvas1.IsInkingEnabled = false; };
+            chkInk1.IsCheckedChanged += (s, e) => 
+            { 
+                if (_inkCanvas1 != null) 
+                    _inkCanvas1.IsInkingEnabled = chkInk1.IsChecked == true; 
+            };
         }
         
         // Load and display the PDF pages
