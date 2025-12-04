@@ -22,6 +22,11 @@ using System.Windows.Markup;
 using System.Collections.ObjectModel;
 using System.Runtime.ConstrainedExecution;
 using System.Windows.Controls.Primitives;
+using PdfSharp.Pdf;
+using PdfSharp.Pdf.IO;
+using System.Drawing;
+using System.Drawing.Imaging;
+using Image = System.Windows.Controls.Image;
 
 namespace Tests
 {
@@ -152,7 +157,7 @@ namespace Tests
             <Slider x:Name=""MySlider"" Maximum = ""100""/>
         </StackPanel>
 ";
-//                var spXamlBindingWorks = @"
+//                var spXamlBindingWorks = @"){
 //        <StackPanel x:Name=""sp"" Orientation = ""Vertical"">
 //            <TextBlock x:Name=""tbSlider"" Text = ""{Binding ElementName=MySlider, Path=Value, UpdateSourceTrigger=PropertyChanged}""/>
 //            <Slider x:Name=""MySlider"" Maximum = ""100""/>
@@ -340,19 +345,20 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
         }
         [TestMethod]
         [TestCategory("Integration")]
-        [Ignore]
+        //[Ignore]
         public async Task TestStressOnePage()
         {
             await RunInSTAExecutionContextAsync(async () =>
             {
-                var pdfFileName = $@"{GetSheetMusicFolder()}\Pop\PopSingles\Be Our Guest - G Major - MN0174098.pdf"; var pageNo = 1;
+                var pdfFileName = $@"{GetSheetMusicFolder()}\Pop\PopSingles\Be Our Guest - G Major - MN0174098.pdf"; 
+                var pageNo = 1;
                 TestContext.WriteLine($"Starting {pdfFileName}");
 
                 //var pdfFileName = $@"{GetOneDriveFolder()}\SheetMusic\Pop\PopSingles\Bohemian Rhapsody - Bb Major.pdf";
                 //var pdfFileName = $@"{GetOneDriveFolder()}\SheetMusic\Pop\PopSingles\HisTheme.pdf";
                 //var pdfFileName = $@"{GetOneDriveFolder()}\SheetMusic\Ragtime\Collections\Best of Ragtime.pdf";                var pageNo = 2;
                 using var fstrm = await FileRandomAccessStream.OpenAsync(pdfFileName, FileAccessMode.Read);
-                var pdfDoc = await PdfDocument.LoadFromStreamAsync(fstrm);
+                var pdfDoc = await Windows.Data.Pdf.PdfDocument.LoadFromStreamAsync(fstrm);
 
                 var testw = new Window()
                 {
@@ -427,99 +433,196 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
 
         [TestMethod]
         [TestCategory("Integration")]
-        [Ignore]
-        public async Task TestStressOnePageMultiChecksum()
+        //[Ignore]
+        public async Task TestStressOnePagePdfSharp()
         {
             await RunInSTAExecutionContextAsync(async () =>
             {
-                //var pdfFileName = $@"{GetOneDriveFolder()}\SheetMusic\Pop\PopSingles\Be Our Guest - G Major - MN0174098.pdf";
-                //pdfFileName = $@"{GetOneDriveFolder()}\SheetMusic\Pop\PopSingles\Bohemian Rhapsody - Bb Major.pdf";
-                //pdfFileName = $@"{GetOneDriveFolder()}\SheetMusic\Pop\PopSingles\HisTheme.pdf";
-                //pdfFileName = $@"{GetOneDriveFolder()}\SheetMusic\Ragtime\Collections\Best of Ragtime.pdf";
-                var testw = new Window();
+                var pdfFileName = $@"{GetSheetMusicFolder()}\Pop\PopSingles\Be Our Guest - G Major - MN0174098.pdf"; 
+                var pageNo = 1;  // Match TestStressOnePage - page 1 (0-indexed = second page)
+                TestContext.WriteLine($"Starting PDFSharp test {pdfFileName}");
+
+                var testw = new Window()
+                {
+                    WindowState = WindowState.Maximized
+                };
                 var ctsDone = new CancellationTokenSource();
                 testw.Closed += (o, e) =>
                 {
                     ctsDone.Cancel();
                 };
-                var strxaml =
-    $@"<Grid
-xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
-xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
-xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetFileNameWithoutExtension(Assembly.GetExecutingAssembly().Location)}"" 
-        Margin=""5,5,5,5"">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width = ""200""/>
-            <ColumnDefinition Width = ""3""/>
-            <ColumnDefinition Width = ""*""/>
-        </Grid.ColumnDefinitions>
-        <ListView x:Name=""lvData""/>
-        <GridSplitter Grid.Column = ""1"" HorizontalAlignment=""Center"" VerticalAlignment=""Stretch"" Width = ""3"" Background=""LightBlue""/>
-        <DockPanel Grid.Column=""2"" x:Name=""dpPDF""/>
-    </Grid>
-";
-                var grid = (System.Windows.Controls.Grid)(XamlReader.Parse(strxaml));
-                var dpPDF = (DockPanel)grid.FindName("dpPDF");
-                var lvData = (ListView)grid.FindName("lvData");
-                testw.Content = grid;
                 testw.Show();
-                var folder = $@"{GetSheetMusicFolder()}\Ragtime\Collections";
-                var lstdata = new ObservableCollection<string>();
-                lvData.ItemsSource = lstdata;
-                foreach (var pdfFileName in Directory.EnumerateFiles(folder, "*.pdf"))
+                try
                 {
-                    using var fstrm = await FileRandomAccessStream.OpenAsync(pdfFileName, FileAccessMode.Read);
-                    var pdfDoc = await PdfDocument.LoadFromStreamAsync(fstrm);
-
-                    var numIterPerPage = 100;
-                    try
+                    using var pdfDoc = PdfSharp.Pdf.IO.PdfReader.Open(pdfFileName, PdfSharp.Pdf.IO.PdfDocumentOpenMode.Import);
+                    
+                    if (pageNo >= pdfDoc.PageCount)
                     {
-                        for (var pageNo = 0; pageNo < pdfDoc.PageCount; pageNo++)
+                        AddLogEntry($"Page {pageNo} out of range. PDF has {pdfDoc.PageCount} pages");
+                        pageNo = 0;
+                    }
+
+                    var ctr = 0;
+                    var dictCheckSums = new Dictionary<ulong, int>();
+                    
+                    while (true)
+                    {
+                        ctsDone.Token.ThrowIfCancellationRequested();
+
+                        // Create a new document with just the page we want
+                        using var outputDoc = new PdfSharp.Pdf.PdfDocument();
+                        var page = outputDoc.AddPage(pdfDoc.Pages[pageNo]);
+                        
+                        // Save to stream for checksum calculation
+                        using var strm = new MemoryStream();
+                        outputDoc.Save(strm);
+                        strm.Seek(0, SeekOrigin.Begin);
+                        
+                        var chksum = 0UL;
+                        var bytes = strm.ToArray();
+                        Array.ForEach(bytes, (b) => { chksum += b; });
+                        dictCheckSums[chksum] = dictCheckSums.TryGetValue(chksum, out var val) ? val + 1 : 1;
+
+                        // Now render for display using Windows.Data.Pdf for visualization
+                        // (PDFSharp doesn't have built-in rendering, so we use the saved PDF)
+                        strm.Seek(0, SeekOrigin.Begin);
+                        var randomAccessStream = new InMemoryRandomAccessStream();
+                        await strm.CopyToAsync(randomAccessStream.AsStreamForWrite());
+                        randomAccessStream.Seek(0);
+                        
+                        var displayDoc = await Windows.Data.Pdf.PdfDocument.LoadFromStreamAsync(randomAccessStream);
+                        using var displayPage = displayDoc.GetPage(0);
+                        
+                        var rect = displayPage.Dimensions.ArtBox;
+                        var renderOpts = new PdfPageRenderOptions()
                         {
-                            var dictCheckSums = new Dictionary<ulong, int>(); // chksum=>cnt of chksum
-                            using var pdfPage = pdfDoc.GetPage((uint)(pageNo));
-                            var rect = pdfPage.Dimensions.ArtBox;
-                            var renderOpts = new PdfPageRenderOptions()
-                            {
-                                DestinationWidth = (uint)rect.Width,
-                                DestinationHeight = (uint)rect.Height,
-                                SourceRect = new Windows.Foundation.Rect(0, 0, rect.Width, rect.Height)
-                            };
-                            for (var ctr = 0; ctr < numIterPerPage; ctr++)
-                            {
-                                ctsDone.Token.ThrowIfCancellationRequested();
+                            DestinationWidth = (uint)rect.Width,
+                            DestinationHeight = (uint)rect.Height
+                        };
+                        
+                        using var renderStream = new InMemoryRandomAccessStream();
+                        await displayPage.RenderToStreamAsync(renderStream, renderOpts);
+                        renderStream.Seek(0);
+                        
+                        var bmi = new BitmapImage();
+                        bmi.BeginInit();
+                        bmi.StreamSource = renderStream.AsStream();
+                        bmi.CacheOption = BitmapCacheOption.OnLoad;
+                        bmi.EndInit();
 
-                                using var strm = new InMemoryRandomAccessStream();
-                                await pdfPage.RenderToStreamAsync(strm, renderOpts);
-                                await strm.FlushAsync();
-                                strm.Seek(0);
-                                var chksum = 0UL;
-                                var st = strm.AsStream();
-                                st.Seek(0, SeekOrigin.Begin);
-                                var bytes = new byte[st.Length];
-                                st.Read(bytes, 0, (int)st.Length);
-                                Array.ForEach(bytes, (b) => { chksum += b; });
-                                dictCheckSums[chksum] = dictCheckSums.TryGetValue(chksum, out var val) ? val + 1 : 1;
-
-                                var sp = new StackPanel() { Orientation = Orientation.Vertical };
-                                sp.Children.Add(new TextBlock()
-                                {
-                                    Text = $"{pdfFileName}({pageNo}/{pdfDoc.PageCount}) {ctr,5} #chk={dictCheckSums.Count} Chk={chksum:n0} "
-                                });
-                                dpPDF.Children.Clear();
-                                dpPDF.Children.Add(sp);
-                            }
-                            if (dictCheckSums.Count > 1)
-                            {
-                                var str = $"{dictCheckSums.Count} {Path.GetFileName(pdfFileName)}({pageNo}/{pdfDoc.PageCount})";
-                                lstdata.Add(str);
-                                AddLogEntry(str);
-                            }
-                        }
+                        var sp = new StackPanel() { Orientation = Orientation.Vertical };
+                        sp.Children.Add(new TextBlock()
+                        {
+                            Text = $"PDFSharp: {Path.GetFileName(pdfFileName)} Page:{pageNo} Iter:{ctr++,5}  # unique checksums = {dictCheckSums.Count} CurChkSum {chksum:n0}"
+                        });
+                        sp.Children.Add(new Image() { Source = bmi, Stretch = System.Windows.Media.Stretch.None });
+                        testw.Content = sp;
+                        
+                        await Task.Yield(); // Allow UI to update
                     }
-                    catch (OperationCanceledException)
+                }
+                catch (OperationCanceledException)
+                {
+                    AddLogEntry($"OpCancelled");
+                }
+                catch (Exception ex)
+                {
+                    AddLogEntry($"Exception: {ex}");
+                    throw;
+                }
+                AddLogEntry("Done all");
+            });
+            AddLogEntry("Done all..exit test");
+        }
+
+
+        [TestMethod]
+        [TestCategory("Integration")]
+        //[Ignore]
+        public async Task TestStressOnePagePdfium()
+        {
+            await RunInSTAExecutionContextAsync(async () =>
+            {
+                var pdfFileName = $@"{GetSheetMusicFolder()}\Pop\PopSingles\Be Our Guest - G Major - MN0174098.pdf"; 
+                var pageNo = 1;
+                TestContext.WriteLine($"Starting PDFium test {pdfFileName}");
+
+                var testw = new Window()
+                {
+                    WindowState = WindowState.Maximized
+                };
+                var ctsDone = new CancellationTokenSource();
+                testw.Closed += (o, e) =>
+                {
+                    ctsDone.Cancel();
+                };
+                testw.Show();
+                try
+                {
+                    using var pdfDoc = PdfiumViewer.PdfDocument.Load(pdfFileName);
+                    
+                    if (pageNo >= pdfDoc.PageCount)
                     {
+                        AddLogEntry($"Page {pageNo} out of range. PDF has {pdfDoc.PageCount} pages");
+                        pageNo = 0;
                     }
+
+                    var ctr = 0;
+                    var dictCheckSums = new Dictionary<ulong, int>();
+                    
+                    while (true)
+                    {
+                        ctsDone.Token.ThrowIfCancellationRequested();
+
+                        // Render page to bitmap using PDFium
+                        var pageSize = pdfDoc.PageSizes[pageNo];
+                        var dpi = 96;
+                        var width = (int)(pageSize.Width * dpi / 72.0);
+                        var height = (int)(pageSize.Height * dpi / 72.0);
+                        
+                        using var bitmap = pdfDoc.Render(pageNo, width, height, dpi, dpi, false);
+                        
+                        // Calculate checksum on bitmap data
+                        var strm = new MemoryStream();
+                        bitmap.Save(strm, ImageFormat.Png);
+                        strm.Seek(0, SeekOrigin.Begin);
+                        var bytes = strm.ToArray();
+                        
+                        var chksum = 0UL;
+                        Array.ForEach(bytes, (b) => { chksum += b; });
+                        dictCheckSums[chksum] = dictCheckSums.TryGetValue(chksum, out var val) ? val + 1 : 1;
+
+                        // Convert to BitmapImage for WPF display - keep stream alive
+                        strm.Seek(0, SeekOrigin.Begin);
+                        var bmi = new BitmapImage();
+                        bmi.BeginInit();
+                        bmi.StreamSource = strm;
+                        bmi.CacheOption = BitmapCacheOption.OnLoad;
+                        bmi.EndInit();
+                        bmi.Freeze();
+                        strm.Dispose();
+
+                        var sp = new StackPanel() { Orientation = Orientation.Vertical };
+                        sp.Children.Add(new TextBlock()
+                        {
+                            Text = $"PDFium: {Path.GetFileName(pdfFileName)} Page:{pageNo} Iter:{ctr++,5}  # unique checksums = {dictCheckSums.Count} CurChkSum {chksum:n0} StreamLen={bytes.Length:n0} Size:{width}x{height}"
+                        });
+                        sp.Children.Add(new Image() { Source = bmi, Stretch = System.Windows.Media.Stretch.None });
+                        testw.Content = sp;
+                        
+                        await Task.Yield();
+                        await Task.Delay(10);
+
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    AddLogEntry($"OpCancelled");
+                }
+                catch (Exception ex)
+                {
+                    AddLogEntry($"Exception: {ex}");
+                    throw;
                 }
                 AddLogEntry("Done all");
             });
