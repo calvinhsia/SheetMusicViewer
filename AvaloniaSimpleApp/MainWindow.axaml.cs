@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using SysDrawing = System.Drawing;
@@ -15,7 +16,6 @@ namespace AvaloniaSimpleApp;
 
 public partial class MainWindow : Window
 {
-    private int _clickCount = 0;
     private int _iterationCount = 0;
     private readonly Dictionary<ulong, int> _dictCheckSums = new();
     private CancellationTokenSource? _cts;
@@ -38,15 +38,16 @@ public partial class MainWindow : Window
             folder = @"d:\OneDrive";
         }
         _pdfFileName = $@"{folder}\SheetMusic\Pop\PopSingles\Be Our Guest - G Major - MN0174098.pdf";
-    }
-
-    private void OnButtonClick(object? sender, RoutedEventArgs e)
-    {
-        _clickCount++;
-        var statusText = this.FindControl<TextBlock>("StatusText");
-        if (statusText != null)
+        
+        // Log diagnostic info
+        var exePath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+        System.Diagnostics.Debug.WriteLine($"App location: {exePath}");
+        System.Diagnostics.Debug.WriteLine($"PDF file exists: {File.Exists(_pdfFileName)}");
+        if (!string.IsNullOrEmpty(exePath))
         {
-            statusText.Text = $"Button clicked {_clickCount} time{(_clickCount == 1 ? "" : "s")}!";
+            var x64Path = Path.Combine(exePath, "x64", "pdfium.dll");
+            System.Diagnostics.Debug.WriteLine($"pdfium.dll path: {x64Path}");
+            System.Diagnostics.Debug.WriteLine($"pdfium.dll exists: {File.Exists(x64Path)}");
         }
     }
 
@@ -96,14 +97,19 @@ public partial class MainWindow : Window
                 return;
             }
 
-            using var pdfDoc = PdfiumViewer.PdfDocument.Load(_pdfFileName);
-            
-            if (_pageNo >= pdfDoc.PageCount)
+            PdfiumViewer.PdfDocument? pdfDoc = null;
+            try
+            {
+                pdfDoc = PdfiumViewer.PdfDocument.Load(_pdfFileName);
+            }
+            catch (DllNotFoundException dllEx)
             {
                 var statusText = this.FindControl<TextBlock>("StatusText");
                 if (statusText != null)
                 {
-                    statusText.Text = $"Page {_pageNo} out of range. PDF has {pdfDoc.PageCount} pages";
+                    var exePath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                    var x64Path = exePath != null ? Path.Combine(exePath, "x64", "pdfium.dll") : "unknown";
+                    statusText.Text = $"DLL Not Found: {dllEx.Message}. Looking for pdfium.dll at: {x64Path}. Exists: {File.Exists(x64Path)}";
                 }
                 _isRunning = false;
                 var btn = this.FindControl<Button>("StartButton");
@@ -113,48 +119,67 @@ public partial class MainWindow : Window
                 }
                 return;
             }
-
-            var pageSize = pdfDoc.PageSizes[_pageNo];
-            var dpi = 96;
-            var width = (int)(pageSize.Width * dpi / 72.0);
-            var height = (int)(pageSize.Height * dpi / 72.0);
-
-            while (!ct.IsCancellationRequested)
+            
+            using (pdfDoc)
             {
-                // Render page to bitmap using PDFium
-                using var bitmap = pdfDoc.Render(_pageNo, width, height, dpi, dpi, false);
-                
-                // Calculate checksum on bitmap data
-                using var strm = new MemoryStream();
-                bitmap.Save(strm, SysDrawingImaging.ImageFormat.Png);
-                strm.Seek(0, SeekOrigin.Begin);
-                var bytes = strm.ToArray();
-                
-                var chksum = 0UL;
-                Array.ForEach(bytes, (b) => { chksum += b; });
-                _dictCheckSums[chksum] = _dictCheckSums.TryGetValue(chksum, out var val) ? val + 1 : 1;
-
-                // Convert to Avalonia Bitmap
-                strm.Seek(0, SeekOrigin.Begin);
-                var avaloniaBitmap = new Bitmap(strm);
-
-                // Update UI on UI thread
-                await Dispatcher.UIThread.InvokeAsync(() =>
+                if (_pageNo >= pdfDoc.PageCount)
                 {
-                    var imageControl = this.FindControl<Avalonia.Controls.Image>("PdfImage");
-                    if (imageControl != null)
-                    {
-                        imageControl.Source = avaloniaBitmap;
-                    }
-
                     var statusText = this.FindControl<TextBlock>("StatusText");
                     if (statusText != null)
                     {
-                        statusText.Text = $"PDFium: {Path.GetFileName(_pdfFileName)} Page:{_pageNo} Iter:{_iterationCount++,5}  # unique checksums = {_dictCheckSums.Count} CurChkSum {chksum:n0} StreamLen={bytes.Length:n0} Size:{width}x{height}";
+                        statusText.Text = $"Page {_pageNo} out of range. PDF has {pdfDoc.PageCount} pages";
                     }
-                });
+                    _isRunning = false;
+                    var btn = this.FindControl<Button>("StartButton");
+                    if (btn != null)
+                    {
+                        btn.Content = "Start Stress Test";
+                    }
+                    return;
+                }
 
-                await Task.Delay(10, ct);
+                var pageSize = pdfDoc.PageSizes[_pageNo];
+                var dpi = 96;
+                var width = (int)(pageSize.Width * dpi / 72.0);
+                var height = (int)(pageSize.Height * dpi / 72.0);
+
+                while (!ct.IsCancellationRequested)
+                {
+                    // Render page to bitmap using PDFium
+                    using var bitmap = pdfDoc.Render(_pageNo, width, height, dpi, dpi, false);
+                    
+                    // Calculate checksum on bitmap data
+                    using var strm = new MemoryStream();
+                    bitmap.Save(strm, SysDrawingImaging.ImageFormat.Png);
+                    strm.Seek(0, SeekOrigin.Begin);
+                    var bytes = strm.ToArray();
+                    
+                    var chksum = 0UL;
+                    Array.ForEach(bytes, (b) => { chksum += b; });
+                    _dictCheckSums[chksum] = _dictCheckSums.TryGetValue(chksum, out var val) ? val + 1 : 1;
+
+                    // Convert to Avalonia Bitmap
+                    strm.Seek(0, SeekOrigin.Begin);
+                    var avaloniaBitmap = new Bitmap(strm);
+
+                    // Update UI on UI thread
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        var imageControl = this.FindControl<Avalonia.Controls.Image>("PdfImage");
+                        if (imageControl != null)
+                        {
+                            imageControl.Source = avaloniaBitmap;
+                        }
+
+                        var statusText = this.FindControl<TextBlock>("StatusText");
+                        if (statusText != null)
+                        {
+                            statusText.Text = $"PDFium: {Path.GetFileName(_pdfFileName)} Page:{_pageNo} Iter:{_iterationCount++,5}  # unique checksums = {_dictCheckSums.Count} CurChkSum {chksum:n0} StreamLen={bytes.Length:n0} Size:{width}x{height}";
+                        }
+                    });
+
+                    await Task.Delay(10, ct);
+                }
             }
         }
         catch (OperationCanceledException)
@@ -168,7 +193,7 @@ public partial class MainWindow : Window
                 var statusText = this.FindControl<TextBlock>("StatusText");
                 if (statusText != null)
                 {
-                    statusText.Text = $"Error: {ex.Message}";
+                    statusText.Text = $"Error: {ex.GetType().Name}: {ex.Message}";
                 }
             });
         }
