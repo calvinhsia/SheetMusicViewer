@@ -33,6 +33,8 @@ namespace SheetMusicViewer
         public event PropertyChangedEventHandler PropertyChanged;
         // zoom gesture: https://stackoverflow.com/questions/25861840/zoom-pinch-detection-in-a-wpf-usercontrol
 
+        public ICommand ChooserCommand { get; private set; }
+
         //public static readonly RoutedEvent PdfExceptionEvent =
         //    EventManager.RegisterRoutedEvent("PdfExceptionEvent",
         //        RoutingStrategy.Bubble,
@@ -150,6 +152,10 @@ namespace SheetMusicViewer
             _pageCache = new PageCache(this);
             _messageBoxService ??= new MessageBoxService(); // Use injected service or default
             this.DataContext = this;
+            
+            // Initialize the ChooserCommand
+            ChooserCommand = new RelayCommand(async _ => await ChooseMusic(), _ => true);
+            
             if (_UseSettings)
             {
                 this.Width = Properties.Settings.Default.MainWindowSize.Width;
@@ -286,7 +292,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 else
                 {
                     (lstPdfMetaFileData, lstFolders) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(_RootMusicFolder);
-                    this.btnChooser.IsEnabled = true;
+                    this.mnuChooser.IsEnabled = true;
                     var lastPdfMetaData = lstPdfMetaFileData.Where(p => p.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true) == lastPdfOpen).FirstOrDefault();
                     if (lastPdfMetaData != null)
                     {
@@ -528,6 +534,13 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             base.OnPreviewKeyDown(e);
             var elmWithFocus = Keyboard.FocusedElement;
             var isCtrlKeyDown = e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Control);
+            
+            // Don't handle arrow keys if a menu is open - let the menu system handle it
+            if (elmWithFocus is MenuItem || (elmWithFocus is FrameworkElement fe && fe.TemplatedParent is MenuItem))
+            {
+                return;
+            }
+            
             if (isCtrlKeyDown || elmWithFocus is not TextBox && elmWithFocus is not Slider) // tbx and slider should get the keystroke and process it 
             {
                 switch (e.Key)
@@ -848,7 +861,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         async Task<bool> ChooseMusic()
         {
             var retval = false;
-            this.btnChooser.IsEnabled = false;
+            this.mnuChooser.IsEnabled = false;
             var win = new ChooseMusic(this);
             if (win.ShowDialog() == true)
             {
@@ -863,7 +876,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     CloseCurrentPdfFile();
                 }
             }
-            this.btnChooser.IsEnabled = true;
+            this.mnuChooser.IsEnabled = true;
             return retval;
 
         }
@@ -875,6 +888,13 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         void BtnQuit_Click(object sender, RoutedEventArgs e)
         {
             this.Close();
+        }
+        void BtnAbout_Click(object sender, RoutedEventArgs e)
+        {
+            var aboutMessage = $"{MyAppName}\n\n" +
+                              $"Branch: {BuildInfo.GitBranch}\n" +
+                              $"Build Time: {BuildInfo.BuildTime}";
+            _messageBoxService.Show(aboutMessage, "About", MessageBoxButton.OK);
         }
         async void BtnInvCache_Click(object sender, RoutedEventArgs e) {
             //Bug 43106054: PDF RenderToStreamAsync produces different results with same page https://microsoft.visualstudio.com/OS/_workitems/edit/43106054/  
