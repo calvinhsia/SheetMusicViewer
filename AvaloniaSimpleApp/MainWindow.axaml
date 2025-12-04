@@ -10,7 +10,7 @@
                     Content="Start Stress Test"
                     Padding="15,8"
                     FontSize="14"
-                    Click="OnButtonClick"/>
+                    Click="OnStartButtonClick"/>
             
             <TextBlock x:Name="StatusText"
                        Text="Ready - Click button to start rendering PDF page repeatedly"
