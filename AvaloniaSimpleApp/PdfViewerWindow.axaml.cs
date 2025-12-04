@@ -24,6 +24,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private string _description0 = string.Empty;
     private string _description1 = string.Empty;
     private readonly int _pageNo = 1; // Start at page 1 (0-indexed)
+    
+    private InkCanvasControl? _inkCanvas0;
+    private InkCanvasControl? _inkCanvas1;
 
     public PdfViewerWindow()
     {
@@ -46,6 +49,22 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         PdfUIEnabled = true;
         Description0 = "Page 1";
         Description1 = "Page 2";
+        
+        // Wire up ink checkbox events
+        var chkInk0 = this.FindControl<CheckBox>("chkInk0");
+        var chkInk1 = this.FindControl<CheckBox>("chkInk1");
+        
+        if (chkInk0 != null)
+        {
+            chkInk0.Checked += (s, e) => { if (_inkCanvas0 != null) _inkCanvas0.IsInkingEnabled = true; };
+            chkInk0.Unchecked += (s, e) => { if (_inkCanvas0 != null) _inkCanvas0.IsInkingEnabled = false; };
+        }
+        
+        if (chkInk1 != null)
+        {
+            chkInk1.Checked += (s, e) => { if (_inkCanvas1 != null) _inkCanvas1.IsInkingEnabled = true; };
+            chkInk1.Unchecked += (s, e) => { if (_inkCanvas1 != null) _inkCanvas1.IsInkingEnabled = false; };
+        }
         
         // Load and display the PDF pages
         Loaded += async (s, e) => await LoadAndDisplayPagesAsync();
@@ -84,27 +103,25 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                     grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                     grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                     
-                    // Left page (page 1)
-                    var image0 = new Avalonia.Controls.Image
+                    // Left page (page 1) with ink annotation
+                    _inkCanvas0 = new InkCanvasControl(page0Image)
                     {
-                        Source = page0Image,
-                        Stretch = Avalonia.Media.Stretch.Uniform,
-                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                        IsInkingEnabled = false
                     };
-                    Grid.SetColumn(image0, 0);
-                    grid.Children.Add(image0);
+                    Grid.SetColumn(_inkCanvas0, 0);
+                    grid.Children.Add(_inkCanvas0);
                     
-                    // Right page (page 2)
+                    // Right page (page 2) with ink annotation
                     if (page1Image != null)
                     {
-                        var image1 = new Avalonia.Controls.Image
+                        _inkCanvas1 = new InkCanvasControl(page1Image)
                         {
-                            Source = page1Image,
-                            Stretch = Avalonia.Media.Stretch.Uniform,
-                            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left
+                            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+                            IsInkingEnabled = false
                         };
-                        Grid.SetColumn(image1, 1);
-                        grid.Children.Add(image1);
+                        Grid.SetColumn(_inkCanvas1, 1);
+                        grid.Children.Add(_inkCanvas1);
                     }
                     
                     dpPage.Children.Add(grid);
