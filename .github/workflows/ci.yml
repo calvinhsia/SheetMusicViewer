@@ -57,7 +57,7 @@ jobs:
           --logger "trx;LogFileName=integration-test-results.trx" `
           --results-directory ./TestResults/Integration `
           --filter "TestCategory=Integration&TestCategory!=Manual"
-      continue-on-error: true
+      continue-on-error: false
       shell: powershell
     
     - name: Upload test results
