@@ -158,6 +158,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 return;
             }
 
+            if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+            {
+                Description0 = "PDF rendering is not supported on this platform";
+                return;
+            }
+
             // Get page count
             int pageCount;
             using (var pdfStream = File.OpenRead(_pdfFileName))
@@ -244,6 +250,11 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
 
     private async Task<Bitmap> RenderPageAsync(string pdfFilePath, int pageIndex)
     {
+        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            throw new PlatformNotSupportedException("PDF rendering is not supported on this platform");
+        }
+
         return await Task.Run(() =>
         {
             using var pdfStream = File.OpenRead(pdfFilePath);
