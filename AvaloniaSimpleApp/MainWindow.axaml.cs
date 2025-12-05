@@ -4,6 +4,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -110,6 +111,7 @@ public partial class MainWindow : Window
                     var exePath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
                     var x64Path = exePath != null ? Path.Combine(exePath, "x64", "pdfium.dll") : "unknown";
                     statusText.Text = $"DLL Not Found: {dllEx.Message}. Looking for pdfium.dll at: {x64Path}. Exists: {File.Exists(x64Path)}";
+                    Trace.WriteLine(statusText.Text);
                 }
                 _isRunning = false;
                 var btn = this.FindControl<Button>("StartButton");

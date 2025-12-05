@@ -454,7 +454,8 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
             {
                 var pdfFileName = $@"{GetSheetMusicFolder()}\Pop\PopSingles\Be Our Guest - G Major - MN0174098.pdf"; 
                 var pageNo = 1;
-                TestContext.WriteLine($"Starting PDFium test {pdfFileName}");
+                var dpi = 96;
+                TestContext.WriteLine($"Starting PdfiumViewer.Updated test {pdfFileName}");
 
                 var testw = new Window()
                 {
@@ -468,6 +469,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
                 testw.Show();
                 try
                 {
+                    // PdfiumViewer.Updated API (maintained fork)
                     using var pdfDoc = PdfiumViewer.PdfDocument.Load(pdfFileName);
                     
                     if (pageNo >= pdfDoc.PageCount)
@@ -476,6 +478,10 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
                         pageNo = 0;
                     }
 
+                    var size = pdfDoc.PageSizes[pageNo];
+                    var width = (int)(size.Width * dpi / 72.0);
+                    var height = (int)(size.Height * dpi / 72.0);
+
                     var ctr = 0;
                     var dictCheckSums = new Dictionary<ulong, int>();
                     
@@ -483,12 +489,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
                     {
                         ctsDone.Token.ThrowIfCancellationRequested();
 
-                        // Render page to bitmap using PDFium
-                        var pageSize = pdfDoc.PageSizes[pageNo];
-                        var dpi = 96;
-                        var width = (int)(pageSize.Width * dpi / 72.0);
-                        var height = (int)(pageSize.Height * dpi / 72.0);
-                        
+                        // Render page using PdfiumViewer
                         using var bitmap = pdfDoc.Render(pageNo, width, height, dpi, dpi, false);
                         
                         // Calculate checksum on bitmap data
@@ -501,7 +502,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
                         Array.ForEach(bytes, (b) => { chksum += b; });
                         dictCheckSums[chksum] = dictCheckSums.TryGetValue(chksum, out var val) ? val + 1 : 1;
 
-                        // Convert to BitmapImage for WPF display - keep stream alive
+                        // Convert to BitmapImage for WPF display
                         strm.Seek(0, SeekOrigin.Begin);
                         var bmi = new BitmapImage();
                         bmi.BeginInit();
@@ -514,7 +515,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
                         var sp = new StackPanel() { Orientation = Orientation.Vertical };
                         sp.Children.Add(new TextBlock()
                         {
-                            Text = $"PDFium: {Path.GetFileName(pdfFileName)} Page:{pageNo} Iter:{ctr++,5}  # unique checksums = {dictCheckSums.Count} CurChkSum {chksum:n0} StreamLen={bytes.Length:n0} Size:{width}x{height}"
+                            Text = $"PdfiumViewer.Updated: {Path.GetFileName(pdfFileName)} Page:{pageNo} Iter:{ctr++,5}  # unique checksums = {dictCheckSums.Count} CurChkSum {chksum:n0} StreamLen={bytes.Length:n0} Size:{width}x{height}"
                         });
                         sp.Children.Add(new Image() { Source = bmi, Stretch = System.Windows.Media.Stretch.None });
                         testw.Content = sp;

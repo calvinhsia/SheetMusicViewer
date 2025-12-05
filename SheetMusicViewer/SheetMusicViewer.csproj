@@ -109,6 +109,6 @@ namespace SheetMusicViewer
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-    <PackageReference Include="Microsoft.Windows.Compatibility" Version="8.0.4" />
+    <PackageReference Include="Microsoft.Windows.Compatibility" Version="8.0.11" />
   </ItemGroup>
 </Project>

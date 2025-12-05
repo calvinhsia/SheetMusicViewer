@@ -321,5 +321,34 @@ namespace Tests
 
             AddLogEntry($"Empty metadata handled correctly");
         }
+
+        [TestMethod]
+        [TestCategory("Integration")]
+        public async Task TestBmkJsonStats()
+        {
+            await RunInSTAExecutionContextAsync(async () =>
+            {
+                var folder = GetSheetMusicFolder();
+                var bmkFiles = Directory.GetFiles(folder, "*.bmk", SearchOption.AllDirectories);
+                var cntBmkWithStrokes = bmkFiles.Count(bmkPath =>
+                {
+                    try
+                    {
+                        if (BmkJsonConverter.IsJsonFormat(bmkPath))
+                        {
+                            var pdfPath = Path.ChangeExtension(bmkPath, ".pdf");
+                            var metadata = BmkJsonConverter.LoadFromJson(bmkPath, pdfPath, isSinglesFolder: false);
+                            return metadata.dictInkStrokes.Count > 0;
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        // Ignore errors
+                    }
+                    return false;
+                });
+
+            });
+        }
     }
 }
