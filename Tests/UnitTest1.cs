@@ -167,8 +167,8 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
         }
 
         [TestMethod]
-        [TestCategory("Integration")]
-        [Ignore]
+        [TestCategory("Manual")]
+        //[Ignore]
         public async Task TestStress()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -253,7 +253,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
             AddLogEntry("Done all..exit test");
         }
         [TestMethod]
-        [TestCategory("Integration")]
+        [TestCategory("Manual")]
         //[Ignore]
         public async Task TestStressOnePage()
         {
@@ -341,8 +341,8 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
 
 
         [TestMethod]
-        [TestCategory("Integration")]
-        //[Ignore]
+        [TestCategory("Manual")]
+        [Ignore]
         public async Task TestStressOnePagePdfSharp()
         {
             await RunInSTAExecutionContextAsync(async () =>
@@ -446,7 +446,7 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
 
 
         [TestMethod]
-        [TestCategory("Integration")]
+        [TestCategory("Manual")]
         //[Ignore]
         public async Task TestStressOnePagePdfium()
         {
