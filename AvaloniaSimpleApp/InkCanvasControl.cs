@@ -6,17 +6,22 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace AvaloniaSimpleApp;
 
-public class InkCanvasControl : Canvas
+public class InkCanvasControl : Panel
 {
-    private readonly List<Polyline> _strokePolylines = new();
+    private readonly List<List<Point>> _normalizedStrokes = new();
+    private List<Point>? _currentNormalizedStroke;
+    private readonly List<Polyline> _renderedPolylines = new();
     private Polyline? _currentPolyline;
     private bool _isDrawing;
     private IBrush _currentBrush = Brushes.Black;
     private double _strokeThickness = 2.0;
     private readonly Bitmap _backgroundImage;
+    private readonly Image _bgImage;
+    private Size _lastRenderSize;
 
     public bool IsInkingEnabled { get; set; }
 
@@ -24,19 +29,15 @@ public class InkCanvasControl : Canvas
     {
         _backgroundImage = backgroundImage;
         
-        // Set explicit size to match the image
-        Width = backgroundImage.PixelSize.Width;
-        Height = backgroundImage.PixelSize.Height;
+        ClipToBounds = true;
         
-        // Create an Image control for the background
-        var bgImage = new Image
+        // Create an Image control for the background that stretches to fill
+        _bgImage = new Image
         {
             Source = backgroundImage,
-            Stretch = Stretch.Fill,
-            Width = Width,
-            Height = Height
+            Stretch = Stretch.Uniform
         };
-        Children.Add(bgImage);
+        Children.Add(_bgImage);
         
         PointerPressed += OnPointerPressed;
         PointerMoved += OnPointerMoved;
@@ -44,6 +45,84 @@ public class InkCanvasControl : Canvas
         
         // Add context menu
         InitializeContextMenu();
+    }
+
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        _bgImage.Measure(availableSize);
+        return _bgImage.DesiredSize;
+    }
+
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        _bgImage.Arrange(new Rect(finalSize));
+        
+        // Arrange all polylines to fill the same area
+        foreach (var child in Children)
+        {
+            if (child != _bgImage)
+            {
+                child.Arrange(new Rect(finalSize));
+            }
+        }
+        
+        // Only re-render strokes if size actually changed
+        if (finalSize != _lastRenderSize && _normalizedStrokes.Count > 0)
+        {
+            _lastRenderSize = finalSize;
+            RerenderStrokes();
+        }
+        
+        return finalSize;
+    }
+
+    private void RerenderStrokes()
+    {
+        if (Bounds.Width == 0 || Bounds.Height == 0) return;
+
+        // Remove old rendered polylines (except current drawing)
+        foreach (var polyline in _renderedPolylines)
+        {
+            if (polyline != _currentPolyline)
+            {
+                Children.Remove(polyline);
+            }
+        }
+        _renderedPolylines.Clear();
+
+        // Re-render all strokes at current size
+        foreach (var normalizedStroke in _normalizedStrokes)
+        {
+            var polyline = new Polyline
+            {
+                Stroke = _currentBrush,
+                StrokeThickness = _strokeThickness,
+                StrokeLineCap = PenLineCap.Round,
+                Points = new Points(normalizedStroke.Select(p => new Point(
+                    p.X * Bounds.Width,
+                    p.Y * Bounds.Height
+                )))
+            };
+            Children.Add(polyline);
+            _renderedPolylines.Add(polyline);
+        }
+        
+        // Add current polyline back if drawing
+        if (_currentPolyline != null)
+        {
+            _renderedPolylines.Add(_currentPolyline);
+        }
+    }
+
+    private Point ScreenToNormalized(Point screenPoint)
+    {
+        if (Bounds.Width == 0 || Bounds.Height == 0)
+            return new Point(0, 0);
+        
+        return new Point(
+            screenPoint.X / Bounds.Width,
+            screenPoint.Y / Bounds.Height
+        );
     }
 
     private void InitializeContextMenu()
@@ -74,6 +153,10 @@ public class InkCanvasControl : Canvas
         if (!IsInkingEnabled) return;
 
         var point = e.GetPosition(this);
+        var normalizedPoint = ScreenToNormalized(point);
+        
+        _currentNormalizedStroke = new List<Point> { normalizedPoint };
+        
         _currentPolyline = new Polyline
         {
             Stroke = _currentBrush,
@@ -83,16 +166,18 @@ public class InkCanvasControl : Canvas
         };
         
         Children.Add(_currentPolyline);
-        _strokePolylines.Add(_currentPolyline);
         _isDrawing = true;
         e.Pointer.Capture(this);
     }
 
     private void OnPointerMoved(object? sender, PointerEventArgs e)
     {
-        if (!IsInkingEnabled || !_isDrawing || _currentPolyline == null) return;
+        if (!IsInkingEnabled || !_isDrawing || _currentPolyline == null || _currentNormalizedStroke == null) return;
 
         var point = e.GetPosition(this);
+        var normalizedPoint = ScreenToNormalized(point);
+        
+        _currentNormalizedStroke.Add(normalizedPoint);
         _currentPolyline.Points.Add(point);
     }
 
@@ -100,6 +185,17 @@ public class InkCanvasControl : Canvas
     {
         if (!IsInkingEnabled || !_isDrawing) return;
 
+        if (_currentNormalizedStroke != null && _currentNormalizedStroke.Count > 0)
+        {
+            _normalizedStrokes.Add(_currentNormalizedStroke);
+        }
+        
+        if (_currentPolyline != null)
+        {
+            _renderedPolylines.Add(_currentPolyline);
+        }
+        
+        _currentNormalizedStroke = null;
         _currentPolyline = null;
         _isDrawing = false;
         e.Pointer.Capture(null);
@@ -124,10 +220,13 @@ public class InkCanvasControl : Canvas
 
     public void ClearStrokes()
     {
-        foreach (var polyline in _strokePolylines)
+        foreach (var polyline in _renderedPolylines)
         {
             Children.Remove(polyline);
         }
-        _strokePolylines.Clear();
+        _renderedPolylines.Clear();
+        _normalizedStrokes.Clear();
+        _currentPolyline = null;
+        _currentNormalizedStroke = null;
     }
 }
