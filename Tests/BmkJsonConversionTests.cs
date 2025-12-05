@@ -323,7 +323,7 @@ namespace Tests
         }
 
         [TestMethod]
-        [TestCategory("Integration")]
+        [TestCategory("Manual")]
         public async Task TestBmkJsonStats()
         {
             await RunInSTAExecutionContextAsync(async () =>
