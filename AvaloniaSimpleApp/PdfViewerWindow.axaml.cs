@@ -175,32 +175,39 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 if (dpPage != null)
                 {
                     dpPage.Children.Clear();
-                    
-                    var grid = new Grid();
+                    dpPage.Background = Avalonia.Media.Brushes.LightGreen;
+
+                    var grid = new Grid
+                    {
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+                        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch
+                    };
                     grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                     grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                    
-                    // Left page (page 1) with ink annotation
+
+                    // Left page (page 1) with ink annotation - aligned right
                     _inkCanvas0 = new InkCanvasControl(page0Image)
                     {
                         HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
                         IsInkingEnabled = false
                     };
                     Grid.SetColumn(_inkCanvas0, 0);
                     grid.Children.Add(_inkCanvas0);
-                    
-                    // Right page (page 2) with ink annotation
+
+                    // Right page (page 2) with ink annotation - aligned left
                     if (page1Image != null)
                     {
                         _inkCanvas1 = new InkCanvasControl(page1Image)
                         {
                             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+                            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
                             IsInkingEnabled = false
                         };
                         Grid.SetColumn(_inkCanvas1, 1);
                         grid.Children.Add(_inkCanvas1);
                     }
-                    
+
                     dpPage.Children.Add(grid);
                 }
                 
