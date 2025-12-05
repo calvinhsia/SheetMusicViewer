@@ -93,6 +93,22 @@ public partial class MainWindow : Window
                 return;
             }
 
+            if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+            {
+                var statusText = this.FindControl<TextBlock>("StatusText");
+                if (statusText != null)
+                {
+                    statusText.Text = "PDF rendering is not supported on this platform";
+                }
+                _isRunning = false;
+                var btn = this.FindControl<Button>("StartButton");
+                if (btn != null)
+                {
+                    btn.Content = "Start Stress Test";
+                }
+                return;
+            }
+
             int pageCount;
             try
             {

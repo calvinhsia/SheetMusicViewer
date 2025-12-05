@@ -124,7 +124,10 @@ public class AvaloniaTests
             timer.Start();
         };
 
-        uiThread.SetApartmentState(ApartmentState.STA);
+        if (OperatingSystem.IsWindows())
+        {
+            uiThread.SetApartmentState(ApartmentState.STA);
+        }
         uiThread.Start();
 
         // Wait for the test to complete with timeout
@@ -266,7 +269,10 @@ public class AvaloniaTests
                 timer.Start();
             };
             
-            uiThread.SetApartmentState(ApartmentState.STA);
+            if (OperatingSystem.IsWindows())
+            {
+                uiThread.SetApartmentState(ApartmentState.STA);
+            }
             uiThread.Start();
             
             // Wait for the test to complete with timeout
@@ -306,17 +312,10 @@ public class AvaloniaTests
         // 1. Inking can be enabled on page 2
         // 2. Strokes can be drawn on page 2
         // 3. Strokes persist and scale correctly when window is resized
-        // 4. Test works cross-platform using headless mode
+        // 4. Test works cross-platform using Avalonia with PDFtoImage
+        // Note: Requires a display/window system to run (not headless)
 
         var testPdfPath = CreateTestPdf();
-        
-        // Skip if running in headless environment (CI/CD) - this test shows UI
-        if (Environment.GetEnvironmentVariable("CI") == "true" || 
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
-        {
-            Assert.Inconclusive("Test skipped in headless CI environment - requires display for visual verification");
-            return;
-        }
         
         try
         {
@@ -339,7 +338,10 @@ public class AvaloniaTests
                 }
             });
 
-            uiThread.SetApartmentState(ApartmentState.STA);
+            if (OperatingSystem.IsWindows())
+            {
+                uiThread.SetApartmentState(ApartmentState.STA);
+            }
             uiThread.Start();
 
             // Wait for Avalonia to initialize
@@ -667,7 +669,10 @@ public class AvaloniaTests
             }
         });
 
-        thread.SetApartmentState(ApartmentState.STA);
+        if (OperatingSystem.IsWindows())
+        {
+            thread.SetApartmentState(ApartmentState.STA);
+        }
         thread.IsBackground = true;
         thread.Start();
 
