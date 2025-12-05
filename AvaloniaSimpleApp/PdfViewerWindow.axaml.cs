@@ -8,8 +8,8 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
-using SysDrawing = System.Drawing;
-using SysDrawingImaging = System.Drawing.Imaging;
+using PDFtoImage;
+using SkiaSharp;
 
 namespace AvaloniaSimpleApp;
 
@@ -35,17 +35,18 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         InitializeComponent();
         DataContext = this;
         
-        // Get the PDF file path
+        // Get the PDF file path - cross-platform friendly
         var username = Environment.UserName;
-        var folder = $@"C:\Users\{username}\OneDrive";
+        var homeFolder = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var folder = Path.Combine(homeFolder, "OneDrive");
         if (!Directory.Exists(folder))
         {
-            folder = @"d:\OneDrive";
+            folder = Path.Combine(homeFolder, "Documents");
         }
-        _pdfFileName = $@"{folder}\SheetMusic\Pop\PopSingles\Be Our Guest - G Major - MN0174098.pdf";
+        _pdfFileName = Path.Combine(folder, "SheetMusic", "Pop", "PopSingles", "Be Our Guest - G Major - MN0174098.pdf");
         
         // Initialize with PDF info
-        PdfTitle = System.IO.Path.GetFileName(_pdfFileName);
+        PdfTitle = Path.GetFileName(_pdfFileName);
         CurrentPageNumber = 1;
         MaxPageNumberMinus1 = 3;
         PdfUIEnabled = true;
@@ -157,15 +158,20 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 return;
             }
 
-            using var pdfDoc = PdfiumViewer.PdfDocument.Load(_pdfFileName);
-            MaxPageNumberMinus1 = pdfDoc.PageCount - 1;
+            // Get page count
+            int pageCount;
+            using (var pdfStream = File.OpenRead(_pdfFileName))
+            {
+                pageCount = PDFtoImage.Conversion.GetPageCount(pdfStream);
+            }
+            MaxPageNumberMinus1 = pageCount - 1;
             
-            var page0Image = await RenderPageAsync(pdfDoc, 1);
+            var page0Image = await RenderPageAsync(_pdfFileName, 1);
             
             Bitmap? page1Image = null;
-            if (pdfDoc.PageCount > 1)
+            if (pageCount > 1)
             {
-                page1Image = await RenderPageAsync(pdfDoc, 2);
+                page1Image = await RenderPageAsync(_pdfFileName, 2);
             }
             
             // Update UI on UI thread
@@ -211,8 +217,8 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                     dpPage.Children.Add(grid);
                 }
                 
-                Description0 = $"Page 1 of {pdfDoc.PageCount}";
-                Description1 = pdfDoc.PageCount > 1 ? $"Page 2 of {pdfDoc.PageCount}" : "";
+                Description0 = $"Page 1 of {pageCount}";
+                Description1 = pageCount > 1 ? $"Page 2 of {pageCount}" : "";
             });
         }
         catch (Exception ex)
@@ -224,22 +230,23 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
     }
 
-    private async Task<Bitmap> RenderPageAsync(PdfiumViewer.PdfDocument pdfDoc, int pageIndex)
+    private async Task<Bitmap> RenderPageAsync(string pdfFilePath, int pageIndex)
     {
         return await Task.Run(() =>
         {
-            var pageSize = pdfDoc.PageSizes[pageIndex];
-            var dpi = 96;
-            var width = (int)(pageSize.Width * dpi / 72.0);
-            var height = (int)(pageSize.Height * dpi / 72.0);
+            using var pdfStream = File.OpenRead(pdfFilePath);
             
-            using var bitmap = pdfDoc.Render(pageIndex, width, height, dpi, dpi, false);
+            // Render PDF page to SKBitmap using PDFtoImage
+            using var skBitmap = PDFtoImage.Conversion.ToImage(pdfStream, page: pageIndex, options: new(Dpi: 96));
             
-            using var strm = new MemoryStream();
-            bitmap.Save(strm, SysDrawingImaging.ImageFormat.Png);
-            strm.Seek(0, SeekOrigin.Begin);
+            // Convert SKBitmap to Avalonia Bitmap
+            using var image = SKImage.FromBitmap(skBitmap);
+            using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+            using var stream = new MemoryStream();
+            data.SaveTo(stream);
+            stream.Seek(0, SeekOrigin.Begin);
             
-            return new Bitmap(strm);
+            return new Bitmap(stream);
         });
     }
 
