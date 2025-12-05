@@ -66,11 +66,14 @@ public class InkCanvasControl : Panel
             }
         }
         
-        // Only re-render strokes if size actually changed
-        if (finalSize != _lastRenderSize && _normalizedStrokes.Count > 0)
+        // Re-render strokes if size changed and we have strokes to render
+        // Use a small tolerance to avoid re-rendering on tiny floating point differences
+        if (_normalizedStrokes.Count > 0 && 
+            (Math.Abs(finalSize.Width - _lastRenderSize.Width) > 0.5 || 
+             Math.Abs(finalSize.Height - _lastRenderSize.Height) > 0.5))
         {
             _lastRenderSize = finalSize;
-            RerenderStrokes();
+            RerenderStrokes(finalSize);
         }
         
         return finalSize;
@@ -78,7 +81,12 @@ public class InkCanvasControl : Panel
 
     private void RerenderStrokes()
     {
-        if (Bounds.Width == 0 || Bounds.Height == 0) return;
+        RerenderStrokes(Bounds.Size);
+    }
+
+    private void RerenderStrokes(Size renderSize)
+    {
+        if (renderSize.Width <= 0 || renderSize.Height <= 0) return;
 
         // Remove old rendered polylines (except current drawing)
         foreach (var polyline in _renderedPolylines)
@@ -90,7 +98,7 @@ public class InkCanvasControl : Panel
         }
         _renderedPolylines.Clear();
 
-        // Re-render all strokes at current size
+        // Re-render all strokes at current size using normalized coordinates
         foreach (var normalizedStroke in _normalizedStrokes)
         {
             var polyline = new Polyline
@@ -99,8 +107,8 @@ public class InkCanvasControl : Panel
                 StrokeThickness = _strokeThickness,
                 StrokeLineCap = PenLineCap.Round,
                 Points = new Points(normalizedStroke.Select(p => new Point(
-                    p.X * Bounds.Width,
-                    p.Y * Bounds.Height
+                    p.X * renderSize.Width,
+                    p.Y * renderSize.Height
                 )))
             };
             Children.Add(polyline);
