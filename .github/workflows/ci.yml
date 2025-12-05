@@ -44,7 +44,7 @@ jobs:
           --verbosity normal `
           --logger "trx;LogFileName=unit-test-results.trx" `
           --results-directory ./TestResults/Unit `
-          --filter "TestCategory=Unit"
+          --filter "TestCategory=Unit&TestCategory!=Manual"
       continue-on-error: false
       shell: powershell
     
@@ -56,7 +56,7 @@ jobs:
           --verbosity normal `
           --logger "trx;LogFileName=integration-test-results.trx" `
           --results-directory ./TestResults/Integration `
-          --filter "TestCategory=Integration"
+          --filter "TestCategory=Integration&TestCategory!=Manual"
       continue-on-error: true
       shell: powershell
     

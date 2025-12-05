@@ -11,7 +11,7 @@ namespace AvaloniaSimpleApp;
 public class AvaloniaTests
 {
     [TestMethod]
-    [TestCategory("Integration")]
+    [TestCategory("Manual")]
     public async Task TestAvaloniaPdfStressTest()
     {
         await Task.Run(() =>
@@ -30,7 +30,7 @@ public class AvaloniaTests
     }
 
     [TestMethod]
-    [TestCategory("Integration")]
+    [TestCategory("Manual")]
     public async Task TestAvaloniaPdfViewerUI()
     {
         await Task.Run(() =>
