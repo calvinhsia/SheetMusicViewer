@@ -248,8 +248,11 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         {
             using var pdfStream = File.OpenRead(pdfFilePath);
             
+            // PDFtoImage uses 0-based page indexing, so convert from 1-based to 0-based
+            var zeroBasedPageIndex = pageIndex - 1;
+            
             // Render PDF page to SKBitmap using PDFtoImage
-            using var skBitmap = PDFtoImage.Conversion.ToImage(pdfStream, page: pageIndex, options: new(Dpi: 96));
+            using var skBitmap = PDFtoImage.Conversion.ToImage(pdfStream, page: zeroBasedPageIndex, options: new(Dpi: 96));
             
             // Convert SKBitmap to Avalonia Bitmap
             using var image = SKImage.FromBitmap(skBitmap);
