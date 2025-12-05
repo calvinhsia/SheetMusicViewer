@@ -1,4 +1,6 @@
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using System;
@@ -23,7 +25,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private string _pdfTitle = string.Empty;
     private string _description0 = string.Empty;
     private string _description1 = string.Empty;
-    private readonly int _pageNo = 1; // Start at page 1 (0-indexed)
+    private readonly int _pageNo = 1;
     
     private InkCanvasControl? _inkCanvas0;
     private InkCanvasControl? _inkCanvas1;
@@ -45,7 +47,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         // Initialize with PDF info
         PdfTitle = System.IO.Path.GetFileName(_pdfFileName);
         CurrentPageNumber = 1;
-        MaxPageNumberMinus1 = 3; // Assume 4 pages for now
+        MaxPageNumberMinus1 = 3;
         PdfUIEnabled = true;
         Description0 = "Page 1";
         Description1 = "Page 2";
@@ -72,8 +74,77 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             };
         }
         
+        // Wire up full screen checkbox event and set it as default
+        var chkFullScreen = this.FindControl<CheckBox>("chkFullScreen");
+        if (chkFullScreen != null)
+        {
+            chkFullScreen.IsCheckedChanged += (s, e) =>
+            {
+                ChkFullScreenToggled(chkFullScreen.IsChecked == true);
+            };
+            
+            // Set full screen as default
+            chkFullScreen.IsChecked = true;
+        }
+        
+        // Wire up full screen menu item
+        var mnuFullScreen = this.FindControl<MenuItem>("mnuFullScreen");
+        if (mnuFullScreen != null)
+        {
+            mnuFullScreen.Click += MnuFullScreen_Click;
+        }
+        
+        // Wire up quit menu item
+        var mnuQuit = this.FindControl<MenuItem>("mnuQuit");
+        if (mnuQuit != null)
+        {
+            mnuQuit.Click += MnuQuit_Click;
+        }
+        
+        // Add keyboard handler for Alt-Q
+        this.KeyDown += Window_KeyDown;
+        
         // Load and display the PDF pages
         Loaded += async (s, e) => await LoadAndDisplayPagesAsync();
+    }
+
+    private void Window_KeyDown(object? sender, KeyEventArgs e)
+    {
+        // Handle Alt-Q for quit
+        if (e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.Q)
+        {
+            Close();
+            e.Handled = true;
+        }
+    }
+
+    private void MnuQuit_Click(object? sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+
+    private void MnuFullScreen_Click(object? sender, RoutedEventArgs e)
+    {
+        var chkFullScreen = this.FindControl<CheckBox>("chkFullScreen");
+        if (chkFullScreen != null)
+        {
+            // Toggle the checkbox state which will trigger ChkFullScreenToggled
+            chkFullScreen.IsChecked = !chkFullScreen.IsChecked;
+        }
+    }
+
+    private void ChkFullScreenToggled(bool isChecked)
+    {
+        if (isChecked)
+        {
+            this.WindowState = WindowState.Maximized;
+            this.SystemDecorations = SystemDecorations.None;
+        }
+        else
+        {
+            this.SystemDecorations = SystemDecorations.Full;
+            this.WindowState = WindowState.Normal;
+        }
     }
 
     private async Task LoadAndDisplayPagesAsync()
