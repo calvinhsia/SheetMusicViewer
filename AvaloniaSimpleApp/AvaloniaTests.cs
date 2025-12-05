@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Headless;
@@ -738,6 +738,80 @@ public class AvaloniaTests
         uiThread.Join(2000);
     }
 
+    [TestMethod]
+    [TestCategory("Manual")]
+    public async Task TestAvaloniaDataGridBrowseList()
+    {
+        // This test shows a DataGrid similar to BrowseList with data from reflection
+        // Skip if running in headless environment (CI/CD)
+        if (Environment.GetEnvironmentVariable("CI") == "true" || 
+            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+        {
+            Assert.Inconclusive("Test skipped in headless CI environment - requires display");
+            return;
+        }
+
+        var testCompleted = new TaskCompletionSource<bool>();
+        var uiThread = new Thread(() =>
+        {
+            try
+            {
+                AppBuilder.Configure<TestBrowseListApp>()
+                    .UsePlatformDetect()
+                    .WithInterFont()
+                    .LogToTrace()
+                    .StartWithClassicDesktopLifetime(Array.Empty<string>());
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"UI thread error: {ex.Message}");
+                testCompleted.TrySetException(ex);
+            }
+        });
+
+        TestBrowseListApp.OnSetupWindow = async (app, lifetime) =>
+        {
+            try
+            {
+                var window = new BrowseListWindow();
+                lifetime.MainWindow = window;
+                
+                // Close test when window is closed
+                window.Closed += (s, e) =>
+                {
+                    Trace.WriteLine("BrowseListWindow closed by user");
+                    testCompleted.TrySetResult(true);
+                    lifetime.Shutdown();
+                };
+                
+                window.Show();
+                
+                Trace.WriteLine($"✓ BrowseListWindow created and shown");
+                Trace.WriteLine($"✓ Loading types from Avalonia assemblies...");
+
+                // Wait for window to be fully loaded
+                await Task.Delay(100);
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"Error: {ex}");
+                testCompleted.SetException(ex);
+                lifetime.Shutdown();
+            }
+        };
+
+        if (OperatingSystem.IsWindows())
+        {
+            uiThread.SetApartmentState(ApartmentState.STA);
+        }
+        uiThread.Start();
+
+        // Wait indefinitely for user to close the window
+        await testCompleted.Task;
+        
+        uiThread.Join(2000);
+    }
+
     private async Task RunHeadlessTest(Func<Task> testAction)
     {
         var tcs = new TaskCompletionSource<bool>();
@@ -1056,8 +1130,8 @@ public class TestablePdfViewerWindow : PdfViewerWindow
     }
 }
 
-// Test app for ChooseMusic dialog
-public class TestChooseMusicApp : Avalonia.Application
+// Test app for BrowseList dialog
+public class TestBrowseListApp : Avalonia.Application
 {
     public static Func<Avalonia.Application, IClassicDesktopStyleApplicationLifetime, Task>? OnSetupWindow;
     
@@ -1080,321 +1154,348 @@ public class TestChooseMusicApp : Avalonia.Application
     }
 }
 
-// ChooseMusic-style window with generated bitmaps
-public class ChooseMusicWindow : Window
+// BrowseList-style window with DataGrid populated from reflection
+public class BrowseListWindow : Window
 {
-    private TabControl _tabControl;
-    private ListBox _lbBooks;
-    private TextBlock _tbxTotals;
-    private ComboBox _cboRootFolder;
-    private TextBox _tbxFilter;
+    private DataGrid _dataGrid;
+    private TextBox _txtFilter;
+    private TextBlock _txtStatus;
+    private Button _btnApply;
+    private List<TypeInfo> _allData;
+    private List<TypeInfo> _filteredData;
 
-    public ChooseMusicWindow()
+    public BrowseListWindow()
     {
-        Title = "Choose Music - Avalonia Test";
-        Width = 1200;
-        Height = 800;
+        Title = "Browse Types - Avalonia Test (Reflection Data)";
+        Width = 1400;
+        Height = 900;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         
         BuildUI();
         
-        // Generate books after window is loaded
+        // Load data after window is loaded
         this.Opened += async (s, e) =>
         {
-            await FillBooksTabAsync();
+            await LoadDataAsync();
         };
     }
 
     private void BuildUI()
     {
+        // Use Grid instead of DockPanel for more reliable layout
         var grid = new Grid();
-        grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-        grid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star)));
+        grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto)); // Filter panel
+        grid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star))); // DataGrid
         
-        // Tab control for Books, Favorites, Query, Playlists
-        _tabControl = new TabControl();
-        Grid.SetRow(_tabControl, 0);
-        Grid.SetRowSpan(_tabControl, 2);
+        // Top filter panel
+        var filterPanel = new StackPanel 
+        { 
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(10),
+            Spacing = 10,
+            Height = 50,
+            Background = Brushes.LightGray
+        };
         
-        // Books tab
-        var booksTab = new TabItem { Header = "_Books" };
-        var booksGrid = new Grid();
-        booksGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-        booksGrid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star)));
+        _txtStatus = new TextBlock 
+        { 
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 20, 0),
+            FontSize = 12,
+            MinWidth = 200,
+            Text = "Initializing..."
+        };
+        filterPanel.Children.Add(_txtStatus);
         
-        // Filter bar
-        var filterPanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(5) };
-        filterPanel.Children.Add(new RadioButton { Content = "ByDate", GroupName = "Sort", IsChecked = true, Margin = new Thickness(20, 5, 0, 0) });
-        filterPanel.Children.Add(new RadioButton { Content = "ByFolder", GroupName = "Sort", Margin = new Thickness(20, 5, 0, 0) });
-        filterPanel.Children.Add(new RadioButton { Content = "ByNumPages", GroupName = "Sort", Margin = new Thickness(20, 5, 0, 0) });
-        filterPanel.Children.Add(new Label { Content = "Filter", Margin = new Thickness(20, 0, 0, 0) });
-        _tbxFilter = new TextBox { Width = 150, Margin = new Thickness(5, 0, 0, 0) };
-        filterPanel.Children.Add(_tbxFilter);
-        Grid.SetRow(filterPanel, 0);
-        booksGrid.Children.Add(filterPanel);
-        
-        // Books list with wrap panel - use ItemsControl instead of ListBox for better control
-        var itemsControl = new ItemsControl();
-        _lbBooks = new ListBox();
-        
-        // Create a WrapPanel as the items panel
-        var wrapPanelFactory = new FuncTemplate<Panel?>(() => new WrapPanel
-        {
-            Orientation = Orientation.Horizontal
+        filterPanel.Children.Add(new Label 
+        { 
+            Content = "String Filter:",
+            VerticalAlignment = VerticalAlignment.Center
         });
-        _lbBooks.ItemsPanel = wrapPanelFactory;
         
-        var scrollViewer = new ScrollViewer 
+        _txtFilter = new TextBox 
         { 
-            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
-            Content = _lbBooks
+            Width = 300,
+            Watermark = "Type to filter...",
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        _txtFilter.KeyDown += (s, e) =>
+        {
+            if (e.Key == Avalonia.Input.Key.Enter)
+            {
+                ApplyFilter();
+            }
+        };
+        filterPanel.Children.Add(_txtFilter);
+        
+        _btnApply = new Button 
+        { 
+            Content = "Apply",
+            Margin = new Thickness(5, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        _btnApply.Click += (s, e) => ApplyFilter();
+        filterPanel.Children.Add(_btnApply);
+        
+        var btnClear = new Button 
+        { 
+            Content = "Clear",
+            Margin = new Thickness(5, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        btnClear.Click += (s, e) =>
+        {
+            _txtFilter.Text = string.Empty;
+            ApplyFilter();
+        };
+        filterPanel.Children.Add(btnClear);
+        
+        Grid.SetRow(filterPanel, 0);
+        grid.Children.Add(filterPanel);
+        
+        // DataGrid for displaying the data
+        _dataGrid = new DataGrid
+        {
+            Margin = new Thickness(10),
+            Background = Brushes.White,
+            GridLinesVisibility = DataGridGridLinesVisibility.All,
+            BorderThickness = new Thickness(2),
+            BorderBrush = Brushes.Black,
+            IsReadOnly = true,
+            CanUserReorderColumns = true,
+            CanUserResizeColumns = true,
+            CanUserSortColumns = true,
+            SelectionMode = DataGridSelectionMode.Extended,
+            AutoGenerateColumns = false,
+            HeadersVisibility = DataGridHeadersVisibility.Column,
+            MinHeight = 100,
+            RowHeight = 25, // Explicit row height
+            FontSize = 12,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch
         };
         
-        Grid.SetRow(scrollViewer, 1);
-        booksGrid.Children.Add(scrollViewer);
+        // Define columns manually for better control
+        _dataGrid.Columns.Add(new DataGridTextColumn
+        {
+            Header = "Type Name",
+            Binding = new Avalonia.Data.Binding("Name"),
+            Width = new DataGridLength(250)
+        });
         
-        booksTab.Content = booksGrid;
-        _tabControl.Items.Add(booksTab);
+        _dataGrid.Columns.Add(new DataGridTextColumn
+        {
+            Header = "Namespace",
+            Binding = new Avalonia.Data.Binding("Namespace"),
+            Width = new DataGridLength(300)
+        });
         
-        // Favorites tab (placeholder)
-        var favTab = new TabItem { Header = "Fa_vorites", Content = new TextBlock { Text = "Favorites go here", Margin = new Thickness(20) } };
-        _tabControl.Items.Add(favTab);
+        _dataGrid.Columns.Add(new DataGridTextColumn
+        {
+            Header = "Base Type",
+            Binding = new Avalonia.Data.Binding("BaseTypeName"),
+            Width = new DataGridLength(200)
+        });
         
-        // Query tab (placeholder)
-        var queryTab = new TabItem { Header = "_Query", Content = new TextBlock { Text = "Query goes here", Margin = new Thickness(20) } };
-        _tabControl.Items.Add(queryTab);
+        _dataGrid.Columns.Add(new DataGridTextColumn
+        {
+            Header = "Is Public",
+            Binding = new Avalonia.Data.Binding("IsPublic"),
+            Width = new DataGridLength(80)
+        });
         
-        // Playlists tab (placeholder)
-        var playlistsTab = new TabItem { Header = "_Playlists", Content = new TextBlock { Text = "Playlists go here", Margin = new Thickness(20) } };
-        _tabControl.Items.Add(playlistsTab);
+        _dataGrid.Columns.Add(new DataGridTextColumn
+        {
+            Header = "Is Abstract",
+            Binding = new Avalonia.Data.Binding("IsAbstract"),
+            Width = new DataGridLength(80)
+        });
         
-        grid.Children.Add(_tabControl);
+        _dataGrid.Columns.Add(new DataGridTextColumn
+        {
+            Header = "Is Sealed",
+            Binding = new Avalonia.Data.Binding("IsSealed"),
+            Width = new DataGridLength(80)
+        });
         
-        // Top bar with totals and controls
-        var topBar = new StackPanel 
-        { 
-            Orientation = Orientation.Horizontal, 
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 5, 10, 5)
-        };
-        Grid.SetRow(topBar, 0);
+        _dataGrid.Columns.Add(new DataGridTextColumn
+        {
+            Header = "# Properties",
+            Binding = new Avalonia.Data.Binding("PropertyCount"),
+            Width = new DataGridLength(100)
+        });
         
-        _tbxTotals = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0) };
-        topBar.Children.Add(_tbxTotals);
+        _dataGrid.Columns.Add(new DataGridTextColumn
+        {
+            Header = "# Methods",
+            Binding = new Avalonia.Data.Binding("MethodCount"),
+            Width = new DataGridLength(100)
+        });
         
-        topBar.Children.Add(new Label { Content = "Music Folder Path:", Margin = new Thickness(20, 0, 0, 0) });
-        _cboRootFolder = new ComboBox { Width = 300, Margin = new Thickness(10, 0, 10, 0) };
-        _cboRootFolder.Items.Add("C:\\Users\\Music\\SheetMusic");
-        _cboRootFolder.Items.Add("D:\\Music\\PDFs");
-        _cboRootFolder.SelectedIndex = 0;
-        topBar.Children.Add(_cboRootFolder);
+        _dataGrid.Columns.Add(new DataGridTextColumn
+        {
+            Header = "Assembly",
+            Binding = new Avalonia.Data.Binding("AssemblyName"),
+            Width = new DataGridLength(200)
+        });
         
-        var btnCancel = new Button { Content = "Cancel", Margin = new Thickness(10, 0, 0, 0) };
-        btnCancel.Click += (s, e) => Close();
-        topBar.Children.Add(btnCancel);
+        Trace.WriteLine($"✓ DataGrid created with {_dataGrid.Columns.Count} columns");
+        Trace.WriteLine($"  DataGrid properties: Background={_dataGrid.Background}, BorderBrush={_dataGrid.BorderBrush}, BorderThickness={_dataGrid.BorderThickness}");
         
-        var btnOk = new Button { Content = "_OK", Width = 50, Margin = new Thickness(10, 0, 10, 0) };
-        btnOk.Click += (s, e) => Close();
-        topBar.Children.Add(btnOk);
+        Grid.SetRow(_dataGrid, 1);
+        grid.Children.Add(_dataGrid);
         
-        grid.Children.Add(topBar);
+        Trace.WriteLine($"✓ DataGrid added to Grid (child count: {grid.Children.Count})");
         
         Content = grid;
     }
 
-    private async Task FillBooksTabAsync()
+    private async Task LoadDataAsync()
     {
-        var random = new Random(42); // Fixed seed for consistent colors
-        var items = new List<Control>();
+        _txtStatus.Text = "Loading types from Avalonia assemblies...";
+        await Task.Delay(100); // Allow UI to update
         
-        // Generate 50 book items with colorful bitmaps
-        var bookNames = new[]
-        {
-            "Classical Piano Vol 1", "Jazz Standards", "Pop Hits 2020", "Rock Classics",
-            "Broadway Favorites", "Country Gold", "Blues Collection", "Folk Songs",
-            "Movie Themes", "Video Game Music", "Christmas Carols", "Gospel Hymns",
-            "Opera Arias", "Chamber Music", "Symphonies", "Concertos",
-            "Sonatas", "Etudes", "Preludes", "Fugues",
-            "Nocturnes", "Waltzes", "Mazurkas", "Ballades",
-            "Impromptus", "Scherzos", "Polonaises", "Rhapsodies",
-            "Variations", "Suites", "Partitas", "Inventions",
-            "Toccatas", "Fantasias", "Rondos", "Minuets",
-            "Gavottes", "Bourrees", "Sarabandes", "Gigues",
-            "Courantes", "Allemandes", "Passacaglias", "Chaconnes",
-            "Marches", "Serenades", "Divertimentos", "Overtures",
-            "Interludes", "Bagatelles"
-        };
+        _allData = new List<TypeInfo>();
         
-        for (int i = 0; i < 50; i++)
+        try
         {
-            var bookName = bookNames[i % bookNames.Length];
-            if (i >= bookNames.Length)
+            // Get Avalonia assemblies
+            var avaloniaAssemblies = AppDomain.CurrentDomain.GetAssemblies()
+                .Where(a => !a.IsDynamic && a.GetName().Name != null && 
+                       (a.GetName().Name.StartsWith("Avalonia") || 
+                        a.GetName().Name.Contains("SkiaSharp")))
+                .ToList();
+            
+            Trace.WriteLine($"Found {avaloniaAssemblies.Count} Avalonia/SkiaSharp assemblies");
+            _txtStatus.Text = $"Found {avaloniaAssemblies.Count} assemblies, loading types...";
+            await Task.Delay(100);
+            
+            foreach (var assembly in avaloniaAssemblies)
             {
-                bookName += $" Vol {i / bookNames.Length + 1}";
+                try
+                {
+                    var types = assembly.GetTypes()
+                        .Where(t => t.IsPublic || t.IsNestedPublic)
+                        .Take(200) // Limit per assembly
+                        .ToList();
+                    
+                    foreach (var type in types)
+                    {
+                        try
+                        {
+                            var typeInfo = new TypeInfo
+                            {
+                                Name = type.Name,
+                                Namespace = type.Namespace ?? "(no namespace)",
+                                BaseTypeName = type.BaseType?.Name ?? "(none)",
+                                IsPublic = type.IsPublic || type.IsNestedPublic,
+                                IsAbstract = type.IsAbstract,
+                                IsSealed = type.IsSealed,
+                                PropertyCount = type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static).Length,
+                                MethodCount = type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly).Length,
+                                AssemblyName = assembly.GetName().Name,
+                                FullName = type.FullName ?? type.Name
+                            };
+                            _allData.Add(typeInfo);
+                        }
+                        catch
+                        {
+                            // Skip types that can't be reflected
+                        }
+                    }
+                    
+                    Trace.WriteLine($"  {assembly.GetName().Name}: {types.Count} types");
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"  Error loading types from {assembly.GetName().Name}: {ex.Message}");
+                }
+                
+                // Update UI periodically
+                if (_allData.Count % 100 == 0)
+                {
+                    _txtStatus.Text = $"Loaded {_allData.Count} types...";
+                    await Task.Delay(10);
+                }
             }
             
-            // Create a colorful bitmap for this book
-            var bitmap = GenerateBookCoverBitmap(200, 240, random, bookName, i);
+            _filteredData = new List<TypeInfo>(_allData);
             
-            // Create the book item UI
-            var sp = new StackPanel { Orientation = Orientation.Vertical, Width = 150, Margin = new Thickness(5) };
+            Trace.WriteLine($"✓ Setting ItemsSource with {_filteredData.Count} items");
+            _txtStatus.Text = $"Setting grid data ({_filteredData.Count} items)...";
+            await Task.Delay(100);
             
-            var img = new Avalonia.Controls.Image
-            {
-                Source = bitmap,
-                Width = 140,
-                Height = 200,
-                Stretch = Stretch.UniformToFill
-            };
-            sp.Children.Add(img);
+            // Use ObservableCollection for better data binding
+            var observableData = new System.Collections.ObjectModel.ObservableCollection<TypeInfo>(_filteredData);
+            _dataGrid.ItemsSource = observableData;
             
-            sp.Children.Add(new TextBlock
-            {
-                Text = bookName,
-                TextWrapping = TextWrapping.Wrap,
-                MaxWidth = 140,
-                Margin = new Thickness(0, 5, 0, 0),
-                FontSize = 11
-            });
+            // Force DataGrid to measure and arrange
+            _dataGrid.InvalidateMeasure();
+            _dataGrid.InvalidateArrange();
             
-            var numSongs = random.Next(10, 100);
-            var numPages = random.Next(20, 500);
-            var numFavs = random.Next(0, 20);
+            Trace.WriteLine($"✓ ItemsSource set, updating status");
+            Trace.WriteLine($"  DataGrid DesiredSize: {_dataGrid.DesiredSize}");
+            Trace.WriteLine($"  DataGrid Bounds: {_dataGrid.Bounds}");
+            UpdateStatus();
             
-            sp.Children.Add(new TextBlock
-            {
-                Text = $"#Sngs={numSongs} Pg={numPages} Fav={numFavs}",
-                FontSize = 10,
-                Foreground = Brushes.Gray,
-                Margin = new Thickness(0, 2, 0, 0)
-            });
-            
-            items.Add(sp);
-            
-            // Add incrementally to show loading progress
-            if (i % 5 == 4)
-            {
-                _lbBooks.ItemsSource = null;
-                _lbBooks.ItemsSource = new List<Control>(items);
-                _tbxTotals.Text = $"Total #Books = {items.Count} # Songs = {items.Count * 50} # Pages = {items.Count * 150} #Fav={items.Count * 5}";
-                await Task.Delay(10); // Small delay to show progressive loading
-            }
+            Trace.WriteLine($"✓ Loaded {_allData.Count} total types and displayed in grid");
         }
-        
-        // Final update
-        _lbBooks.ItemsSource = items;
-        _tbxTotals.Text = $"Total #Books = {items.Count} # Songs = {items.Count * 50:n0} # Pages = {items.Count * 150:n0} #Fav={items.Count * 5:n0}";
+        catch (Exception ex)
+        {
+            _txtStatus.Text = $"Error: {ex.Message}";
+            Trace.WriteLine($"Error loading data: {ex}");
+        }
     }
 
-    private Bitmap GenerateBookCoverBitmap(int width, int height, Random random, string title, int index)
+    private void ApplyFilter()
     {
-        using var surface = SKSurface.Create(new SKImageInfo(width, height));
-        var canvas = surface.Canvas;
-        canvas.Clear(SKColors.White);
+        var filterText = _txtFilter.Text?.Trim().ToLower() ?? string.Empty;
         
-        // Generate a nice gradient background
-        var color1 = SKColor.FromHsv(random.Next(360), random.Next(60, 100), random.Next(70, 100));
-        var color2 = SKColor.FromHsv((random.Next(360) + 180) % 360, random.Next(60, 100), random.Next(40, 70));
-        
-        using var shader = SKShader.CreateLinearGradient(
-            new SKPoint(0, 0),
-            new SKPoint(width, height),
-            new[] { color1, color2 },
-            SKShaderTileMode.Clamp);
-        
-        using var paint = new SKPaint
+        if (string.IsNullOrEmpty(filterText))
         {
-            Shader = shader,
-            IsAntialias = true
-        };
-        canvas.DrawRect(0, 0, width, height, paint);
-        
-        // Add some decorative elements
-        using var accentPaint = new SKPaint
+            _filteredData = new List<TypeInfo>(_allData);
+        }
+        else
         {
-            Color = SKColors.White.WithAlpha(100),
-            IsAntialias = true,
-            StrokeWidth = 3,
-            Style = SKPaintStyle.Stroke
-        };
-        
-        // Draw some circles or rectangles as decoration
-        var shapeType = index % 4;
-        switch (shapeType)
-        {
-            case 0:
-                canvas.DrawCircle(width / 2, height / 3, 30, accentPaint);
-                break;
-            case 1:
-                canvas.DrawRect(width / 4, height / 4, width / 2, height / 2, accentPaint);
-                break;
-            case 2:
-                for (int i = 0; i < 3; i++)
-                {
-                    canvas.DrawLine(10, height / 4 + i * 20, width - 10, height / 4 + i * 20, accentPaint);
-                }
-                break;
-            case 3:
-                canvas.DrawOval(new SKRect(width / 4, height / 3, width * 3 / 4, height * 2 / 3), accentPaint);
-                break;
+            _filteredData = _allData
+                .Where(t => 
+                    t.Name.ToLower().Contains(filterText) ||
+                    t.Namespace.ToLower().Contains(filterText) ||
+                    t.BaseTypeName.ToLower().Contains(filterText) ||
+                    t.AssemblyName.ToLower().Contains(filterText))
+                .ToList();
         }
         
-        // Add title text at bottom
-        using var textPaint = new SKPaint
+        _dataGrid.ItemsSource = null;
+        _dataGrid.ItemsSource = _filteredData;
+        UpdateStatus();
+    }
+
+    private void UpdateStatus()
+    {
+        if (_filteredData.Count == _allData.Count)
         {
-            Color = SKColors.White,
-            IsAntialias = true,
-            TextSize = 14,
-            Typeface = SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold),
-            TextAlign = SKTextAlign.Center
-        };
-        
-        // Add shadow for text
-        using var shadowPaint = new SKPaint
-        {
-            Color = SKColors.Black.WithAlpha(150),
-            IsAntialias = true,
-            TextSize = 14,
-            Typeface = SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold),
-            TextAlign = SKTextAlign.Center
-        };
-        
-        var yPos = height - 30;
-        
-        // Word wrap the title
-        var words = title.Split(' ');
-        var currentLine = "";
-        foreach (var word in words)
-        {
-            var testLine = currentLine.Length > 0 ? currentLine + " " + word : word;
-            var lineWidth = textPaint.MeasureText(testLine);
-            
-            if (lineWidth > width - 20 && currentLine.Length > 0)
-            {
-                canvas.DrawText(currentLine, width / 2 + 1, yPos + 1, shadowPaint);
-                canvas.DrawText(currentLine, width / 2, yPos, textPaint);
-                currentLine = word;
-                yPos += 18;
-            }
-            else
-            {
-                currentLine = testLine;
-            }
+            _txtStatus.Text = $"Showing all {_allData.Count:n0} types";
         }
-        
-        if (currentLine.Length > 0)
+        else
         {
-            canvas.DrawText(currentLine, width / 2 + 1, yPos + 1, shadowPaint);
-            canvas.DrawText(currentLine, width / 2, yPos, textPaint);
+            _txtStatus.Text = $"Showing {_filteredData.Count:n0} of {_allData.Count:n0} types";
         }
-        
-        // Convert to Avalonia bitmap
-        using var image = surface.Snapshot();
-        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-        using var stream = new MemoryStream();
-        data.SaveTo(stream);
-        stream.Seek(0, SeekOrigin.Begin);
-        
-        return new Bitmap(stream);
     }
 }
+
+// Data class for type information
+public class TypeInfo
+{
+    public string Name { get; set; } = string.Empty;
+    public string Namespace { get; set; } = string.Empty;
+    public string BaseTypeName { get; set; } = string.Empty;
+    public bool IsPublic { get; set; }
+    public bool IsAbstract { get; set; }
+    public bool IsSealed { get; set; }
+    public int PropertyCount { get; set; }
+    public int MethodCount { get; set; }
+    public string AssemblyName { get; set; } = string.Empty;
+    public string FullName { get; set; } = string.Empty;
+}
+
