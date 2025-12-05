@@ -45,32 +45,23 @@ public partial class MainWindow : Window
         var exePath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
         System.Diagnostics.Debug.WriteLine($"App location: {exePath}");
         System.Diagnostics.Debug.WriteLine($"PDF file exists: {File.Exists(_pdfFileName)}");
+        
+        // Auto-start stress test when window is loaded
+        this.Opened += OnWindowOpened;
+        
+        // Handle window closing to cancel stress test
+        this.Closing += (s, e) =>
+        {
+            _cts?.Cancel();
+        };
     }
 
-    private async void OnStartButtonClick(object? sender, RoutedEventArgs e)
+    private async void OnWindowOpened(object? sender, EventArgs e)
     {
-        if (_isRunning)
-        {
-            // Stop the stress test
-            _cts?.Cancel();
-            _isRunning = false;
-            if (sender is Button btn)
-            {
-                btn.Content = "Start Stress Test";
-            }
-        }
-        else
-        {
-            // Start the stress test
-            _isRunning = true;
-            if (sender is Button btn)
-            {
-                btn.Content = "Stop Stress Test";
-            }
-            
-            _cts = new CancellationTokenSource();
-            await RunStressTestAsync(_cts.Token);
-        }
+        // Auto-start the stress test
+        _isRunning = true;
+        _cts = new CancellationTokenSource();
+        await RunStressTestAsync(_cts.Token);
     }
 
     private async Task RunStressTestAsync(CancellationToken ct)
@@ -85,11 +76,6 @@ public partial class MainWindow : Window
                     statusText.Text = $"PDF file not found: {_pdfFileName}";
                 }
                 _isRunning = false;
-                var btn = this.FindControl<Button>("StartButton");
-                if (btn != null)
-                {
-                    btn.Content = "Start Stress Test";
-                }
                 return;
             }
 
@@ -101,11 +87,6 @@ public partial class MainWindow : Window
                     statusText.Text = "PDF rendering is not supported on this platform";
                 }
                 _isRunning = false;
-                var btn = this.FindControl<Button>("StartButton");
-                if (btn != null)
-                {
-                    btn.Content = "Start Stress Test";
-                }
                 return;
             }
 
@@ -124,11 +105,6 @@ public partial class MainWindow : Window
                     Trace.WriteLine(statusText.Text);
                 }
                 _isRunning = false;
-                var btn = this.FindControl<Button>("StartButton");
-                if (btn != null)
-                {
-                    btn.Content = "Start Stress Test";
-                }
                 return;
             }
             
@@ -140,11 +116,6 @@ public partial class MainWindow : Window
                     statusText.Text = $"Page {_pageNo} out of range. PDF has {pageCount} pages";
                 }
                 _isRunning = false;
-                var btn = this.FindControl<Button>("StartButton");
-                if (btn != null)
-                {
-                    btn.Content = "Start Stress Test";
-                }
                 return;
             }
 
@@ -210,14 +181,6 @@ public partial class MainWindow : Window
         finally
         {
             _isRunning = false;
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                var btn = this.FindControl<Button>("StartButton");
-                if (btn != null)
-                {
-                    btn.Content = "Start Stress Test";
-                }
-            });
         }
     }
 }

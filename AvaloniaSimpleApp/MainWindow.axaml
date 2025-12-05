@@ -6,14 +6,8 @@
     
     <DockPanel>
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="10" Spacing="10">
-            <Button x:Name="StartButton"
-                    Content="Start Stress Test"
-                    Padding="15,8"
-                    FontSize="14"
-                    Click="OnStartButtonClick"/>
-            
             <TextBlock x:Name="StatusText"
-                       Text="Ready - Click button to start rendering PDF page repeatedly"
+                       Text="Starting stress test..."
                        FontSize="12"
                        VerticalAlignment="Center"
                        Foreground="Gray"/>
