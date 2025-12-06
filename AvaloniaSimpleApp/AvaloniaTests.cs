@@ -812,6 +812,74 @@ public class AvaloniaTests
         uiThread.Join(2000);
     }
 
+    [TestMethod]
+    [TestCategory("Manual")]
+    public async Task TestSimpleHardcodedDataGrid()
+    {
+        // This test creates the absolute simplest DataGrid with hardcoded everything
+        // to verify that Avalonia DataGrid works at all in this environment
+        if (Environment.GetEnvironmentVariable("CI") == "true" || 
+            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+        {
+            Assert.Inconclusive("Test skipped in headless CI environment - requires display");
+            return;
+        }
+
+        var testCompleted = new TaskCompletionSource<bool>();
+        var uiThread = new Thread(() =>
+        {
+            try
+            {
+                AppBuilder.Configure<TestSimpleDataGridApp>()
+                    .UsePlatformDetect()
+                    .WithInterFont()
+                    .LogToTrace()
+                    .StartWithClassicDesktopLifetime(Array.Empty<string>());
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"UI thread error: {ex.Message}");
+                testCompleted.TrySetException(ex);
+            }
+        });
+
+        TestSimpleDataGridApp.OnSetupWindow = async (app, lifetime) =>
+        {
+            try
+            {
+                var window = new SimpleDataGridWindow();
+                lifetime.MainWindow = window;
+                
+                window.Closed += (s, e) =>
+                {
+                    Trace.WriteLine("SimpleDataGridWindow closed by user");
+                    testCompleted.TrySetResult(true);
+                    lifetime.Shutdown();
+                };
+                
+                window.Show();
+                
+                Trace.WriteLine($"✓ SimpleDataGridWindow created and shown");
+                await Task.Delay(100);
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"Error: {ex}");
+                testCompleted.SetException(ex);
+                lifetime.Shutdown();
+            }
+        };
+
+        if (OperatingSystem.IsWindows())
+        {
+            uiThread.SetApartmentState(ApartmentState.STA);
+        }
+        uiThread.Start();
+
+        await testCompleted.Task;
+        uiThread.Join(2000);
+    }
+
     private async Task RunHeadlessTest(Func<Task> testAction)
     {
         var tcs = new TaskCompletionSource<bool>();
@@ -1157,345 +1225,198 @@ public class TestBrowseListApp : Avalonia.Application
 // BrowseList-style window with DataGrid populated from reflection
 public class BrowseListWindow : Window
 {
-    private DataGrid _dataGrid;
-    private TextBox _txtFilter;
-    private TextBlock _txtStatus;
-    private Button _btnApply;
-    private List<TypeInfo> _allData;
-    private List<TypeInfo> _filteredData;
+    private BrowseControl _browseControl;
 
     public BrowseListWindow()
     {
-        Title = "Browse Types - Avalonia Test (Reflection Data)";
+        Title = "Browse Avalonia Types - Reflection Query Test";
         Width = 1400;
         Height = 900;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         
-        BuildUI();
-        
-        // Load data after window is loaded
-        this.Opened += async (s, e) =>
-        {
-            await LoadDataAsync();
-        };
-    }
-
-    private void BuildUI()
-    {
-        // Use Grid instead of DockPanel for more reliable layout
-        var grid = new Grid();
-        grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto)); // Filter panel
-        grid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star))); // DataGrid
-        
-        // Top filter panel
-        var filterPanel = new StackPanel 
-        { 
-            Orientation = Orientation.Horizontal,
-            Margin = new Thickness(10),
-            Spacing = 10,
-            Height = 50,
-            Background = Brushes.LightGray
-        };
-        
-        _txtStatus = new TextBlock 
-        { 
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 20, 0),
-            FontSize = 12,
-            MinWidth = 200,
-            Text = "Initializing..."
-        };
-        filterPanel.Children.Add(_txtStatus);
-        
-        filterPanel.Children.Add(new Label 
-        { 
-            Content = "String Filter:",
-            VerticalAlignment = VerticalAlignment.Center
-        });
-        
-        _txtFilter = new TextBox 
-        { 
-            Width = 300,
-            Watermark = "Type to filter...",
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        _txtFilter.KeyDown += (s, e) =>
-        {
-            if (e.Key == Avalonia.Input.Key.Enter)
-            {
-                ApplyFilter();
-            }
-        };
-        filterPanel.Children.Add(_txtFilter);
-        
-        _btnApply = new Button 
-        { 
-            Content = "Apply",
-            Margin = new Thickness(5, 0, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        _btnApply.Click += (s, e) => ApplyFilter();
-        filterPanel.Children.Add(_btnApply);
-        
-        var btnClear = new Button 
-        { 
-            Content = "Clear",
-            Margin = new Thickness(5, 0, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        btnClear.Click += (s, e) =>
-        {
-            _txtFilter.Text = string.Empty;
-            ApplyFilter();
-        };
-        filterPanel.Children.Add(btnClear);
-        
-        Grid.SetRow(filterPanel, 0);
-        grid.Children.Add(filterPanel);
-        
-        // DataGrid for displaying the data
-        _dataGrid = new DataGrid
-        {
-            Margin = new Thickness(10),
-            Background = Brushes.White,
-            GridLinesVisibility = DataGridGridLinesVisibility.All,
-            BorderThickness = new Thickness(2),
-            BorderBrush = Brushes.Black,
-            IsReadOnly = true,
-            CanUserReorderColumns = true,
-            CanUserResizeColumns = true,
-            CanUserSortColumns = true,
-            SelectionMode = DataGridSelectionMode.Extended,
-            AutoGenerateColumns = false,
-            HeadersVisibility = DataGridHeadersVisibility.Column,
-            MinHeight = 100,
-            RowHeight = 25, // Explicit row height
-            FontSize = 12,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch
-        };
-        
-        // Define columns manually for better control
-        _dataGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "Type Name",
-            Binding = new Avalonia.Data.Binding("Name"),
-            Width = new DataGridLength(250)
-        });
-        
-        _dataGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "Namespace",
-            Binding = new Avalonia.Data.Binding("Namespace"),
-            Width = new DataGridLength(300)
-        });
-        
-        _dataGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "Base Type",
-            Binding = new Avalonia.Data.Binding("BaseTypeName"),
-            Width = new DataGridLength(200)
-        });
-        
-        _dataGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "Is Public",
-            Binding = new Avalonia.Data.Binding("IsPublic"),
-            Width = new DataGridLength(80)
-        });
-        
-        _dataGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "Is Abstract",
-            Binding = new Avalonia.Data.Binding("IsAbstract"),
-            Width = new DataGridLength(80)
-        });
-        
-        _dataGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "Is Sealed",
-            Binding = new Avalonia.Data.Binding("IsSealed"),
-            Width = new DataGridLength(80)
-        });
-        
-        _dataGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "# Properties",
-            Binding = new Avalonia.Data.Binding("PropertyCount"),
-            Width = new DataGridLength(100)
-        });
-        
-        _dataGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "# Methods",
-            Binding = new Avalonia.Data.Binding("MethodCount"),
-            Width = new DataGridLength(100)
-        });
-        
-        _dataGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "Assembly",
-            Binding = new Avalonia.Data.Binding("AssemblyName"),
-            Width = new DataGridLength(200)
-        });
-        
-        Trace.WriteLine($"✓ DataGrid created with {_dataGrid.Columns.Count} columns");
-        Trace.WriteLine($"  DataGrid properties: Background={_dataGrid.Background}, BorderBrush={_dataGrid.BorderBrush}, BorderThickness={_dataGrid.BorderThickness}");
-        
-        Grid.SetRow(_dataGrid, 1);
-        grid.Children.Add(_dataGrid);
-        
-        Trace.WriteLine($"✓ DataGrid added to Grid (child count: {grid.Children.Count})");
-        
-        Content = grid;
-    }
-
-    private async Task LoadDataAsync()
-    {
-        _txtStatus.Text = "Loading types from Avalonia assemblies...";
-        await Task.Delay(100); // Allow UI to update
-        
-        _allData = new List<TypeInfo>();
-        
-        try
-        {
-            // Get Avalonia assemblies
-            var avaloniaAssemblies = AppDomain.CurrentDomain.GetAssemblies()
-                .Where(a => !a.IsDynamic && a.GetName().Name != null && 
-                       (a.GetName().Name.StartsWith("Avalonia") || 
-                        a.GetName().Name.Contains("SkiaSharp")))
-                .ToList();
-            
-            Trace.WriteLine($"Found {avaloniaAssemblies.Count} Avalonia/SkiaSharp assemblies");
-            _txtStatus.Text = $"Found {avaloniaAssemblies.Count} assemblies, loading types...";
-            await Task.Delay(100);
-            
-            foreach (var assembly in avaloniaAssemblies)
-            {
-                try
-                {
-                    var types = assembly.GetTypes()
-                        .Where(t => t.IsPublic || t.IsNestedPublic)
-                        .Take(200) // Limit per assembly
-                        .ToList();
-                    
-                    foreach (var type in types)
+        // Create a LINQ reflection query over Avalonia types
+        // This demonstrates the real-world usage: browsing types from assemblies with automatic column generation
+        var query = from type in typeof(Avalonia.Controls.Button).Assembly.GetTypes()
+                    where type.IsClass && type.IsPublic
+                    select new
                     {
-                        try
-                        {
-                            var typeInfo = new TypeInfo
-                            {
-                                Name = type.Name,
-                                Namespace = type.Namespace ?? "(no namespace)",
-                                BaseTypeName = type.BaseType?.Name ?? "(none)",
-                                IsPublic = type.IsPublic || type.IsNestedPublic,
-                                IsAbstract = type.IsAbstract,
-                                IsSealed = type.IsSealed,
-                                PropertyCount = type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static).Length,
-                                MethodCount = type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly).Length,
-                                AssemblyName = assembly.GetName().Name,
-                                FullName = type.FullName ?? type.Name
-                            };
-                            _allData.Add(typeInfo);
-                        }
-                        catch
-                        {
-                            // Skip types that can't be reflected
-                        }
-                    }
-                    
-                    Trace.WriteLine($"  {assembly.GetName().Name}: {types.Count} types");
-                }
-                catch (Exception ex)
-                {
-                    Trace.WriteLine($"  Error loading types from {assembly.GetName().Name}: {ex.Message}");
-                }
-                
-                // Update UI periodically
-                if (_allData.Count % 100 == 0)
-                {
-                    _txtStatus.Text = $"Loaded {_allData.Count} types...";
-                    await Task.Delay(10);
-                }
+                        TypeName = type.Name,
+                        Namespace = type.Namespace ?? string.Empty,
+                        IsAbstract = type.IsAbstract,
+                        MethodCount = type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly).Length,
+                        PropertyCount = type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly).Length
+                    };
+        
+        var typeCount = query.Count();
+        Trace.WriteLine($"✓ Creating BrowseControl with LINQ reflection query");
+        Trace.WriteLine($"✓ Query returns {typeCount} public classes from Avalonia.Controls assembly");
+        Trace.WriteLine($"✓ Query uses anonymous type with computed properties (MethodCount, PropertyCount)");
+        
+        // Create the browse control with the reflection query
+        // Columns will be automatically generated: TypeName, Namespace, IsAbstract, MethodCount, PropertyCount
+        _browseControl = new BrowseControl(query, colWidths: new[] { 250, 350, 100, 120, 120 });
+        
+        // Handle double-click to close window
+        _browseControl.ListView.DoubleTapped += (o, e) =>
+        {
+            if (_browseControl.ListView.SelectedIndex >= 0)
+            {
+                Trace.WriteLine($"Selected: {_browseControl.ListView.SelectedItem}");
             }
-            
-            _filteredData = new List<TypeInfo>(_allData);
-            
-            Trace.WriteLine($"✓ Setting ItemsSource with {_filteredData.Count} items");
-            _txtStatus.Text = $"Setting grid data ({_filteredData.Count} items)...";
-            await Task.Delay(100);
-            
-            // Use ObservableCollection for better data binding
-            var observableData = new System.Collections.ObjectModel.ObservableCollection<TypeInfo>(_filteredData);
-            _dataGrid.ItemsSource = observableData;
-            
-            // Force DataGrid to measure and arrange
-            _dataGrid.InvalidateMeasure();
-            _dataGrid.InvalidateArrange();
-            
-            Trace.WriteLine($"✓ ItemsSource set, updating status");
-            Trace.WriteLine($"  DataGrid DesiredSize: {_dataGrid.DesiredSize}");
-            Trace.WriteLine($"  DataGrid Bounds: {_dataGrid.Bounds}");
-            UpdateStatus();
-            
-            Trace.WriteLine($"✓ Loaded {_allData.Count} total types and displayed in grid");
-        }
-        catch (Exception ex)
-        {
-            _txtStatus.Text = $"Error: {ex.Message}";
-            Trace.WriteLine($"Error loading data: {ex}");
-        }
-    }
-
-    private void ApplyFilter()
-    {
-        var filterText = _txtFilter.Text?.Trim().ToLower() ?? string.Empty;
+        };
         
-        if (string.IsNullOrEmpty(filterText))
-        {
-            _filteredData = new List<TypeInfo>(_allData);
-        }
-        else
-        {
-            _filteredData = _allData
-                .Where(t => 
-                    t.Name.ToLower().Contains(filterText) ||
-                    t.Namespace.ToLower().Contains(filterText) ||
-                    t.BaseTypeName.ToLower().Contains(filterText) ||
-                    t.AssemblyName.ToLower().Contains(filterText))
-                .ToList();
-        }
+        Content = _browseControl;
         
-        _dataGrid.ItemsSource = null;
-        _dataGrid.ItemsSource = _filteredData;
-        UpdateStatus();
-    }
-
-    private void UpdateStatus()
-    {
-        if (_filteredData.Count == _allData.Count)
-        {
-            _txtStatus.Text = $"Showing all {_allData.Count:n0} types";
-        }
-        else
-        {
-            _txtStatus.Text = $"Showing {_filteredData.Count:n0} of {_allData.Count:n0} types";
-        }
+        Trace.WriteLine($"✓ BrowseListWindow created with reflection-based query");
+        Trace.WriteLine($"✓ Columns: TypeName, Namespace, IsAbstract, MethodCount, PropertyCount");
+        Trace.WriteLine($"✓ Try filtering by type name (e.g., 'Button', 'Panel', 'Control')");
     }
 }
 
-// Data class for type information
-public class TypeInfo
+// Simple test class to verify DataGrid works with real classes
+public class TestItem
 {
-    public string Name { get; set; } = string.Empty;
-    public string Namespace { get; set; } = string.Empty;
-    public string BaseTypeName { get; set; } = string.Empty;
-    public bool IsPublic { get; set; }
-    public bool IsAbstract { get; set; }
-    public bool IsSealed { get; set; }
-    public int PropertyCount { get; set; }
-    public int MethodCount { get; set; }
-    public string AssemblyName { get; set; } = string.Empty;
-    public string FullName { get; set; } = string.Empty;
+    public string Name { get; set; }
+    public string Value { get; set; }
+    public int Number { get; set; }
+}
+
+// Test app for simple DataGrid
+public class TestSimpleDataGridApp : Avalonia.Application
+{
+    public static Func<Avalonia.Application, IClassicDesktopStyleApplicationLifetime, Task>? OnSetupWindow;
+    
+    public override void Initialize()
+    {
+        Styles.Add(new FluentTheme());
+    }
+    
+    public override void OnFrameworkInitializationCompleted()
+    {
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            if (OnSetupWindow != null)
+            {
+                _ = OnSetupWindow.Invoke(this, desktop);
+            }
+        }
+
+        base.OnFrameworkInitializationCompleted();
+    }
+}
+
+// Simplest possible DataGrid window with hardcoded everything
+public class SimpleDataGridWindow : Window
+{
+    public SimpleDataGridWindow()
+    {
+        Title = "Simple Hardcoded DataGrid Test";
+        Width = 800;
+        Height = 600;
+        WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        Background = Brushes.LightGray;
+        
+        // Create the simplest possible DataGrid
+        var dataGrid = new DataGrid
+        {
+            AutoGenerateColumns = true, // Let Avalonia generate columns automatically
+            IsReadOnly = true,
+            CanUserReorderColumns = true,
+            CanUserResizeColumns = true,
+            GridLinesVisibility = DataGridGridLinesVisibility.All,
+            HeadersVisibility = DataGridHeadersVisibility.Column,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Background = Brushes.White,
+            BorderBrush = Brushes.Black,
+            BorderThickness = new Thickness(2),
+            Margin = new Thickness(10),
+            RowHeight = 30,
+            // Try setting explicit Height instead of letting it stretch
+            Height = 500
+        };
+        
+        // Create simple hardcoded data
+        var items = new List<TestItem>
+        {
+            new TestItem { Name = "Item 1", Value = "Value 1", Number = 100 },
+            new TestItem { Name = "Item 2", Value = "Value 2", Number = 200 },
+            new TestItem { Name = "Item 3", Value = "Value 3", Number = 300 },
+            new TestItem { Name = "Item 4", Value = "Value 4", Number = 400 },
+            new TestItem { Name = "Item 5", Value = "Value 5", Number = 500 }
+        };
+        
+        Trace.WriteLine($"✓ Created {items.Count} hardcoded TestItem instances");
+        
+        // Set ItemsSource IMMEDIATELY to test if timing is really the issue
+        dataGrid.ItemsSource = items;
+        Trace.WriteLine($"✓ ItemsSource set IMMEDIATELY in constructor to {items.Count} items");
+        
+        // Also hook Loaded to check status
+        dataGrid.Loaded += (s, e) =>
+        {
+            Trace.WriteLine($"DataGrid.Loaded event fired:");
+            Trace.WriteLine($"  Bounds = {dataGrid.Bounds}");
+            Trace.WriteLine($"  IsVisible = {dataGrid.IsVisible}");
+            Trace.WriteLine($"  ItemsSource count = {items.Count}");
+            Trace.WriteLine($"  AutoGenerateColumns = {dataGrid.AutoGenerateColumns}");
+            Trace.WriteLine($"  Columns.Count = {dataGrid.Columns.Count}");
+            Trace.WriteLine($"  Height = {dataGrid.Height}, RowHeight = {dataGrid.RowHeight}");
+            
+            // CRITICAL: Force another layout pass after ItemsSource is set
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                dataGrid.InvalidateMeasure();
+                dataGrid.InvalidateArrange();
+                dataGrid.UpdateLayout();
+                
+                Trace.WriteLine($"  After UpdateLayout: Columns.Count = {dataGrid.Columns.Count}");
+                
+                // Check visual children immediately after forced layout
+                var hasVisualChildren = Avalonia.VisualTree.VisualExtensions.GetVisualChildren(dataGrid).Any();
+                var rowCount = Avalonia.VisualTree.VisualExtensions.GetVisualChildren(dataGrid).OfType<DataGridRow>().Count();
+                Trace.WriteLine($"  Immediately after layout: HasVisualChildren={hasVisualChildren}, DataGridRow count={rowCount}");
+                
+                // Try to enumerate ALL visual children to see what's actually there
+                var allChildren = Avalonia.VisualTree.VisualExtensions.GetVisualChildren(dataGrid).ToList();
+                Trace.WriteLine($"  Visual children types ({allChildren.Count} total):");
+                foreach (var child in allChildren.Take(10))  // Show first 10
+                {
+                    Trace.WriteLine($"    - {child.GetType().Name}");
+                }
+                
+                // Try GetVisualDescendants to go deeper
+                var allDescendants = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(dataGrid).ToList();
+                Trace.WriteLine($"  Visual DESCENDANTS ({allDescendants.Count} total):");
+                var descendantTypes = allDescendants.GroupBy(d => d.GetType().Name)
+                    .Select(g => $"{g.Key} ({g.Count()})")
+                    .ToList();
+                foreach (var typeInfo in descendantTypes.Take(20))
+                {
+                    Trace.WriteLine($"    - {typeInfo}");
+                }
+            }, Avalonia.Threading.DispatcherPriority.Loaded);
+            
+            // Also check after a delay
+            System.Threading.Tasks.Task.Delay(2000).ContinueWith(_ =>
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    var hasVisualChildren = Avalonia.VisualTree.VisualExtensions.GetVisualChildren(dataGrid).Any();
+                    var rowCount = Avalonia.VisualTree.VisualExtensions.GetVisualChildren(dataGrid).OfType<DataGridRow>().Count();
+                    Trace.WriteLine($"DataGrid DIAGNOSTIC (after 2s): Columns={dataGrid.Columns.Count}, HasVisualChildren={hasVisualChildren}, DataGridRow count={rowCount}");
+                    
+                    // Check for any ScrollViewer
+                    var scrollViewerCount = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(dataGrid)
+                        .Count(c => c.GetType().Name.Contains("Scroll"));
+                    Trace.WriteLine($"  ScrollViewer-related controls = {scrollViewerCount}");
+                });
+            });
+        };
+        
+        Content = dataGrid;
+        
+        Trace.WriteLine($"✓ SimpleDataGridWindow created with explicit Height=500");
+    }
 }
 
