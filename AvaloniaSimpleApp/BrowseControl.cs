@@ -69,7 +69,9 @@ public class BrowseControl : DockPanel
             this.Children.Add(listFilter);
             DockPanel.SetDock(listFilter, Dock.Top);
 
-            // Create a container for header + listview with ScrollViewer
+            ListView = new BrowseListView(query, this);
+            
+            // Create a container for header + ScrollViewer
             var listContainer = new DockPanel
             {
                 LastChildFill = true,
@@ -77,16 +79,15 @@ public class BrowseControl : DockPanel
                 VerticalAlignment = VerticalAlignment.Stretch
             };
 
-            ListView = new BrowseListView(query, this);
-            
-            // Add header grid to container
+            // Add header grid to container (docked to top)
             if (ListView.HeaderGrid != null)
             {
                 listContainer.Children.Add(ListView.HeaderGrid);
                 DockPanel.SetDock(ListView.HeaderGrid, Dock.Top);
             }
             
-            // ListView is now a ScrollViewer, add it directly
+            // Add the ScrollViewer - it will fill remaining space
+            // The ScrollViewer's content (StackPanel) must NOT stretch vertically
             listContainer.Children.Add(ListView);
             
             this.Children.Add(listContainer);
@@ -195,7 +196,7 @@ internal class ListFilter : DockPanel
     }
 }
 
-public class BrowseListView : ScrollViewer
+public class BrowseListView : UserControl  // Changed from ScrollViewer to UserControl
 {
     int _nColIndex = 0;
     private readonly int[] _colWidths;
@@ -205,6 +206,7 @@ public class BrowseListView : ScrollViewer
     private string _currentFilter = string.Empty;
     private Grid _headerGrid;
     private StackPanel _itemsPanel;
+    private ScrollViewer _scrollViewer;  // Add explicit ScrollViewer
     private List<Grid> _selectedRows = new List<Grid>();
     private int _lastSortedColumnIndex = -1;
     private bool _lastSortAscending = true;
@@ -220,15 +222,12 @@ public class BrowseListView : ScrollViewer
     public int SelectedIndex { get; set; } = -1;
     public object SelectedItem { get; set; }
     public int ItemCount => _filteredItems?.Count ?? 0;
+    public ContextMenu ContextMenu { get; set; }
 
     public BrowseListView(IEnumerable query, BrowseControl browseControl)
     {
         this._colWidths = browseControl._colWidths;
         this._originalQuery = query;
-        this.HorizontalAlignment = HorizontalAlignment.Stretch;
-        this.VerticalAlignment = VerticalAlignment.Stretch;
-        this.HorizontalScrollBarVisibility = ScrollBarVisibility.Auto;
-        this.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
         
         // Create collections
         _allItems = new ObservableCollection<object>();
@@ -322,6 +321,14 @@ public class BrowseListView : ScrollViewer
             Margin = new Thickness(8, 8, 8, 0)
         };
 
+        // Calculate minimum width for header
+        double minWidth = 0;
+        foreach (var col in _columns)
+        {
+            minWidth += col.Width > 0 ? col.Width : 150;
+        }
+        _headerGrid.MinWidth = minWidth;
+
         // Add column definitions for headers
         foreach (var col in _columns)
         {
@@ -364,15 +371,26 @@ public class BrowseListView : ScrollViewer
         _itemsPanel = new StackPanel
         {
             Orientation = Orientation.Vertical,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
             Background = Brushes.White,
-            Margin = new Thickness(8, 0, 8, 8)
+            MinWidth = minWidth
         };
 
-        // Set the items panel directly as content (header will be added by BrowseControl)
-        this.Content = _itemsPanel;
+        // Create ScrollViewer to wrap items panel
+        _scrollViewer = new ScrollViewer
+        {
+            Content = _itemsPanel,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch
+        };
+
+        // Set the ScrollViewer as the content of the UserControl
+        this.Content = _scrollViewer;
         
-        Trace.WriteLine($"BrowseListView.BuildVisualStructure: Visual structure created");
+        Trace.WriteLine($"BrowseListView.BuildVisualStructure: Visual structure created with MinWidth={minWidth}");
     }
 
     private void RenderItems()
@@ -404,6 +422,14 @@ public class BrowseListView : ScrollViewer
             Margin = new Thickness(0, 0, 0, 1),
             Tag = item
         };
+
+        // Calculate minimum width based on column widths
+        double minWidth = 0;
+        foreach (var col in _columns)
+        {
+            minWidth += col.Width > 0 ? col.Width : 150; // Default 150 for auto-sized columns
+        }
+        grid.MinWidth = minWidth;
 
         // Add column definitions matching header
         foreach (var colDef in _headerGrid.ColumnDefinitions)
@@ -468,10 +494,44 @@ public class BrowseListView : ScrollViewer
     {
         if (sender is not Grid clickedGrid) return;
 
-        var props = e.GetCurrentPoint(this).Properties;
         var isCtrlPressed = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+        var isShiftPressed = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
 
-        if (isCtrlPressed)
+        if (isShiftPressed && _selectedRows.Count > 0)
+        {
+            // Range select: select all rows between last selected and clicked row
+            var lastSelectedIndex = _itemsPanel.Children.IndexOf(_selectedRows[_selectedRows.Count - 1]);
+            var clickedIndex = _itemsPanel.Children.IndexOf(clickedGrid);
+            
+            var startIndex = Math.Min(lastSelectedIndex, clickedIndex);
+            var endIndex = Math.Max(lastSelectedIndex, clickedIndex);
+            
+            // Clear previous selection unless Ctrl is also pressed
+            if (!isCtrlPressed)
+            {
+                foreach (var row in _selectedRows)
+                {
+                    row.Background = Brushes.White;
+                }
+                _selectedRows.Clear();
+                SelectedItems.Clear();
+            }
+            
+            // Select range
+            for (int i = startIndex; i <= endIndex; i++)
+            {
+                if (_itemsPanel.Children[i] is Grid rowGrid)
+                {
+                    if (!_selectedRows.Contains(rowGrid))
+                    {
+                        _selectedRows.Add(rowGrid);
+                        SelectedItems.Add(rowGrid.Tag);
+                        rowGrid.Background = Brushes.LightGreen;
+                    }
+                }
+            }
+        }
+        else if (isCtrlPressed)
         {
             // Multi-select: toggle selection
             if (_selectedRows.Contains(clickedGrid))
@@ -741,7 +801,7 @@ public class BrowseListView : ScrollViewer
     private void OnCopy(object sender, RoutedEventArgs e)
     {
         var text = DumpToString(false);
-        var topLevel = TopLevel.GetTopLevel(this);
+        var topLevel = TopLevel.GetTopLevel(_scrollViewer);  // Changed from 'this' to '_scrollViewer'
         if (topLevel?.Clipboard != null)
         {
             topLevel.Clipboard.SetTextAsync(text);
