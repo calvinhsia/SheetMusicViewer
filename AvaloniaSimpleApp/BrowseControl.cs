@@ -503,6 +503,40 @@ public class BrowseListView : UserControl  // Changed from ScrollViewer to UserC
     {
         if (sender is not Grid clickedGrid) return;
 
+        var props = e.GetCurrentPoint(this).Properties;
+        
+        // RIGHT-CLICK: Don't change selection, just show context menu
+        if (props.IsRightButtonPressed)
+        {
+            // If clicking on an already-selected row, keep the selection
+            if (_selectedRows.Contains(clickedGrid))
+            {
+                e.Handled = true;
+                return; // Keep existing selection
+            }
+            // If clicking on unselected row, select just that row
+            else
+            {
+                foreach (var row in _selectedRows)
+                {
+                    row.Background = Brushes.White;
+                }
+                _selectedRows.Clear();
+                SelectedItems.Clear();
+
+                _selectedRows.Add(clickedGrid);
+                SelectedItems.Add(clickedGrid.Tag);
+                clickedGrid.Background = Brushes.LightGreen;
+                
+                SelectedItem = clickedGrid.Tag;
+                SelectedIndex = _itemsPanel.Children.IndexOf(clickedGrid);
+                
+                e.Handled = true;
+                return;
+            }
+        }
+
+        // LEFT-CLICK: Normal selection behavior
         var isCtrlPressed = e.KeyModifiers.HasFlag(KeyModifiers.Control);
         var isShiftPressed = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
 
