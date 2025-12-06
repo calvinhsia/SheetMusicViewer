@@ -296,18 +296,27 @@ public class BrowseListView : UserControl  // Changed from ScrollViewer to UserC
             }
         }
 
+        // CREATE CONTEXT MENU FIRST - before BuildVisualStructure
+        this.ContextMenu = new ContextMenu();
+        AddContextMenuItem("_Copy", "Copy selected items to clipboard", OnCopy);
+        AddContextMenuItem("Export to E_xcel", "Create a temp file of selected items in CSV format", OnExportExcel);
+        AddContextMenuItem("Export to _Notepad", "Create a temp file of selected items in TXT format", OnExportNotepad);
+        
+        Trace.WriteLine($"BrowseListView: Context menu created with {this.ContextMenu.Items.Count} items");
+
         // Create the visual structure
         BuildVisualStructure();
+        
+        // ATTACH context menu to scrollviewer and panel so right-click works
+        _scrollViewer.ContextMenu = this.ContextMenu;
+        _itemsPanel.ContextMenu = this.ContextMenu;
+        
+        Trace.WriteLine($"BrowseListView: Context menu attached to scrollviewer and panel");
         
         // Render items manually
         RenderItems();
         
         Trace.WriteLine($"BrowseListView: Created with {this._columns.Count} columns and {_filteredItems.Count} items");
-
-        this.ContextMenu = new ContextMenu();
-        AddContextMenuItem("_Copy", "Copy selected items to clipboard", OnCopy);
-        AddContextMenuItem("Export to E_xcel", "Create a temp file of selected items in CSV format", OnExportExcel);
-        AddContextMenuItem("Export to _Notepad", "Create a temp file of selected items in TXT format", OnExportNotepad);
     }
 
     private void BuildVisualStructure()
