@@ -205,6 +205,9 @@ public class BrowseListView : ScrollViewer
     private string _currentFilter = string.Empty;
     private Grid _headerGrid;
     private StackPanel _itemsPanel;
+    private List<Grid> _selectedRows = new List<Grid>();
+    private int _lastSortedColumnIndex = -1;
+    private bool _lastSortAscending = true;
 
     readonly Type _baseType = null;
     readonly string _baseTypeName = string.Empty;
@@ -377,6 +380,10 @@ public class BrowseListView : ScrollViewer
         Trace.WriteLine($"BrowseListView.RenderItems: Rendering {_filteredItems.Count} items manually");
         
         _itemsPanel.Children.Clear();
+        _selectedRows.Clear();
+        SelectedItems.Clear();
+        SelectedIndex = -1;
+        SelectedItem = null;
         
         foreach (var item in _filteredItems)
         {
@@ -394,7 +401,8 @@ public class BrowseListView : ScrollViewer
             HorizontalAlignment = HorizontalAlignment.Stretch,
             Height = 25,
             Background = Brushes.White,
-            Margin = new Thickness(0, 0, 0, 1)
+            Margin = new Thickness(0, 0, 0, 1),
+            Tag = item
         };
 
         // Add column definitions matching header
@@ -436,7 +444,79 @@ public class BrowseListView : ScrollViewer
             grid.Children.Add(textBlock);
         }
 
+        // Add selection handling
+        grid.PointerPressed += OnRowPointerPressed;
+        grid.PointerEntered += (s, e) =>
+        {
+            if (!_selectedRows.Contains(grid))
+            {
+                grid.Background = Brushes.LightBlue;
+            }
+        };
+        grid.PointerExited += (s, e) =>
+        {
+            if (!_selectedRows.Contains(grid))
+            {
+                grid.Background = Brushes.White;
+            }
+        };
+
         return grid;
+    }
+
+    private void OnRowPointerPressed(object sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Grid clickedGrid) return;
+
+        var props = e.GetCurrentPoint(this).Properties;
+        var isCtrlPressed = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+
+        if (isCtrlPressed)
+        {
+            // Multi-select: toggle selection
+            if (_selectedRows.Contains(clickedGrid))
+            {
+                // Deselect
+                _selectedRows.Remove(clickedGrid);
+                SelectedItems.Remove(clickedGrid.Tag);
+                clickedGrid.Background = Brushes.White;
+            }
+            else
+            {
+                // Add to selection
+                _selectedRows.Add(clickedGrid);
+                SelectedItems.Add(clickedGrid.Tag);
+                clickedGrid.Background = Brushes.LightGreen;
+            }
+        }
+        else
+        {
+            // Single select: clear previous and select new
+            foreach (var row in _selectedRows)
+            {
+                row.Background = Brushes.White;
+            }
+            _selectedRows.Clear();
+            SelectedItems.Clear();
+
+            _selectedRows.Add(clickedGrid);
+            SelectedItems.Add(clickedGrid.Tag);
+            clickedGrid.Background = Brushes.LightGreen;
+        }
+
+        // Update SelectedItem and SelectedIndex
+        if (_selectedRows.Count > 0)
+        {
+            SelectedItem = _selectedRows[0].Tag;
+            SelectedIndex = _itemsPanel.Children.IndexOf(_selectedRows[0]);
+        }
+        else
+        {
+            SelectedItem = null;
+            SelectedIndex = -1;
+        }
+
+        Trace.WriteLine($"Selection: {SelectedItems.Count} items selected");
     }
 
     private string FormatValue(object value)
@@ -564,7 +644,87 @@ public class BrowseListView : ScrollViewer
     private void OnHeaderClick(int columnIndex)
     {
         Trace.WriteLine($"Header clicked: column {columnIndex}");
-        // TODO: Implement sorting
+        
+        if (columnIndex < 0 || columnIndex >= _columns.Count)
+            return;
+
+        var col = _columns[columnIndex];
+        
+        // Determine sort direction
+        bool ascending = true;
+        if (_lastSortedColumnIndex == columnIndex)
+        {
+            // Toggle direction if clicking same column
+            ascending = !_lastSortAscending;
+        }
+        
+        _lastSortedColumnIndex = columnIndex;
+        _lastSortAscending = ascending;
+
+        // Update header button to show sort indicator
+        UpdateHeaderSortIndicators(columnIndex, ascending);
+
+        // Sort the filtered items
+        try
+        {
+            var sortedItems = ascending
+                ? _filteredItems.OrderBy(item => GetPropertyValue(item, col.BindingPath)).ToList()
+                : _filteredItems.OrderByDescending(item => GetPropertyValue(item, col.BindingPath)).ToList();
+
+            _filteredItems.Clear();
+            foreach (var item in sortedItems)
+            {
+                _filteredItems.Add(item);
+            }
+
+            // Re-render with sorted items
+            RenderItems();
+            
+            Trace.WriteLine($"Sorted by {col.HeaderText} ({(ascending ? "ascending" : "descending")})");
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"Error sorting by column {columnIndex}: {ex.Message}");
+        }
+    }
+
+    private object GetPropertyValue(object item, string propertyPath)
+    {
+        try
+        {
+            var prop = TypeDescriptor.GetProperties(item)[propertyPath];
+            if (prop != null)
+            {
+                return prop.GetValue(item) ?? string.Empty;
+            }
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"Error getting property value for sorting: {ex.Message}");
+        }
+        return string.Empty;
+    }
+
+    private void UpdateHeaderSortIndicators(int sortedColumnIndex, bool ascending)
+    {
+        // Update all header buttons to show sort indicator
+        for (int i = 0; i < _headerGrid.Children.Count; i++)
+        {
+            if (_headerGrid.Children[i] is Button btn)
+            {
+                var col = _columns[i];
+                if (i == sortedColumnIndex)
+                {
+                    // Show sort indicator
+                    btn.Content = $"{col.HeaderText} {(ascending ? "?" : "?")}";
+                }
+                else
+                {
+                    // Remove sort indicator
+                    btn.Content = col.HeaderText;
+                }
+            }
+        }
     }
 
     private void AddContextMenuItem(string header, string tooltip, Action<object, RoutedEventArgs> handler)
