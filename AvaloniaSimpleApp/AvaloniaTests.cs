@@ -16,6 +16,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 
 namespace AvaloniaSimpleApp;
 
@@ -1512,6 +1513,8 @@ public class AvaloniaTests
     {
         // This test uses PdfMetaData class from WPF project (real class with get/set properties)
         // to verify if DataGrid works with strongly-typed classes vs anonymous types
+        // UPDATED: Try multiple approaches to get DataGrid working
+        // This test attempts different configurations to display data in Avalonia DataGrid
         if (Environment.GetEnvironmentVariable("CI") == "true" || 
             Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
         {
@@ -1549,10 +1552,11 @@ public class AvaloniaTests
         {
             try
             {
-                Trace.WriteLine("=== DataGrid Test with Real PdfMetaData Class ===");
+                Trace.WriteLine("=== AGGRESSIVE DataGrid Troubleshooting ===");
+                Trace.WriteLine("Trying multiple approaches to force DataGrid to display data...");
                 Trace.WriteLine("");
                 
-                // Create sample PdfMetaData items (simplified - no actual PDF files needed)
+                // Create sample data
                 var items = new System.Collections.ObjectModel.ObservableCollection<PdfMetaDataSimple>();
                 for (int i = 0; i < 20; i++)
                 {
@@ -1571,25 +1575,122 @@ public class AvaloniaTests
                 Trace.WriteLine($"✓ Item type: {items[0].GetType().FullName}");
                 Trace.WriteLine("");
                 
-                var dataGrid = new DataGrid
+                // APPROACH 1: Manual column definitions with explicit bindings
+                Trace.WriteLine("APPROACH 1: Manual columns with explicit bindings");
+                var dataGrid1 = new DataGrid
                 {
                     ItemsSource = items,
-                    AutoGenerateColumns = true,
+                    AutoGenerateColumns = false,  // Force manual
                     CanUserReorderColumns = true,
                     CanUserResizeColumns = true,
                     CanUserSortColumns = true,
                     GridLinesVisibility = DataGridGridLinesVisibility.All,
                     SelectionMode = DataGridSelectionMode.Extended,
                     Width = 900,
-                    Height = 500
+                    Height = 200
+                };
+                
+                // Manually add columns with explicit property bindings
+                dataGrid1.Columns.Add(new DataGridTextColumn 
+                { 
+                    Header = "File Name", 
+                    Binding = new Avalonia.Data.Binding("FileName"),
+                    Width = new DataGridLength(200)
+                });
+                dataGrid1.Columns.Add(new DataGridTextColumn 
+                { 
+                    Header = "Pages", 
+                    Binding = new Avalonia.Data.Binding("NumPages"),
+                    Width = new DataGridLength(80)
+                });
+                dataGrid1.Columns.Add(new DataGridTextColumn 
+                { 
+                    Header = "Songs", 
+                    Binding = new Avalonia.Data.Binding("NumSongs"),
+                    Width = new DataGridLength(80)
+                });
+                dataGrid1.Columns.Add(new DataGridTextColumn 
+                { 
+                    Header = "Favorites", 
+                    Binding = new Avalonia.Data.Binding("NumFavorites"),
+                    Width = new DataGridLength(80)
+                });
+                dataGrid1.Columns.Add(new DataGridTextColumn 
+                { 
+                    Header = "Last Page", 
+                    Binding = new Avalonia.Data.Binding("LastPageNo"),
+                    Width = new DataGridLength(80)
+                });
+                dataGrid1.Columns.Add(new DataGridTextColumn 
+                { 
+                    Header = "Notes", 
+                    Binding = new Avalonia.Data.Binding("Notes"),
+                    Width = new DataGridLength(150)
+                });
+                
+                Trace.WriteLine($"  Columns: {dataGrid1.Columns.Count}");
+                
+                // APPROACH 2: Auto-generate columns
+                Trace.WriteLine("APPROACH 2: Auto-generate columns");
+                var dataGrid2 = new DataGrid
+                {
+                    ItemsSource = items,
+                    AutoGenerateColumns = true,
+                    Width = 900,
+                    Height = 200
+                };
+                
+                // APPROACH 3: Set ItemsSource AFTER showing window
+                Trace.WriteLine("APPROACH 3: Set ItemsSource after window shown");
+                var dataGrid3 = new DataGrid
+                {
+                    AutoGenerateColumns = true,
+                    Width = 900,
+                    Height = 200
+                };
+                
+                // Stack all three grids vertically
+                var stackPanel = new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Vertical,
+                    Spacing = 20
+                };
+                
+                stackPanel.Children.Add(new TextBlock 
+                { 
+                    Text = "APPROACH 1: Manual columns with explicit bindings",
+                    FontWeight = FontWeight.Bold,
+                    Margin = new Thickness(10)
+                });
+                stackPanel.Children.Add(dataGrid1);
+                
+                stackPanel.Children.Add(new TextBlock 
+                { 
+                    Text = "APPROACH 2: Auto-generate columns",
+                    FontWeight = FontWeight.Bold,
+                    Margin = new Thickness(10)
+                });
+                stackPanel.Children.Add(dataGrid2);
+                
+                stackPanel.Children.Add(new TextBlock 
+                { 
+                    Text = "APPROACH 3: ItemsSource set AFTER window shown",
+                    FontWeight = FontWeight.Bold,
+                    Margin = new Thickness(10)
+                });
+                stackPanel.Children.Add(dataGrid3);
+                
+                var scrollViewer = new ScrollViewer
+                {
+                    Content = stackPanel
                 };
                 
                 var window = new Window
                 {
-                    Title = "DataGrid with Real Class (PdfMetaDataSimple) - 20 Items",
+                    Title = "DataGrid Troubleshooting - 3 Approaches",
                     Width = 1000,
-                    Height = 600,
-                    Content = dataGrid,
+                    Height = 800,
+                    Content = scrollViewer,
                     WindowStartupLocation = WindowStartupLocation.CenterScreen
                 };
                 
@@ -1606,31 +1707,43 @@ public class AvaloniaTests
                 
                 window.Show();
                 
-                await Task.Delay(1000);
+                // APPROACH 3: Set ItemsSource AFTER window is shown
+                await Task.Delay(500);
+                dataGrid3.ItemsSource = items;
+                
+                await Task.Delay(500);
                 
                 // Diagnostic output
-                Trace.WriteLine("=== DIAGNOSTIC INFO ===");
-                Trace.WriteLine($"DataGrid.ItemsSource type: {dataGrid.ItemsSource?.GetType().Name}");
-                Trace.WriteLine($"DataGrid.ItemsSource count: {items.Count}");
-                Trace.WriteLine($"DataGrid columns count: {dataGrid.Columns.Count}");
+                Trace.WriteLine("");
+                Trace.WriteLine("=== DIAGNOSTIC RESULTS ===");
+                Trace.WriteLine($"Approach 1 columns: {dataGrid1.Columns.Count}");
+                Trace.WriteLine($"Approach 2 columns: {dataGrid2.Columns.Count}");
+                Trace.WriteLine($"Approach 3 columns: {dataGrid3.Columns.Count}");
                 
-                if (dataGrid.Columns.Count > 0)
+                // Check if any rows were generated
+                Trace.WriteLine("");
+                Trace.WriteLine("Checking visual tree for DataGridRow elements...");
+                
+                for (int i = 1; i <= 3; i++)
                 {
-                    Trace.WriteLine("✅ DataGrid AUTO-GENERATED columns from PdfMetaDataSimple:");
-                    foreach (var col in dataGrid.Columns)
+                    var grid = i == 1 ? dataGrid1 : i == 2 ? dataGrid2 : dataGrid3;
+                    var rowCount = CountDataGridRows(grid);
+                    Trace.WriteLine($"  Approach {i}: {rowCount} DataGridRow elements found");
+                    
+                    if (rowCount > 0)
                     {
-                        Trace.WriteLine($"  - {col.Header}");
+                        Trace.WriteLine($"  ✅ APPROACH {i} MIGHT BE WORKING!");
                     }
-                    Trace.WriteLine("");
-                    Trace.WriteLine("❓ CRITICAL QUESTION: Do you see DATA in the grid?");
-                    Trace.WriteLine("   If YES: DataGrid works with real classes (strongly-typed)");
-                    Trace.WriteLine("   If NO: DataGrid is fundamentally broken in Avalonia 11.3.9");
-                }
-                else
-                {
-                    Trace.WriteLine("❌ NO COLUMNS - DataGrid failed to discover properties!");
+                    else
+                    {
+                        Trace.WriteLine($"  ❌ Approach {i} has no rows");
+                    }
                 }
                 
+                Trace.WriteLine("");
+                Trace.WriteLine("❓ VISUAL CHECK: Do you see DATA in ANY of the 3 grids?");
+                Trace.WriteLine("   If YES: Which approach works?");
+                Trace.WriteLine("   If NO: DataGrid is confirmed broken in Avalonia 11.3.9");
                 Trace.WriteLine("");
                 Trace.WriteLine("Close the window when done checking.");
             }
@@ -1650,6 +1763,41 @@ public class AvaloniaTests
         uiThread.Join(2000);
         
         Trace.WriteLine("✓ Test completed");
+    }
+
+    private static int CountDataGridRows(DataGrid grid)
+    {
+        // Try to count DataGridRow elements in visual tree
+        int count = 0;
+        try
+        {
+            // Walk visual tree looking for DataGridRow elements
+            void CountRows(Visual visual)
+            {
+                if (visual != null)
+                {
+                    if (visual.GetType().Name.Contains("DataGridRow"))
+                    {
+                        count++;
+                    }
+                    
+                    foreach (var child in visual.GetVisualChildren())
+                    {
+                        if (child is Visual childVisual)
+                        {
+                            CountRows(childVisual);
+                        }
+                    }
+                }
+            }
+            
+            CountRows(grid);
+        }
+        catch
+        {
+            // If we can't inspect the visual tree, return 0
+        }
+        return count;
     }
 
     private static AppBuilder BuildAvaloniaApp()
@@ -1699,7 +1847,6 @@ endobj
 >>
 >>
 >>
->>
 endobj
 4 0 obj
 <<
@@ -1713,7 +1860,6 @@ endobj
 /Type /Font
 /Subtype /Type1
 /BaseFont /Helvetica
->>
 >>
 >>
 >>
