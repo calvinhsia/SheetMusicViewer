@@ -219,7 +219,7 @@ public class ListBoxBrowseView : UserControl
             Background = Brushes.LightGray,
             Height = 25,
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            Margin = new Thickness(8, 8, 8, 0)
+            Margin = new Thickness(0, 8, 0, 0)
         };
 
         double minWidth = 0;
