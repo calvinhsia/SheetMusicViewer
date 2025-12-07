@@ -1312,13 +1312,13 @@ public class AvaloniaTests
                 if (panel?.Children.Count < itemCount * 0.1)
                 {
                     Trace.WriteLine("✅ VIRTUALIZATION WORKING!");
-                    Trace.WriteLine($"   Only {(double)panel.Children.Count / itemCount * 100:F1}% of items in visual tree");
-                    Trace.WriteLine($"   ListBoxBrowseControl recommended for large datasets");
+                    Trace.WriteLine($"   Only {panel.Children.Count:n0} / {itemCount:n0} items in visual tree");
                 }
                 else
                 {
                     Trace.WriteLine("⚠️ Virtualization may not be working as expected");
                 }
+                
                 Trace.WriteLine("");
                 Trace.WriteLine("Both windows will remain open for manual comparison.");
                 Trace.WriteLine("Test features: sorting, filtering, selection, scrolling.");
@@ -1355,6 +1355,159 @@ public class AvaloniaTests
 
         await testCompleted.Task;
         uiThread.Join(2000);
+    }
+
+    [TestMethod]
+    [TestCategory("Manual")]
+    public async Task TestListBoxBrowseControl()
+    {
+        // This test demonstrates the ListBoxBrowseControl with a large dataset (10,000 items)
+        // and remains open until the user closes the window.
+        // This is useful for manual testing of virtualization, sorting, filtering, and UI responsiveness.
+        if (Environment.GetEnvironmentVariable("CI") == "true" || 
+            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+        {
+            Assert.Inconclusive("Test skipped in headless CI environment - requires display");
+            return;
+        }
+
+        var testCompleted = new TaskCompletionSource<bool>();
+        var uiThread = new Thread(() =>
+        {
+            try
+            {
+                AppBuilder.Configure<TestHeadlessApp>()
+                    .UsePlatformDetect()
+                    .WithInterFont()
+                    .LogToTrace()
+                    .StartWithClassicDesktopLifetime(Array.Empty<string>());
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"UI thread error: {ex.Message}");
+                testCompleted.TrySetException(ex);
+            }
+        });
+
+        if (OperatingSystem.IsWindows())
+        {
+            uiThread.SetApartmentState(ApartmentState.STA);
+        }
+        uiThread.Start();
+
+        await Task.Delay(1000);
+
+        await Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            try
+            {
+                Trace.WriteLine("=== ListBoxBrowseControl with 10,000 Items ===");
+                Trace.WriteLine("");
+                
+                // Create a large dataset - 10,000 items
+                var itemCount = 10000;
+                var query = Enumerable.Range(0, itemCount)
+                    .Select(i => new
+                    {
+                        Id = i,
+                        Name = $"Item {i:D5}",
+                        Category = $"Category {i % 20}",
+                        Type = $"Type {i % 5}",
+                        Value = i * 2.5,
+                        Status = i % 3 == 0 ? "Active" : i % 3 == 1 ? "Pending" : "Inactive",
+                        Description = $"Description for test item number {i} with additional details"
+                    });
+                
+                Trace.WriteLine($"✓ Created query with {itemCount:n0} items");
+                Trace.WriteLine("");
+                
+                // Measure creation time
+                var sw = Stopwatch.StartNew();
+                var browseControl = new ListBoxBrowseControl(query, colWidths: new[] { 80, 150, 120, 80, 100, 100, 350 });
+                sw.Stop();
+                
+                // Create window
+                var window = new Window
+                {
+                    Title = $"ListBoxBrowseControl - {itemCount:n0} Items (Virtualized)",
+                    Width = 1200,
+                    Height = 800,
+                    Content = browseControl,
+                    WindowStartupLocation = WindowStartupLocation.CenterScreen
+                };
+                
+                // Handle window closed event
+                window.Closed += (s, e) =>
+                {
+                    Trace.WriteLine("");
+                    Trace.WriteLine("Window closed by user");
+                    testCompleted.TrySetResult(true);
+                    
+                    if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lifetime)
+                    {
+                        lifetime.Shutdown();
+                    }
+                };
+                
+                window.Show();
+                await Task.Delay(500);
+                
+                // Get metrics
+                var memoryMB = GC.GetTotalMemory(false) / 1024 / 1024;
+                
+                // Get ListBox panel info for virtualization verification
+                var listBoxView = browseControl.ListView;
+                var listBoxField = listBoxView.GetType().GetField("_listBox", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                var listBox = listBoxField?.GetValue(listBoxView) as ListBox;
+                var presenter = listBox?.Presenter;
+                var panel = presenter?.Panel;
+                
+                Trace.WriteLine("=== PERFORMANCE METRICS ===");
+                Trace.WriteLine($"✓ Creation time: {sw.ElapsedMilliseconds:n0} ms");
+                Trace.WriteLine($"✓ Dataset size: {itemCount:n0} items");
+                Trace.WriteLine($"✓ Panel type: {panel?.GetType().Name ?? "N/A"}");
+                Trace.WriteLine($"✓ Visual items in tree: {panel?.Children.Count.ToString("n0") ?? "N/A"}");
+                Trace.WriteLine($"✓ Memory footprint: ~{memoryMB:n0} MB");
+                Trace.WriteLine("");
+                
+                if (panel != null && panel.Children.Count < itemCount * 0.1)
+                {
+                    var virtualizationPercent = (double)panel.Children.Count / itemCount * 100;
+                    Trace.WriteLine("✅ EXCELLENT VIRTUALIZATION!");
+                    Trace.WriteLine($"   Only {virtualizationPercent:F2}% of items in visual tree");
+                    Trace.WriteLine($"   Ratio: {panel.Children.Count:n0} / {itemCount:n0}");
+                }
+                Trace.WriteLine("");
+                
+                Trace.WriteLine("=== INSTRUCTIONS ===");
+                Trace.WriteLine("The window is now open with 10,000 items.");
+                Trace.WriteLine("Try these features:");
+                Trace.WriteLine("  - Scroll through the list (should be smooth due to virtualization)");
+                Trace.WriteLine("  - Click column headers to sort");
+                Trace.WriteLine("  - Use the filter textbox to search");
+                Trace.WriteLine("  - Select multiple items (Ctrl+Click or Shift+Click)");
+                Trace.WriteLine("  - Right-click for context menu (Copy, Export to CSV, Export to Notepad)");
+                Trace.WriteLine("");
+                Trace.WriteLine("Close the window when finished testing.");
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"Test error: {ex}");
+                testCompleted.SetException(ex);
+                
+                if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lifetime)
+                {
+                    lifetime.Shutdown();
+                }
+            }
+        });
+
+        // Wait indefinitely for user to close the window
+        await testCompleted.Task;
+        
+        uiThread.Join(2000);
+        
+        Trace.WriteLine("✓ Test completed successfully");
     }
 
     private static AppBuilder BuildAvaloniaApp()
