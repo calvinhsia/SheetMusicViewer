@@ -1,4 +1,4 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using Avalonia.Layout;
 using System;
 using System.Diagnostics;
@@ -107,9 +107,10 @@ public class BrowseListWindow : Window
                     };
         
         var typeCount = query.Count();
-        Trace.WriteLine($"? Creating BrowseControl with LINQ reflection query");
-        Trace.WriteLine($"? Query returns {typeCount} public classes from Avalonia.Controls assembly");
-        Trace.WriteLine($"? Query uses anonymous type with computed properties (MethodCount, PropertyCount)");
+
+        Trace.WriteLine($"✓ Creating BrowseControl with LINQ reflection query");
+        Trace.WriteLine($"✓ Query returns {typeCount} public classes from Avalonia.Controls assembly");
+        Trace.WriteLine($"✓ Query uses anonymous type with computed properties (MethodCount, PropertyCount)");
         
         // Create the browse control with the reflection query
         // Columns will be automatically generated: TypeName, Namespace, IsAbstract, MethodCount, PropertyCount
@@ -117,8 +118,8 @@ public class BrowseListWindow : Window
         
         Content = _browseControl;
         
-        Trace.WriteLine($"? BrowseListWindow created with reflection-based query");
-        Trace.WriteLine($"? Columns: TypeName, Namespace, IsAbstract, MethodCount, PropertyCount");
-        Trace.WriteLine($"? Try filtering by type name (e.g., 'Button', 'Panel', 'Control')");
+        Trace.WriteLine($"✓ BrowseListWindow created with reflection-based query");
+        Trace.WriteLine($"✓ Columns: TypeName, Namespace, IsAbstract, MethodCount, PropertyCount");
+        Trace.WriteLine($"✓ Try filtering by type name (e.g., 'Button', 'Panel', 'Control')");
     }
 }
