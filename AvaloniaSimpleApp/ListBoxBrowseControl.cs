@@ -57,7 +57,7 @@ public class ListBoxBrowseControl : DockPanel
             
             listFilter.SetBrowseList(ListView);
             
-            Trace.WriteLine($"ListBoxBrowseControl: Created with virtualization support");
+            Trace.WriteLine($"ListBoxBrowseControl: Created with virtualization and column resizing support");
         }
         catch (Exception ex)
         {
@@ -156,6 +156,7 @@ public class ListBoxBrowseView : UserControl
     private List<ListBoxColumnInfo> _columns = new List<ListBoxColumnInfo>();
     private int _lastSortedColumnIndex = -1;
     private bool _lastSortAscending = true;
+    private bool _isResizing = false;
 
     public Grid HeaderGrid => _headerGrid;
     public IList SelectedItems => _listBox?.SelectedItems ?? new List<object>();
@@ -241,6 +242,9 @@ public class ListBoxBrowseView : UserControl
             }
             _headerGrid.ColumnDefinitions.Add(colDef);
         }
+        
+        // Add an extra dummy column at the end to allow the last column to resize
+        _headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
         for (int i = 0; i < _columns.Count; i++)
         {
@@ -262,6 +266,24 @@ public class ListBoxBrowseView : UserControl
             
             Grid.SetColumn(headerButton, i);
             _headerGrid.Children.Add(headerButton);
+            
+            // Add GridSplitter at the right edge of every column (including the last one)
+            var splitter = new GridSplitter
+            {
+                Width = 3,
+                Background = Brushes.Transparent,
+                ResizeDirection = GridResizeDirection.Columns,
+                VerticalAlignment = VerticalAlignment.Stretch,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Cursor = new Cursor(StandardCursorType.SizeWestEast)
+            };
+            
+            Grid.SetColumn(splitter, i);
+            _headerGrid.Children.Add(splitter);
+            
+            // Subscribe to drag events to trigger item grid regeneration
+            splitter.DragStarted += OnSplitterDragStarted;
+            splitter.DragCompleted += OnSplitterDragCompleted;
         }
 
         // Create ListBox with virtualization
@@ -306,7 +328,25 @@ public class ListBoxBrowseView : UserControl
 
         this.Content = _listBox;
         
-        Trace.WriteLine($"ListBoxBrowseView: Visual structure created with ListBox virtualization");
+        Trace.WriteLine($"ListBoxBrowseView: Visual structure created with ListBox virtualization and resizable columns");
+    }
+    
+    private void OnSplitterDragStarted(object? sender, VectorEventArgs e)
+    {
+        _isResizing = true;
+        Trace.WriteLine("Column resize started");
+    }
+    
+    private void OnSplitterDragCompleted(object? sender, VectorEventArgs e)
+    {
+        _isResizing = false;
+        Trace.WriteLine("Column resize completed - regenerating visible items");
+        
+        // Regenerate all visible item grids with new column widths
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            RecustomizeVisibleContainers();
+        }, Avalonia.Threading.DispatcherPriority.Background);
     }
     
     private void OnListBoxLoaded(object? sender, RoutedEventArgs e)
@@ -467,11 +507,12 @@ public class ListBoxBrowseView : UserControl
         var grid = new Grid
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            Height = 18,  // Reduced from 20 to 18 for even tighter spacing
+            Height = 18,
             Background = Brushes.Transparent,
-            Margin = new Thickness(0)  // Ensure no margin
+            Margin = new Thickness(0)
         };
 
+        // Copy column definitions from header grid to ensure synchronization (including the dummy column at the end)
         foreach (var colDef in _headerGrid.ColumnDefinitions)
         {
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = colDef.Width });
@@ -499,8 +540,8 @@ public class ListBoxBrowseView : UserControl
             var textBlock = new TextBlock
             {
                 Text = cellText,
-                Padding = new Thickness(5, 0, 5, 0),  // Keep horizontal padding, zero vertical
-                Margin = new Thickness(0),  // Ensure no margin
+                Padding = new Thickness(5, 0, 5, 0),
+                Margin = new Thickness(0),
                 VerticalAlignment = VerticalAlignment.Center,
                 TextTrimming = TextTrimming.CharacterEllipsis
             };
@@ -508,6 +549,8 @@ public class ListBoxBrowseView : UserControl
             Grid.SetColumn(textBlock, i);
             grid.Children.Add(textBlock);
         }
+        
+        // Note: The dummy column at the end (_headerGrid.ColumnDefinitions.Count - 1) is left empty
 
         return grid;
     }
@@ -835,12 +878,14 @@ public class ListBoxBrowseView : UserControl
 
     private void UpdateHeaderSortIndicators(int sortedColumnIndex, bool ascending)
     {
-        for (int i = 0; i < _headerGrid.Children.Count; i++)
+        // Iterate through children and only update buttons (skip GridSplitters)
+        int buttonIndex = 0;
+        foreach (var child in _headerGrid.Children)
         {
-            if (_headerGrid.Children[i] is Button btn)
+            if (child is Button btn)
             {
-                var col = _columns[i];
-                if (i == sortedColumnIndex)
+                var col = _columns[buttonIndex];
+                if (buttonIndex == sortedColumnIndex)
                 {
                     btn.Content = $"{col.HeaderText} {(ascending ? "↑" : "↓")}";
                 }
@@ -848,6 +893,7 @@ public class ListBoxBrowseView : UserControl
                 {
                     btn.Content = col.HeaderText;
                 }
+                buttonIndex++;
             }
         }
     }
