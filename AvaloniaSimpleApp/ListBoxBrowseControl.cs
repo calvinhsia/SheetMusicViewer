@@ -12,6 +12,18 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using Avalonia.Styling;
+using Avalonia.Controls.Templates;
 
 namespace AvaloniaSimpleApp;
 
@@ -267,12 +279,18 @@ public class ListBoxBrowseView : UserControl
         // Create ListBox with virtualization
         _listBox = new ListBox
         {
-            ItemsSource = _filteredItems,
-            SelectionMode = SelectionMode.Multiple,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
-            Background = Brushes.White
+            SelectionMode = SelectionMode.Multiple,
+            ItemsSource = _filteredItems
         };
+        
+        // Reduce ListBoxItem padding/margin to minimize vertical spacing
+        var itemStyle = new Style(x => x.OfType<ListBoxItem>());
+        itemStyle.Setters.Add(new Setter(ListBoxItem.PaddingProperty, new Thickness(0)));
+        itemStyle.Setters.Add(new Setter(ListBoxItem.MarginProperty, new Thickness(0)));
+        itemStyle.Setters.Add(new Setter(ListBoxItem.MinHeightProperty, 18.0));
+        _listBox.Styles.Add(itemStyle);
 
         // Create and attach context menu
         var contextMenu = new ContextMenu();
@@ -294,38 +312,39 @@ public class ListBoxBrowseView : UserControl
 
         // Use Loaded event to customize containers after they're created
         _listBox.Loaded += OnListBoxLoaded;
+        
+        // ALSO subscribe to LayoutUpdated for additional detection of container changes
+        _listBox.LayoutUpdated += OnListBoxLayoutUpdated;
 
         this.Content = _listBox;
         
         Trace.WriteLine($"ListBoxBrowseView: Visual structure created with ListBox virtualization");
     }
-
+    
     private void OnListBoxLoaded(object? sender, RoutedEventArgs e)
     {
-        Trace.WriteLine($"OnListBoxLoaded: ListBox loaded, customizing visible containers");
-        
         try
         {
+            Trace.WriteLine("OnListBoxLoaded: ListBox loaded, customizing visible containers");
+            
             var generator = _listBox.ItemContainerGenerator;
             if (generator == null)
             {
-                Trace.WriteLine("  ERROR: ItemContainerGenerator is null");
+                Trace.WriteLine("  ERROR: Generator is null");
                 return;
             }
-
+            
             Trace.WriteLine($"  Generator exists, ItemsSource has {_filteredItems.Count} items");
-
+            
             var presenter = _listBox.Presenter;
-            if (presenter?.Panel != null)
-            {
-                Trace.WriteLine($"  Panel type: {presenter.Panel.GetType().Name}");
-                Trace.WriteLine($"  Panel children count: {presenter.Panel.Children.Count}");
-            }
-
+            var panel = presenter?.Panel;
+            Trace.WriteLine($"  Panel type: {panel?.GetType().Name ?? "NULL"}");
+            Trace.WriteLine($"  Panel children count: {panel?.Children.Count ?? 0}");
+            
             int customizedCount = 0;
             for (int i = 0; i < _filteredItems.Count; i++)
             {
-                var container = _listBox.ContainerFromIndex(i) as ListBoxItem;
+                var container = generator.ContainerFromIndex(i) as ListBoxItem;
                 if (container != null)
                 {
                     var item = _filteredItems[i];
@@ -336,7 +355,8 @@ public class ListBoxBrowseView : UserControl
             }
             
             Trace.WriteLine($"  ? Customized {customizedCount} visible containers");
-
+            
+            // Subscribe to EffectiveViewportChanged for scrolling
             _listBox.EffectiveViewportChanged += OnEffectiveViewportChanged;
             Trace.WriteLine($"  ? Subscribed to EffectiveViewportChanged for dynamic customization");
         }
@@ -346,61 +366,73 @@ public class ListBoxBrowseView : UserControl
             Trace.WriteLine($"  Stack: {ex.StackTrace}");
         }
     }
-
+    
     private void OnEffectiveViewportChanged(object? sender, EffectiveViewportChangedEventArgs e)
     {
         try
         {
+            // Get info about what's actually visible
+            var presenter = _listBox.Presenter;
+            var panel = presenter?.Panel;
+            var visibleIndices = new List<int>();
+            
+            // Force re-customization of all visible containers
             int customizedCount = 0;
-            int alreadyCustomizedCount = 0;
+            int toStringCount = 0;
+            int alreadyGridCount = 0;
             
             for (int i = 0; i < _filteredItems.Count; i++)
             {
                 var container = _listBox.ContainerFromIndex(i) as ListBoxItem;
                 if (container != null)
                 {
-                    // Check if the container content is NOT a Grid (meaning it's uncustomized)
-                    // The default content is the item's ToString(), which is typically wrapped in ContentPresenter
-                    bool needsCustomization = false;
+                    visibleIndices.Add(i);
                     
-                    if (container.Content == null)
+                    var item = _filteredItems[i];
+                    
+                    // Log BEFORE setting Content
+                    var contentBefore = container.Content;
+                    var contentBeforeType = contentBefore?.GetType().Name ?? "NULL";
+                    var isGridBefore = contentBefore is Grid;
+                    var isToStringBefore = !isGridBefore && contentBefore != null;
+                    
+                    if (isToStringBefore)
                     {
-                        needsCustomization = true;
+                        toStringCount++;
+                        Trace.WriteLine($"  ?? Container {i}: WAS ToString ({contentBeforeType}), fixing now...");
                     }
-                    else if (container.Content is Grid grid)
+                    else if (isGridBefore)
                     {
-                        // It's already a Grid - but verify it has the right structure
-                        // Our grids should have ColumnDefinitions matching the header
-                        if (grid.ColumnDefinitions.Count != _columns.Count)
-                        {
-                            needsCustomization = true;
-                            Trace.WriteLine($"  Grid has wrong column count: {grid.ColumnDefinitions.Count} vs {_columns.Count}");
-                        }
-                        else
-                        {
-                            alreadyCustomizedCount++;
-                        }
-                    }
-                    else
-                    {
-                        // Content is something else (ContentPresenter, TextBlock, etc. with ToString())
-                        needsCustomization = true;
-                        Trace.WriteLine($"  Container {i} has content type: {container.Content.GetType().Name}");
+                        alreadyGridCount++;
                     }
                     
-                    if (needsCustomization)
+                    // Create and set the new Grid
+                    var grid = CreateItemGrid(item);
+                    container.Content = grid;
+                    
+                    // Log IMMEDIATELY AFTER setting Content
+                    var contentAfter = container.Content;
+                    var contentAfterType = contentAfter?.GetType().Name ?? "NULL";
+                    var isSameReference = ReferenceEquals(contentAfter, grid);
+                    
+                    customizedCount++;
+                    
+                    // Detailed logging only for ToString cases
+                    if (isToStringBefore)
                     {
-                        var item = _filteredItems[i];
-                        var newGrid = CreateItemGrid(item);
-                        container.Content = newGrid;
-                        customizedCount++;
+                        Trace.WriteLine($"       AFTER fix: {contentAfterType}, SameRef={isSameReference}");
                     }
                 }
             }
             
-            if (customizedCount > 0 || alreadyCustomizedCount > 0)
+            if (customizedCount > 0)
             {
-                Trace.WriteLine($"OnEffectiveViewportChanged: Customized {customizedCount} new containers, {alreadyCustomizedCount} already OK");
+                var indicesStr = visibleIndices.Count <= 5 
+                    ? string.Join(", ", visibleIndices)
+                    : $"{visibleIndices[0]}..{visibleIndices[visibleIndices.Count - 1]}";
+                    
+                Trace.WriteLine($"OnEffectiveViewportChanged: Visible indices [{indicesStr}], " +
+                    $"Customized={customizedCount}, ToString={toStringCount}, AlreadyGrid={alreadyGridCount}");
             }
         }
         catch (Exception ex)
@@ -410,13 +442,53 @@ public class ListBoxBrowseView : UserControl
         }
     }
 
+    private void OnListBoxLayoutUpdated(object? sender, EventArgs e)
+    {
+        // This fires frequently during layout changes, including when new containers are virtualized
+        // We use it to catch newly created containers and convert them from ToString to Grid
+        try
+        {
+            int fixedCount = 0;
+            
+            for (int i = 0; i < _filteredItems.Count; i++)
+            {
+                var container = _listBox.ContainerFromIndex(i) as ListBoxItem;
+                if (container != null)
+                {
+                    var contentBefore = container.Content;
+                    var isToStringBefore = contentBefore != null && !(contentBefore is Grid);
+                    
+                    if (isToStringBefore)
+                    {
+                        var item = _filteredItems[i];
+                        var grid = CreateItemGrid(item);
+                        container.Content = grid;
+                        fixedCount++;
+                    }
+                }
+            }
+            
+            // Only log when we actually fix containers (reduce noise)
+            // Remove or comment out this line in production if desired
+            // if (fixedCount > 0)
+            // {
+            //     Trace.WriteLine($"OnListBoxLayoutUpdated: Fixed {fixedCount} containers");
+            // }
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"ERROR in OnListBoxLayoutUpdated: {ex.Message}");
+        }
+    }
+
     private Control CreateItemGrid(object item)
     {
         var grid = new Grid
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            Height = 20,  // Reduced from 25 to 20 for tighter spacing
-            Background = Brushes.Transparent
+            Height = 18,  // Reduced from 20 to 18 for even tighter spacing
+            Background = Brushes.Transparent,
+            Margin = new Thickness(0)  // Ensure no margin
         };
 
         foreach (var colDef in _headerGrid.ColumnDefinitions)
@@ -446,7 +518,8 @@ public class ListBoxBrowseView : UserControl
             var textBlock = new TextBlock
             {
                 Text = cellText,
-                Padding = new Thickness(5, 0, 5, 0),  // Reduced vertical padding from 2 to 0
+                Padding = new Thickness(5, 0, 5, 0),  // Keep horizontal padding, zero vertical
+                Margin = new Thickness(0),  // Ensure no margin
                 VerticalAlignment = VerticalAlignment.Center,
                 TextTrimming = TextTrimming.CharacterEllipsis
             };
