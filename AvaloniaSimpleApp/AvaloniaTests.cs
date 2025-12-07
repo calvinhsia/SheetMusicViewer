@@ -1314,12 +1314,8 @@ public class AvaloniaTests
                     Trace.WriteLine("✅ VIRTUALIZATION WORKING!");
                     Trace.WriteLine($"   Only {panel.Children.Count:n0} / {itemCount:n0} items in visual tree");
                 }
-                else
-                {
-                    Trace.WriteLine("⚠️ Virtualization may not be working as expected");
-                }
-                
                 Trace.WriteLine("");
+                
                 Trace.WriteLine("Both windows will remain open for manual comparison.");
                 Trace.WriteLine("Test features: sorting, filtering, selection, scrolling.");
                 Trace.WriteLine("Windows will close in 30 seconds...");
@@ -1439,7 +1435,6 @@ public class AvaloniaTests
                 // Handle window closed event
                 window.Closed += (s, e) =>
                 {
-                    Trace.WriteLine("");
                     Trace.WriteLine("Window closed by user");
                     testCompleted.TrySetResult(true);
                     
@@ -1450,7 +1445,8 @@ public class AvaloniaTests
                 };
                 
                 window.Show();
-                await Task.Delay(500);
+                
+                await Task.Delay(1000);
                 
                 // Get metrics
                 var memoryMB = GC.GetTotalMemory(false) / 1024 / 1024;
@@ -1464,7 +1460,7 @@ public class AvaloniaTests
                 
                 Trace.WriteLine("=== PERFORMANCE METRICS ===");
                 Trace.WriteLine($"✓ Creation time: {sw.ElapsedMilliseconds:n0} ms");
-                Trace.WriteLine($"✓ Dataset size: {itemCount:n0} items");
+                Trace.WriteLine($"✓ Dataset size: {itemCount:n0}");
                 Trace.WriteLine($"✓ Panel type: {panel?.GetType().Name ?? "N/A"}");
                 Trace.WriteLine($"✓ Visual items in tree: {panel?.Children.Count.ToString("n0") ?? "N/A"}");
                 Trace.WriteLine($"✓ Memory footprint: ~{memoryMB:n0} MB");
@@ -1508,6 +1504,152 @@ public class AvaloniaTests
         uiThread.Join(2000);
         
         Trace.WriteLine("✓ Test completed successfully");
+    }
+
+    [TestMethod]
+    [TestCategory("Manual")]
+    public async Task TestDataGridWithRealClass()
+    {
+        // This test uses PdfMetaData class from WPF project (real class with get/set properties)
+        // to verify if DataGrid works with strongly-typed classes vs anonymous types
+        if (Environment.GetEnvironmentVariable("CI") == "true" || 
+            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+        {
+            Assert.Inconclusive("Test skipped in headless CI environment - requires display");
+            return;
+        }
+
+        var testCompleted = new TaskCompletionSource<bool>();
+        var uiThread = new Thread(() =>
+        {
+            try
+            {
+                AppBuilder.Configure<TestHeadlessApp>()
+                    .UsePlatformDetect()
+                    .WithInterFont()
+                    .LogToTrace()
+                    .StartWithClassicDesktopLifetime(Array.Empty<string>());
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"UI thread error: {ex.Message}");
+                testCompleted.TrySetException(ex);
+            }
+        });
+
+        if (OperatingSystem.IsWindows())
+        {
+            uiThread.SetApartmentState(ApartmentState.STA);
+        }
+        uiThread.Start();
+
+        await Task.Delay(1000);
+
+        await Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            try
+            {
+                Trace.WriteLine("=== DataGrid Test with Real PdfMetaData Class ===");
+                Trace.WriteLine("");
+                
+                // Create sample PdfMetaData items (simplified - no actual PDF files needed)
+                var items = new System.Collections.ObjectModel.ObservableCollection<PdfMetaDataSimple>();
+                for (int i = 0; i < 20; i++)
+                {
+                    items.Add(new PdfMetaDataSimple
+                    {
+                        FileName = $"Book{i:D3}.pdf",
+                        NumPages = 50 + i * 10,
+                        NumSongs = 10 + i,
+                        NumFavorites = i % 5,
+                        LastPageNo = i * 3,
+                        Notes = i % 3 == 0 ? "Has TOC" : (i % 3 == 1 ? "Classical" : "Jazz")
+                    });
+                }
+                
+                Trace.WriteLine($"✓ Created {items.Count} PdfMetaDataSimple items");
+                Trace.WriteLine($"✓ Item type: {items[0].GetType().FullName}");
+                Trace.WriteLine("");
+                
+                var dataGrid = new DataGrid
+                {
+                    ItemsSource = items,
+                    AutoGenerateColumns = true,
+                    CanUserReorderColumns = true,
+                    CanUserResizeColumns = true,
+                    CanUserSortColumns = true,
+                    GridLinesVisibility = DataGridGridLinesVisibility.All,
+                    SelectionMode = DataGridSelectionMode.Extended,
+                    Width = 900,
+                    Height = 500
+                };
+                
+                var window = new Window
+                {
+                    Title = "DataGrid with Real Class (PdfMetaDataSimple) - 20 Items",
+                    Width = 1000,
+                    Height = 600,
+                    Content = dataGrid,
+                    WindowStartupLocation = WindowStartupLocation.CenterScreen
+                };
+                
+                window.Closed += (s, e) =>
+                {
+                    Trace.WriteLine("Window closed by user");
+                    testCompleted.TrySetResult(true);
+                    
+                    if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lifetime)
+                    {
+                        lifetime.Shutdown();
+                    }
+                };
+                
+                window.Show();
+                
+                await Task.Delay(1000);
+                
+                // Diagnostic output
+                Trace.WriteLine("=== DIAGNOSTIC INFO ===");
+                Trace.WriteLine($"DataGrid.ItemsSource type: {dataGrid.ItemsSource?.GetType().Name}");
+                Trace.WriteLine($"DataGrid.ItemsSource count: {items.Count}");
+                Trace.WriteLine($"DataGrid columns count: {dataGrid.Columns.Count}");
+                
+                if (dataGrid.Columns.Count > 0)
+                {
+                    Trace.WriteLine("✅ DataGrid AUTO-GENERATED columns from PdfMetaDataSimple:");
+                    foreach (var col in dataGrid.Columns)
+                    {
+                        Trace.WriteLine($"  - {col.Header}");
+                    }
+                    Trace.WriteLine("");
+                    Trace.WriteLine("❓ CRITICAL QUESTION: Do you see DATA in the grid?");
+                    Trace.WriteLine("   If YES: DataGrid works with real classes (strongly-typed)");
+                    Trace.WriteLine("   If NO: DataGrid is fundamentally broken in Avalonia 11.3.9");
+                }
+                else
+                {
+                    Trace.WriteLine("❌ NO COLUMNS - DataGrid failed to discover properties!");
+                }
+                
+                Trace.WriteLine("");
+                Trace.WriteLine("Close the window when done checking.");
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"Test error: {ex}");
+                testCompleted.SetException(ex);
+                
+                if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lifetime)
+                {
+                    lifetime.Shutdown();
+                }
+            }
+        });
+
+        await testCompleted.Task;
+        uiThread.Join(2000);
+        
+        Trace.WriteLine("✓ Test completed");
     }
 
     private static AppBuilder BuildAvaloniaApp()
@@ -1630,7 +1772,23 @@ public class TestDataItem
     public string Name { get; set; }
     public string Description { get; set; }
     public double Value { get; set; }
+    public string Category { get; set; }
+    public string Type { get; set; }
+    public string Status { get; set; }
     
     public override string ToString() => Name;
+}
+
+// Simplified version of PdfMetaData for testing DataGrid with real class
+public class PdfMetaDataSimple
+{
+    public string FileName { get; set; }
+    public int NumPages { get; set; }
+    public int NumSongs { get; set; }
+    public int NumFavorites { get; set; }
+    public int LastPageNo { get; set; }
+    public string Notes { get; set; }
+    
+    public override string ToString() => FileName;
 }
 
