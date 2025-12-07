@@ -16,9 +16,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Avalonia.Media.Imaging;
-using SkiaSharp;
-using Avalonia.Controls.Templates;
 
 namespace AvaloniaSimpleApp;
 
@@ -32,7 +29,6 @@ public class AvaloniaTests
     
     [TestMethod]
     [TestCategory("Manual")]
-    //[Ignore("Cannot run multiple Avalonia UI tests in same process - run individually")]
     public async Task TestAvaloniaPdfStressTest()
     {
         await Task.Run(() =>
@@ -52,7 +48,6 @@ public class AvaloniaTests
 
     [TestMethod]
     [TestCategory("Manual")]
-    //[Ignore("Cannot run multiple Avalonia UI tests in same process - run individually")]
     public async Task TestAvaloniaPdfViewerUI()
     {
         // Skip if running in headless environment (CI/CD)
@@ -417,13 +412,13 @@ public class AvaloniaTests
                     // Directly add a normalized stroke using reflection to simulate drawing
                     var normalizedStrokesField = typeof(InkCanvasControl).GetField("_normalizedStrokes", 
                         BindingFlags.NonPublic | BindingFlags.Instance);
-                    var normalizedStrokes = normalizedStrokesField?.GetValue(inkCanvas1) as System.Collections.Generic.List<System.Collections.Generic.List<Point>>;
+                    var normalizedStrokes = normalizedStrokesField?.GetValue(inkCanvas1) as List<List<Point>>;
                     
                     Assert.IsNotNull(normalizedStrokes, "Normalized strokes collection should exist");
                     
                     // Add a test stroke with normalized coordinates (0-1 range)
                     // Draw a diagonal line across the page
-                    var testStroke = new System.Collections.Generic.List<Point>
+                    var testStroke = new List<Point>
                     {
                         new Point(0.1, 0.1),
                         new Point(0.2, 0.2),
@@ -482,7 +477,7 @@ public class AvaloniaTests
                     // Verify the rendered polylines exist and have correct screen coordinates
                     var renderedPolylinesField = typeof(InkCanvasControl).GetField("_renderedPolylines",
                         BindingFlags.NonPublic | BindingFlags.Instance);
-                    var renderedPolylines = renderedPolylinesField?.GetValue(inkCanvas1) as System.Collections.Generic.List<Avalonia.Controls.Shapes.Polyline>;
+                    var renderedPolylines = renderedPolylinesField?.GetValue(inkCanvas1) as List<Avalonia.Controls.Shapes.Polyline>;
                     
                     Assert.IsNotNull(renderedPolylines, "Rendered polylines should exist");
                     Assert.AreEqual(1, renderedPolylines.Count, "Should have one rendered polyline");
@@ -523,7 +518,7 @@ public class AvaloniaTests
                     Trace.WriteLine($"  InkCanvas new bounds: {inkCanvas1.Bounds}");
                     
                     // Verify normalized coordinates haven't changed
-                    var normalizedStrokesAfterResize = normalizedStrokesField?.GetValue(inkCanvas1) as System.Collections.Generic.List<System.Collections.Generic.List<Point>>;
+                    var normalizedStrokesAfterResize = normalizedStrokesField?.GetValue(inkCanvas1) as List<List<Point>>;
                     Assert.IsNotNull(normalizedStrokesAfterResize, "Strokes should still exist after resize");
                     Assert.AreEqual(normalizedStrokes.Count, normalizedStrokesAfterResize.Count, "Stroke count should remain the same");
                     
@@ -539,7 +534,7 @@ public class AvaloniaTests
                     Trace.WriteLine($"✓ Normalized coordinates preserved after resize");
                     
                     // Verify the rendered polylines were updated with new screen coordinates
-                    var renderedPolylinesAfterResize = renderedPolylinesField?.GetValue(inkCanvas1) as System.Collections.Generic.List<Avalonia.Controls.Shapes.Polyline>;
+                    var renderedPolylinesAfterResize = renderedPolylinesField?.GetValue(inkCanvas1) as List<Avalonia.Controls.Shapes.Polyline>;
                     
                     Assert.IsNotNull(renderedPolylinesAfterResize, "Rendered polylines should exist");
                     Assert.AreEqual(normalizedStrokes.Count, renderedPolylinesAfterResize.Count, "Should have one polyline per stroke");
@@ -574,14 +569,14 @@ public class AvaloniaTests
                     Trace.WriteLine($"✓ Window resized again to: {window.Width}x{window.Height}");
                     
                     // Verify normalized coordinates still unchanged
-                    var normalizedStrokesAfterSecondResize = normalizedStrokesField?.GetValue(inkCanvas1) as System.Collections.Generic.List<System.Collections.Generic.List<Point>>;
+                    var normalizedStrokesAfterSecondResize = normalizedStrokesField?.GetValue(inkCanvas1) as List<List<Point>>;
                     var firstStrokeFirstPointFinal = normalizedStrokesAfterSecondResize[0][0];
                     
                     Assert.AreEqual(firstStrokeFirstPoint.X, firstStrokeFirstPointFinal.X, 0.0001, "Coordinates should remain normalized after multiple resizes");
                     Assert.AreEqual(firstStrokeFirstPoint.Y, firstStrokeFirstPointFinal.Y, 0.0001, "Coordinates should remain normalized after multiple resizes");
                     
                     // Verify screen coordinates updated correctly after second resize
-                    var renderedPolylinesFinal = renderedPolylinesField?.GetValue(inkCanvas1) as System.Collections.Generic.List<Avalonia.Controls.Shapes.Polyline>;
+                    var renderedPolylinesFinal = renderedPolylinesField?.GetValue(inkCanvas1) as List<Avalonia.Controls.Shapes.Polyline>;
                     var polylineFinal = renderedPolylinesFinal[0];
                     
                     var expectedFirstXFinal = firstStrokeFirstPoint.X * inkCanvas1.Bounds.Width;
@@ -812,146 +807,6 @@ public class AvaloniaTests
         uiThread.Join(2000);
     }
 
-    [TestMethod]
-    [TestCategory("Manual")]
-    public async Task TestSimpleHardcodedDataGrid()
-    {
-        // This test creates the absolute simplest DataGrid with hardcoded everything
-        // to verify that Avalonia DataGrid works at all in this environment
-        if (Environment.GetEnvironmentVariable("CI") == "true" || 
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
-        {
-            Assert.Inconclusive("Test skipped in headless CI environment - requires display");
-            return;
-        }
-
-        var testCompleted = new TaskCompletionSource<bool>();
-        var uiThread = new Thread(() =>
-        {
-            try
-            {
-                AppBuilder.Configure<TestSimpleDataGridApp>()
-                    .UsePlatformDetect()
-                    .WithInterFont()
-                    .LogToTrace()
-                    .StartWithClassicDesktopLifetime(Array.Empty<string>());
-            }
-            catch (Exception ex)
-            {
-                Trace.WriteLine($"UI thread error: {ex.Message}");
-                testCompleted.TrySetException(ex);
-            }
-        });
-
-        TestSimpleDataGridApp.OnSetupWindow = async (app, lifetime) =>
-        {
-            try
-            {
-                var window = new SimpleDataGridWindow();
-                lifetime.MainWindow = window;
-                
-                window.Closed += (s, e) =>
-                {
-                    Trace.WriteLine("SimpleDataGridWindow closed by user");
-                    testCompleted.TrySetResult(true);
-                    lifetime.Shutdown();
-                };
-                
-                window.Show();
-                
-                Trace.WriteLine($"✓ SimpleDataGridWindow created and shown");
-                await Task.Delay(100);
-            }
-            catch (Exception ex)
-            {
-                Trace.WriteLine($"Error: {ex}");
-                testCompleted.SetException(ex);
-                lifetime.Shutdown();
-            }
-        };
-
-        if (OperatingSystem.IsWindows())
-        {
-            uiThread.SetApartmentState(ApartmentState.STA);
-        }
-        uiThread.Start();
-
-        await testCompleted.Task;
-        uiThread.Join(2000);
-    }
-
-    private async Task RunHeadlessTest(Func<Task> testAction)
-    {
-        var tcs = new TaskCompletionSource<bool>();
-        Exception? testException = null;
-
-        var thread = new Thread(() =>
-        {
-            try
-            {
-                var app = BuildAvaloniaApp()
-                    .UseHeadless(new AvaloniaHeadlessPlatformOptions
-                    {
-                        UseHeadlessDrawing = false
-                    });
-
-                app.StartWithClassicDesktopLifetime(Array.Empty<string>(), ShutdownMode.OnExplicitShutdown);
-            }
-            catch (Exception ex)
-            {
-                testException = ex;
-                tcs.TrySetException(ex);
-            }
-        });
-
-        if (OperatingSystem.IsWindows())
-        {
-            thread.SetApartmentState(ApartmentState.STA);
-        }
-        thread.IsBackground = true;
-        thread.Start();
-
-        // Wait for Avalonia to initialize
-        await Task.Delay(1000);
-
-        try
-        {
-            await Dispatcher.UIThread.InvokeAsync(async () =>
-            {
-                try
-                {
-                    await testAction();
-                    tcs.SetResult(true);
-                }
-                catch (Exception ex)
-                {
-                    testException = ex;
-                    tcs.SetException(ex);
-                }
-                finally
-                {
-                    // Shutdown the app
-                    if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lifetime)
-                    {
-                        lifetime.Shutdown();
-                    }
-                }
-            });
-
-            await tcs.Task;
-        }
-        catch
-        {
-            if (testException != null)
-                throw testException;
-            throw;
-        }
-        finally
-        {
-            thread.Join(2000);
-        }
-    }
-
     private static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<TestHeadlessApp>()
             .UsePlatformDetect()
@@ -1062,361 +917,6 @@ startxref
         
         File.WriteAllText(tempPath, pdfContent);
         return tempPath;
-    }
-}
-
-// Test app for headless testing
-public class TestHeadlessApp : Avalonia.Application
-{
-    public override void Initialize()
-    {
-        Styles.Add(new FluentTheme());
-    }
-}
-
-// Custom App that shows PdfViewerWindow instead of MainWindow
-public class PdfViewerApp : Avalonia.Application
-{
-    public static Action<PdfViewerApp, IClassicDesktopStyleApplicationLifetime> OnSetupWindow;
-
-    public override void Initialize()
-    {
-        // Manually add FluentTheme instead of loading XAML
-        // This avoids the "No precompiled XAML found" error
-        Styles.Add(new FluentTheme());
-    }
-
-    public override void OnFrameworkInitializationCompleted()
-    {
-        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-        {
-            OnSetupWindow?.Invoke(this, desktop);
-        }
-
-        base.OnFrameworkInitializationCompleted();
-    }
-}
-
-// Test app for headless testing
-public class TestPdfViewerApp : Avalonia.Application
-{
-    public static Func<Avalonia.Application, IClassicDesktopStyleApplicationLifetime, Task>? OnSetupWindow;
-    
-    public override void Initialize()
-    {
-        Styles.Add(new FluentTheme());
-    }
-    
-    public override void OnFrameworkInitializationCompleted()
-    {
-        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-        {
-            if (OnSetupWindow != null)
-            {
-                // Fire and forget - the async setup will handle its own completion
-                _ = OnSetupWindow.Invoke(this, desktop);
-            }
-        }
-
-        base.OnFrameworkInitializationCompleted();
-    }
-}
-
-// Testable version of PdfViewerWindow that exposes internal state and allows custom PDF path
-public class TestablePdfViewerWindow : PdfViewerWindow
-{
-    private readonly string _customPdfPath;
-    private bool _isInitialized;
-
-    public TestablePdfViewerWindow(string pdfPath) : base()
-    {
-        _customPdfPath = pdfPath;
-        _isInitialized = false;
-        
-        // Override the PDF file path using reflection BEFORE any initialization
-        var field = typeof(PdfViewerWindow).GetField("_pdfFileName", 
-            BindingFlags.NonPublic | BindingFlags.Instance);
-        if (field != null)
-        {
-            field.SetValue(this, pdfPath);
-        }
-        
-        // Update the title to reflect the test PDF
-        PdfTitle = Path.GetFileName(pdfPath);
-        
-        // Override the initial values that the constructor set
-        CurrentPageNumber = 1;
-        MaxPageNumberMinus1 = 1; // Will be updated after PDF loads
-        PdfUIEnabled = true;
-        
-        _isInitialized = true;
-        
-        Trace.WriteLine($"TestablePdfViewerWindow created with path: {pdfPath}");
-    }
-
-    public string GetPdfFileName()
-    {
-        // Access the private field through reflection
-        var field = typeof(PdfViewerWindow).GetField("_pdfFileName", 
-            BindingFlags.NonPublic | BindingFlags.Instance);
-        var fileName = field?.GetValue(this) as string ?? string.Empty;
-        Trace.WriteLine($"GetPdfFileName returning: {fileName}");
-        return fileName;
-    }
-
-    public async Task TriggerLoadAsync()
-    {
-        Trace.WriteLine($"TriggerLoadAsync called, file exists: {File.Exists(_customPdfPath)}");
-        
-        // Manually call the load method that would normally be triggered by Loaded event
-        var method = typeof(PdfViewerWindow).GetMethod("LoadAndDisplayPagesAsync",
-            BindingFlags.NonPublic | BindingFlags.Instance);
-        
-        if (method != null)
-        {
-            try
-            {
-                var task = method.Invoke(this, null) as Task;
-                if (task != null)
-                {
-                    await task;
-                    Trace.WriteLine($"LoadAndDisplayPagesAsync completed successfully");
-                    Trace.WriteLine($"After load: Description0='{Description0}', Description1='{Description1}'");
-                    Trace.WriteLine($"After load: MaxPageNumberMinus1={MaxPageNumberMinus1}, CurrentPageNumber={CurrentPageNumber}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Trace.WriteLine($"Exception in TriggerLoadAsync: {ex}");
-                throw;
-            }
-        }
-        else
-        {
-            Trace.WriteLine("LoadAndDisplayPagesAsync method not found!");
-        }
-    }
-}
-
-// Test app for BrowseList dialog
-public class TestBrowseListApp : Avalonia.Application
-{
-    public static Func<Avalonia.Application, IClassicDesktopStyleApplicationLifetime, Task>? OnSetupWindow;
-    
-    public override void Initialize()
-    {
-        Styles.Add(new FluentTheme());
-    }
-    
-    public override void OnFrameworkInitializationCompleted()
-    {
-        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-        {
-            if (OnSetupWindow != null)
-            {
-                _ = OnSetupWindow.Invoke(this, desktop);
-            }
-        }
-
-        base.OnFrameworkInitializationCompleted();
-    }
-}
-
-// BrowseList-style window with DataGrid populated from reflection
-public class BrowseListWindow : Window
-{
-    private BrowseControl _browseControl;
-
-    public BrowseListWindow()
-    {
-        Title = "Browse Avalonia Types - Reflection Query Test";
-        Width = 1400;
-        Height = 900;
-        WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        
-        // Create a LINQ reflection query over Avalonia types
-        // This demonstrates the real-world usage: browsing types from assemblies with automatic column generation
-        var query = from type in typeof(Avalonia.Controls.Button).Assembly.GetTypes()
-                    where type.IsClass && type.IsPublic
-                    select new
-                    {
-                        TypeName = type.Name,
-                        Namespace = type.Namespace ?? string.Empty,
-                        IsAbstract = type.IsAbstract,
-                        MethodCount = type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly).Length,
-                        PropertyCount = type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly).Length
-                    };
-        
-        var typeCount = query.Count();
-        Trace.WriteLine($"✓ Creating BrowseControl with LINQ reflection query");
-        Trace.WriteLine($"✓ Query returns {typeCount} public classes from Avalonia.Controls assembly");
-        Trace.WriteLine($"✓ Query uses anonymous type with computed properties (MethodCount, PropertyCount)");
-        
-        // Create the browse control with the reflection query
-        // Columns will be automatically generated: TypeName, Namespace, IsAbstract, MethodCount, PropertyCount
-        _browseControl = new BrowseControl(query, colWidths: new[] { 250, 350, 100, 120, 120 });
-        
-        // Handle double-click to close window
-        _browseControl.ListView.DoubleTapped += (o, e) =>
-        {
-            if (_browseControl.ListView.SelectedIndex >= 0)
-            {
-                Trace.WriteLine($"Selected: {_browseControl.ListView.SelectedItem}");
-            }
-        };
-        
-        Content = _browseControl;
-        
-        Trace.WriteLine($"✓ BrowseListWindow created with reflection-based query");
-        Trace.WriteLine($"✓ Columns: TypeName, Namespace, IsAbstract, MethodCount, PropertyCount");
-        Trace.WriteLine($"✓ Try filtering by type name (e.g., 'Button', 'Panel', 'Control')");
-    }
-}
-
-// Simple test class to verify DataGrid works with real classes
-public class TestItem
-{
-    public string Name { get; set; }
-    public string Value { get; set; }
-    public int Number { get; set; }
-}
-
-// Test app for simple DataGrid
-public class TestSimpleDataGridApp : Avalonia.Application
-{
-    public static Func<Avalonia.Application, IClassicDesktopStyleApplicationLifetime, Task>? OnSetupWindow;
-    
-    public override void Initialize()
-    {
-        Styles.Add(new FluentTheme());
-    }
-    
-    public override void OnFrameworkInitializationCompleted()
-    {
-        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-        {
-            if (OnSetupWindow != null)
-            {
-                _ = OnSetupWindow.Invoke(this, desktop);
-            }
-        }
-
-        base.OnFrameworkInitializationCompleted();
-    }
-}
-
-// Simplest possible DataGrid window with hardcoded everything
-public class SimpleDataGridWindow : Window
-{
-    public SimpleDataGridWindow()
-    {
-        Title = "Simple Hardcoded DataGrid Test";
-        Width = 800;
-        Height = 600;
-        WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        Background = Brushes.LightGray;
-        
-        // Create the simplest possible DataGrid
-        var dataGrid = new DataGrid
-        {
-            AutoGenerateColumns = true, // Let Avalonia generate columns automatically
-            IsReadOnly = true,
-            CanUserReorderColumns = true,
-            CanUserResizeColumns = true,
-            GridLinesVisibility = DataGridGridLinesVisibility.All,
-            HeadersVisibility = DataGridHeadersVisibility.Column,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch,
-            Background = Brushes.White,
-            BorderBrush = Brushes.Black,
-            BorderThickness = new Thickness(2),
-            Margin = new Thickness(10),
-            RowHeight = 30,
-            // Try setting explicit Height instead of letting it stretch
-            Height = 500
-        };
-        
-        // Create simple hardcoded data
-        var items = new List<TestItem>
-        {
-            new TestItem { Name = "Item 1", Value = "Value 1", Number = 100 },
-            new TestItem { Name = "Item 2", Value = "Value 2", Number = 200 },
-            new TestItem { Name = "Item 3", Value = "Value 3", Number = 300 },
-            new TestItem { Name = "Item 4", Value = "Value 4", Number = 400 },
-            new TestItem { Name = "Item 5", Value = "Value 5", Number = 500 }
-        };
-        
-        Trace.WriteLine($"✓ Created {items.Count} hardcoded TestItem instances");
-        
-        // Set ItemsSource IMMEDIATELY to test if timing is really the issue
-        dataGrid.ItemsSource = items;
-        Trace.WriteLine($"✓ ItemsSource set IMMEDIATELY in constructor to {items.Count} items");
-        
-        // Also hook Loaded to check status
-        dataGrid.Loaded += (s, e) =>
-        {
-            Trace.WriteLine($"DataGrid.Loaded event fired:");
-            Trace.WriteLine($"  Bounds = {dataGrid.Bounds}");
-            Trace.WriteLine($"  IsVisible = {dataGrid.IsVisible}");
-            Trace.WriteLine($"  ItemsSource count = {items.Count}");
-            Trace.WriteLine($"  AutoGenerateColumns = {dataGrid.AutoGenerateColumns}");
-            Trace.WriteLine($"  Columns.Count = {dataGrid.Columns.Count}");
-            Trace.WriteLine($"  Height = {dataGrid.Height}, RowHeight = {dataGrid.RowHeight}");
-            
-            // CRITICAL: Force another layout pass after ItemsSource is set
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            {
-                dataGrid.InvalidateMeasure();
-                dataGrid.InvalidateArrange();
-                dataGrid.UpdateLayout();
-                
-                Trace.WriteLine($"  After UpdateLayout: Columns.Count = {dataGrid.Columns.Count}");
-                
-                // Check visual children immediately after forced layout
-                var hasVisualChildren = Avalonia.VisualTree.VisualExtensions.GetVisualChildren(dataGrid).Any();
-                var rowCount = Avalonia.VisualTree.VisualExtensions.GetVisualChildren(dataGrid).OfType<DataGridRow>().Count();
-                Trace.WriteLine($"  Immediately after layout: HasVisualChildren={hasVisualChildren}, DataGridRow count={rowCount}");
-                
-                // Try to enumerate ALL visual children to see what's actually there
-                var allChildren = Avalonia.VisualTree.VisualExtensions.GetVisualChildren(dataGrid).ToList();
-                Trace.WriteLine($"  Visual children types ({allChildren.Count} total):");
-                foreach (var child in allChildren.Take(10))  // Show first 10
-                {
-                    Trace.WriteLine($"    - {child.GetType().Name}");
-                }
-                
-                // Try GetVisualDescendants to go deeper
-                var allDescendants = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(dataGrid).ToList();
-                Trace.WriteLine($"  Visual DESCENDANTS ({allDescendants.Count} total):");
-                var descendantTypes = allDescendants.GroupBy(d => d.GetType().Name)
-                    .Select(g => $"{g.Key} ({g.Count()})")
-                    .ToList();
-                foreach (var typeInfo in descendantTypes.Take(20))
-                {
-                    Trace.WriteLine($"    - {typeInfo}");
-                }
-            }, Avalonia.Threading.DispatcherPriority.Loaded);
-            
-            // Also check after a delay
-            System.Threading.Tasks.Task.Delay(2000).ContinueWith(_ =>
-            {
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                {
-                    var hasVisualChildren = Avalonia.VisualTree.VisualExtensions.GetVisualChildren(dataGrid).Any();
-                    var rowCount = Avalonia.VisualTree.VisualExtensions.GetVisualChildren(dataGrid).OfType<DataGridRow>().Count();
-                    Trace.WriteLine($"DataGrid DIAGNOSTIC (after 2s): Columns={dataGrid.Columns.Count}, HasVisualChildren={hasVisualChildren}, DataGridRow count={rowCount}");
-                    
-                    // Check for any ScrollViewer
-                    var scrollViewerCount = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(dataGrid)
-                        .Count(c => c.GetType().Name.Contains("Scroll"));
-                    Trace.WriteLine($"  ScrollViewer-related controls = {scrollViewerCount}");
-                });
-            });
-        };
-        
-        Content = dataGrid;
-        
-        Trace.WriteLine($"✓ SimpleDataGridWindow created with explicit Height=500");
     }
 }
 
