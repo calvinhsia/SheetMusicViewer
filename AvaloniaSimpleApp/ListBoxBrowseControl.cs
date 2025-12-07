@@ -619,12 +619,17 @@ public class ListBoxBrowseView : UserControl
             var file = await topLevel.StorageProvider.SaveFilePickerAsync(saveDialog);
             if (file != null)
             {
+                // Use selected items if any are selected, otherwise use all filtered items
+                var itemsToExport = _listBox.SelectedItems != null && _listBox.SelectedItems.Count > 0
+                    ? _listBox.SelectedItems.Cast<object>()
+                    : _filteredItems.Cast<object>();
+                
                 var sb = new System.Text.StringBuilder();
                 
                 var headers = _columns.Select(c => c.HeaderText).ToList();
                 sb.AppendLine(string.Join(",", headers.Select(h => $"\"{h}\"")));
                 
-                foreach (var item in _filteredItems)
+                foreach (var item in itemsToExport)
                 {
                     var props = TypeDescriptor.GetProperties(item);
                     var values = new List<string>();
@@ -642,7 +647,8 @@ public class ListBoxBrowseView : UserControl
                 await using var writer = new System.IO.StreamWriter(stream);
                 await writer.WriteAsync(sb.ToString());
                 
-                Trace.WriteLine($"OnExportCsvClick: Exported {_filteredItems.Count} items to {file.Path}");
+                var itemCount = itemsToExport.Count();
+                Trace.WriteLine($"OnExportCsvClick: Exported {itemCount} items to {file.Path}");
             }
         }
         catch (Exception ex)
@@ -655,6 +661,13 @@ public class ListBoxBrowseView : UserControl
     {
         try
         {
+            // Use selected items if any are selected, otherwise use all filtered items
+            var itemsToExport = _listBox.SelectedItems != null && _listBox.SelectedItems.Count > 0
+                ? _listBox.SelectedItems.Cast<object>()
+                : _filteredItems.Cast<object>();
+            
+            var itemCount = itemsToExport.Count();
+            
             // Create temp file like the original WPF version
             var tmpFileName = System.IO.Path.GetTempFileName();
             var sb = new System.Text.StringBuilder();
@@ -664,7 +677,7 @@ public class ListBoxBrowseView : UserControl
             sb.AppendLine(string.Join("\t", headers));
             
             // Add data rows
-            foreach (var item in _filteredItems)
+            foreach (var item in itemsToExport)
             {
                 var props = TypeDescriptor.GetProperties(item);
                 var values = new List<string>();
@@ -682,7 +695,7 @@ public class ListBoxBrowseView : UserControl
             var filename = System.IO.Path.ChangeExtension(tmpFileName, "txt");
             System.IO.File.Move(tmpFileName, filename);
             
-            Trace.WriteLine($"OnExportTxtClick: Exported {_filteredItems.Count} items to {filename}");
+            Trace.WriteLine($"OnExportTxtClick: Exported {itemCount} items to {filename}");
             
             // Use shell execute to open with default .txt handler (like original)
             try
