@@ -1,29 +1,17 @@
-﻿using System;
+﻿using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.Styling;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
-using Avalonia.Input;
-using Avalonia.Interactivity;
-using Avalonia.Layout;
-using Avalonia.Media;
-using Avalonia.Threading;
-using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Avalonia.Styling;
-using Avalonia.Controls.Templates;
 
 namespace AvaloniaSimpleApp;
 
@@ -327,14 +315,7 @@ public class ListBoxBrowseView : UserControl
         {
             Trace.WriteLine("OnListBoxLoaded: ListBox loaded, customizing visible containers");
             
-            var generator = _listBox.ItemContainerGenerator;
-            if (generator == null)
-            {
-                Trace.WriteLine("  ERROR: Generator is null");
-                return;
-            }
-            
-            Trace.WriteLine($"  Generator exists, ItemsSource has {_filteredItems.Count} items");
+            Trace.WriteLine($"  ItemsSource has {_filteredItems.Count} items");
             
             var presenter = _listBox.Presenter;
             var panel = presenter?.Panel;
@@ -344,7 +325,7 @@ public class ListBoxBrowseView : UserControl
             int customizedCount = 0;
             for (int i = 0; i < _filteredItems.Count; i++)
             {
-                var container = generator.ContainerFromIndex(i) as ListBoxItem;
+                var container = _listBox.ContainerFromIndex(i) as ListBoxItem;
                 if (container != null)
                 {
                     var item = _filteredItems[i];
@@ -477,7 +458,7 @@ public class ListBoxBrowseView : UserControl
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"ERROR in OnListBoxLayoutUpdated: {ex.Message}");
+            Trace.WriteLine($"ERROR in OnExportCsvClick: {ex.Message}");
         }
     }
 
