@@ -38,7 +38,7 @@ public class TestBase
     public virtual void TestInitialize()
     {
         var ciStatus = IsCI ? "CI" : "Local";
-        LogMessage($"Starting test {TestContext.TestName} ({ciStatus})");
+        LogMessage($"Starting test {TestContext?.TestName ?? "Unknown"} ({ciStatus})");
     }
 
     /// <summary>
@@ -47,7 +47,7 @@ public class TestBase
     [TestCleanup]
     public virtual void TestCleanup()
     {
-        LogMessage($"Completed test {TestContext.TestName} - Result: {TestContext.CurrentTestOutcome}");
+        LogMessage($"Completed test {TestContext?.TestName ?? "Unknown"} - Result: {TestContext?.CurrentTestOutcome.ToString() ?? "Unknown"}");
     }
 
     /// <summary>
