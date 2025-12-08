@@ -35,7 +35,8 @@ public class BrowseControlTests
         {
             try
             {
-                AppBuilder.Configure<TestChooseMusicApp>()
+                TestAppConfigurations.ConfigureDefault();
+                AppBuilder.Configure<TestApp>()
                     .UsePlatformDetect()
                     .WithInterFont()
                     .LogToTrace()
@@ -48,7 +49,7 @@ public class BrowseControlTests
             }
         });
 
-        TestChooseMusicApp.OnSetupWindow = async (app, lifetime) =>
+        TestApp.OnSetupWindow = async (app, lifetime) =>
         {
             try
             {
@@ -118,7 +119,8 @@ public class BrowseControlTests
         {
             try
             {
-                AppBuilder.Configure<TestBrowseListApp>()
+                TestAppConfigurations.ConfigureDefault();
+                AppBuilder.Configure<TestApp>()
                     .UsePlatformDetect()
                     .WithInterFont()
                     .LogToTrace()
@@ -131,7 +133,7 @@ public class BrowseControlTests
             }
         });
 
-        TestBrowseListApp.OnSetupWindow = async (app, lifetime) =>
+        TestApp.OnSetupWindow = async (app, lifetime) =>
         {
             try
             {
@@ -186,7 +188,8 @@ public class BrowseControlTests
         {
             try
             {
-                AppBuilder.Configure<TestHeadlessApp>()
+                TestAppConfigurations.ConfigureDefault();
+                AppBuilder.Configure<TestApp>()
                     .UsePlatformDetect()
                     .WithInterFont()
                     .LogToTrace()
@@ -354,7 +357,8 @@ public class BrowseControlTests
         {
             try
             {
-                AppBuilder.Configure<TestHeadlessApp>()
+                TestAppConfigurations.ConfigureDefault();
+                AppBuilder.Configure<TestApp>()
                     .UsePlatformDetect()
                     .WithInterFont()
                     .LogToTrace()
