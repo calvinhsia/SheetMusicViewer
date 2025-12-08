@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using System;
 using System.Diagnostics;
@@ -61,5 +62,21 @@ public static class AvaloniaTestHelper
         
         await testCompleted.Task;
         uiThread.Join(2000);
+    }
+
+    public static EventHandler CreateWindowClosedHandler(
+        TaskCompletionSource<bool> testCompleted,
+        IClassicDesktopStyleApplicationLifetime lifetime,
+        string? closedMessage = null)
+    {
+        return (s, e) =>
+        {
+            if (!string.IsNullOrEmpty(closedMessage))
+            {
+                Trace.WriteLine(closedMessage);
+            }
+            testCompleted.TrySetResult(true);
+            lifetime.Shutdown();
+        };
     }
 }

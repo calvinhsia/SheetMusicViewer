@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
@@ -77,10 +77,18 @@ public class PdfViewerTests
             }
             
             lifetime.MainWindow = window;
+            
+            window.Closed += (s, e) =>
+            {
+                Trace.WriteLine("Window closed by user or timer - completing test");
+                testCompleted.TrySetResult(true);
+                lifetime.Shutdown();
+            };
+            
             window.Show();
             
-            Trace.WriteLine($"? PdfViewerWindow created and shown");
-            Trace.WriteLine($"? Window will close automatically after 10 seconds");
+            Trace.WriteLine($"✓ PdfViewerWindow created and shown");
+            Trace.WriteLine($"✓ Window will close automatically after 10 seconds");
             
             var delay = 10000;
             var timer = new System.Timers.Timer(delay);
@@ -91,8 +99,6 @@ public class PdfViewerTests
                 {
                     Trace.WriteLine("Closing PdfViewerWindow and shutting down test");
                     window?.Close();
-                    testCompleted.SetResult(true);
-                    lifetime.Shutdown();
                 });
             };
             timer.Start();
@@ -121,7 +127,6 @@ public class PdfViewerTests
             try { File.Delete(pdfPath); } catch { }
         }
         
-        // Mark Avalonia as initialized so subsequent tests can handle it
         lock (_initLock)
         {
             _avaloniaInitialized = true;
