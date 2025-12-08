@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
@@ -205,9 +205,9 @@ public class BrowseControlTests : TestBase
                 window.Show();
                 await Task.Delay(1000);
                 
-                Trace.WriteLine($"✓ Window created with selection handler");
-                Trace.WriteLine($"✓ Double-click or press Enter on any row to trigger the handler");
-                Trace.WriteLine($"✓ Select multiple rows (Ctrl+Click) and press Enter to see multiple selection");
+                Trace.WriteLine($"? Window created with selection handler");
+                Trace.WriteLine($"? Double-click or press Enter on any row to trigger the handler");
+                Trace.WriteLine($"? Select multiple rows (Ctrl+Click) and press Enter to see multiple selection");
                 Trace.WriteLine("Close the window when finished testing.");
             });
         });
