@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:local="clr-namespace:AvaloniaSimpleApp"
-        x:Class="AvaloniaSimpleApp.PdfViewerWindow"
+        xmlns:local="clr-namespace:AvaloniaTests"
+        x:Class="AvaloniaTests.PdfViewerWindow"
         x:DataType="local:PdfViewerWindow"
         Title="Avalonia PDF Viewer"
         WindowState="Maximized">

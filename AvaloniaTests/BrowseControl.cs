@@ -18,7 +18,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 
-namespace AvaloniaSimpleApp;
+namespace AvaloniaTests;
 
 /// <summary>
 /// Standalone browse control that accepts a LINQ query and automatically generates columns.

@@ -8,7 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace AvaloniaSimpleApp;
+namespace AvaloniaTests;
 
 public class InkCanvasControl : Panel
 {

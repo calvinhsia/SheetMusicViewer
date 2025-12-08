@@ -12,7 +12,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 
-namespace AvaloniaSimpleApp;
+namespace AvaloniaTests;
 
 /// <summary>
 /// ChooseMusic-style window with generated book cover bitmaps.

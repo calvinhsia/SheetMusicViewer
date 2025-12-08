@@ -11,7 +11,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace AvaloniaSimpleApp;
+namespace AvaloniaTests;
 
 // Test app for simple DataGrid
 public class TestSimpleDataGridApp : Application
