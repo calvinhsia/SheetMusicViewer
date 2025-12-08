@@ -36,7 +36,8 @@ public class DataGridTests
         {
             try
             {
-                AppBuilder.Configure<TestDataGridApp>()
+                TestAppConfigurations.ConfigureForDataGrid();
+                AppBuilder.Configure<TestApp>()
                     .UsePlatformDetect()
                     .WithInterFont()
                     .LogToTrace()
@@ -49,7 +50,7 @@ public class DataGridTests
             }
         });
 
-        TestDataGridApp.OnSetupWindow = async (app, lifetime) =>
+        TestApp.OnSetupWindow = async (app, lifetime) =>
         {
             try
             {
@@ -58,8 +59,8 @@ public class DataGridTests
                 
                 window.Closed += (s, e) =>
                 {
-                    Trace.WriteLine("? DataGridTestWindow closed by user");
-                    Trace.WriteLine("? TEST PASSED: DataGrid displayed rows successfully");
+                    Trace.WriteLine("✓ DataGridTestWindow closed by user");
+                    Trace.WriteLine("✓ TEST PASSED: DataGrid displayed rows successfully");
                     testCompleted.TrySetResult(true);
                     lifetime.Shutdown();
                 };
@@ -67,8 +68,8 @@ public class DataGridTests
                 window.Show();
                 
                 Trace.WriteLine("=== DataGrid Working Test ===");
-                Trace.WriteLine("? DataGridTestWindow created and shown");
-                Trace.WriteLine("? DataGrid with 15 people displayed");
+                Trace.WriteLine("✓ DataGridTestWindow created and shown");
+                Trace.WriteLine("✓ DataGrid with 15 people displayed");
                 Trace.WriteLine("");
                 Trace.WriteLine("Features to test:");
                 Trace.WriteLine("  • Edit cells (double-click)");
@@ -115,7 +116,8 @@ public class DataGridTests
         {
             try
             {
-                AppBuilder.Configure<TestDataGridApp>()
+                TestAppConfigurations.ConfigureForDataGrid();
+                AppBuilder.Configure<TestApp>()
                     .UsePlatformDetect()
                     .WithInterFont()
                     .LogToTrace()
@@ -128,7 +130,7 @@ public class DataGridTests
             }
         });
 
-        TestDataGridApp.OnSetupWindow = async (app, lifetime) =>
+        TestApp.OnSetupWindow = async (app, lifetime) =>
         {
             try
             {
