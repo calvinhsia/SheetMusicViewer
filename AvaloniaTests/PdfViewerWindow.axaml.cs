@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 using PDFtoImage;
 using SkiaSharp;
 
-namespace AvaloniaSimpleApp;
+namespace AvaloniaTests;
 
 public partial class PdfViewerWindow : Window, INotifyPropertyChanged
 {

@@ -8,7 +8,7 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <IsTestProject>true</IsTestProject>
     <LangVersion>latest</LangVersion>
-    <StartupObject>AvaloniaSimpleApp.Program</StartupObject>
+    <StartupObject>AvaloniaTests.Program</StartupObject>
   </PropertyGroup>
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />

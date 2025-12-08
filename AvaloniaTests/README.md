@@ -1,4 +1,4 @@
-# AvaloniaSimpleApp - Test Project
+# AvaloniaTests - Test Project
 
 This is a hybrid project that serves as both a standalone Avalonia application AND a test project that appears in Visual Studio Test Explorer.
 
@@ -39,12 +39,12 @@ This is a hybrid project that serves as both a standalone Avalonia application A
 
 ### Method 2: Run Directly (Stress Test Only)
 ```powershell
-cd AvaloniaSimpleApp
+cd AvaloniaTests
 dotnet run
 ```
 
 ### Method 3: Debug from Visual Studio
-1. Set `AvaloniaSimpleApp` as the startup project
+1. Set `AvaloniaTests` as the startup project
 2. Press F5 to run with debugging
 
 ## How It Works
@@ -74,7 +74,7 @@ Both tests use `PdfViewerApp` (custom Application class) or the default `App` to
 The project is marked as a test project with these settings in `.csproj`:
 ```xml
 <IsTestProject>true</IsTestProject>
-<StartupObject>AvaloniaSimpleApp.Program</StartupObject>
+<StartupObject>AvaloniaTests.Program</StartupObject>
 ```
 
 This allows it to:

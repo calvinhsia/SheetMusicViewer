@@ -4,7 +4,7 @@ using Avalonia.Themes.Fluent;
 using System;
 using System.Threading.Tasks;
 
-namespace AvaloniaSimpleApp;
+namespace AvaloniaTests;
 
 // Test app for headless testing
 public class TestHeadlessApp : Application

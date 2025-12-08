@@ -13,7 +13,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 
-namespace AvaloniaSimpleApp;
+namespace AvaloniaTests;
 
 public class ListBoxBrowseControl : DockPanel
 {

@@ -16,7 +16,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WpfApp", "WpfApp\WpfApp.csproj", "{D25AE10D-12AF-42C8-948C-4A25994B50BE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AvaloniaSimpleApp", "AvaloniaSimpleApp\AvaloniaSimpleApp.csproj", "{6A9FA10A-2ACA-0DAA-24CC-1459B0516635}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AvaloniaTests", "AvaloniaTests\AvaloniaTests.csproj", "{6A9FA10A-2ACA-0DAA-24CC-1459B0516635}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

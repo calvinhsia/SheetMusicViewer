@@ -7,7 +7,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 
-namespace AvaloniaSimpleApp;
+namespace AvaloniaTests;
 
 // Testable version of PdfViewerWindow that exposes internal state and allows custom PDF path
 public class TestablePdfViewerWindow : PdfViewerWindow
