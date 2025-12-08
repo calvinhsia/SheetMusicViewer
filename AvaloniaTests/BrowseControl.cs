@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -15,13 +15,13 @@ using System.Linq;
 
 namespace AvaloniaTests;
 
-public class ListBoxBrowseControl : DockPanel
+public class BrowseControl : DockPanel
 {
     public ListBoxBrowseView ListView { get; private set; }
     internal int[] _colWidths;
     public IEnumerable _query;
 
-    public ListBoxBrowseControl(IEnumerable query, int[] colWidths = null)
+    public BrowseControl(IEnumerable query, int[] colWidths = null)
     {
         try
         {
@@ -57,12 +57,12 @@ public class ListBoxBrowseControl : DockPanel
             
             listFilter.SetBrowseList(ListView);
             
-            Trace.WriteLine($"ListBoxBrowseControl: Created with virtualization and column resizing support");
+            Trace.WriteLine($"BrowseControl: Created with virtualization and column resizing support");
         }
         catch (Exception ex)
         {
             this.Children.Add(new TextBlock { Text = ex.ToString() });
-            Trace.WriteLine($"ListBoxBrowseControl: Exception: {ex}");
+            Trace.WriteLine($"BrowseControl: Exception: {ex}");
         }
     }
 }
@@ -163,7 +163,7 @@ public class ListBoxBrowseView : UserControl
     public int SelectedIndex => _listBox?.SelectedIndex ?? -1;
     public object SelectedItem => _listBox?.SelectedItem;
 
-    public ListBoxBrowseView(IEnumerable query, ListBoxBrowseControl browseControl)
+    public ListBoxBrowseView(IEnumerable query, BrowseControl browseControl)
     {
         this._colWidths = browseControl._colWidths;
         this._originalQuery = query;
@@ -375,11 +375,11 @@ public class ListBoxBrowseView : UserControl
                 }
             }
             
-            Trace.WriteLine($"  ✓ Customized {customizedCount} visible containers");
+            Trace.WriteLine($"  ? Customized {customizedCount} visible containers");
             
             // Subscribe to EffectiveViewportChanged for scrolling
             _listBox.EffectiveViewportChanged += OnEffectiveViewportChanged;
-            Trace.WriteLine($"  ✓ Subscribed to EffectiveViewportChanged for dynamic customization");
+            Trace.WriteLine($"  ? Subscribed to EffectiveViewportChanged for dynamic customization");
         }
         catch (Exception ex)
         {
@@ -420,7 +420,7 @@ public class ListBoxBrowseView : UserControl
                     if (isToStringBefore)
                     {
                         toStringCount++;
-                        Trace.WriteLine($"  ⚠️ Container {i}: WAS ToString ({contentBeforeType}), fixing now...");
+                        Trace.WriteLine($"  ?? Container {i}: WAS ToString ({contentBeforeType}), fixing now...");
                     }
                     else if (isGridBefore)
                     {
@@ -740,8 +740,7 @@ public class ListBoxBrowseView : UserControl
         }
     }
 
-    private void OnHeaderClick(int columnIndex
-)
+    private void OnHeaderClick(int columnIndex)
     {
         Trace.WriteLine($"Header clicked: column {columnIndex}");
         
@@ -887,7 +886,7 @@ public class ListBoxBrowseView : UserControl
                 var col = _columns[buttonIndex];
                 if (buttonIndex == sortedColumnIndex)
                 {
-                    btn.Content = $"{col.HeaderText} {(ascending ? "↑" : "↓")}";
+                    btn.Content = $"{col.HeaderText} {(ascending ? "?" : "?")}";
                 }
                 else
                 {
