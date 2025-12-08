@@ -193,7 +193,7 @@ public class BrowseControlTests
         {
             try
             {
-                Trace.WriteLine("=== BrowseControl Comparison Test ===");
+                Trace.WriteLine("=== ListBoxBrowseControl Performance Test ===");
                 Trace.WriteLine("");
                 
                 var itemCount = 1000;
@@ -210,74 +210,44 @@ public class BrowseControlTests
                 Trace.WriteLine($"Created query with {itemCount:n0} items");
                 Trace.WriteLine("");
                 
-                Trace.WriteLine("TEST 1: BrowseControl (Manual Rendering)");
-                Trace.WriteLine("------------------------------------------");
+                Trace.WriteLine("TEST: ListBoxBrowseControl (Virtualized ListBox)");
+                Trace.WriteLine("--------------------------------------------------");
                 
-                var sw1 = Stopwatch.StartNew();
-                var browseControl1 = new BrowseControl(query, colWidths: new[] { 100, 200, 150, 100, 300 });
-                sw1.Stop();
+                var sw = Stopwatch.StartNew();
+                var browseControl = new ListBoxBrowseControl(query, colWidths: new[] { 100, 200, 150, 100, 300 });
+                sw.Stop();
                 
-                var window1 = new Window
-                {
-                    Title = "BrowseControl (Manual) - 1,000 items",
-                    Width = 1000,
-                    Height = 600,
-                    Content = browseControl1
-                };
-                
-                window1.Show();
-                await Task.Delay(500);
-                
-                var memoryBefore1 = GC.GetTotalMemory(false);
-                
-                var panelField1 = browseControl1.ListView.GetType().GetField("_itemsPanel", 
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                var panel1 = panelField1?.GetValue(browseControl1.ListView) as StackPanel;
-                var panelChildCount1 = panel1?.Children.Count ?? 0;
-                
-                Trace.WriteLine($"Creation time: {sw1.ElapsedMilliseconds:n0} ms");
-                Trace.WriteLine($"ListView panel children: {panelChildCount1:n0}");
-                Trace.WriteLine($"Memory footprint: ~{memoryBefore1 / 1024 / 1024:n0} MB");
-                Trace.WriteLine("");
-                
-                Trace.WriteLine("TEST 2: ListBoxBrowseControl (Virtualized ListBox)");
-                Trace.WriteLine("---------------------------------------------------");
-                
-                var sw2 = Stopwatch.StartNew();
-                var browseControl2 = new ListBoxBrowseControl(query, colWidths: new[] { 100, 200, 150, 100, 300 });
-                sw2.Stop();
-                
-                var window2 = new Window
+                var window = new Window
                 {
                     Title = "ListBoxBrowseControl (Virtualized) - 1,000 items",
                     Width = 1000,
                     Height = 600,
-                    Content = browseControl2,
-                    Position = new PixelPoint(window1.Position.X + 50, window1.Position.Y + 50)
+                    Content = browseControl
                 };
                 
-                window2.Show();
+                window.Show();
                 await Task.Delay(500);
                 
-                var memoryBefore2 = GC.GetTotalMemory(false);
+                var memoryBefore = GC.GetTotalMemory(false);
                 
-                var listBoxView = browseControl2.ListView;
+                var listBoxView = browseControl.ListView;
                 var listBoxField = listBoxView.GetType().GetField("_listBox", 
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 var listBox = listBoxField?.GetValue(listBoxView) as ListBox;
                 var presenter = listBox?.Presenter;
                 var panel = presenter?.Panel;
                 
-                Trace.WriteLine($"Creation time: {sw2.ElapsedMilliseconds:n0} ms");
+                Trace.WriteLine($"Creation time: {sw.ElapsedMilliseconds:n0} ms");
                 Trace.WriteLine($"ListBox panel type: {panel?.GetType().Name ?? "N/A"}");
                 Trace.WriteLine($"ListBox panel children: {panel?.Children.Count.ToString("n0") ?? "N/A"}");
-                Trace.WriteLine($"Memory footprint: ~{memoryBefore2 / 1024 / 1024:n0} MB");
+                Trace.WriteLine($"Memory footprint: ~{memoryBefore / 1024 / 1024:n0} MB");
                 Trace.WriteLine("");
                 
-                Trace.WriteLine("=== COMPARISON ===");
+                Trace.WriteLine("=== RESULTS ===");
                 Trace.WriteLine($"Dataset: {itemCount:n0} items");
-                Trace.WriteLine($"Manual: {itemCount:n0} rows, {sw1.ElapsedMilliseconds:n0} ms, ~{memoryBefore1 / 1024 / 1024:n0} MB");
-                Trace.WriteLine($"ListBox: ~{panel?.Children.Count ?? 0} rows, {sw2.ElapsedMilliseconds:n0} ms, ~{memoryBefore2 / 1024 / 1024:n0} MB");
+                Trace.WriteLine($"Rendered: ~{panel?.Children.Count ?? 0} rows");
+                Trace.WriteLine($"Time: {sw.ElapsedMilliseconds:n0} ms");
+                Trace.WriteLine($"Memory: ~{memoryBefore / 1024 / 1024:n0} MB");
                 
                 if (panel?.Children.Count < itemCount * 0.1)
                 {
@@ -285,12 +255,11 @@ public class BrowseControlTests
                 }
                 
                 Trace.WriteLine("");
-                Trace.WriteLine("Windows will close in 30 seconds...");
+                Trace.WriteLine("Window will close in 30 seconds...");
                 
                 await Task.Delay(30000);
                 
-                window1.Close();
-                window2.Close();
+                window.Close();
                 testCompleted.SetResult(true);
                 
                 if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lifetime)
