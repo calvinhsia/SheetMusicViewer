@@ -23,14 +23,6 @@ public class DataGridTests
     [TestCategory("Manual")]
     public async Task TestDataGridWorking()
     {
-        // Skips the test in headless CI environments
-        if (Environment.GetEnvironmentVariable("CI") == "true" || 
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
-        {
-            Assert.Inconclusive("Test skipped in headless CI environment - requires display");
-            return;
-        }
-
         var testCompleted = new TaskCompletionSource<bool>();
         var uiThread = new Thread(() =>
         {
@@ -104,13 +96,6 @@ public class DataGridTests
     [TestCategory("Manual")]
     public async Task TestDataGridWithRealClass()
     {
-        if (Environment.GetEnvironmentVariable("CI") == "true" || 
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
-        {
-            Assert.Inconclusive("Test skipped in headless CI environment - requires display");
-            return;
-        }
-
         var testCompleted = new TaskCompletionSource<bool>();
         var uiThread = new Thread(() =>
         {

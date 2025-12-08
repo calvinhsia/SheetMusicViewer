@@ -23,13 +23,6 @@ public class VirtualizationTests
     [TestCategory("Manual")]
     public async Task TestItemContainerGeneratorDirect()
     {
-        if (Environment.GetEnvironmentVariable("CI") == "true" || 
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
-        {
-            Assert.Inconclusive("Test skipped in headless CI environment - requires display");
-            return;
-        }
-
         var testCompleted = new TaskCompletionSource<bool>();
         var uiThread = new Thread(() =>
         {
@@ -205,13 +198,6 @@ public class VirtualizationTests
     [TestCategory("Manual")]
     public async Task TestListBoxVirtualization()
     {
-        if (Environment.GetEnvironmentVariable("CI") == "true" || 
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
-        {
-            Assert.Inconclusive("Test skipped in headless CI environment - requires display");
-            return;
-        }
-
         var testCompleted = new TaskCompletionSource<bool>();
         var uiThread = new Thread(() =>
         {

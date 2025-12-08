@@ -42,13 +42,6 @@ public class PdfViewerTests
     [TestCategory("Manual")]
     public async Task TestAvaloniaPdfViewerUI()
     {
-        if (Environment.GetEnvironmentVariable("CI") == "true" || 
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
-        {
-            Assert.Inconclusive("Test skipped in headless CI environment - requires display");
-            return;
-        }
-
         var pdfPath = Environment.GetEnvironmentVariable("PDF_TEST_PATH");
         if (string.IsNullOrEmpty(pdfPath))
         {
@@ -149,13 +142,6 @@ public class PdfViewerTests
             }
         }
         
-        if (Environment.GetEnvironmentVariable("CI") == "true" || 
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
-        {
-            Assert.Inconclusive("Test skipped in headless CI environment - requires display");
-            return;
-        }
-
         var testPdfPath = TestHelpers.CreateTestPdf();
         
         try
