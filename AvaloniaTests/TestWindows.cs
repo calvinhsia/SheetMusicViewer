@@ -84,7 +84,7 @@ public class TestablePdfViewerWindow : PdfViewerWindow
 // BrowseList-style window with DataGrid populated from reflection
 public class BrowseListWindow : Window
 {
-    private ListBoxBrowseControl _browseControl;
+    private BrowseControl _browseControl;
 
     public BrowseListWindow()
     {
@@ -108,13 +108,13 @@ public class BrowseListWindow : Window
         
         var typeCount = query.Count();
 
-        Trace.WriteLine($"✓ Creating ListBoxBrowseControl with LINQ reflection query");
+        Trace.WriteLine($"✓ Creating BrowseControl with LINQ reflection query");
         Trace.WriteLine($"✓ Query returns {typeCount} public classes from Avalonia.Controls assembly");
         Trace.WriteLine($"✓ Query uses anonymous type with computed properties (MethodCount, PropertyCount)");
         
         // Create the browse control with the reflection query (using virtualized ListBox)
         // Columns will be automatically generated: TypeName, Namespace, IsAbstract, MethodCount, PropertyCount
-        _browseControl = new ListBoxBrowseControl(query, colWidths: new[] { 250, 350, 100, 120, 120 });
+        _browseControl = new BrowseControl(query, colWidths: new[] { 250, 350, 100, 120, 120 });
         
         Content = _browseControl;
         

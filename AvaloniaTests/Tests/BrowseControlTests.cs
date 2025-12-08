@@ -91,7 +91,7 @@ public class BrowseControlTests
 
             await Dispatcher.UIThread.InvokeAsync(async () =>
             {
-                Trace.WriteLine("=== ListBoxBrowseControl with 10,000 Items ===");
+                Trace.WriteLine("=== BrowseControl with 10,000 Items ===");
                 
                 var itemCount = 10000;
                 var query = Enumerable.Range(0, itemCount)
@@ -107,12 +107,12 @@ public class BrowseControlTests
                     });
                 
                 var sw = Stopwatch.StartNew();
-                var browseControl = new ListBoxBrowseControl(query, colWidths: new[] { 80, 150, 120, 80, 100, 100, 350 });
+                var browseControl = new BrowseControl(query, colWidths: new[] { 80, 150, 120, 80, 100, 100, 350 });
                 sw.Stop();
                 
                 var window = new Window
                 {
-                    Title = $"ListBoxBrowseControl - {itemCount:n0} Items (Virtualized)",
+                    Title = $"BrowseControl - {itemCount:n0} Items (Virtualized)",
                     Width = 1200,
                     Height = 800,
                     Content = browseControl,
@@ -122,7 +122,7 @@ public class BrowseControlTests
                 window.Closed += AvaloniaTestHelper.CreateWindowClosedHandler(
                     testCompleted,
                     lifetime,
-                    "ListBoxBrowseControl window closed");
+                    "BrowseControl window closed");
                 
                 window.Show();
                 await Task.Delay(1000);
