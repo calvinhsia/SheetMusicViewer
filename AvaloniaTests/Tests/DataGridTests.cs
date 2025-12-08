@@ -28,13 +28,10 @@ public class DataGridTests
             var window = new DataGridTestWindow();
             lifetime.MainWindow = window;
             
-            window.Closed += (s, e) =>
-            {
-                Trace.WriteLine("✓ DataGridTestWindow closed by user");
-                Trace.WriteLine("✓ TEST PASSED: DataGrid displayed rows successfully");
-                testCompleted.TrySetResult(true);
-                lifetime.Shutdown();
-            };
+            window.Closed += AvaloniaTestHelper.CreateWindowClosedHandler(
+                testCompleted,
+                lifetime,
+                "✓ DataGridTestWindow closed by user\n✓ TEST PASSED: DataGrid displayed rows successfully");
             
             window.Show();
             
@@ -103,13 +100,10 @@ public class DataGridTests
             
             lifetime.MainWindow = window;
             
-            window.Closed += (s, e) =>
-            {
-                Trace.WriteLine("✓ DataGrid window closed by user");
-                Trace.WriteLine("✓ TEST PASSED: Programmatic DataGrid with AutoGenerateColumns works!");
-                testCompleted.TrySetResult(true);
-                lifetime.Shutdown();
-            };
+            window.Closed += AvaloniaTestHelper.CreateWindowClosedHandler(
+                testCompleted,
+                lifetime,
+                "✓ DataGrid window closed by user\n✓ TEST PASSED: Programmatic DataGrid with AutoGenerateColumns works!");
             
             window.Show();
             
