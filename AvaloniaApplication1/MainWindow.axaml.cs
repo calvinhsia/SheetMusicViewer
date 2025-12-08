@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using AvaloniaApplication1.ViewModels;
 
 namespace AvaloniaApplication1
 {
@@ -7,6 +8,7 @@ namespace AvaloniaApplication1
         public MainWindow()
         {
             InitializeComponent();
+            DataContext = new MainWindowViewModel();
         }
     }
 }

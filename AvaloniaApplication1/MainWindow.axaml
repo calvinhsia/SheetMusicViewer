@@ -2,8 +2,19 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:AvaloniaApplication1.ViewModels"
+        xmlns:models="using:AvaloniaApplication1.Models"
         mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
         x:Class="AvaloniaApplication1.MainWindow"
-        Title="AvaloniaApplication1">
-    Welcome to Avalonia!
+        x:DataType="vm:MainWindowViewModel"
+        Title="DataGrid Sample">
+    <DataGrid Margin="20" ItemsSource="{Binding People}"
+              GridLinesVisibility="All"
+              BorderThickness="1" BorderBrush="Gray">
+        <DataGrid.Columns>
+            <DataGridTextColumn Header="First Name" Binding="{Binding FirstName}" x:DataType="models:Person"/>
+            <DataGridTextColumn Header="Last Name" Binding="{Binding LastName}" x:DataType="models:Person"/>
+            <DataGridCheckBoxColumn Header="Fictitious?" Binding="{Binding IsFictitious}" x:DataType="models:Person"/>
+        </DataGrid.Columns>
+    </DataGrid>
 </Window>
