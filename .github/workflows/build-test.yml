@@ -2,9 +2,10 @@ name: Build and Test
 
 on:
   push:
-    branches: [ main, tests ]
+    branches: [ main, tests, develop ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, tests ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -23,28 +24,28 @@ jobs:
         dotnet-version: 8.0.x
         
     - name: Restore dependencies
-      run: dotnet restore AvaloniaSimpleApp/AvaloniaSimpleApp.csproj
+      run: dotnet restore AvaloniaTests/AvaloniaTests.csproj
       
     - name: Build
-      run: dotnet build AvaloniaSimpleApp/AvaloniaSimpleApp.csproj --no-restore --configuration Release
+      run: dotnet build AvaloniaTests/AvaloniaTests.csproj --no-restore --configuration Release
       
     - name: Test
-      run: dotnet test AvaloniaSimpleApp/AvaloniaSimpleApp.csproj --no-build --configuration Release --verbosity normal --filter "TestCategory!=Manual"
+      run: dotnet test AvaloniaTests/AvaloniaTests.csproj --no-build --configuration Release --verbosity normal --filter "TestCategory!=Manual"
       
     - name: Publish (macOS)
       if: matrix.os == 'macos-latest'
-      run: dotnet publish AvaloniaSimpleApp/AvaloniaSimpleApp.csproj -c Release -r osx-arm64 --self-contained true -o ./publish/osx-arm64
+      run: dotnet publish AvaloniaTests/AvaloniaTests.csproj -c Release -r osx-arm64 --self-contained true -o ./publish/osx-arm64
       
     - name: Publish (Windows)
       if: matrix.os == 'windows-latest'
-      run: dotnet publish AvaloniaSimpleApp/AvaloniaSimpleApp.csproj -c Release -r win-x64 --self-contained true -o ./publish/win-x64
+      run: dotnet publish AvaloniaTests/AvaloniaTests.csproj -c Release -r win-x64 --self-contained true -o ./publish/win-x64
       
     - name: Publish (Linux)
       if: matrix.os == 'ubuntu-latest'
-      run: dotnet publish AvaloniaSimpleApp/AvaloniaSimpleApp.csproj -c Release -r linux-x64 --self-contained true -o ./publish/linux-x64
+      run: dotnet publish AvaloniaTests/AvaloniaTests.csproj -c Release -r linux-x64 --self-contained true -o ./publish/linux-x64
       
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: AvaloniaSimpleApp-${{ matrix.os }}
+        name: AvaloniaTests-${{ matrix.os }}
         path: ./publish/
