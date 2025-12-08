@@ -23,13 +23,6 @@ public class BrowseControlTests
     [TestCategory("Manual")]
     public async Task TestAvaloniaChooseMusicDialog()
     {
-        if (Environment.GetEnvironmentVariable("CI") == "true" || 
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
-        {
-            Assert.Inconclusive("Test skipped in headless CI environment - requires display");
-            return;
-        }
-
         var testCompleted = new TaskCompletionSource<bool>();
         var uiThread = new Thread(() =>
         {
@@ -107,13 +100,6 @@ public class BrowseControlTests
     [TestCategory("Manual")]
     public async Task TestAvaloniaDataGridBrowseList()
     {
-        if (Environment.GetEnvironmentVariable("CI") == "true" || 
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
-        {
-            Assert.Inconclusive("Test skipped in headless CI environment - requires display");
-            return;
-        }
-
         var testCompleted = new TaskCompletionSource<bool>();
         var uiThread = new Thread(() =>
         {
@@ -176,13 +162,6 @@ public class BrowseControlTests
     [TestCategory("Manual")]
     public async Task TestBrowseControlComparison()
     {
-        if (Environment.GetEnvironmentVariable("CI") == "true" || 
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
-        {
-            Assert.Inconclusive("Test skipped in headless CI environment - requires display");
-            return;
-        }
-
         var testCompleted = new TaskCompletionSource<bool>();
         var uiThread = new Thread(() =>
         {
@@ -345,13 +324,6 @@ public class BrowseControlTests
     [TestCategory("Manual")]
     public async Task TestListBoxBrowseControl()
     {
-        if (Environment.GetEnvironmentVariable("CI") == "true" || 
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
-        {
-            Assert.Inconclusive("Test skipped in headless CI environment - requires display");
-            return;
-        }
-
         var testCompleted = new TaskCompletionSource<bool>();
         var uiThread = new Thread(() =>
         {
