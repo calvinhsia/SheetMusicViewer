@@ -65,6 +65,17 @@ public class BrowseControl : DockPanel
             Trace.WriteLine($"BrowseControl: Exception: {ex}");
         }
     }
+
+    /// <summary>
+    /// Adds a custom context menu item to the browse control
+    /// </summary>
+    /// <param name="itemName">The display name for the menu item</param>
+    /// <param name="tooltip">Optional tooltip for the menu item</param>
+    /// <param name="action">Action to execute with the currently selected items</param>
+    public void AddContextMenuItem(string itemName, string tooltip, Action<IList<object>> action)
+    {
+        ListView?.AddContextMenuItem(itemName, tooltip, action);
+    }
 }
 
 internal class ListBoxListFilter : DockPanel
@@ -629,50 +640,54 @@ public class ListBoxBrowseView : UserControl
     {
         try
         {
-            var topLevel = TopLevel.GetTopLevel(this);
-            if (topLevel == null)
-                return;
-
-            var saveDialog = new Avalonia.Platform.Storage.FilePickerSaveOptions
+            // Use selected items if any are selected, otherwise use all filtered items
+            var itemsToExport = _listBox.SelectedItems != null && _listBox.SelectedItems.Count > 0
+                ? _listBox.SelectedItems.Cast<object>()
+                : _filteredItems.Cast<object>();
+            
+            var itemCount = itemsToExport.Count();
+            
+            // Create temp file like the original WPF version
+            var tmpFileName = System.IO.Path.GetTempFileName();
+            var sb = new System.Text.StringBuilder();
+            
+            // Add header row
+            var headers = _columns.Select(c => c.HeaderText).ToList();
+            sb.AppendLine(string.Join(",", headers.Select(h => $"\"{h}\"")));
+            
+            // Add data rows
+            foreach (var item in itemsToExport)
             {
-                Title = "Export to CSV",
-                SuggestedFileName = "export.csv",
-                DefaultExtension = "csv"
-            };
-
-            var file = await topLevel.StorageProvider.SaveFilePickerAsync(saveDialog);
-            if (file != null)
-            {
-                // Use selected items if any are selected, otherwise use all filtered items
-                var itemsToExport = _listBox.SelectedItems != null && _listBox.SelectedItems.Count > 0
-                    ? _listBox.SelectedItems.Cast<object>()
-                    : _filteredItems.Cast<object>();
-                
-                var sb = new System.Text.StringBuilder();
-                
-                var headers = _columns.Select(c => c.HeaderText).ToList();
-                sb.AppendLine(string.Join(",", headers.Select(h => $"\"{h}\"")));
-                
-                foreach (var item in itemsToExport)
+                var props = TypeDescriptor.GetProperties(item);
+                var values = new List<string>();
+                foreach (var col in _columns)
                 {
-                    var props = TypeDescriptor.GetProperties(item);
-                    var values = new List<string>();
-                    foreach (var col in _columns)
-                    {
-                        var prop = props[col.BindingPath];
-                        var value = prop?.GetValue(item);
-                        var formatted = FormatValue(value);
-                        values.Add($"\"{formatted.Replace("\"", "\"\"")}\"");
-                    }
-                    sb.AppendLine(string.Join(",", values));
+                    var prop = props[col.BindingPath];
+                    var value = prop?.GetValue(item);
+                    var formatted = FormatValue(value);
+                    values.Add($"\"{formatted.Replace("\"", "\"\"")}\"");
                 }
+                sb.AppendLine(string.Join(",", values));
+            }
 
-                await using var stream = await file.OpenWriteAsync();
-                await using var writer = new System.IO.StreamWriter(stream);
-                await writer.WriteAsync(sb.ToString());
-                
-                var itemCount = itemsToExport.Count();
-                Trace.WriteLine($"OnExportCsvClick: Exported {itemCount} items to {file.Path}");
+            // Write the file
+            System.IO.File.WriteAllText(tmpFileName, sb.ToString(), System.Text.Encoding.UTF8);
+            var filename = System.IO.Path.ChangeExtension(tmpFileName, "csv");
+            System.IO.File.Move(tmpFileName, filename);
+            
+            Trace.WriteLine($"OnExportCsvClick: Exported {itemCount} items to {filename}");
+            
+            // Use shell execute to open with default .csv handler (like original)
+            try
+            {
+                var process = new System.Diagnostics.Process();
+                process.StartInfo.FileName = filename;
+                process.StartInfo.UseShellExecute = true;
+                process.Start();
+            }
+            catch (Exception openEx)
+            {
+                Trace.WriteLine($"Could not open file: {openEx.Message}");
             }
         }
         catch (Exception ex)
@@ -895,6 +910,53 @@ public class ListBoxBrowseView : UserControl
                 buttonIndex++;
             }
         }
+    }
+
+    /// <summary>
+    /// Adds a custom context menu item
+    /// </summary>
+    /// <param name="itemName">The display name for the menu item</param>
+    /// <param name="tooltip">Optional tooltip for the menu item</param>
+    /// <param name="action">Action to execute with the currently selected items</param>
+    public void AddContextMenuItem(string itemName, string tooltip, Action<IList<object>> action)
+    {
+        if (_listBox?.ContextMenu == null)
+        {
+            Trace.WriteLine($"AddContextMenuItem: ContextMenu is null");
+            return;
+        }
+
+        var menuItem = new MenuItem { Header = itemName };
+        
+        if (!string.IsNullOrEmpty(tooltip))
+        {
+            ToolTip.SetTip(menuItem, tooltip);
+        }
+
+        menuItem.Click += (s, e) =>
+        {
+            try
+            {
+                var selectedItems = _listBox.SelectedItems;
+                if (selectedItems == null || selectedItems.Count == 0)
+                {
+                    Trace.WriteLine($"{itemName}: No items selected");
+                    return;
+                }
+
+                var itemsList = selectedItems.Cast<object>().ToList();
+                action?.Invoke(itemsList);
+                
+                Trace.WriteLine($"{itemName}: Executed on {itemsList.Count} items");
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"ERROR in {itemName}: {ex.Message}");
+            }
+        };
+
+        _listBox.ContextMenu.Items.Add(menuItem);
+        Trace.WriteLine($"AddContextMenuItem: Added '{itemName}' to context menu");
     }
 }
 
