@@ -20,13 +20,15 @@ public class BrowseControl : DockPanel
     public ListBoxBrowseView ListView { get; private set; }
     internal int[] _colWidths;
     public IEnumerable _query;
+    private Action<BrowseControlSelectionEventArgs> _selectionHandler;
 
-    public BrowseControl(IEnumerable query, int[] colWidths = null)
+    public BrowseControl(IEnumerable query, int[] colWidths = null, Action<BrowseControlSelectionEventArgs> selectionHandler = null)
     {
         try
         {
             _query = query;
             _colWidths = colWidths;
+            _selectionHandler = selectionHandler;
             
             this.LastChildFill = true;
             this.HorizontalAlignment = HorizontalAlignment.Stretch;
@@ -64,6 +66,11 @@ public class BrowseControl : DockPanel
             this.Children.Add(new TextBlock { Text = ex.ToString() });
             Trace.WriteLine($"BrowseControl: Exception: {ex}");
         }
+    }
+
+    internal void RaiseSelectionActivated(BrowseControlSelectionEventArgs args)
+    {
+        _selectionHandler?.Invoke(args);
     }
 }
 
@@ -208,7 +215,45 @@ public class ListBoxBrowseView : UserControl
 
         BuildVisualStructure();
         
+        // Set up selection activation handlers
+        SetupSelectionActivation(browseControl);
+        
         Trace.WriteLine($"ListBoxBrowseView: Created with {_columns.Count} columns, {_filteredItems.Count} items");
+    }
+
+    private void SetupSelectionActivation(BrowseControl browseControl)
+    {
+        // Handle double-click
+        _listBox.DoubleTapped += (s, e) =>
+        {
+            RaiseSelectionEvent(browseControl, BrowseControlActivationType.DoubleClick);
+        };
+
+        // Handle Enter key
+        _listBox.KeyDown += (s, e) =>
+        {
+            if (e.Key == Key.Enter && _listBox.SelectedItem != null)
+            {
+                RaiseSelectionEvent(browseControl, BrowseControlActivationType.EnterKey);
+                e.Handled = true;
+            }
+        };
+    }
+
+    private void RaiseSelectionEvent(BrowseControl browseControl, BrowseControlActivationType activationType)
+    {
+        if (_listBox.SelectedItem == null)
+            return;
+
+        var args = new BrowseControlSelectionEventArgs(
+            _listBox.SelectedItem,
+            _listBox.SelectedItems?.Cast<object>().ToList() ?? new List<object>(),
+            _listBox.SelectedIndex,
+            activationType
+        );
+        
+        browseControl.RaiseSelectionActivated(args);
+        Trace.WriteLine($"{activationType} on item at index {_listBox.SelectedIndex}");
     }
 
     private void BuildVisualStructure()
@@ -903,4 +948,48 @@ internal class ListBoxColumnInfo
     public string HeaderText { get; set; }
     public string BindingPath { get; set; }
     public int Width { get; set; }
+}
+
+
+/// <summary>
+/// Event arguments for BrowseControl selection events
+/// </summary>
+public class BrowseControlSelectionEventArgs : EventArgs
+{
+    /// <summary>
+    /// Gets the primary selected item (the item that was double-clicked or had Enter pressed)
+    /// </summary>
+    public object SelectedItem { get; }
+
+    /// <summary>
+    /// Gets all currently selected items
+    /// </summary>
+    public IList<object> SelectedItems { get; }
+
+    /// <summary>
+    /// Gets the index of the primary selected item
+    /// </summary>
+    public int SelectedIndex { get; }
+
+    /// <summary>
+    /// Gets the activation type (DoubleClick or EnterKey)
+    /// </summary>
+    public BrowseControlActivationType ActivationType { get; }
+
+    public BrowseControlSelectionEventArgs(object selectedItem, IList<object> selectedItems, int selectedIndex, BrowseControlActivationType activationType)
+    {
+        SelectedItem = selectedItem;
+        SelectedItems = selectedItems ?? new List<object>();
+        SelectedIndex = selectedIndex;
+        ActivationType = activationType;
+    }
+}
+
+/// <summary>
+/// Type of activation for the selection event
+/// </summary>
+public enum BrowseControlActivationType
+{
+    DoubleClick,
+    EnterKey
 }
