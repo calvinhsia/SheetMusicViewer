@@ -15,7 +15,7 @@ namespace AvaloniaTests.Tests;
 
 [TestClass]
 [DoNotParallelize]
-public class PdfViewerTests
+public class PdfViewerTests : TestBase
 {
     private static bool _avaloniaInitialized = false;
     private static readonly object _initLock = new object();
@@ -33,7 +33,7 @@ public class PdfViewerTests
             }
             catch (Exception ex)
             {
-                Trace.WriteLine(ex.Message);
+                LogMessage($"Exception: {ex.Message}");
             }
         });
     }
@@ -60,7 +60,7 @@ public class PdfViewerTests
             }
             catch (Exception ex)
             {
-                Trace.WriteLine($"UI thread error: {ex.Message}");
+                LogMessage($"UI thread error: {ex.Message}");
                 testCompleted.TrySetException(ex);
             }
         });
@@ -80,15 +80,15 @@ public class PdfViewerTests
             
             window.Closed += (s, e) =>
             {
-                Trace.WriteLine("Window closed by user or timer - completing test");
+                LogMessage("Window closed by user or timer - completing test");
                 testCompleted.TrySetResult(true);
                 lifetime.Shutdown();
             };
             
             window.Show();
             
-            Trace.WriteLine($"✓ PdfViewerWindow created and shown");
-            Trace.WriteLine($"✓ Window will close automatically after 10 seconds");
+            LogMessage($"✓ PdfViewerWindow created and shown");
+            LogMessage($"✓ Window will close automatically after 10 seconds");
             
             var delay = 10000;
             var timer = new System.Timers.Timer(delay);
@@ -97,7 +97,7 @@ public class PdfViewerTests
                 timer.Stop();
                 Dispatcher.UIThread.Post(() =>
                 {
-                    Trace.WriteLine("Closing PdfViewerWindow and shutting down test");
+                    LogMessage("Closing PdfViewerWindow and shutting down test");
                     window?.Close();
                 });
             };
@@ -113,7 +113,7 @@ public class PdfViewerTests
         var completedTask = await Task.WhenAny(testCompleted.Task, Task.Delay(15000));
         if (completedTask != testCompleted.Task)
         {
-            Trace.WriteLine("Test timed out - manually close the window to complete");
+            LogMessage("Test timed out - manually close the window to complete");
         }
         else
         {
@@ -122,10 +122,7 @@ public class PdfViewerTests
 
         uiThread.Join(2000);
         
-        if (!string.IsNullOrEmpty(pdfPath) && pdfPath.Contains(Path.GetTempPath()))
-        {
-            try { File.Delete(pdfPath); } catch { }
-        }
+        SafeDeleteFile(pdfPath);
         
         lock (_initLock)
         {
@@ -137,6 +134,9 @@ public class PdfViewerTests
     [TestCategory("Integration")]
     public async Task TestPdfViewerWindowLoadsAndDisplaysPdf()
     {
+        // Skip this test in CI environments where SkiaSharp native libraries may not be compatible
+        SkipIfCI("SkiaSharp native library compatibility issues. Run locally or as Manual test.");
+        
         // Check if Avalonia has already been initialized by a previous test
         lock (_initLock)
         {
@@ -171,14 +171,14 @@ public class PdfViewerTests
                     }
                     catch (InvalidOperationException ex) when (ex.Message.Contains("Setup was already called"))
                     {
-                        Trace.WriteLine("Avalonia already initialized - test cannot continue");
+                        LogMessage("Avalonia already initialized - test cannot continue");
                         testCompleted.TrySetResult(false);
                         return;
                     }
                 }
                 catch (Exception ex)
                 {
-                    Trace.WriteLine($"UI thread error: {ex.Message}");
+                    LogMessage($"UI thread error: {ex.Message}");
                     testCompleted.TrySetException(ex);
                 }
             });
@@ -192,15 +192,15 @@ public class PdfViewerTests
                 try
                 {
                     await window.TriggerLoadAsync();
-                    Trace.WriteLine("PDF load triggered successfully");
+                    LogMessage("PDF load triggered successfully");
                 }
                 catch (Exception ex)
                 {
-                    Trace.WriteLine($"Error triggering PDF load: {ex.Message}");
+                    LogMessage($"Error triggering PDF load: {ex.Message}");
                 }
 
                 var delay = 3000;
-                Trace.WriteLine($"Waiting {delay} ms before verification...");
+                LogMessage($"Waiting {delay} ms before verification...");
                 var timer = new System.Timers.Timer(delay);
                 timer.Elapsed += (s, e) =>
                 {
@@ -214,20 +214,19 @@ public class PdfViewerTests
                             Assert.IsTrue(window.PdfUIEnabled, "PDF UI should be enabled");
                             Assert.AreNotEqual(string.Empty, window.PdfTitle, "PDF title should be set");
                             
-                            Trace.WriteLine($"? Window created and shown");
-                            Trace.WriteLine($"? PDF file: {window.GetPdfFileName()}");
-                            Trace.WriteLine($"? Page count: {window.MaxPageNumberMinus1}");
-                            Trace.WriteLine($"? Page 0 description: {window.Description0}");
-                            Trace.WriteLine($"? Page 1 description: {window.Description1}");
+                            LogMessage($"✓ Window created and shown");
+                            LogMessage($"✓ PDF file: {window.GetPdfFileName()}");
+                            LogMessage($"✓ Page count: {window.MaxPageNumberMinus1}");
+                            LogMessage($"✓ Page 0 description: {window.Description0}");
+                            LogMessage($"✓ Page 1 description: {window.Description1}");
                             
                             if (!window.Description0.Contains("Error"))
                             {
-                                // Try to find dpPage control - in real implementation this would work
-                                Trace.WriteLine($"? PDF loaded successfully");
+                                LogMessage($"✓ PDF loaded successfully");
                             }
                             else
                             {
-                                Trace.WriteLine($"? PDF loading had errors: {window.Description0}");
+                                LogMessage($"⚠ PDF loading had errors: {window.Description0}");
                             }
                             
                             testCompleted.SetResult(true);
@@ -235,7 +234,7 @@ public class PdfViewerTests
                         }
                         catch (Exception ex)
                         {
-                            Trace.WriteLine($"Verification error: {ex.Message}");
+                            LogMessage($"Verification error: {ex.Message}");
                             testCompleted.SetException(ex);
                             lifetime.Shutdown();
                         }
@@ -272,10 +271,7 @@ public class PdfViewerTests
         }
         finally
         {
-            if (File.Exists(testPdfPath))
-            {
-                try { File.Delete(testPdfPath); } catch { }
-            }
+            SafeDeleteFile(testPdfPath);
         }
     }
 }

@@ -17,7 +17,7 @@ namespace AvaloniaTests.Tests;
 
 [TestClass]
 [DoNotParallelize]
-public class DataGridTests
+public class DataGridTests : TestBase
 {
     [TestMethod]
     [TestCategory("Manual")]
