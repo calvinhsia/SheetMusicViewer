@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -375,11 +375,11 @@ public class ListBoxBrowseView : UserControl
                 }
             }
             
-            Trace.WriteLine($"  ? Customized {customizedCount} visible containers");
+            Trace.WriteLine($"  ✓ Customized {customizedCount} visible containers");
             
             // Subscribe to EffectiveViewportChanged for scrolling
             _listBox.EffectiveViewportChanged += OnEffectiveViewportChanged;
-            Trace.WriteLine($"  ? Subscribed to EffectiveViewportChanged for dynamic customization");
+            Trace.WriteLine($"  ✓ Subscribed to EffectiveViewportChanged for dynamic customization");
         }
         catch (Exception ex)
         {
@@ -420,7 +420,7 @@ public class ListBoxBrowseView : UserControl
                     if (isToStringBefore)
                     {
                         toStringCount++;
-                        Trace.WriteLine($"  ?? Container {i}: WAS ToString ({contentBeforeType}), fixing now...");
+                        Trace.WriteLine($"  ⚠️ Container {i}: WAS ToString ({contentBeforeType}), fixing now...");
                     }
                     else if (isGridBefore)
                     {
@@ -886,7 +886,7 @@ public class ListBoxBrowseView : UserControl
                 var col = _columns[buttonIndex];
                 if (buttonIndex == sortedColumnIndex)
                 {
-                    btn.Content = $"{col.HeaderText} {(ascending ? "?" : "?")}";
+                    btn.Content = $"{col.HeaderText} {(ascending ? "↑" : "↓")}";
                 }
                 else
                 {
