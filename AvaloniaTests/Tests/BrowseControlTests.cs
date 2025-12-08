@@ -23,175 +23,67 @@ public class BrowseControlTests
     [TestCategory("Manual")]
     public async Task TestAvaloniaChooseMusicDialog()
     {
-        var testCompleted = new TaskCompletionSource<bool>();
-        var uiThread = new Thread(() =>
+        await AvaloniaTestHelper.RunAvaloniaTest(async (lifetime, testCompleted) =>
         {
-            try
-            {
-                TestAppConfigurations.ConfigureDefault();
-                AppBuilder.Configure<TestApp>()
-                    .UsePlatformDetect()
-                    .WithInterFont()
-                    .LogToTrace()
-                    .StartWithClassicDesktopLifetime(Array.Empty<string>());
-            }
-            catch (Exception ex)
-            {
-                Trace.WriteLine($"UI thread error: {ex.Message}");
-                testCompleted.TrySetException(ex);
-            }
-        });
+            var window = new ChooseMusicWindow();
+            lifetime.MainWindow = window;
+            window.Show();
+            
+            Trace.WriteLine($"? ChooseMusicWindow created and shown");
+            Trace.WriteLine($"? Generating bitmaps for books...");
 
-        TestApp.OnSetupWindow = async (app, lifetime) =>
-        {
-            try
+            await Task.Delay(1000);
+
+            var timer = new System.Timers.Timer(30000);
+            timer.Elapsed += (s, e) =>
             {
-                var window = new ChooseMusicWindow();
-                lifetime.MainWindow = window;
-                window.Show();
-                
-                Trace.WriteLine($"? ChooseMusicWindow created and shown");
-                Trace.WriteLine($"? Generating bitmaps for books...");
-
-                await Task.Delay(1000);
-
-                var timer = new System.Timers.Timer(30000);
-                timer.Elapsed += (s, e) =>
+                timer.Stop();
+                Dispatcher.UIThread.Post(() =>
                 {
-                    timer.Stop();
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        Trace.WriteLine("Closing ChooseMusicWindow");
-                        window?.Close();
-                        testCompleted.SetResult(true);
-                        lifetime.Shutdown();
-                    });
-                };
-                timer.Start();
-            }
-            catch (Exception ex)
-            {
-                Trace.WriteLine($"Error: {ex}");
-                testCompleted.SetException(ex);
-                lifetime.Shutdown();
-            }
-        };
-
-        if (OperatingSystem.IsWindows())
-        {
-            uiThread.SetApartmentState(ApartmentState.STA);
-        }
-        uiThread.Start();
-
-        var completedTask = await Task.WhenAny(testCompleted.Task, Task.Delay(35000));
-        if (completedTask != testCompleted.Task)
-        {
-            Trace.WriteLine("Test timed out - manually close the window to complete");
-        }
-        else
-        {
-            await testCompleted.Task;
-        }
-
-        uiThread.Join(2000);
+                    Trace.WriteLine("Closing ChooseMusicWindow");
+                    window?.Close();
+                    testCompleted.SetResult(true);
+                    lifetime.Shutdown();
+                });
+            };
+            timer.Start();
+        }, timeoutMs: 35000);
     }
 
     [TestMethod]
     [TestCategory("Manual")]
     public async Task TestAvaloniaDataGridBrowseList()
     {
-        var testCompleted = new TaskCompletionSource<bool>();
-        var uiThread = new Thread(() =>
+        await AvaloniaTestHelper.RunAvaloniaTest(async (lifetime, testCompleted) =>
         {
-            try
+            var window = new BrowseListWindow();
+            lifetime.MainWindow = window;
+            
+            window.Closed += (s, e) =>
             {
-                TestAppConfigurations.ConfigureDefault();
-                AppBuilder.Configure<TestApp>()
-                    .UsePlatformDetect()
-                    .WithInterFont()
-                    .LogToTrace()
-                    .StartWithClassicDesktopLifetime(Array.Empty<string>());
-            }
-            catch (Exception ex)
-            {
-                Trace.WriteLine($"UI thread error: {ex.Message}");
-                testCompleted.TrySetException(ex);
-            }
-        });
-
-        TestApp.OnSetupWindow = async (app, lifetime) =>
-        {
-            try
-            {
-                var window = new BrowseListWindow();
-                lifetime.MainWindow = window;
-                
-                window.Closed += (s, e) =>
-                {
-                    Trace.WriteLine("BrowseListWindow closed by user");
-                    testCompleted.TrySetResult(true);
-                    lifetime.Shutdown();
-                };
-                
-                window.Show();
-                
-                Trace.WriteLine($"? BrowseListWindow created and shown");
-                Trace.WriteLine($"? Loading types from Avalonia assemblies...");
-
-                await Task.Delay(100);
-            }
-            catch (Exception ex)
-            {
-                Trace.WriteLine($"Error: {ex}");
-                testCompleted.SetException(ex);
+                Trace.WriteLine("BrowseListWindow closed by user");
+                testCompleted.TrySetResult(true);
                 lifetime.Shutdown();
-            }
-        };
+            };
+            
+            window.Show();
+            
+            Trace.WriteLine($"? BrowseListWindow created and shown");
+            Trace.WriteLine($"? Loading types from Avalonia assemblies...");
 
-        if (OperatingSystem.IsWindows())
-        {
-            uiThread.SetApartmentState(ApartmentState.STA);
-        }
-        uiThread.Start();
-
-        await testCompleted.Task;
-        uiThread.Join(2000);
+            await Task.Delay(100);
+        });
     }
 
     [TestMethod]
     [TestCategory("Manual")]
     public async Task TestBrowseControlComparison()
     {
-        var testCompleted = new TaskCompletionSource<bool>();
-        var uiThread = new Thread(() =>
+        await AvaloniaTestHelper.RunAvaloniaTest(async (lifetime, testCompleted) =>
         {
-            try
-            {
-                TestAppConfigurations.ConfigureDefault();
-                AppBuilder.Configure<TestApp>()
-                    .UsePlatformDetect()
-                    .WithInterFont()
-                    .LogToTrace()
-                    .StartWithClassicDesktopLifetime(Array.Empty<string>());
-            }
-            catch (Exception ex)
-            {
-                Trace.WriteLine($"UI thread error: {ex.Message}");
-                testCompleted.TrySetException(ex);
-            }
-        });
+            await Task.Delay(1000);
 
-        if (OperatingSystem.IsWindows())
-        {
-            uiThread.SetApartmentState(ApartmentState.STA);
-        }
-        uiThread.Start();
-
-        await Task.Delay(1000);
-
-        await Dispatcher.UIThread.InvokeAsync(async () =>
-        {
-            try
+            await Dispatcher.UIThread.InvokeAsync(async () =>
             {
                 Trace.WriteLine("=== ListBoxBrowseControl Performance Test ===");
                 Trace.WriteLine("");
@@ -261,68 +153,20 @@ public class BrowseControlTests
                 
                 window.Close();
                 testCompleted.SetResult(true);
-                
-                if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lifetime)
-                {
-                    lifetime.Shutdown();
-                }
-            }
-            catch (Exception ex)
-            {
-                Trace.WriteLine($"Test error: {ex}");
-                testCompleted.SetException(ex);
-                
-                if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lifetime)
-                {
-                    lifetime.Shutdown();
-                }
-            }
+                lifetime.Shutdown();
+            });
         });
-
-        var completedTask = await Task.WhenAny(testCompleted.Task, Task.Delay(40000));
-        if (completedTask != testCompleted.Task)
-        {
-            Assert.Fail("Test timed out");
-        }
-
-        await testCompleted.Task;
-        uiThread.Join(2000);
     }
 
     [TestMethod]
     [TestCategory("Manual")]
     public async Task TestListBoxBrowseControl()
     {
-        var testCompleted = new TaskCompletionSource<bool>();
-        var uiThread = new Thread(() =>
+        await AvaloniaTestHelper.RunAvaloniaTest(async (lifetime, testCompleted) =>
         {
-            try
-            {
-                TestAppConfigurations.ConfigureDefault();
-                AppBuilder.Configure<TestApp>()
-                    .UsePlatformDetect()
-                    .WithInterFont()
-                    .LogToTrace()
-                    .StartWithClassicDesktopLifetime(Array.Empty<string>());
-            }
-            catch (Exception ex)
-            {
-                Trace.WriteLine($"UI thread error: {ex.Message}");
-                testCompleted.TrySetException(ex);
-            }
-        });
+            await Task.Delay(1000);
 
-        if (OperatingSystem.IsWindows())
-        {
-            uiThread.SetApartmentState(ApartmentState.STA);
-        }
-        uiThread.Start();
-
-        await Task.Delay(1000);
-
-        await Dispatcher.UIThread.InvokeAsync(async () =>
-        {
-            try
+            await Dispatcher.UIThread.InvokeAsync(async () =>
             {
                 Trace.WriteLine("=== ListBoxBrowseControl with 10,000 Items ===");
                 
@@ -369,20 +213,7 @@ public class BrowseControlTests
                 Trace.WriteLine($"? Creation time: {sw.ElapsedMilliseconds:n0} ms");
                 Trace.WriteLine($"? Memory: ~{memoryMB:n0} MB");
                 Trace.WriteLine("Close the window when finished testing.");
-            }
-            catch (Exception ex)
-            {
-                Trace.WriteLine($"Test error: {ex}");
-                testCompleted.SetException(ex);
-                
-                if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lifetime)
-                {
-                    lifetime.Shutdown();
-                }
-            }
+            });
         });
-
-        await testCompleted.Task;
-        uiThread.Join(2000);
     }
 }
