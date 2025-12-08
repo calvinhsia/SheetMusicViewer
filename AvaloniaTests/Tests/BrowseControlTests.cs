@@ -17,7 +17,7 @@ namespace AvaloniaTests.Tests;
 
 [TestClass]
 [DoNotParallelize]
-public class BrowseControlTests
+public class BrowseControlTests : TestBase
 {
     [TestMethod]
     [TestCategory("Manual")]
