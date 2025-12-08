@@ -86,3 +86,34 @@ public class TestBrowseListApp : Application
         base.OnFrameworkInitializationCompleted();
     }
 }
+
+// Test app for DataGrid demonstration
+public class TestDataGridApp : Application
+{
+    public static Func<Application, IClassicDesktopStyleApplicationLifetime, Task>? OnSetupWindow;
+    
+    public override void Initialize()
+    {
+        Styles.Add(new FluentTheme());
+        
+        // Add DataGrid styles
+        var dataGridStyles = new Avalonia.Markup.Xaml.Styling.StyleInclude(new Uri("avares://Avalonia.Controls.DataGrid/"))
+        {
+            Source = new Uri("avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml")
+        };
+        Styles.Add(dataGridStyles);
+    }
+    
+    public override void OnFrameworkInitializationCompleted()
+    {
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            if (OnSetupWindow != null)
+            {
+                _ = OnSetupWindow.Invoke(this, desktop);
+            }
+        }
+
+        base.OnFrameworkInitializationCompleted();
+    }
+}
