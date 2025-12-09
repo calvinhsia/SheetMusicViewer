@@ -21,7 +21,7 @@ public class BrowseControl : DockPanel
     internal int[] _colWidths;
     public IEnumerable _query;
 
-    public BrowseControl(IEnumerable query, int[] colWidths = null)
+    public BrowseControl(IEnumerable query, int[] colWidths)
     {
         try
         {
@@ -63,6 +63,7 @@ public class BrowseControl : DockPanel
         {
             this.Children.Add(new TextBlock { Text = ex.ToString() });
             Trace.WriteLine($"BrowseControl: Exception: {ex}");
+            throw;
         }
     }
 
@@ -179,15 +180,10 @@ public class ListBoxBrowseView : UserControl
         this._colWidths = browseControl._colWidths;
         this._originalQuery = query;
         
-        // Create collections
-        _allItems = new ObservableCollection<object>();
-        _filteredItems = new ObservableCollection<object>();
-        
-        foreach (var item in query)
-        {
-            _allItems.Add(item);
-            _filteredItems.Add(item);
-        }
+        // Optimize: Materialize once and use constructor for batch initialization
+        var itemsList = query.Cast<object>().ToList();
+        _allItems = new ObservableCollection<object>(itemsList);
+        _filteredItems = new ObservableCollection<object>(itemsList);
 
         // Analyze query type to build column info
         var ienum = query.GetType().GetInterface(typeof(IEnumerable<>).FullName);
