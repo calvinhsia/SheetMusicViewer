@@ -28,6 +28,33 @@ namespace SheetMusicViewer
     using PageNoBaseClassComparer = SheetMusicLib.PageNoBaseClassComparer;
 
     /// <summary>
+    /// WPF implementation of IPdfDocumentProvider using Windows.Data.Pdf
+    /// </summary>
+    public class WpfPdfDocumentProvider : IPdfDocumentProvider
+    {
+        public static readonly WpfPdfDocumentProvider Instance = new();
+
+        public async Task<int> GetPageCountAsync(string pdfFilePath)
+        {
+            var pdfDoc = await PdfMetaData.GetPdfDocumentForFileAsync(pdfFilePath);
+            return (int)pdfDoc.PageCount;
+        }
+    }
+
+    /// <summary>
+    /// WPF implementation of IExceptionHandler
+    /// </summary>
+    public class WpfExceptionHandler : IExceptionHandler
+    {
+        public static readonly WpfExceptionHandler Instance = new();
+
+        public void OnException(string context, Exception ex)
+        {
+            PdfViewerWindow.s_pdfViewerWindow?.OnException(context, ex);
+        }
+    }
+
+    /// <summary>
     /// The serialized info for a PDF is in a file with the same name as the PDF with the extension changed to ".bmk"
     /// Some PDFs are a series of scanned docs, numbered, e.g. 0,1,2,3...
     /// There will be a single .bmk for all volumes of a multi volume set series.
@@ -625,74 +652,57 @@ namespace SheetMusicViewer
         }
 
         public string PdfBmkMetadataFileName => Path.ChangeExtension(_FullPathFile, "bmk");
+
+        /// <summary>
+        /// Read PDF metadata from disk, using the portable core from SheetMusicLib
+        /// </summary>
         public static async Task<PdfMetaData> ReadPdfMetaDataAsync(string FullPathPdfFileOrSinglesFolder, bool IsSingles = false)
         {
-            PdfMetaData pdfFileData = null;
-            var bmkFile = Path.ChangeExtension(FullPathPdfFileOrSinglesFolder, "bmk");
-            if (File.Exists(bmkFile))
+            // Use the portable core to read metadata
+            var coreResult = await SheetMusicLib.PdfMetaDataCore.ReadPdfMetaDataAsync(
+                FullPathPdfFileOrSinglesFolder,
+                IsSingles,
+                WpfPdfDocumentProvider.Instance,
+                WpfExceptionHandler.Instance);
+
+            if (coreResult == null)
             {
-                try
-                {
-                    var serializer = new XmlSerializer(typeof(PdfMetaData));
-                    //                    var dtLastWriteTime = (new FileInfo(bmkFile)).LastWriteTime;
-                    using var sr = new StreamReader(bmkFile);
-                    pdfFileData = (PdfMetaData)serializer.Deserialize(sr);
-                    pdfFileData._FullPathFile = FullPathPdfFileOrSinglesFolder;
-                    //                        pdfFileData.dtLastWrite = dtLastWriteTime;
-                    if (pdfFileData.dtLastWrite.Year < 1900)
-                    {
-                        pdfFileData.dtLastWrite = (new FileInfo(bmkFile)).LastWriteTime;
-                    }
-                    pdfFileData.initialLastPageNo = pdfFileData.LastPageNo;
-                    pdfFileData.IsSinglesFolder = IsSingles;
-                    if (pdfFileData.lstVolInfo.Count == 0) // There should be at least one for each PDF in a series. If no series, there should be 1 for itself.
-                    {
-                        var doc = await GetPdfDocumentForFileAsync(FullPathPdfFileOrSinglesFolder);
-                        pdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
-                        {
-                            FileNameVolume = Path.GetFileName(FullPathPdfFileOrSinglesFolder),
-                            NPagesInThisVolume = (int)doc.PageCount,
-                            Rotation = 0
-                        });
-                        pdfFileData.IsDirty = true;
-                    }
-                    if (string.IsNullOrEmpty(pdfFileData.lstVolInfo[0].FileNameVolume))
-                    {
-                        pdfFileData.lstVolInfo[0].FileNameVolume = Path.GetFileName(FullPathPdfFileOrSinglesFolder); //temptemp
-                        pdfFileData.IsDirty = true;
-                    }
-                    if (pdfFileData.LastPageNo < pdfFileData.PageNumberOffset || pdfFileData.LastPageNo >= pdfFileData.MaxPageNum) // make sure lastpageno is in range
-                    {
-                        pdfFileData.LastPageNo = pdfFileData.PageNumberOffset; // go to first page
-                    }
-                }
-                catch (Exception ex)
-                {
-                    PdfViewerWindow.s_pdfViewerWindow?.OnException($"Reading {bmkFile}", ex);
-                    // we don't want to delete the file because the user might have valuable bookmarks/favorites.
-                    // let the user have an opportunity to fix it.
-                }
+                return null;
             }
-            else
+
+            // Convert the portable result to WPF-specific PdfMetaData
+            var pdfFileData = new PdfMetaData
             {
-                pdfFileData = new PdfMetaData()
+                _FullPathFile = coreResult.FullPathFile,
+                IsSinglesFolder = coreResult.IsSinglesFolder,
+                IsDirty = coreResult.IsDirty,
+                PageNumberOffset = coreResult.PageNumberOffset,
+                LastPageNo = coreResult.LastPageNo,
+                dtLastWrite = coreResult.LastWriteTime,
+                Notes = coreResult.Notes,
+                lstTocEntries = coreResult.TocEntries,
+                Favorites = coreResult.Favorites,
+                LstInkStrokes = coreResult.InkStrokes
+            };
+
+            pdfFileData.initialLastPageNo = pdfFileData.LastPageNo;
+
+            // Convert PdfVolumeInfoBase to WPF-specific PdfVolumeInfo
+            foreach (var volBase in coreResult.VolumeInfoList)
+            {
+                pdfFileData.lstVolInfo.Add(new PdfVolumeInfo
                 {
-                    _FullPathFile = FullPathPdfFileOrSinglesFolder,
-                    IsSinglesFolder = IsSingles,
-                    dtLastWrite = DateTime.Now,
-                    IsDirty = true
-                };
-                var doc = await GetPdfDocumentForFileAsync(FullPathPdfFileOrSinglesFolder);
-                pdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
-                {
-                    FileNameVolume = Path.GetFileName(FullPathPdfFileOrSinglesFolder),
-                    NPagesInThisVolume = (int)doc.PageCount,
-                    Rotation = 0
+                    FileNameVolume = volBase.FileNameVolume,
+                    NPagesInThisVolume = volBase.NPagesInThisVolume,
+                    Rotation = volBase.Rotation
                 });
             }
+
+            // Initialize dictionaries
             pdfFileData.InitializeDictToc(pdfFileData.lstTocEntries);
             pdfFileData.InitializeFavList();
             pdfFileData.InitializeInkStrokes();
+
             return pdfFileData;
         }
 
