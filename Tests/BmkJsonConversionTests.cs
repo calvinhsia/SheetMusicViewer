@@ -329,7 +329,6 @@ namespace Tests
         {
             await RunInSTAExecutionContextAsync(async () =>
             {
-                var folder = GetSheetMusicFolder();
                 /*
     C:\Users\calvinh\OneDrive\SheetMusic\Classical\Everybodys Favorite Piano Pieces.pdf 1,2
     C:\Users\calvinh\OneDrive\SheetMusic\Classical\Piano Pieces for the Adult Student.pdf 44
@@ -345,6 +344,7 @@ namespace Tests
     C:\Users\calvinh\OneDrive\SheetMusic\Ragtime\Collections\CharlesJohnsonSingles 24,132,282,283,447
     C:\Users\calvinh\OneDrive\SheetMusic\Ragtime\Singles 21,705,1176,1545
                  */
+                var folder = GetSheetMusicFolder();
                 var res = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(folder);
                 var bmkswithink = res.Item1.Where(x => x.dictInkStrokes.Count > 0);
                 foreach (var item in bmkswithink)

@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -86,6 +87,10 @@ public class BrowseControlTests : TestBase
     {
         await AvaloniaTestHelper.RunAvaloniaTest(async (lifetime, testCompleted) =>
         {
+            var username = Environment.UserName;
+            var folder = $@"C:\Users\{username}\OneDrive\SheetMusic";
+            // can't callbecause of WPF dependencies
+            //var res = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(folder);
             await Task.Delay(1000);
         });
     }
