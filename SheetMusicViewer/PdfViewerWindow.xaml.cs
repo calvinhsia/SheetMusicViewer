@@ -109,13 +109,16 @@ namespace SheetMusicViewer
             get { return _fShow2Pages; }
             set
             {
-                _fShow2Pages = value;
-                chkFav1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
-                chkInk1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
-                txtDesc1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
-                this.Dispatcher.InvokeAsync(async () => await ShowPageAsync(CurrentPageNumber, ClearCache: true, resetRenderTransform: true));
-                OnMyPropertyChanged();
-                OnMyPropertyChanged(nameof(NumPagesPerView));
+                if (_fShow2Pages != value)
+                {
+                    _fShow2Pages = value;
+                    chkFav1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
+                    chkInk1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
+                    txtDesc1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
+                    this.Dispatcher.InvokeAsync(async () => await ShowPageAsync(CurrentPageNumber, ClearCache: true, resetRenderTransform: true));
+                    OnMyPropertyChanged();
+                    OnMyPropertyChanged(nameof(NumPagesPerView));
+                }
             }
         }
         public int NumPagesPerView => _fShow2Pages ? 2 : 1;
@@ -133,7 +136,7 @@ namespace SheetMusicViewer
 
         internal PageCache _pageCache;
         internal IMessageBoxService _messageBoxService;
-        
+
         public PdfViewerWindow(string rootFolderForTesting, bool UseSettings)
         {
             this._RootMusicFolder = rootFolderForTesting;
@@ -152,10 +155,10 @@ namespace SheetMusicViewer
             _pageCache = new PageCache(this);
             _messageBoxService ??= new MessageBoxService(); // Use injected service or default
             this.DataContext = this;
-            
+
             // Initialize the ChooserCommand
             ChooserCommand = new RelayCommand(async _ => await ChooseMusic(), _ => true);
-            
+
             if (_UseSettings)
             {
                 this.Width = Properties.Settings.Default.MainWindowSize.Width;
@@ -534,13 +537,13 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             base.OnPreviewKeyDown(e);
             var elmWithFocus = Keyboard.FocusedElement;
             var isCtrlKeyDown = e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Control);
-            
+
             // Don't handle arrow keys if a menu is open - let the menu system handle it
             if (elmWithFocus is MenuItem || (elmWithFocus is FrameworkElement fe && fe.TemplatedParent is MenuItem))
             {
                 return;
             }
-            
+
             if (isCtrlKeyDown || elmWithFocus is not TextBox && elmWithFocus is not Slider) // tbx and slider should get the keystroke and process it 
             {
                 switch (e.Key)
@@ -896,11 +899,11 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                               $"Build Time: {BuildInfo.BuildTime}";
             _messageBoxService.Show(aboutMessage, "About", MessageBoxButton.OK);
         }
-        
+
         async void BtnConvertInkToJson_Click(object sender, RoutedEventArgs e)
         {
             TouchCount++;
-            
+
             try
             {
                 var result = _messageBoxService.Show(
@@ -909,16 +912,16 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     "Continue?",
                     "Convert BMK Files to JSON",
                     MessageBoxButton.YesNo);
-                
+
                 if (result != MessageBoxResult.Yes)
                     return;
-                
+
                 // Convert all BMK files to JSON format
                 var (total, converted) = BmkJsonConverter.ConvertAllBmksToJson(lstPdfMetaFileData);
-                
+
                 // Count how many had ink strokes
                 int bmksWithInk = lstPdfMetaFileData.Count(m => m.dictInkStrokes.Count > 0);
-                
+
                 // Show results
                 var message = $"Conversion complete!\n\n" +
                              $"Total BMKs processed: {total}\n" +
@@ -932,8 +935,9 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 _messageBoxService.Show($"Error converting BMK files:\n\n{ex.Message}", "Conversion Error", MessageBoxButton.OK);
             }
         }
-        
-        async void BtnInvCache_Click(object sender, RoutedEventArgs e) {
+
+        async void BtnInvCache_Click(object sender, RoutedEventArgs e)
+        {
             //Bug 43106054: PDF RenderToStreamAsync produces different results with same page https://microsoft.visualstudio.com/OS/_workitems/edit/43106054/  
             await ShowPageAsync(CurrentPageNumber, ClearCache: true, forceRedraw: true, resetRenderTransform: true);
         }
@@ -1089,7 +1093,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         void OnSliderValueChanged(object sender, RoutedEventArgs e)
         {
             // now get the title of the page
-            var title =$"{CurrentPageNumber} {currentPdfMetaData?.GetDescription(CurrentPageNumber)}";
+            var title = $"{CurrentPageNumber} {currentPdfMetaData?.GetDescription(CurrentPageNumber)}";
             tbSliderPopup.Text = title;
             if (!_DisableSliderValueChanged)
             {
