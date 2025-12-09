@@ -49,7 +49,7 @@ public class PdfViewerTests : TestBase
         }
 
         var testCompleted = new TaskCompletionSource<bool>();
-        PdfViewerWindow? window = null;
+        PdfWindow? window = null;
 
         var uiThread = new Thread(() =>
         {
@@ -67,11 +67,11 @@ public class PdfViewerTests : TestBase
 
         PdfViewerApp.OnSetupWindow = (app, lifetime) =>
         {
-            window = new PdfViewerWindow();
+            window = new PdfWindow();
             
             if (!string.IsNullOrEmpty(pdfPath))
             {
-                var field = typeof(PdfViewerWindow).GetField("_pdfFileName", 
+                var field = typeof(PdfWindow).GetField("_pdfFileName", 
                     BindingFlags.NonPublic | BindingFlags.Instance);
                 field?.SetValue(window, pdfPath);
             }
@@ -87,7 +87,7 @@ public class PdfViewerTests : TestBase
             
             window.Show();
             
-            LogMessage($"✓ PdfViewerWindow created and shown");
+            LogMessage($"✓ PdfWindow created and shown");
             LogMessage($"✓ Window will close automatically after 10 seconds");
             
             var delay = 10000;
@@ -97,7 +97,7 @@ public class PdfViewerTests : TestBase
                 timer.Stop();
                 Dispatcher.UIThread.Post(() =>
                 {
-                    LogMessage("Closing PdfViewerWindow and shutting down test");
+                    LogMessage("Closing PdfWindow and shutting down test");
                     window?.Close();
                 });
             };
@@ -152,7 +152,7 @@ public class PdfViewerTests : TestBase
         try
         {
             var testCompleted = new TaskCompletionSource<bool>();
-            var window = default(TestablePdfViewerWindow);
+            var window = default(TestablePdfWindow);
             
             var uiThread = new Thread(() =>
             {
@@ -185,7 +185,7 @@ public class PdfViewerTests : TestBase
             
             TestPdfViewerApp.OnSetupWindow = async (app, lifetime) =>
             {
-                window = new TestablePdfViewerWindow(testPdfPath);
+                window = new TestablePdfWindow(testPdfPath);
                 lifetime.MainWindow = window;
                 window.Show();
                 

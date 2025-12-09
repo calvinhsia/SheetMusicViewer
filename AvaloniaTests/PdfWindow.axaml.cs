@@ -13,7 +13,7 @@ using SkiaSharp;
 
 namespace AvaloniaTests;
 
-public partial class PdfViewerWindow : Window, INotifyPropertyChanged
+public partial class PdfWindow : Window, INotifyPropertyChanged
 {
     public new event PropertyChangedEventHandler? PropertyChanged;
 
@@ -30,7 +30,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private InkCanvasControl? _inkCanvas0;
     private InkCanvasControl? _inkCanvas1;
 
-    public PdfViewerWindow()
+    public PdfWindow()
     {
         InitializeComponent();
         DataContext = this;

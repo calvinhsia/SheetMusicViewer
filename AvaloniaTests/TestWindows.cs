@@ -9,17 +9,17 @@ using System.Threading.Tasks;
 
 namespace AvaloniaTests;
 
-// Testable version of PdfViewerWindow that exposes internal state and allows custom PDF path
-public class TestablePdfViewerWindow : PdfViewerWindow
+// Testable version of PdfWindow that exposes internal state and allows custom PDF path
+public class TestablePdfWindow : PdfWindow
 {
     private readonly string _customPdfPath;
 
-    public TestablePdfViewerWindow(string pdfPath) : base()
+    public TestablePdfWindow(string pdfPath) : base()
     {
         _customPdfPath = pdfPath;
         
         // Override the PDF file path using reflection BEFORE any initialization
-        var field = typeof(PdfViewerWindow).GetField("_pdfFileName", 
+        var field = typeof(PdfWindow).GetField("_pdfFileName", 
             BindingFlags.NonPublic | BindingFlags.Instance);
         if (field != null)
         {
@@ -34,13 +34,13 @@ public class TestablePdfViewerWindow : PdfViewerWindow
         MaxPageNumberMinus1 = 1; // Will be updated after PDF loads
         PdfUIEnabled = true;
         
-        Trace.WriteLine($"TestablePdfViewerWindow created with path: {pdfPath}");
+        Trace.WriteLine($"TestablePdfWindow created with path: {pdfPath}");
     }
 
     public string GetPdfFileName()
     {
         // Access the private field through reflection
-        var field = typeof(PdfViewerWindow).GetField("_pdfFileName", 
+        var field = typeof(PdfWindow).GetField("_pdfFileName", 
             BindingFlags.NonPublic | BindingFlags.Instance);
         var fileName = field?.GetValue(this) as string ?? string.Empty;
         Trace.WriteLine($"GetPdfFileName returning: {fileName}");
@@ -52,7 +52,7 @@ public class TestablePdfViewerWindow : PdfViewerWindow
         Trace.WriteLine($"TriggerLoadAsync called, file exists: {File.Exists(_customPdfPath)}");
         
         // Manually call the load method that would normally be triggered by Loaded event
-        var method = typeof(PdfViewerWindow).GetMethod("LoadAndDisplayPagesAsync",
+        var method = typeof(PdfWindow).GetMethod("LoadAndDisplayPagesAsync",
             BindingFlags.NonPublic | BindingFlags.Instance);
         
         if (method != null)
