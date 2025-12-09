@@ -7,9 +7,9 @@ using System.Threading.Tasks;
 namespace AvaloniaTests.Tests;
 
 /// <summary>
-/// Testable version of PdfViewerWindow that exposes internal properties for testing
+/// Testable version of PdfWindow that exposes internal properties for testing
 /// </summary>
-public class TestablePdfViewerWindow : Window
+public class TestablePdfWindow : Window
 {
     private string? _pdfFileName;
     private int _maxPageNumberMinus1;
@@ -18,7 +18,7 @@ public class TestablePdfViewerWindow : Window
     private string _pdfTitle = string.Empty;
     private bool _pdfUIEnabled;
 
-    public TestablePdfViewerWindow(string pdfFilePath)
+    public TestablePdfWindow(string pdfFilePath)
     {
         _pdfFileName = pdfFilePath;
         Title = "Testable PDF Viewer Window";
@@ -82,14 +82,14 @@ public class TestablePdfViewerWindow : Window
                 _description1 = $"Page 1 from {System.IO.Path.GetFileName(_pdfFileName)}";
                 _pdfUIEnabled = true;
                 
-                Trace.WriteLine($"TestablePdfViewerWindow: Simulated load of {_pdfFileName}");
+                Trace.WriteLine($"TestablePdfWindow: Simulated load of {_pdfFileName}");
             }
             catch (System.Exception ex)
             {
                 _description0 = $"Error loading PDF: {ex.Message}";
                 _description1 = string.Empty;
                 _pdfUIEnabled = false;
-                Trace.WriteLine($"TestablePdfViewerWindow error: {ex}");
+                Trace.WriteLine($"TestablePdfWindow error: {ex}");
             }
         }
         else
