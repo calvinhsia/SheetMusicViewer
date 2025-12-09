@@ -5,6 +5,8 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using PDFtoImage;
+using SheetMusicLib;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -15,6 +17,42 @@ using System.Threading;
 using System.Threading.Tasks;
 
 namespace AvaloniaTests.Tests;
+
+/// <summary>
+/// Avalonia implementation of IPdfDocumentProvider using PDFtoImage library
+/// </summary>
+public class AvaloniaPdfDocumentProvider : IPdfDocumentProvider
+{
+    public async Task<int> GetPageCountAsync(string pdfFilePath)
+    {
+        return await Task.Run(() =>
+        {
+            try
+            {
+                if (!File.Exists(pdfFilePath))
+                    return 0;
+                    
+                return Conversion.GetPageCount(pdfFilePath);
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"AvaloniaPdfDocumentProvider: Error getting page count for {pdfFilePath}: {ex.Message}");
+                return 0;
+            }
+        });
+    }
+}
+
+/// <summary>
+/// Simple exception handler that logs to Trace
+/// </summary>
+public class TraceExceptionHandler : IExceptionHandler
+{
+    public void OnException(string context, Exception ex)
+    {
+        Trace.WriteLine($"Exception in {context}: {ex.Message}");
+    }
+}
 
 [TestClass]
 [DoNotParallelize]
@@ -83,16 +121,79 @@ public class BrowseControlTests : TestBase
     }
     [TestMethod]
     [TestCategory("Manual")]
-    public async Task TestBroseControlWithRealPDFMetadata()
+    public async Task TestBrowseControlWithRealPDFMetadata()
     {
         await AvaloniaTestHelper.RunAvaloniaTest(async (lifetime, testCompleted) =>
         {
             var username = Environment.UserName;
             var folder = $@"C:\Users\{username}\OneDrive\SheetMusic";
-            // can't callbecause of WPF dependencies
-            //var res = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(folder);
-            await Task.Delay(1000);
-        });
+
+            if (!Directory.Exists(folder))
+            {
+                Trace.WriteLine($"? Folder not found: {folder}");
+                testCompleted.TrySetResult(true);
+                return;
+            }
+
+            Trace.WriteLine($"? Scanning folder: {folder}");
+
+            var pdfDocumentProvider = new AvaloniaPdfDocumentProvider();
+            var exceptionHandler = new TraceExceptionHandler();
+
+            var sw = Stopwatch.StartNew();
+            
+            // Use the portable LoadAllPdfMetaDataFromDiskAsync from SheetMusicLib
+            var (results, folders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+                folder,
+                pdfDocumentProvider,
+                exceptionHandler);
+            
+            sw.Stop();
+            Trace.WriteLine($"? Loaded {results.Count} metadata files from {folders.Count} folders in {sw.ElapsedMilliseconds}ms");
+
+            await Dispatcher.UIThread.InvokeAsync(async () =>
+            {
+                // Create a query with displayable properties
+                var query = results.Select(r => new
+                {
+                    Name = Path.GetFileNameWithoutExtension(r.FullPathFile),
+                    Pages = r.VolumeInfoList.Sum(v => v.NPagesInThisVolume),
+                    TOC = r.TocEntries.Count,
+                    Favorites = r.Favorites.Count,
+                    InkStrokes = r.InkStrokes.Count,
+                    Volumes = r.VolumeInfoList.Count,
+                    LastPage = r.LastPageNo,
+                    IsSingles = r.IsSinglesFolder,
+                    LastModified = r.LastWriteTime.ToString("yyyy-MM-dd HH:mm"),
+                    Path = r.FullPathFile
+                });
+
+                var browseControl = new BrowseControl(query, colWidths: new[] { 250, 60, 50, 70, 80, 70, 70, 70, 130, 400 });
+
+                var window = new Window
+                {
+                    Title = $"PDF Metadata Browser - {results.Count:n0} Items (SheetMusicLib)",
+                    Width = 1400,
+                    Height = 800,
+                    Content = browseControl,
+                    WindowStartupLocation = WindowStartupLocation.CenterScreen
+                };
+
+                window.Closed += AvaloniaTestHelper.CreateWindowClosedHandler(
+                    testCompleted,
+                    lifetime,
+                    "PDF Metadata Browser closed");
+
+                window.Show();
+
+                var memoryMB = GC.GetTotalMemory(false) / 1024 / 1024;
+                Trace.WriteLine($"? Window shown with {results.Count} items from {folders.Count} folders");
+                Trace.WriteLine($"? Memory: ~{memoryMB:n0} MB");
+                Trace.WriteLine("Close the window when finished testing.");
+
+                await Task.Delay(100);
+            });
+        }, timeoutMs: 120000);
     }
 
     [TestMethod]
