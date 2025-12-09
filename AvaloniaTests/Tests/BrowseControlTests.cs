@@ -80,6 +80,15 @@ public class BrowseControlTests : TestBase
             await Task.Delay(100);
         });
     }
+    [TestMethod]
+    [TestCategory("Manual")]
+    public async Task TestBroseControlWithRealPDFMetadata()
+    {
+        await AvaloniaTestHelper.RunAvaloniaTest(async (lifetime, testCompleted) =>
+        {
+            await Task.Delay(1000);
+        });
+    }
 
     [TestMethod]
     [TestCategory("Manual")]
