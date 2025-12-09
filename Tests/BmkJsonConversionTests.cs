@@ -2,6 +2,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SheetMusicViewer;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -58,7 +59,7 @@ namespace Tests
                 Notes = "Test notes for the book",
                 IsSinglesFolder = false
             };
-            
+
             metadata.lstVolInfo.Add(new PdfVolumeInfo
             {
                 FileNameVolume = Path.GetFileName(testPdfPath),
@@ -121,7 +122,7 @@ namespace Tests
             await RunInSTAExecutionContextAsync(async () =>
             {
                 await Task.Yield();
-                
+
                 // Arrange - Create metadata with all types of data
                 var metadata = new PdfMetaData
                 {
@@ -129,7 +130,7 @@ namespace Tests
                     PageNumberOffset = 0,
                     Notes = "Integration test book"
                 };
-                
+
                 metadata.lstVolInfo.Add(new PdfVolumeInfo
                 {
                     FileNameVolume = Path.GetFileName(testPdfPath),
@@ -143,7 +144,7 @@ namespace Tests
                     Composer = "Composer A",
                     PageNo = 0
                 });
-                
+
                 metadata.lstTocEntries.Add(new TOCEntry
                 {
                     SongName = "Test Song 2",
@@ -240,7 +241,7 @@ namespace Tests
                 NPagesInThisVolume = 1,
                 Rotation = 0
             });
-            
+
             // Save in XML format (simulating old format)
             metadata.SaveIfDirty(ForceDirty: true);
             var bmkPath = Path.ChangeExtension(testPdfPath, ".bmk");
@@ -329,24 +330,28 @@ namespace Tests
             await RunInSTAExecutionContextAsync(async () =>
             {
                 var folder = GetSheetMusicFolder();
-                var bmkFiles = Directory.GetFiles(folder, "*.bmk", SearchOption.AllDirectories);
-                var cntBmkWithStrokes = bmkFiles.Count(bmkPath =>
+                /*
+    C:\Users\calvinh\OneDrive\SheetMusic\Classical\Everybodys Favorite Piano Pieces.pdf 1,2
+    C:\Users\calvinh\OneDrive\SheetMusic\Classical\Piano Pieces for the Adult Student.pdf 44
+    C:\Users\calvinh\OneDrive\SheetMusic\Classical\Tchaikovsky The Nutcracker Suite.pdf 2
+    C:\Users\calvinh\OneDrive\SheetMusic\FakeBooks\The Best Fake Book Ever0.pdf 72,397,416
+    C:\Users\calvinh\OneDrive\SheetMusic\FakeBooks\The Movie Fake Book0.pdf 363
+    C:\Users\calvinh\OneDrive\SheetMusic\Pop\150 of the Most Beautiful Songs Ever 0.pdf 269
+    C:\Users\calvinh\OneDrive\SheetMusic\Pop\Songs of the Sixties.pdf 16
+    C:\Users\calvinh\OneDrive\SheetMusic\Pop\The American Treasury of Popular Movie Songs.pdf 17
+    C:\Users\calvinh\OneDrive\SheetMusic\Ragtime\Collections\Ragtime & Early Blues Piano0.pdf 25,158
+    C:\Users\calvinh\OneDrive\SheetMusic\Ragtime\Collections\Ragtime Jubilee.pdf 67
+    C:\Users\calvinh\OneDrive\SheetMusic\Ragtime\Collections\The Music of James Scott.pdf 68,80,102
+    C:\Users\calvinh\OneDrive\SheetMusic\Ragtime\Collections\CharlesJohnsonSingles 24,132,282,283,447
+    C:\Users\calvinh\OneDrive\SheetMusic\Ragtime\Singles 21,705,1176,1545
+                 */
+                var res = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(folder);
+                var bmkswithink = res.Item1.Where(x => x.dictInkStrokes.Count > 0);
+                foreach (var item in bmkswithink)
                 {
-                    try
-                    {
-                        if (BmkJsonConverter.IsJsonFormat(bmkPath))
-                        {
-                            var pdfPath = Path.ChangeExtension(bmkPath, ".pdf");
-                            var metadata = BmkJsonConverter.LoadFromJson(bmkPath, pdfPath, isSinglesFolder: false);
-                            return metadata.dictInkStrokes.Count > 0;
-                        }
-                    }
-                    catch (Exception)
-                    {
-                        // Ignore errors
-                    }
-                    return false;
-                });
+                    Trace.WriteLine(item._FullPathFile + " " + string.Join(',', item.dictInkStrokes.Keys));
+
+                }
 
             });
         }
