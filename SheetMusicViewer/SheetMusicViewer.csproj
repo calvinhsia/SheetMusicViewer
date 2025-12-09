@@ -71,7 +71,18 @@ https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/desktop-to-uwp-
 
   <!-- Generate BuildInfo in obj folder (not source controlled) -->
   <Target Name="GenerateBuildInfo" BeforeTargets="BeforeCompile;MarkupCompilePass1">
-    <Exec Command="git rev-parse --abbrev-ref HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true">
+    <!-- Try git from PATH first -->
+    <Exec Command="git rev-parse --abbrev-ref HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="low" IgnoreStandardErrorWarningFormat="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitBranchName" />
+    </Exec>
+    
+    <!-- Fallback: Try Visual Studio's bundled git if PATH git failed -->
+    <Exec Command="&quot;$(DevEnvDir)CommonExtensions\Microsoft\TeamFoundation\Team Explorer\Git\cmd\git.exe&quot; rev-parse --abbrev-ref HEAD" 
+          ConsoleToMSBuild="true" 
+          IgnoreExitCode="true" 
+          StandardErrorImportance="low" 
+          IgnoreStandardErrorWarningFormat="true"
+          Condition="'$(GitBranchName)' == '' OR $(GitBranchName.Contains('not recognized')) OR $(GitBranchName.Contains('is not'))">
       <Output TaskParameter="ConsoleOutput" PropertyName="GitBranchName" />
     </Exec>
     
@@ -81,6 +92,10 @@ https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/desktop-to-uwp-
     </GetPacificTime>
     
     <PropertyGroup>
+      <!-- Reset GitBranchName if it contains error messages (git not available) -->
+      <GitBranchName Condition="$(GitBranchName.Contains('not recognized'))">unknown</GitBranchName>
+      <GitBranchName Condition="$(GitBranchName.Contains('is not'))">unknown</GitBranchName>
+      <GitBranchName Condition="$(GitBranchName.Contains('fatal:'))">unknown</GitBranchName>
       <!-- Fallback to environment variables if git returns HEAD (detached HEAD in CI) -->
       <GitBranchName Condition="'$(GitBranchName)' == 'HEAD' AND '$(GITHUB_REF_NAME)' != ''">$(GITHUB_REF_NAME)</GitBranchName>
       <GitBranchName Condition="'$(GitBranchName)' == 'HEAD' AND '$(BUILD_SOURCEBRANCHNAME)' != ''">$(BUILD_SOURCEBRANCHNAME)</GitBranchName>
