@@ -18,6 +18,7 @@
     <PackageReference Include="PDFium.x64" Version="4648.0.0" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\SheetMusicLib\SheetMusicLib.csproj" />
     <ProjectReference Include="..\SheetMusicViewer\SheetMusicViewer.csproj" />
   </ItemGroup>
 </Project>

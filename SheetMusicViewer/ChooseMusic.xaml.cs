@@ -11,6 +11,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using SheetMusicLib;
 
 namespace SheetMusicViewer
 {
@@ -563,7 +564,7 @@ namespace SheetMusicViewer
         }
         private void WrapPanel_ManipulationDelta(object sender, ManipulationDeltaEventArgs e)
         {
-            //this just gets the source. 
+            //thisjust gets the source. 
             // I cast it to FE because I wanted to use ActualWidth for Center. You could try RenderSize as alternate
             if (e.Source is FrameworkElement element)
             {
@@ -574,7 +575,7 @@ namespace SheetMusicViewer
 
                 var deltaManipulation = e.DeltaManipulation;
                 var matrix = ((MatrixTransform)element.RenderTransform).Matrix;
-                // find the old center; arguaby this could be cached 
+                // find the old center; arguably this could be cached 
                 Point center = new(element.ActualWidth / 2, element.ActualHeight / 2);
                 // transform it to take into account transforms from previous manipulations 
                 center = matrix.Transform(center);

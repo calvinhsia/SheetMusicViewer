@@ -14,9 +14,19 @@ using System.Xml.Serialization;
 using Windows.Data.Pdf;
 using Windows.Storage;
 using Windows.Storage.Streams;
+using SheetMusicLib;
 
 namespace SheetMusicViewer
 {
+    // Re-export types from SheetMusicLib for backward compatibility
+    // These using directives make the types available without fully qualifying
+    using TOCEntry = SheetMusicLib.TOCEntry;
+    using Favorite = SheetMusicLib.Favorite;
+    using InkStrokeClass = SheetMusicLib.InkStrokeClass;
+    using PageNoBaseClass = SheetMusicLib.PageNoBaseClass;
+    using TocEntryComparer = SheetMusicLib.TocEntryComparer;
+    using PageNoBaseClassComparer = SheetMusicLib.PageNoBaseClassComparer;
+
     /// <summary>
     /// The serialized info for a PDF is in a file with the same name as the PDF with the extension changed to ".bmk"
     /// Some PDFs are a series of scanned docs, numbered, e.g. 0,1,2,3...
@@ -1068,108 +1078,19 @@ namespace SheetMusicViewer
             return string.Compare(x.FileNameVolume, y.FileNameVolume);
         }
     }
-    public class TocEntryComparer : IComparer<TOCEntry>
-    {
-        public int Compare(TOCEntry x, TOCEntry y)
-        {
-            return string.Compare(x.SongName, y.SongName);
-        }
-    }
 
-    public class PageNoBaseClassComparer : IComparer<PageNoBaseClass>
-    {
-        public int Compare(PageNoBaseClass x, PageNoBaseClass y)
-        {
-            return x.Pageno == y.Pageno ? 0 : (x.Pageno < y.Pageno ? -1 : 1);
-        }
-    }
-
+    /// <summary>
+    /// WPF-specific PDF volume info with Task for async document loading
+    /// </summary>
     [Serializable]
-    public class PdfVolumeInfo
+    public class PdfVolumeInfo : PdfVolumeInfoBase
     {
-        /// <summary>
-        /// The num PDF pages in this PDF file
-        /// </summary>
-        [XmlElement("NPages")]
-        public int NPagesInThisVolume;
-        /*Normal = 0,Rotate90 = 1,Rotate180 = 2,Rotate270 = 3*/
-        public int Rotation;
         [XmlIgnore]
         public Task<PdfDocument> TaskPdfDocument;
-
-        [XmlElement("FileName")]
-        /// <summary>
-        /// the JustFilename (with extension) Can't be rel to rootfolder: user could change rootfolder to folder inside, so must be rel to fullpath: needs to be portable from machine to machine) path filename for the PDF document
-        /// </summary>
-        public string FileNameVolume;
 
         public override string ToString()
         {
             return $"{FileNameVolume} #Pgs={NPagesInThisVolume,4} Rotation={(Rotation)Rotation}";
-        }
-    }
-
-    public class PageNoBaseClass
-    {
-        public int Pageno { get; set; }
-    }
-
-    [Serializable]
-    public class Favorite : PageNoBaseClass //: ICloneable
-    {
-        public string FavoriteName { get; set; }
-
-        //public object Clone()
-        //{
-        //    return new Favorite()
-        //    {
-        //        FavoriteName = this.FavoriteName,
-        //        Pageno = this.Pageno
-        //    };
-        //}
-
-        public override string ToString()
-        {
-            return $"{FavoriteName} {Pageno}".Trim();
-        }
-    }
-
-    [Serializable]
-    public class InkStrokeClass : PageNoBaseClass
-    {
-        public Point InkStrokeDimension;
-        public byte[] StrokeData { get; set; }
-    }
-
-    /// <summary>
-    /// Not really bookmark: Table of Contents Entry
-    /// </summary>
-    [Serializable]
-    public class TOCEntry : ICloneable
-    {
-        public string SongName { get; set; }
-        public string Composer { get; set; }
-        public string Notes { get; set; }
-        /// <summary>
-        /// Composition Date
-        /// </summary>
-        public string Date { get; set; }
-        public int PageNo { get; set; }
-        public object Clone()
-        {
-            return new TOCEntry()
-            {
-                SongName = this.SongName,
-                Composer = this.Composer,
-                Notes = this.Notes,
-                Date = this.Date,
-                PageNo = this.PageNo
-            };
-        }
-
-        public override string ToString()
-        {
-            return $"{PageNo} {SongName} {Composer} {Date} {Notes}".Trim();
         }
     }
 }
