@@ -1,4 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SheetMusicLib;
 using SheetMusicViewer;
 using System;
 using System.Collections.Generic;
@@ -456,7 +457,7 @@ namespace Tests
                     var inkData = new InkStrokeClass
                     {
                         Pageno = 0,
-                        InkStrokeDimension = new Point(800, 600),
+                        InkStrokeDimension = new PortablePoint(800, 600),
                         StrokeData = ms.ToArray()
                     };
                     metadata.dictInkStrokes[0] = inkData;
@@ -513,10 +514,10 @@ namespace Tests
             {
                 Color = "#0000FF",
                 Thickness = 2.0,
-                Points = new List<PortablePoint>
+                Points = new List<PortableInkPoint>
                 {
-                    new PortablePoint { X = 20, Y = 20 },
-                    new PortablePoint { X = 200, Y = 200 }
+                    new PortableInkPoint { X = 20, Y = 20 },
+                    new PortableInkPoint { X = 200, Y = 200 }
                 }
             });
 
@@ -528,7 +529,7 @@ namespace Tests
             var inkData = new InkStrokeClass
             {
                 Pageno = 0,
-                InkStrokeDimension = new Point(800, 600),
+                InkStrokeDimension = new PortablePoint(800, 600),
                 StrokeData = System.Text.Encoding.UTF8.GetBytes(json)
             };
             metadata.dictInkStrokes[0] = inkData;
@@ -578,7 +579,7 @@ namespace Tests
                     metadata.dictInkStrokes[0] = new InkStrokeClass
                     {
                         Pageno = 0,
-                        InkStrokeDimension = new Point(800, 600),
+                        InkStrokeDimension = new PortablePoint(800, 600),
                         StrokeData = ms.ToArray()
                     };
                 }

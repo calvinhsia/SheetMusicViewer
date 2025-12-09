@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Ink;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using SheetMusicLib;
 
 namespace SheetMusicViewer
 {
@@ -243,7 +244,7 @@ namespace SheetMusicViewer
                         var inkstrokeClass = new InkStrokeClass()
                         {
                             Pageno = _PgNo,
-                            InkStrokeDimension = new Point(this.Width, this.Height),
+                            InkStrokeDimension = new PortablePoint(this.Width, this.Height),
                             StrokeData = strm.GetBuffer()
                         };
                         _pdfViewerWindow.currentPdfMetaData.dictInkStrokes[_PgNo] = inkstrokeClass;

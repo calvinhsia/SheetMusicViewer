@@ -1,4 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SheetMusicLib;
 using SheetMusicViewer;
 using System;
 using System.Collections.Generic;
@@ -171,7 +172,7 @@ namespace Tests
                     metadata.dictInkStrokes[0] = new InkStrokeClass
                     {
                         Pageno = 0,
-                        InkStrokeDimension = new Point(800, 600),
+                        InkStrokeDimension = new PortablePoint(800, 600),
                         StrokeData = ms.ToArray()
                     };
                 }

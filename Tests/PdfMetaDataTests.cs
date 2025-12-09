@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SheetMusicLib;
 using SheetMusicViewer;
 using Windows.Data.Pdf;
 using Windows.Storage;

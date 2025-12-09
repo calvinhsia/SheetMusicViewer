@@ -1,174 +1,22 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text;
 using System.Windows;
 using System.Windows.Ink;
 using System.Windows.Media;
+using SheetMusicLib;
 
 namespace SheetMusicViewer
 {
-    #region Portable Ink Stroke Format Classes
-    
     /// <summary>
-    /// Portable ink stroke format for cross-platform compatibility
-    /// </summary>
-    public class PortableInkStroke
-    {
-        [JsonPropertyName("points")]
-        public List<PortablePoint> Points { get; set; } = new();
-        
-        [JsonPropertyName("color")]
-        public string Color { get; set; } = "#000000";
-        
-        [JsonPropertyName("thickness")]
-        public double Thickness { get; set; } = 2.0;
-        
-        [JsonPropertyName("isHighlighter")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-        public bool IsHighlighter { get; set; }
-        
-        [JsonPropertyName("opacity")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-        public double Opacity { get; set; } = 1.0;
-    }
-
-    public class PortablePoint
-    {
-        [JsonPropertyName("x")]
-        public double X { get; set; }
-        
-        [JsonPropertyName("y")]
-        public double Y { get; set; }
-    }
-
-    /// <summary>
-    /// Portable ink stroke collection with dimension info for scaling
-    /// </summary>
-    public class PortableInkStrokeCollection
-    {
-        [JsonPropertyName("strokes")]
-        public List<PortableInkStroke> Strokes { get; set; } = new();
-        
-        [JsonPropertyName("canvasWidth")]
-        public double CanvasWidth { get; set; }
-        
-        [JsonPropertyName("canvasHeight")]
-        public double CanvasHeight { get; set; }
-    }
-    
-    #endregion
-
-    #region BMK JSON Format Classes
-    
-    /// <summary>
-    /// JSON-based BMK format for cross-platform compatibility
-    /// Replaces XML serialization with JSON
-    /// </summary>
-    public class BmkJsonFormat
-    {
-        [JsonPropertyName("version")]
-        public int Version { get; set; } = 1;
-        
-        [JsonPropertyName("lastWrite")]
-        public DateTime LastWrite { get; set; }
-        
-        [JsonPropertyName("lastPageNo")]
-        public int LastPageNo { get; set; }
-        
-        [JsonPropertyName("pageNumberOffset")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-        public int PageNumberOffset { get; set; }
-        
-        [JsonPropertyName("notes")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public string Notes { get; set; }
-        
-        [JsonPropertyName("volumes")]
-        public List<JsonPdfVolumeInfo> Volumes { get; set; } = new();
-        
-        [JsonPropertyName("tableOfContents")]
-        public List<JsonTOCEntry> TableOfContents { get; set; } = new();
-        
-        [JsonPropertyName("favorites")]
-        public List<JsonFavorite> Favorites { get; set; } = new();
-        
-        [JsonPropertyName("inkStrokes")]
-        public Dictionary<int, JsonInkStrokes> InkStrokes { get; set; } = new();
-    }
-
-    public class JsonPdfVolumeInfo
-    {
-        [JsonPropertyName("fileName")]
-        public string FileName { get; set; }
-        
-        [JsonPropertyName("pageCount")]
-        public int PageCount { get; set; }
-        
-        [JsonPropertyName("rotation")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-        public int Rotation { get; set; }
-    }
-
-    public class JsonTOCEntry
-    {
-        [JsonPropertyName("songName")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public string SongName { get; set; }
-        
-        [JsonPropertyName("composer")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public string Composer { get; set; }
-        
-        [JsonPropertyName("date")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public string Date { get; set; }
-        
-        [JsonPropertyName("notes")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public string Notes { get; set; }
-        
-        [JsonPropertyName("pageNo")]
-        public int PageNo { get; set; }
-    }
-
-    public class JsonFavorite
-    {
-        [JsonPropertyName("pageNo")]
-        public int PageNo { get; set; }
-        
-        [JsonPropertyName("name")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public string Name { get; set; }
-    }
-
-    public class JsonInkStrokes
-    {
-        [JsonPropertyName("pageNo")]
-        public int PageNo { get; set; }
-        
-        [JsonPropertyName("canvasWidth")]
-        public double CanvasWidth { get; set; }
-        
-        [JsonPropertyName("canvasHeight")]
-        public double CanvasHeight { get; set; }
-        
-        [JsonPropertyName("strokes")]
-        public List<PortableInkStroke> Strokes { get; set; } = new();
-    }
-    
-    #endregion
-
-    /// <summary>
-    /// Unified converter for BMK format (XML to JSON) and Ink Strokes (ISF to JSON)
-    /// Consolidates all conversion logic in one place
+    /// WPF-specific converter for BMK format (XML to JSON) and Ink Strokes (ISF to JSON).
+    /// Uses portable types from SheetMusicLib for cross-platform data.
     /// </summary>
     public static class BmkJsonConverter
     {
-        #region Ink Stroke Conversion (ISF ? JSON)
-        
+        #region Ink Stroke Conversion (ISF ? Portable JSON)
+
         /// <summary>
         /// Convert WPF StrokeCollection (ISF format) to portable JSON format
         /// </summary>
@@ -183,7 +31,7 @@ namespace SheetMusicViewer
             {
                 using var stream = new MemoryStream(isfData);
                 var strokeCollection = new StrokeCollection(stream);
-                
+
                 var portable = new PortableInkStrokeCollection
                 {
                     CanvasWidth = canvasDimension.X,
@@ -207,7 +55,7 @@ namespace SheetMusicViewer
                     var points = stroke.StylusPoints;
                     foreach (var point in points)
                     {
-                        portableStroke.Points.Add(new PortablePoint
+                        portableStroke.Points.Add(new PortableInkPoint
                         {
                             X = point.X,
                             Y = point.Y
@@ -287,43 +135,6 @@ namespace SheetMusicViewer
         }
 
         /// <summary>
-        /// Serialize portable ink strokes to JSON
-        /// </summary>
-        private static string SerializeInkToJson(PortableInkStrokeCollection portableStrokes)
-        {
-            if (portableStrokes == null)
-            {
-                return null;
-            }
-
-            var options = new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-            };
-
-            return JsonSerializer.Serialize(portableStrokes, options);
-        }
-
-        /// <summary>
-        /// Deserialize JSON to portable ink strokes
-        /// </summary>
-        private static PortableInkStrokeCollection DeserializeInkFromJson(string json)
-        {
-            if (string.IsNullOrWhiteSpace(json))
-            {
-                return null;
-            }
-
-            var options = new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true // Allow case variations
-            };
-
-            return JsonSerializer.Deserialize<PortableInkStrokeCollection>(json, options);
-        }
-
-        /// <summary>
         /// Convert all ink strokes in a PdfMetaData from ISF to JSON
         /// Returns the number of pages with ink that were converted
         /// </summary>
@@ -340,25 +151,25 @@ namespace SheetMusicViewer
                 // Check if already in JSON format (starts with '{')
                 if (inkStroke.StrokeData != null && inkStroke.StrokeData.Length > 0)
                 {
-                    var firstByte = inkStroke.StrokeData[0];
-                    if (firstByte == '{') // Already JSON
+                    if (BmkJsonSerializer.IsJsonFormat(inkStroke.StrokeData))
                     {
                         updatedInkStrokes[pageNo] = inkStroke;
                         continue;
                     }
 
                     // Convert from ISF to portable format
-                    var portable = ConvertWpfToPortable(inkStroke.StrokeData, inkStroke.InkStrokeDimension);
+                    var wpfDimension = new Point(inkStroke.InkStrokeDimension.X, inkStroke.InkStrokeDimension.Y);
+                    var portable = ConvertWpfToPortable(inkStroke.StrokeData, wpfDimension);
                     if (portable != null)
                     {
-                        var json = SerializeInkToJson(portable);
+                        var json = BmkJsonSerializer.SerializeInk(portable);
                         if (!string.IsNullOrEmpty(json))
                         {
                             var newInkStroke = new InkStrokeClass
                             {
                                 Pageno = pageNo,
                                 InkStrokeDimension = inkStroke.InkStrokeDimension,
-                                StrokeData = System.Text.Encoding.UTF8.GetBytes(json)
+                                StrokeData = Encoding.UTF8.GetBytes(json)
                             };
                             updatedInkStrokes[pageNo] = newInkStroke;
                             convertedCount++;
@@ -380,11 +191,11 @@ namespace SheetMusicViewer
 
             return convertedCount;
         }
-        
+
         #endregion
 
         #region BMK Conversion (XML ? JSON)
-        
+
         /// <summary>
         /// Convert PdfMetaData (XML format) to JSON format
         /// </summary>
@@ -440,20 +251,18 @@ namespace SheetMusicViewer
 
                 // Check if already in JSON format or ISF
                 PortableInkStrokeCollection portableStrokes = null;
-                
+
                 if (inkStroke.StrokeData != null && inkStroke.StrokeData.Length > 0)
                 {
-                    var firstByte = inkStroke.StrokeData[0];
-                    if (firstByte == '{') // Already JSON
+                    if (BmkJsonSerializer.IsJsonFormat(inkStroke.StrokeData))
                     {
-                        var jsonText = System.Text.Encoding.UTF8.GetString(inkStroke.StrokeData);
-                        portableStrokes = DeserializeInkFromJson(jsonText);
+                        var jsonText = Encoding.UTF8.GetString(inkStroke.StrokeData);
+                        portableStrokes = BmkJsonSerializer.DeserializeInk(jsonText);
                     }
                     else // ISF format - convert it
                     {
-                        portableStrokes = ConvertWpfToPortable(
-                            inkStroke.StrokeData, 
-                            inkStroke.InkStrokeDimension);
+                        var wpfDimension = new Point(inkStroke.InkStrokeDimension.X, inkStroke.InkStrokeDimension.Y);
+                        portableStrokes = ConvertWpfToPortable(inkStroke.StrokeData, wpfDimension);
                     }
 
                     if (portableStrokes != null)
@@ -522,8 +331,8 @@ namespace SheetMusicViewer
                     Pageno = fav.PageNo,
                     FavoriteName = fav.Name
                 };
-                metadata.Favorites.Add(favorite); // Add to list for serialization
-                metadata.dictFav[fav.PageNo] = favorite; // Add to dict for runtime use
+                metadata.Favorites.Add(favorite);
+                metadata.dictFav[fav.PageNo] = favorite;
             }
 
             // Convert ink strokes - keep as portable JSON format
@@ -536,15 +345,15 @@ namespace SheetMusicViewer
                     Strokes = kvp.Value.Strokes
                 };
 
-                var jsonText = SerializeInkToJson(portableStrokes);
+                var jsonText = BmkJsonSerializer.SerializeInk(portableStrokes);
                 var inkStroke = new InkStrokeClass
                 {
                     Pageno = kvp.Key,
-                    InkStrokeDimension = new Point(kvp.Value.CanvasWidth, kvp.Value.CanvasHeight),
-                    StrokeData = System.Text.Encoding.UTF8.GetBytes(jsonText)
+                    InkStrokeDimension = new PortablePoint(kvp.Value.CanvasWidth, kvp.Value.CanvasHeight),
+                    StrokeData = Encoding.UTF8.GetBytes(jsonText)
                 };
-                metadata.LstInkStrokes.Add(inkStroke); // Add to list for serialization
-                metadata.dictInkStrokes[kvp.Key] = inkStroke; // Add to dict for runtime use
+                metadata.LstInkStrokes.Add(inkStroke);
+                metadata.dictInkStrokes[kvp.Key] = inkStroke;
             }
 
             return metadata;
@@ -552,33 +361,22 @@ namespace SheetMusicViewer
 
         #endregion
 
-        #region Serialization
+        #region Serialization Helpers
 
         /// <summary>
-        /// Serialize to JSON string
+        /// Serialize to JSON string (wrapper for BmkJsonSerializer)
         /// </summary>
         public static string SerializeToJson(BmkJsonFormat bmkData)
         {
-            var options = new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-            };
-
-            return JsonSerializer.Serialize(bmkData, options);
+            return BmkJsonSerializer.Serialize(bmkData);
         }
 
         /// <summary>
-        /// Deserialize from JSON string
+        /// Deserialize from JSON string (wrapper for BmkJsonSerializer)
         /// </summary>
         public static BmkJsonFormat DeserializeFromJson(string json)
         {
-            var options = new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true // Allow case variations
-            };
-
-            return JsonSerializer.Deserialize<BmkJsonFormat>(json, options);
+            return BmkJsonSerializer.Deserialize(json);
         }
 
         #endregion
@@ -591,8 +389,7 @@ namespace SheetMusicViewer
         public static void SaveAsJson(PdfMetaData metadata, string bmkFilePath)
         {
             var jsonData = ConvertToJson(metadata);
-            var jsonText = SerializeToJson(jsonData);
-            File.WriteAllText(bmkFilePath, jsonText);
+            BmkJsonSerializer.SaveToFile(jsonData, bmkFilePath);
         }
 
         /// <summary>
@@ -600,8 +397,7 @@ namespace SheetMusicViewer
         /// </summary>
         public static PdfMetaData LoadFromJson(string bmkFilePath, string pdfFilePath, bool isSinglesFolder)
         {
-            var jsonText = File.ReadAllText(bmkFilePath);
-            var jsonData = DeserializeFromJson(jsonText);
+            var jsonData = BmkJsonSerializer.LoadFromFile(bmkFilePath);
             return ConvertFromJson(jsonData, pdfFilePath, isSinglesFolder);
         }
 
@@ -610,19 +406,7 @@ namespace SheetMusicViewer
         /// </summary>
         public static bool IsJsonFormat(string bmkFilePath)
         {
-            if (!File.Exists(bmkFilePath))
-                return false;
-
-            try
-            {
-                using var reader = new StreamReader(bmkFilePath);
-                var firstChar = (char)reader.Read();
-                return firstChar == '{';
-            }
-            catch
-            {
-                return false;
-            }
+            return BmkJsonSerializer.IsJsonFormat(bmkFilePath);
         }
 
         /// <summary>

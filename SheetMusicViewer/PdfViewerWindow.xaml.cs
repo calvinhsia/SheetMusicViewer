@@ -24,6 +24,7 @@ using System.Windows.Threading;
 using Windows.Data.Pdf;
 using Windows.Storage;
 using Windows.Storage.Streams;
+using SheetMusicLib;
 
 namespace SheetMusicViewer
 {
