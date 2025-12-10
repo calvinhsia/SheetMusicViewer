@@ -164,6 +164,7 @@ namespace SheetMusicViewer
     {
         int _nColIndex = 0;
         private readonly int[] _colWidths;
+        private const int DefaultColumnWidth = 120; // Default width when colWidths not provided
 
         /// <summary>
         ///  the type of the underlying list, as specified by the item prefixed by "_", which won't be shown as a column
@@ -553,6 +554,18 @@ namespace SheetMusicViewer
                     }
                 }
                 _nColIndex++;
+            }
+            else
+            {
+                // No colWidths provided - use reasonable defaults based on column name/type
+                if (colWidth != 0)
+                {
+                    gridcol.Width = colWidth;
+                }
+                else
+                {
+                    gridcol.Width = DefaultColumnWidth;
+                }
             }
             return gridcol;
         }

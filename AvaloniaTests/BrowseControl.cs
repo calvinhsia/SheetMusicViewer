@@ -21,7 +21,7 @@ public class BrowseControl : DockPanel
     internal int[] _colWidths;
     public IEnumerable _query;
 
-    public BrowseControl(IEnumerable query, int[] colWidths)
+    public BrowseControl(IEnumerable query, int[] colWidths = null)
     {
         try
         {
@@ -169,6 +169,7 @@ public class ListBoxBrowseView : UserControl
     private int _lastSortedColumnIndex = -1;
     private bool _lastSortAscending = true;
     private bool _isResizing = false;
+    private const int DefaultColumnWidth = 120; // Default width when colWidths not provided
 
     public Grid HeaderGrid => _headerGrid;
     public IList SelectedItems => _listBox?.SelectedItems ?? new List<object>();
@@ -197,7 +198,7 @@ public class ListBoxBrowseView : UserControl
             if (prop.Name.StartsWith("_"))
                 continue;
 
-            int width = 0;
+            int width = DefaultColumnWidth; // Use default width
             if (_colWidths != null && colIndex < _colWidths.Length)
             {
                 width = _colWidths[colIndex];
@@ -307,6 +308,7 @@ public class ListBoxBrowseView : UserControl
         itemStyle.Setters.Add(new Setter(ListBoxItem.PaddingProperty, new Thickness(0)));
         itemStyle.Setters.Add(new Setter(ListBoxItem.MarginProperty, new Thickness(0)));
         itemStyle.Setters.Add(new Setter(ListBoxItem.MinHeightProperty, 18.0));
+        itemStyle.Setters.Add(new Setter(ListBoxItem.ForegroundProperty, Brushes.Blue));
         _listBox.Styles.Add(itemStyle);
 
         // Create and attach context menu
