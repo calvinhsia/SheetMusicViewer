@@ -23,6 +23,24 @@ namespace AvaloniaTests.Tests;
 /// </summary>
 public class AvaloniaPdfDocumentProvider : IPdfDocumentProvider
 {
+    // FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS = 0x00400000
+    // This is set by Windows for cloud-only files that need to be downloaded when accessed
+    private const FileAttributes RecallOnDataAccess = (FileAttributes)0x00400000;
+    
+    // FILE_ATTRIBUTE_RECALL_ON_OPEN = 0x00040000  
+    // This is set for files that need to be recalled even for metadata access
+    private const FileAttributes RecallOnOpen = (FileAttributes)0x00040000;
+
+    /// <summary>
+    /// If true, skip cloud-only files instead of triggering download
+    /// </summary>
+    public bool SkipCloudOnlyFiles { get; set; } = true;
+    
+    /// <summary>
+    /// Enable verbose logging of file attributes for debugging
+    /// </summary>
+    public bool VerboseLogging { get; set; } = true;
+
     public async Task<int> GetPageCountAsync(string pdfFilePath)
     {
         return await Task.Run(() =>
@@ -31,8 +49,70 @@ public class AvaloniaPdfDocumentProvider : IPdfDocumentProvider
             {
                 if (!File.Exists(pdfFilePath))
                     return 0;
-                    
-                return Conversion.GetPageCount(pdfFilePath);
+
+                var fileInfo = new FileInfo(pdfFilePath);
+                var attrs = fileInfo.Attributes;
+                
+                // Check for OneDrive cloud-only placeholder files
+                bool hasRecallOnDataAccess = (attrs & RecallOnDataAccess) == RecallOnDataAccess;
+                bool hasRecallOnOpen = (attrs & RecallOnOpen) == RecallOnOpen;
+                bool hasOffline = (attrs & FileAttributes.Offline) == FileAttributes.Offline;
+                bool hasReparsePoint = (attrs & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint;
+                bool hasSparseFile = (attrs & FileAttributes.SparseFile) == FileAttributes.SparseFile;
+                
+                bool isCloudOnly = hasRecallOnDataAccess || hasRecallOnOpen || hasOffline;
+                                   
+                // ReparsePoint alone doesn't mean cloud-only (could be symlink, junction, etc.)
+                // Small reparse point file is likely a cloud placeholder
+                if (!isCloudOnly && hasReparsePoint && fileInfo.Length < 1024)
+                {
+                    isCloudOnly = true;
+                }
+                
+                if (VerboseLogging)
+                {
+                    var attrStr = $"Attrs=0x{(int)attrs:X8} " +
+                        $"RecallOnDataAccess={hasRecallOnDataAccess} " +
+                        $"RecallOnOpen={hasRecallOnOpen} " +
+                        $"Offline={hasOffline} " +
+                        $"ReparsePoint={hasReparsePoint} " +
+                        $"SparseFile={hasSparseFile} " +
+                        $"Size={fileInfo.Length} " +
+                        $"-> isCloudOnly={isCloudOnly}";
+                    Trace.WriteLine($"AvaloniaPdfDocumentProvider: {Path.GetFileName(pdfFilePath)}: {attrStr}");
+                }
+
+                if (isCloudOnly && SkipCloudOnlyFiles)
+                {
+                    return 0;
+                }
+
+                // Read file - this triggers OneDrive download if cloud-only
+                byte[] pdfBytes;
+                try
+                {
+                    pdfBytes = File.ReadAllBytes(pdfFilePath);
+                }
+                catch (IOException ex) when (ex.HResult == unchecked((int)0x80070185) || 
+                                              ex.HResult == unchecked((int)0x80070186))
+                {
+                    // ERROR_CLOUD_FILE_NETWORK_UNAVAILABLE (0x80070185)
+                    // ERROR_CLOUD_FILE_IN_USE (0x80070186)
+                    Trace.WriteLine($"AvaloniaPdfDocumentProvider: Cloud file unavailable: {pdfFilePath}");
+                    return 0;
+                }
+
+                if (pdfBytes.Length == 0)
+                    return 0;
+
+                // Validate PDF signature
+                if (pdfBytes.Length < 5 || pdfBytes[0] != '%' || pdfBytes[1] != 'P' || pdfBytes[2] != 'D' || pdfBytes[3] != 'F')
+                {
+                    Trace.WriteLine($"AvaloniaPdfDocumentProvider: Not a valid PDF: {pdfFilePath}");
+                    return 0;
+                }
+
+                return Conversion.GetPageCount(pdfBytes);
             }
             catch (Exception ex)
             {
