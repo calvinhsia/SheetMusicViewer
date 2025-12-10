@@ -1,0 +1,141 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:AvaloniaTests"
+        x:Class="AvaloniaTests.MetaDataFormWindow"
+        x:DataType="local:MetaDataFormViewModel"
+        Title="MetaData Editor"
+        Width="1200"
+        Height="700">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Top toolbar with buttons -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10" Spacing="10">
+            <TextBlock Text="PageNumberOffset:" VerticalAlignment="Center"/>
+            <TextBox Text="{Binding PageNumberOffset}" Width="50"/>
+            <Button Content="_Import from Clipboard" Command="{Binding ImportCommand}" 
+                    ToolTip.Tip="Import TOC from clipboard tab separated values (PageNo, SongName, Composer, Date, Notes)"/>
+            <Button Content="_Export to Clipboard" Command="{Binding ExportCommand}"
+                    ToolTip.Tip="Export TOC to clipboard to paste to Excel"/>
+            <Button Content="Add _Row" Command="{Binding AddRowCommand}"
+                    ToolTip.Tip="Add a new TOC entry"/>
+            <Button Content="_Delete Row" Command="{Binding DeleteRowCommand}"
+                    ToolTip.Tip="Delete selected TOC entry"/>
+            <Button Content="_Cancel" Command="{Binding CancelCommand}"/>
+            <Button Content="_Save" Command="{Binding SaveCommand}"/>
+        </StackPanel>
+
+        <!-- Header info panel -->
+        <Grid Grid.Row="1" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Edit panel for selected item -->
+            <StackPanel Grid.Column="0" Orientation="Vertical" Spacing="5" Width="500">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="PageNo:" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,5,0"/>
+                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding SelectedItem.PageNo, Mode=TwoWay}" Width="60" HorizontalAlignment="Left"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="SongName:" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,5,0"/>
+                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding SelectedItem.SongName, Mode=TwoWay}"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Composer:" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,5,0"/>
+                    <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding SelectedItem.Composer, Mode=TwoWay}"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Date:" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,5,0"/>
+                    <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding SelectedItem.Date, Mode=TwoWay}"/>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Notes:" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,5,0"/>
+                    <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding SelectedItem.Notes, Mode=TwoWay}"/>
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Doc Notes:" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,5,0"/>
+                    <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding DocNotes, Mode=TwoWay}" ToolTip.Tip="Notes for entire collection of volumes"/>
+                </Grid>
+            </StackPanel>
+
+            <!-- Volume Info panel -->
+            <StackPanel Grid.Column="1" Orientation="Vertical" Margin="20,0,0,0">
+                <TextBlock Text="Volume Info:" FontWeight="Bold"/>
+                <ListBox ItemsSource="{Binding VolInfoDisplay}" MaxHeight="120" MinWidth="400">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </StackPanel>
+        </Grid>
+
+        <!-- Main content with TOC DataGrid and Favorites -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- TOC DataGrid -->
+            <DataGrid Grid.Column="0"
+                      Name="TocDataGrid"
+                      ItemsSource="{Binding TocEntries}"
+                      SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                      GridLinesVisibility="All"
+                      CanUserReorderColumns="True"
+                      CanUserResizeColumns="True"
+                      CanUserSortColumns="True"
+                      IsReadOnly="False"
+                      SelectionMode="Single">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="PageNo" Binding="{Binding PageNo}" Width="70" x:DataType="local:TocEntryViewModel"/>
+                    <DataGridTextColumn Header="SongName" Binding="{Binding SongName}" Width="250" x:DataType="local:TocEntryViewModel"/>
+                    <DataGridTextColumn Header="Composer" Binding="{Binding Composer}" Width="200" x:DataType="local:TocEntryViewModel"/>
+                    <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="100" x:DataType="local:TocEntryViewModel"/>
+                    <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*" x:DataType="local:TocEntryViewModel"/>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <GridSplitter Grid.Column="1" Width="5" ResizeDirection="Columns"/>
+
+            <!-- Favorites panel -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="Favorites:" FontWeight="Bold" Margin="5,0,0,5"/>
+                <DataGrid Grid.Row="1"
+                          ItemsSource="{Binding Favorites}"
+                          GridLinesVisibility="All"
+                          CanUserReorderColumns="False"
+                          CanUserResizeColumns="True"
+                          IsReadOnly="True"
+                          SelectionMode="Single">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Page" Binding="{Binding PageNo}" Width="60" x:DataType="local:FavoriteViewModel"/>
+                        <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="*" x:DataType="local:FavoriteViewModel"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>
