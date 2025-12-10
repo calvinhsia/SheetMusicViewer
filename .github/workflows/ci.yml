@@ -2,7 +2,6 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, tests, develop ]
   pull_request:
     branches: [ main, tests ]
   workflow_dispatch:
