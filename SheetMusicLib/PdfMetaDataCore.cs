@@ -61,6 +61,77 @@ namespace SheetMusicLib
         /// Ink stroke data
         /// </summary>
         public List<InkStrokeClass> InkStrokes { get; set; } = new();
+
+        /// <summary>
+        /// Get the volume number from a page number
+        /// </summary>
+        public int GetVolNumFromPageNum(int pageNo)
+        {
+            var volno = 0;
+            var pSum = PageNumberOffset;
+            foreach (var vol in VolumeInfoList)
+            {
+                pSum += vol.NPagesInThisVolume;
+                if (pageNo < pSum)
+                {
+                    break;
+                }
+                volno++;
+            }
+            return volno;
+        }
+
+        /// <summary>
+        /// Get the full path to a PDF file from a volume number
+        /// </summary>
+        public string GetFullPathFileFromVolno(int volNo, bool MakeRelative = false, string rootFolder = null)
+        {
+            if (volNo >= VolumeInfoList.Count)
+                volNo = VolumeInfoList.Count - 1;
+            if (volNo < 0)
+                return FullPathFile;
+
+            var retval = Path.Combine(
+                IsSinglesFolder ? FullPathFile : Path.GetDirectoryName(FullPathFile),
+                VolumeInfoList[volNo].FileNameVolume);
+
+            if (MakeRelative && !string.IsNullOrEmpty(rootFolder) && retval.StartsWith(rootFolder))
+            {
+                retval = retval[(rootFolder.Length + 1)..].Replace(".pdf", string.Empty);
+                var lastchar = retval.LastOrDefault();
+                if ("01".Contains(lastchar))
+                {
+                    retval = retval[..^1];
+                }
+            }
+            return retval;
+        }
+
+        /// <summary>
+        /// Get the full path to a PDF file from a page number
+        /// </summary>
+        public string GetFullPathFileFromPageNo(int pageNo)
+        {
+            var volNo = GetVolNumFromPageNum(pageNo);
+            return GetFullPathFileFromVolno(volNo);
+        }
+
+        /// <summary>
+        /// Check if a page is a favorite
+        /// </summary>
+        public bool IsFavorite(int pageNo)
+        {
+            return Favorites.Any(f => f.Pageno == pageNo);
+        }
+
+        /// <summary>
+        /// Get the book name (relative path without extension)
+        /// </summary>
+        public string GetBookName(string rootFolder = null)
+        {
+            var name = GetFullPathFileFromVolno(0, MakeRelative: true, rootFolder: rootFolder);
+            return name ?? Path.GetFileNameWithoutExtension(FullPathFile);
+        }
     }
 
     /// <summary>
@@ -506,9 +577,10 @@ namespace SheetMusicLib
 
     /// <summary>
     /// Serializable version of PDF metadata for XML serialization
-    /// This matches the existing BMK file format
+    /// This matches the existing BMK file format which uses root element "PdfMetaData"
     /// </summary>
     [Serializable]
+    [XmlRoot("PdfMetaData")]
     public class SerializablePdfMetaData
     {
         public List<PdfVolumeInfoBase> lstVolInfo = new();

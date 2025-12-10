@@ -149,31 +149,63 @@ public class BrowseControlTests : TestBase
                 exceptionHandler);
             
             sw.Stop();
+            
+            // Diagnostic: count TOC entries per result
+            var totalTocEntries = results.Sum(r => r.TocEntries.Count);
+            var resultsWithToc = results.Count(r => r.TocEntries.Count > 0);
+            var resultsWithoutToc = results.Count(r => r.TocEntries.Count == 0);
+            
             Trace.WriteLine($"? Loaded {results.Count} metadata files from {folders.Count} folders in {sw.ElapsedMilliseconds}ms");
+            Trace.WriteLine($"? Total TOC entries: {totalTocEntries}");
+            Trace.WriteLine($"? Results with TOC: {resultsWithToc}, without TOC: {resultsWithoutToc}");
+            
+            // Show some samples
+            foreach (var r in results.Take(10))
+            {
+                Trace.WriteLine($"   {Path.GetFileName(r.FullPathFile)}: {r.TocEntries.Count} TOC entries, {r.VolumeInfoList.Count} volumes");
+            }
 
             await Dispatcher.UIThread.InvokeAsync(async () =>
             {
-                // Create a query with displayable properties
-                var query = results.Select(r => new
+                // Create UberToc - flattened list of all TOC entries across all PDFs
+                var uberToc = new List<Tuple<PdfMetaDataReadResult, TOCEntry>>();
+                foreach (var pdfMetaDataItem in results)
                 {
-                    Name = Path.GetFileNameWithoutExtension(r.FullPathFile),
-                    Pages = r.VolumeInfoList.Sum(v => v.NPagesInThisVolume),
-                    TOC = r.TocEntries.Count,
-                    Favorites = r.Favorites.Count,
-                    InkStrokes = r.InkStrokes.Count,
-                    Volumes = r.VolumeInfoList.Count,
-                    LastPage = r.LastPageNo,
-                    IsSingles = r.IsSinglesFolder,
-                    LastModified = r.LastWriteTime.ToString("yyyy-MM-dd HH:mm"),
-                    Path = r.FullPathFile
-                });
+                    foreach (var tentry in pdfMetaDataItem.TocEntries)
+                    {
+                        uberToc.Add(Tuple.Create(pdfMetaDataItem, tentry));
+                    }
+                }
 
-                var browseControl = new BrowseControl(query, colWidths: new[] { 250, 60, 50, 70, 80, 70, 70, 70, 130, 400 });
+                Trace.WriteLine($"? UberToc has {uberToc.Count} entries");
+
+                var query = from tup in uberToc
+                            let itm = tup.Item2
+                            let pdfPath = tup.Item1.GetFullPathFileFromPageNo(itm.PageNo)
+                            let fileInfo = File.Exists(pdfPath) ? new FileInfo(pdfPath) : null
+                            orderby itm.SongName
+                            select new
+                            {
+                                itm.SongName,
+                                Page = itm.PageNo,
+                                Vol = tup.Item1.GetVolNumFromPageNum(itm.PageNo),
+                                itm.Composer,
+                                CompositionDate = itm.Date,
+                                Fav = tup.Item1.IsFavorite(itm.PageNo) ? "Fav" : string.Empty,
+                                BookName = tup.Item1.GetBookName(folder),
+                                itm.Notes,
+                                Acquisition = fileInfo?.LastWriteTime,
+                                Access = fileInfo?.LastAccessTime,
+                                Created = fileInfo?.CreationTime,
+                                _Tup = tup
+                            };
+
+                var browseControl = new BrowseControl(query, colWidths: new[] { 250, 50, 40, 150, 100, 40, 200, 150, 130, 130, 130, 50 });
 
                 var window = new Window
                 {
-                    Title = $"PDF Metadata Browser - {results.Count:n0} Items (SheetMusicLib)",
-                    Width = 1400,
+                    Title = $"UberTOC Browser - {uberToc.Count:n0} Songs from {results.Count:n0} Books (SheetMusicLib)",
+                    Width = 1600,
                     Height = 800,
                     Content = browseControl,
                     WindowStartupLocation = WindowStartupLocation.CenterScreen
@@ -182,12 +214,12 @@ public class BrowseControlTests : TestBase
                 window.Closed += AvaloniaTestHelper.CreateWindowClosedHandler(
                     testCompleted,
                     lifetime,
-                    "PDF Metadata Browser closed");
+                    "UberTOC Browser closed");
 
                 window.Show();
 
                 var memoryMB = GC.GetTotalMemory(false) / 1024 / 1024;
-                Trace.WriteLine($"? Window shown with {results.Count} items from {folders.Count} folders");
+                Trace.WriteLine($"? Window shown with {uberToc.Count} songs from {results.Count} books");
                 Trace.WriteLine($"? Memory: ~{memoryMB:n0} MB");
                 Trace.WriteLine("Close the window when finished testing.");
 
