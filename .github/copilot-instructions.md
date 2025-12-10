@@ -112,3 +112,4 @@ SheetMusicViewer/PdfViewerWindow.xaml.cs
 - Use existing libraries; only add new dependencies if absolutely necessary
 - Avoid adding comments unless they match existing style or explain complex logic
 - Make minimal modifications to achieve the goal
+- **Use `required` modifier** for properties that must be set during object initialization (C# 11+), rather than default initializers, to get compile-time enforcement
