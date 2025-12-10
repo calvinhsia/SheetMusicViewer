@@ -91,12 +91,12 @@ namespace SheetMusicLib
         /// </summary>
         public int Rotation;
 
-        [XmlElement("FileName")]
         /// <summary>
         /// The filename (with extension) for the PDF document.
         /// Can't be relative to rootfolder: user could change rootfolder to folder inside,
         /// so must be relative to fullpath: needs to be portable from machine to machine.
         /// </summary>
+        [XmlElement("FileName")]
         public string FileNameVolume;
 
         public override string ToString()

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Xml.Serialization;
 
 namespace SheetMusicLib
@@ -267,6 +268,7 @@ namespace SheetMusicLib
                                     {
                                         if (curmetadata.VolumeInfoList.Count <= curVolNo)
                                         {
+                                            Trace.WriteLine($"PdfMetaDataCore: Continuation volume {curVolNo} not in BMK (IsDirty={curmetadata.IsDirty}), reading PDF: {Path.GetFileName(file)}");
                                             var pageCount = await pdfDocumentProvider.GetPageCountAsync(file);
                                             var newvolInfo = new PdfVolumeInfoBase
                                             {
@@ -366,6 +368,7 @@ namespace SheetMusicLib
             }
             else
             {
+                Trace.WriteLine($"PdfMetaDataCore: No BMK file exists for Singles folder: {Path.GetFileName(curPath)}");
                 curmetadata = new PdfMetaDataReadResult
                 {
                     FullPathFile = curPath,
@@ -401,6 +404,7 @@ namespace SheetMusicLib
                 {
                     try
                     {
+                        Trace.WriteLine($"PdfMetaDataCore: Singles folder has new file not in BMK, reading PDF: {Path.GetFileName(newfile)}");
                         var pageCount = await pdfDocumentProvider.GetPageCountAsync(newfile);
                         curmetadata.VolumeInfoList.Add(new PdfVolumeInfoBase
                         {
@@ -520,6 +524,7 @@ namespace SheetMusicLib
             // Handle case where no volume info exists
             if (result.VolumeInfoList.Count == 0)
             {
+                Trace.WriteLine($"PdfMetaDataCore: BMK exists but VolumeInfoList is empty, reading PDF: {Path.GetFileName(fullPathPdfFileOrSinglesFolder)}");
                 var pageCount = await pdfDocumentProvider.GetPageCountAsync(fullPathPdfFileOrSinglesFolder);
                 result.VolumeInfoList.Add(new PdfVolumeInfoBase
                 {
@@ -552,6 +557,7 @@ namespace SheetMusicLib
             bool isSingles,
             IPdfDocumentProvider pdfDocumentProvider)
         {
+            Trace.WriteLine($"PdfMetaDataCore: No BMK file exists, reading PDF: {Path.GetFileName(fullPathPdfFileOrSinglesFolder)}");
             var pageCount = await pdfDocumentProvider.GetPageCountAsync(fullPathPdfFileOrSinglesFolder);
 
             var result = new PdfMetaDataReadResult
@@ -583,6 +589,7 @@ namespace SheetMusicLib
     [XmlRoot("PdfMetaData")]
     public class SerializablePdfMetaData
     {
+        [XmlArrayItem("PdfVolumeInfo")]
         public List<PdfVolumeInfoBase> lstVolInfo = new();
         public int LastPageNo;
         public DateTime dtLastWrite;
