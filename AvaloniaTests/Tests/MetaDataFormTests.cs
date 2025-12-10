@@ -15,35 +15,12 @@ namespace AvaloniaTests.Tests;
 [DoNotParallelize]
 public class MetaDataFormTests : TestBase
 {
+    private const string SampleBmkFileName = "Sample59PianoSolosFull.bmk";
+
     /// <summary>
     /// Path to the sample BMK file in TestAssets
     /// </summary>
-    private static string GetSampleBmkPath()
-    {
-        // Find the TestAssets folder relative to the test execution directory
-        var currentDir = AppContext.BaseDirectory;
-        
-        // Navigate up from bin\Debug\net8.0 to find the Tests folder
-        var possiblePaths = new[]
-        {
-            Path.Combine(currentDir, "..", "..", "..", "..", "Tests", "TestAssets", "Sample59PianoSolosFull.bmk"),
-            Path.Combine(currentDir, "..", "..", "..", "Tests", "TestAssets", "Sample59PianoSolosFull.bmk"),
-            Path.Combine(currentDir, "TestAssets", "Sample59PianoSolosFull.bmk"),
-            @"C:\Users\Calvinh\source\repos\SheetMusicViewer\Tests\TestAssets\Sample59PianoSolosFull.bmk"
-        };
-
-        foreach (var path in possiblePaths)
-        {
-            var normalizedPath = Path.GetFullPath(path);
-            if (File.Exists(normalizedPath))
-            {
-                return normalizedPath;
-            }
-        }
-
-        // Fallback: use the hardcoded path from the user's request
-        return @"C:\Users\Calvinh\source\repos\SheetMusicViewer\Tests\TestAssets\Sample59PianoSolosFull.bmk";
-    }
+    private static string SampleBmkPath => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Tests", "TestAssets", SampleBmkFileName));
 
     [TestMethod]
     [TestCategory("Manual")]
@@ -51,7 +28,7 @@ public class MetaDataFormTests : TestBase
     {
         SkipIfCI("Manual test requires user interaction");
 
-        var bmkPath = GetSampleBmkPath();
+        var bmkPath = SampleBmkPath;
         
         if (!File.Exists(bmkPath))
         {
@@ -72,7 +49,7 @@ public class MetaDataFormTests : TestBase
             
             window.Show();
             
-            Trace.WriteLine("=== MetaDataForm Test with Sample59PianoSolosFull.bmk ===");
+            Trace.WriteLine($"=== MetaDataForm Test with {SampleBmkFileName} ===");
             Trace.WriteLine($"? Loaded BMK file: {bmkPath}");
             Trace.WriteLine($"? TOC Entries: {viewModel.TocEntries.Count}");
             Trace.WriteLine($"? Favorites: {viewModel.Favorites.Count}");
@@ -179,7 +156,7 @@ public class MetaDataFormTests : TestBase
     {
         SkipIfCI("Manual test requires user interaction and clipboard");
 
-        var bmkPath = GetSampleBmkPath();
+        var bmkPath = SampleBmkPath;
         
         if (!File.Exists(bmkPath))
         {
@@ -233,7 +210,7 @@ public class MetaDataFormTests : TestBase
     {
         SkipIfCI("Manual test requires user interaction");
 
-        var bmkPath = GetSampleBmkPath();
+        var bmkPath = SampleBmkPath;
         
         if (!File.Exists(bmkPath))
         {

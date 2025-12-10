@@ -98,38 +98,38 @@ public partial class MetaDataFormViewModel : ObservableObject
 
     private void InitializeFromData(SerializablePdfMetaData data)
     {
-        _pageNumberOffset = data.PageNumberOffset;
-        _docNotes = data.Notes;
+        PageNumberOffset = data.PageNumberOffset;
+        DocNotes = data.Notes;
 
         // Load TOC entries
-        _tocEntries.Clear();
+        TocEntries.Clear();
         foreach (var toc in data.lstTocEntries.OrderBy(t => t.PageNo))
         {
-            _tocEntries.Add(new TocEntryViewModel(toc));
+            TocEntries.Add(new TocEntryViewModel(toc));
         }
 
         // Load volume info display
-        _volInfoDisplay.Clear();
+        VolInfoDisplay.Clear();
         int volno = 0;
         int pgno = data.PageNumberOffset;
         foreach (var vol in data.lstVolInfo)
         {
-            _volInfoDisplay.Add($"Vol={volno++} Pg={pgno,3} {vol}");
+            VolInfoDisplay.Add($"Vol={volno++} Pg={pgno,3} {vol}");
             pgno += vol.NPagesInThisVolume;
         }
 
         // Load favorites with descriptions
-        _favorites.Clear();
+        Favorites.Clear();
         var dictToc = BuildTocDictionary(data.lstTocEntries);
         foreach (var fav in data.Favorites.OrderBy(f => f.Pageno))
         {
             var description = GetDescription(fav.Pageno, dictToc);
-            _favorites.Add(new FavoriteViewModel(fav.Pageno, description));
+            Favorites.Add(new FavoriteViewModel(fav.Pageno, description));
         }
 
-        if (_tocEntries.Count > 0)
+        if (TocEntries.Count > 0)
         {
-            _selectedItem = _tocEntries[0];
+            SelectedItem = TocEntries[0];
         }
     }
 
@@ -174,13 +174,13 @@ public partial class MetaDataFormViewModel : ObservableObject
         var clipboard = GetClipboardFunc?.Invoke();
         if (clipboard == null) return;
 
-        var clipText = await clipboard.GetTextAsync();
-        if (string.IsNullOrEmpty(clipText)) return;
+        var clipText = await clipboard.TryGetTextAsync();
+        if (clipText is not { } text || string.IsNullOrEmpty(text)) return;
 
         var importedEntries = new List<TocEntryViewModel>();
         try
         {
-            var lines = clipText.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            var lines = text.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries);
             foreach (var line in lines)
             {
                 var parts = line.Trim().Split('\t');
