@@ -17,11 +17,11 @@ namespace AvaloniaTests;
 
 public class BrowseControl : DockPanel
 {
-    public ListBoxBrowseView ListView { get; private set; }
-    internal int[] _colWidths;
-    public IEnumerable _query;
+    public ListBoxBrowseView ListView { get; private set; } = null!;
+    internal int[]? _colWidths;
+    public IEnumerable _query = null!;
 
-    public BrowseControl(IEnumerable query, int[] colWidths = null)
+    public BrowseControl(IEnumerable query, int[]? colWidths = null)
     {
         try
         {
@@ -32,7 +32,7 @@ public class BrowseControl : DockPanel
             this.HorizontalAlignment = HorizontalAlignment.Stretch;
             this.VerticalAlignment = VerticalAlignment.Stretch;
             
-            var listFilter = new ListBoxListFilter(null);
+            var listFilter = new ListBoxListFilter(null!);
             this.Children.Add(listFilter);
             DockPanel.SetDock(listFilter, Dock.Top);
 
@@ -84,10 +84,10 @@ internal class ListBoxListFilter : DockPanel
     readonly Button _btnApply = new Button() { Content = "Apply" };
     readonly TextBox _txtFilter = new TextBox { Width = 200 };
     readonly TextBlock _txtStatus = new TextBlock();
-    ListBoxBrowseView _browse;
-    private static string _LastFilter;
+    ListBoxBrowseView? _browse;
+    private static string? _LastFilter;
 
-    internal ListBoxListFilter(ListBoxBrowseView browse)
+    internal ListBoxListFilter(ListBoxBrowseView? browse)
     {
         _browse = browse;
         BuildUI();
@@ -130,7 +130,7 @@ internal class ListBoxListFilter : DockPanel
         };
     }
 
-    void On_BtnApply_Click(object o, RoutedEventArgs e)
+    void On_BtnApply_Click(object? o, RoutedEventArgs e)
     {
         try
         {
@@ -159,22 +159,24 @@ internal class ListBoxListFilter : DockPanel
 
 public class ListBoxBrowseView : UserControl
 {
-    private readonly int[] _colWidths;
+    private readonly int[]? _colWidths;
     private readonly IEnumerable _originalQuery;
-    private ObservableCollection<object> _allItems;
-    private ObservableCollection<object> _filteredItems;
-    private Grid _headerGrid;
-    private ListBox _listBox;
+    private ObservableCollection<object> _allItems = null!;
+    private ObservableCollection<object> _filteredItems = null!;
+    private Grid _headerGrid = null!;
+    private ListBox _listBox = null!;
     private List<ListBoxColumnInfo> _columns = new List<ListBoxColumnInfo>();
     private int _lastSortedColumnIndex = -1;
     private bool _lastSortAscending = true;
+#pragma warning disable CS0414 // Field is assigned but never used
     private bool _isResizing = false;
+#pragma warning restore CS0414
     private const int DefaultColumnWidth = 120; // Default width when colWidths not provided
 
     public Grid HeaderGrid => _headerGrid;
     public IList SelectedItems => _listBox?.SelectedItems ?? new List<object>();
     public int SelectedIndex => _listBox?.SelectedIndex ?? -1;
-    public object SelectedItem => _listBox?.SelectedItem;
+    public object? SelectedItem => _listBox?.SelectedItem;
 
     public ListBoxBrowseView(IEnumerable query, BrowseControl browseControl)
     {
@@ -187,8 +189,8 @@ public class ListBoxBrowseView : UserControl
         _filteredItems = new ObservableCollection<object>(itemsList);
 
         // Analyze query type to build column info
-        var ienum = query.GetType().GetInterface(typeof(IEnumerable<>).FullName);
-        var itemType = ienum.GetGenericArguments()[0];
+        var ienum = query.GetType().GetInterface(typeof(IEnumerable<>).FullName!);
+        var itemType = ienum!.GetGenericArguments()[0];
         
         var members = itemType.GetProperties();
         int colIndex = 0;
@@ -564,7 +566,7 @@ public class ListBoxBrowseView : UserControl
         return grid;
     }
 
-    private string FormatValue(object value)
+    private string FormatValue(object? value)
     {
         if (value == null)
             return string.Empty;
@@ -573,7 +575,7 @@ public class ListBoxBrowseView : UserControl
         
         if (type == typeof(string))
         {
-            var str = value.ToString().Trim();
+            var str = value.ToString()!.Trim();
             var ndx = str.IndexOfAny(new[] { '\r', '\n' });
             if (ndx >= 0)
             {
@@ -594,7 +596,7 @@ public class ListBoxBrowseView : UserControl
             return ((double)value).ToString("n2");
         }
         
-        return value.ToString();
+        return value.ToString() ?? string.Empty;
     }
 
     private async void OnCopyClick(object? sender, RoutedEventArgs e)
@@ -960,7 +962,7 @@ public class ListBoxBrowseView : UserControl
 
 internal class ListBoxColumnInfo
 {
-    public string HeaderText { get; set; }
-    public string BindingPath { get; set; }
+    public required string HeaderText { get; set; }
+    public required string BindingPath { get; set; }
     public int Width { get; set; }
 }
