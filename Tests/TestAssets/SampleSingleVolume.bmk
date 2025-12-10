@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PdfMetaData xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+ <lstVolInfo>
+  <PdfVolumeInfo>
+   <NPages>5</NPages>
+   <Rotation>0</Rotation>
+   <FileName>SheetMusicExcerpts.pdf</FileName>
+  </PdfVolumeInfo>
+ </lstVolInfo>
+ <LastPageNo>1</LastPageNo>
+ <dtLastWrite>2025-08-28T19:47:41.1699803-07:00</dtLastWrite>
+ <PageNumberOffset>0</PageNumberOffset>
+ <LstInkStrokes />
+ <Favorites />
+ <lstTocEntries>
+  <TOCEntry>
+   <SongName>SheetMusicExcerpts</SongName>
+   <PageNo>0</PageNo>
+  </TOCEntry>
+ </lstTocEntries>
+</PdfMetaData>
