@@ -84,12 +84,12 @@ namespace SheetMusicLib
         /// The number of PDF pages in this PDF file
         /// </summary>
         [XmlElement("NPages")]
-        public int NPagesInThisVolume;
+        public int NPagesInThisVolume { get; set; }
 
         /// <summary>
         /// Rotation: Normal = 0, Rotate90 = 1, Rotate180 = 2, Rotate270 = 3
         /// </summary>
-        public int Rotation;
+        public int Rotation { get; set; }
 
         /// <summary>
         /// The filename (with extension) for the PDF document.
@@ -97,7 +97,7 @@ namespace SheetMusicLib
         /// so must be relative to fullpath: needs to be portable from machine to machine.
         /// </summary>
         [XmlElement("FileName")]
-        public string FileNameVolume;
+        public string FileNameVolume { get; set; }
 
         public override string ToString()
         {

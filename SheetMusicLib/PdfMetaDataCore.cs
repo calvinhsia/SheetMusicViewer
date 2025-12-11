@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Xml.Serialization;
 
 namespace SheetMusicLib
@@ -143,6 +144,169 @@ namespace SheetMusicLib
     public static class PdfMetaDataCore
     {
         /// <summary>
+        /// JSON serializer options for BMK files
+        /// </summary>
+        private static readonly JsonSerializerOptions JsonOptions = new()
+        {
+            WriteIndented = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
+
+        /// <summary>
+        /// Convert all BMK (XML) files to JSON format in the given folder with verification
+        /// </summary>
+        /// <param name="rootMusicFolder">Root folder to scan</param>
+        /// <param name="deleteOriginalBmk">If true, delete the original .bmk file after successful conversion</param>
+        /// <param name="verifyCallback">Optional callback to report verification errors</param>
+        /// <returns>Tuple of (converted count, verified count, error count)</returns>
+        public static async Task<(int Converted, int Verified, int Errors)> ConvertAllBmkToJsonAsync(
+            string rootMusicFolder,
+            bool deleteOriginalBmk = false,
+            Action<string> verifyCallback = null)
+        {
+            int converted = 0;
+            int verified = 0;
+            int errors = 0;
+            var xmlSerializer = new XmlSerializer(typeof(SerializablePdfMetaData));
+
+            foreach (var bmkFile in Directory.EnumerateFiles(rootMusicFolder, "*.bmk", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    var jsonFile = Path.ChangeExtension(bmkFile, "json");
+                    var pdfFile = Path.ChangeExtension(bmkFile, "pdf");
+
+                    // Read XML
+                    var fileContent = await File.ReadAllTextAsync(bmkFile);
+
+                    // Skip if already JSON format (shouldn't happen with .bmk extension, but be safe)
+                    if (fileContent.TrimStart().StartsWith("{"))
+                        continue;
+
+                    // Parse XML
+                    SerializablePdfMetaData xmlData;
+                    using (var sr = new StringReader(fileContent))
+                    {
+                        xmlData = (SerializablePdfMetaData)xmlSerializer.Deserialize(sr);
+                    }
+
+                    // Convert to JSON
+                    var jsonContent = JsonSerializer.Serialize(xmlData, JsonOptions);
+
+                    // Parse JSON back to verify round-trip
+                    var jsonData = JsonSerializer.Deserialize<SerializablePdfMetaData>(jsonContent, JsonOptions);
+
+                    // Verify the data matches
+                    var verifyErrors = VerifyMetadataMatch(xmlData, jsonData);
+                    if (verifyErrors.Count > 0)
+                    {
+                        errors++;
+                        var errorMsg = $"{Path.GetFileName(bmkFile)}: {string.Join("; ", verifyErrors)}";
+                        Debug.WriteLine($"Verification failed: {errorMsg}");
+                        verifyCallback?.Invoke(errorMsg);
+                        continue;
+                    }
+
+                    verified++;
+
+                    // Write JSON file if it doesn't exist
+                    if (!File.Exists(jsonFile))
+                    {
+                        await File.WriteAllTextAsync(jsonFile, jsonContent);
+                        converted++;
+                        Debug.WriteLine($"Converted: {Path.GetFileName(bmkFile)} -> {Path.GetFileName(jsonFile)}");
+                    }
+
+                    if (deleteOriginalBmk)
+                    {
+                        File.Delete(bmkFile);
+                        Debug.WriteLine($"Deleted: {bmkFile}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    errors++;
+                    var errorMsg = $"{Path.GetFileName(bmkFile)}: Exception - {ex.Message}";
+                    Debug.WriteLine($"Failed to convert: {errorMsg}");
+                    verifyCallback?.Invoke(errorMsg);
+                }
+            }
+
+            return (converted, verified, errors);
+        }
+
+        /// <summary>
+        /// Verify that two SerializablePdfMetaData objects have matching data
+        /// </summary>
+        private static List<string> VerifyMetadataMatch(SerializablePdfMetaData xml, SerializablePdfMetaData json)
+        {
+            var errors = new List<string>();
+
+            if (xml.LastPageNo != json.LastPageNo)
+                errors.Add($"LastPageNo: {xml.LastPageNo} vs {json.LastPageNo}");
+
+            if (xml.PageNumberOffset != json.PageNumberOffset)
+                errors.Add($"PageNumberOffset: {xml.PageNumberOffset} vs {json.PageNumberOffset}");
+
+            if (xml.Notes != json.Notes)
+                errors.Add("Notes differ");
+
+            // Compare volume info
+            var xmlVols = xml.lstVolInfo ?? new List<PdfVolumeInfoBase>();
+            var jsonVols = json.lstVolInfo ?? new List<PdfVolumeInfoBase>();
+            if (xmlVols.Count != jsonVols.Count)
+            {
+                errors.Add($"VolumeInfo count: {xmlVols.Count} vs {jsonVols.Count}");
+            }
+            else
+            {
+                for (int i = 0; i < xmlVols.Count; i++)
+                {
+                    if (xmlVols[i].NPagesInThisVolume != jsonVols[i].NPagesInThisVolume)
+                        errors.Add($"Vol[{i}].NPages: {xmlVols[i].NPagesInThisVolume} vs {jsonVols[i].NPagesInThisVolume}");
+                    if (xmlVols[i].FileNameVolume != jsonVols[i].FileNameVolume)
+                        errors.Add($"Vol[{i}].FileName differs");
+                }
+            }
+
+            // Compare TOC entries
+            var xmlToc = xml.lstTocEntries ?? new List<TOCEntry>();
+            var jsonToc = json.lstTocEntries ?? new List<TOCEntry>();
+            if (xmlToc.Count != jsonToc.Count)
+            {
+                errors.Add($"TOC count: {xmlToc.Count} vs {jsonToc.Count}");
+            }
+            else
+            {
+                for (int i = 0; i < xmlToc.Count; i++)
+                {
+                    if (xmlToc[i].SongName != jsonToc[i].SongName)
+                        errors.Add($"TOC[{i}].SongName differs");
+                    if (xmlToc[i].PageNo != jsonToc[i].PageNo)
+                        errors.Add($"TOC[{i}].PageNo: {xmlToc[i].PageNo} vs {jsonToc[i].PageNo}");
+                }
+            }
+
+            // Compare favorites
+            var xmlFavs = xml.Favorites ?? new List<Favorite>();
+            var jsonFavs = json.Favorites ?? new List<Favorite>();
+            if (xmlFavs.Count != jsonFavs.Count)
+            {
+                errors.Add($"Favorites count: {xmlFavs.Count} vs {jsonFavs.Count}");
+            }
+
+            // Compare ink strokes
+            var xmlInk = xml.LstInkStrokes ?? new List<InkStrokeClass>();
+            var jsonInk = json.LstInkStrokes ?? new List<InkStrokeClass>();
+            if (xmlInk.Count != jsonInk.Count)
+            {
+                errors.Add($"InkStrokes count: {xmlInk.Count} vs {jsonInk.Count}");
+            }
+
+            return errors;
+        }
+
+        /// <summary>
         /// Load all PDF metadata from a folder recursively
         /// </summary>
         /// <param name="rootMusicFolder">Root folder to scan</param>
@@ -207,8 +371,8 @@ namespace SheetMusicLib
                     {
                         // For single songs not in SinglesFolder: if no TOC and # pages < 11, 
                         // create a new TOC entry with 1 song: same as file name
-                        if (!curmetadata.IsSinglesFolder && 
-                            curmetadata.TocEntries.Count == 0 && 
+                        if (!curmetadata.IsSinglesFolder &&
+                            curmetadata.TocEntries.Count == 0 &&
                             curmetadata.VolumeInfoList.Sum(v => v.NPagesInThisVolume) < 11)
                         {
                             curmetadata.TocEntries.Add(new TOCEntry
@@ -289,7 +453,7 @@ namespace SheetMusicLib
                                             curmetadata.VolumeInfoList.Add(newvolInfo);
                                         }
                                     }
-                                    if (curmetadata != null && 
+                                    if (curmetadata != null &&
                                         curVolNo < curmetadata.VolumeInfoList.Count &&
                                         string.IsNullOrEmpty(curmetadata.VolumeInfoList[curVolNo].FileNameVolume))
                                     {
@@ -406,7 +570,7 @@ namespace SheetMusicLib
                 curmetadata.IsDirty = true;
 
                 // Remove deleted volumes
-                curmetadata.VolumeInfoList.RemoveAll(v => 
+                curmetadata.VolumeInfoList.RemoveAll(v =>
                     sortedListDeletedSingles.Contains(v.FileNameVolume.ToLower()));
 
                 // Add new volumes
@@ -453,8 +617,8 @@ namespace SheetMusicLib
         }
 
         /// <summary>
-        /// Read PDF metadata from a BMK file asynchronously using a page count provider for PDF files
-        /// /// </summary>
+        /// Read PDF metadata from a BMK/JSON file asynchronously using a page count provider for PDF files
+        /// </summary>
         /// <param name="fullPathPdfFileOrSinglesFolder">Full path to PDF file or singles folder</param>
         /// <param name="isSingles">Whether this is a singles folder</param>
         /// <param name="pdfDocumentProvider">Provider to get PDF page count</param>
@@ -467,21 +631,26 @@ namespace SheetMusicLib
             IExceptionHandler exceptionHandler = null)
         {
             PdfMetaDataReadResult result = null;
+
+            // Prefer JSON over BMK (XML)
+            var jsonFile = Path.ChangeExtension(fullPathPdfFileOrSinglesFolder, "json");
             var bmkFile = Path.ChangeExtension(fullPathPdfFileOrSinglesFolder, "bmk");
 
-            if (File.Exists(bmkFile))
+            var metadataFile = File.Exists(jsonFile) ? jsonFile : (File.Exists(bmkFile) ? bmkFile : null);
+
+            if (metadataFile != null)
             {
                 try
                 {
                     result = await ReadFromExistingBmkFileAsync(
                         fullPathPdfFileOrSinglesFolder,
-                        bmkFile,
+                        metadataFile,
                         isSingles,
                         pdfDocumentProvider);
                 }
                 catch (Exception ex)
                 {
-                    exceptionHandler?.OnException($"Reading {bmkFile}", ex);
+                    exceptionHandler?.OnException($"Reading {metadataFile}", ex);
                     // Don't delete the file - user might have valuable bookmarks/favorites
                 }
             }
@@ -498,22 +667,24 @@ namespace SheetMusicLib
 
         private static async Task<PdfMetaDataReadResult> ReadFromExistingBmkFileAsync(
             string fullPathPdfFileOrSinglesFolder,
-            string bmkFile,
+            string metadataFile,
             bool isSingles,
             IPdfDocumentProvider pdfDocumentProvider)
         {
             SerializablePdfMetaData serializedData = null;
-            
-            // Try JSON first (faster), fall back to XML for legacy files
-            var fileContent = await File.ReadAllTextAsync(bmkFile);
-            if (fileContent.TrimStart().StartsWith("{"))
+
+            var fileContent = await File.ReadAllTextAsync(metadataFile);
+
+            // Detect format by file extension or content
+            if (metadataFile.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ||
+                fileContent.TrimStart().StartsWith("{"))
             {
                 // JSON format
-                serializedData = JsonSerializer.Deserialize<SerializablePdfMetaData>(fileContent);
+                serializedData = JsonSerializer.Deserialize<SerializablePdfMetaData>(fileContent, JsonOptions);
             }
             else
             {
-                // XML format (legacy)
+                // XML format (legacy .bmk)
                 var serializer = new XmlSerializer(typeof(SerializablePdfMetaData));
                 using var sr = new StringReader(fileContent);
                 serializedData = (SerializablePdfMetaData)serializer.Deserialize(sr);
@@ -527,7 +698,7 @@ namespace SheetMusicLib
                 PageNumberOffset = serializedData.PageNumberOffset,
                 LastPageNo = serializedData.LastPageNo,
                 LastWriteTime = serializedData.dtLastWrite.Year < 1900
-                    ? new FileInfo(bmkFile).LastWriteTime
+                    ? new FileInfo(metadataFile).LastWriteTime
                     : serializedData.dtLastWrite,
                 Notes = serializedData.Notes,
                 TocEntries = serializedData.lstTocEntries ?? new List<TOCEntry>(),
@@ -732,7 +903,7 @@ namespace SheetMusicLib
                     // Find PDFs without BMK files (new PDFs) - group by directory for proper continuation detection
                     // Also need to check if a PDF is a continuation of a file that HAS a BMK
                     var pdfsByDirectory = new Dictionary<string, List<string>>();
-                    
+
                     // Build a set of all base names from BMK files for quick lookup
                     var bmkBaseNames = new Dictionary<string, HashSet<string>>(); // dir -> set of base names
                     foreach (var bmkFile in bmkFiles)
@@ -751,7 +922,7 @@ namespace SheetMusicLib
                         }
                         baseNames.Add(baseName);
                     }
-                    
+
                     foreach (var pdfFile in Directory.EnumerateFiles(rootMusicFolder, "*.pdf", SearchOption.AllDirectories))
                     {
                         // Skip files in 'hidden' folders
@@ -772,7 +943,7 @@ namespace SheetMusicLib
                             // Check if this PDF is a continuation of a file that HAS a BMK
                             var dir = Path.GetDirectoryName(pdfFile) ?? "";
                             var pdfBaseName = Path.GetFileNameWithoutExtension(pdfFile).Trim().ToLower();
-                            
+
                             // Check if this matches any BMK base name (meaning it's a continuation)
                             bool isContinuationOfBmk = false;
                             if (bmkBaseNames.TryGetValue(dir, out var dirBmkBaseNames))
@@ -788,7 +959,7 @@ namespace SheetMusicLib
                                     }
                                 }
                             }
-                            
+
                             if (!isContinuationOfBmk)
                             {
                                 if (!pdfsByDirectory.TryGetValue(dir, out var pdfList))
@@ -815,7 +986,7 @@ namespace SheetMusicLib
                             if (currentBaseFile != null && currentBaseName != null)
                             {
                                 var justfnameCurrent = Path.GetFileNameWithoutExtension(pdfFile).Trim().ToLower();
-                                
+
                                 // Check if current file is a continuation of the base file
                                 if (currentBaseName.Length < justfnameCurrent.Length &&
                                     currentBaseName == justfnameCurrent[..currentBaseName.Length])
@@ -832,7 +1003,7 @@ namespace SheetMusicLib
                             {
                                 // This is a new base file
                                 pdfFilesWithoutBmk.Add(pdfFile);
-                                
+
                                 // Calculate the base name for continuation detection
                                 var justFnameVol0 = Path.GetFileNameWithoutExtension(pdfFile).Trim().ToLower();
                                 var lastcharVol0 = justFnameVol0.LastOrDefault();
@@ -893,7 +1064,7 @@ namespace SheetMusicLib
                         }
 
                         results.Add(metadata);
-                        
+
                         var dir = Path.GetDirectoryName(pdfFile);
                         if (dir != null && dir.Length > rootMusicFolder.Length)
                         {
@@ -933,7 +1104,7 @@ namespace SheetMusicLib
                     if (metadata != null)
                     {
                         // Add default TOC entry for small PDFs
-                        if (metadata.TocEntries.Count == 0 && 
+                        if (metadata.TocEntries.Count == 0 &&
                             metadata.VolumeInfoList.Sum(v => v.NPagesInThisVolume) < 11)
                         {
                             metadata.TocEntries.Add(new TOCEntry
@@ -966,7 +1137,7 @@ namespace SheetMusicLib
     }
 
     /// <summary>
-    /// Serializable version of PDF metadata for XML serialization
+    /// Serializable version of PDF metadata for XML/JSON serialization
     /// This matches the existing BMK file format which uses root element "PdfMetaData"
     /// </summary>
     [Serializable]
@@ -974,13 +1145,13 @@ namespace SheetMusicLib
     public class SerializablePdfMetaData
     {
         [XmlArrayItem("PdfVolumeInfo")]
-        public List<PdfVolumeInfoBase> lstVolInfo = new();
-        public int LastPageNo;
-        public DateTime dtLastWrite;
-        public int PageNumberOffset;
-        public string Notes;
-        public List<InkStrokeClass> LstInkStrokes = new();
-        public List<Favorite> Favorites = new();
-        public List<TOCEntry> lstTocEntries = new();
+        public List<PdfVolumeInfoBase> lstVolInfo { get; set; } = new();
+        public int LastPageNo { get; set; }
+        public DateTime dtLastWrite { get; set; }
+        public int PageNumberOffset { get; set; }
+        public string Notes { get; set; }
+        public List<InkStrokeClass> LstInkStrokes { get; set; } = new();
+        public List<Favorite> Favorites { get; set; } = new();
+        public List<TOCEntry> lstTocEntries { get; set; } = new();
     }
 }
