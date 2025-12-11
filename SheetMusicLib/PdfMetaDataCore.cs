@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text.Json;
 using System.Xml.Serialization;
 
 namespace SheetMusicLib
@@ -146,11 +148,13 @@ namespace SheetMusicLib
         /// <param name="rootMusicFolder">Root folder to scan</param>
         /// <param name="pdfDocumentProvider">Provider to get PDF page count</param>
         /// <param name="exceptionHandler">Optional exception handler</param>
+        /// <param name="useParallelLoading">If true, parse BMK files in parallel for faster loading</param>
         /// <returns>List of metadata results and list of folder names</returns>
         public static async Task<(List<PdfMetaDataReadResult>, List<string>)> LoadAllPdfMetaDataFromDiskAsync(
             string rootMusicFolder,
             IPdfDocumentProvider pdfDocumentProvider,
-            IExceptionHandler exceptionHandler = null)
+            IExceptionHandler exceptionHandler = null,
+            bool useParallelLoading = true)
         {
             var lstPdfMetaFileData = new List<PdfMetaDataReadResult>();
             var lstFolders = new List<string>();
@@ -160,6 +164,12 @@ namespace SheetMusicLib
                 return (lstPdfMetaFileData, lstFolders);
             }
 
+            if (useParallelLoading)
+            {
+                return await LoadAllPdfMetaDataParallelAsync(rootMusicFolder, pdfDocumentProvider, exceptionHandler);
+            }
+
+            // Original sequential implementation
             await Task.Run(async () =>
             {
                 PdfMetaDataReadResult curmetadata = null;
@@ -444,7 +454,7 @@ namespace SheetMusicLib
 
         /// <summary>
         /// Read PDF metadata from a BMK file asynchronously using a page count provider for PDF files
-        /// </summary>
+        /// /// </summary>
         /// <param name="fullPathPdfFileOrSinglesFolder">Full path to PDF file or singles folder</param>
         /// <param name="isSingles">Whether this is a singles folder</param>
         /// <param name="pdfDocumentProvider">Provider to get PDF page count</param>
@@ -492,9 +502,22 @@ namespace SheetMusicLib
             bool isSingles,
             IPdfDocumentProvider pdfDocumentProvider)
         {
-            var serializer = new XmlSerializer(typeof(SerializablePdfMetaData));
-            using var sr = new StreamReader(bmkFile);
-            var serializedData = (SerializablePdfMetaData)serializer.Deserialize(sr);
+            SerializablePdfMetaData serializedData = null;
+            
+            // Try JSON first (faster), fall back to XML for legacy files
+            var fileContent = await File.ReadAllTextAsync(bmkFile);
+            if (fileContent.TrimStart().StartsWith("{"))
+            {
+                // JSON format
+                serializedData = JsonSerializer.Deserialize<SerializablePdfMetaData>(fileContent);
+            }
+            else
+            {
+                // XML format (legacy)
+                var serializer = new XmlSerializer(typeof(SerializablePdfMetaData));
+                using var sr = new StringReader(fileContent);
+                serializedData = (SerializablePdfMetaData)serializer.Deserialize(sr);
+            }
 
             var result = new PdfMetaDataReadResult
             {
@@ -541,6 +564,15 @@ namespace SheetMusicLib
                 result.VolumeInfoList[0].FileNameVolume = Path.GetFileName(fullPathPdfFileOrSinglesFolder);
                 result.IsDirty = true;
             }
+            // Ensure at least one TOC entry exists
+            if (result.TocEntries.Count == 0)
+            {
+                result.TocEntries.Add(new TOCEntry()
+                {
+                    SongName = Path.GetFileNameWithoutExtension(result.FullPathFile)
+                });
+                result.IsDirty = true;
+            }
 
             // Validate last page number is in range
             var maxPageNum = result.PageNumberOffset + result.VolumeInfoList.Sum(v => v.NPagesInThisVolume);
@@ -578,6 +610,358 @@ namespace SheetMusicLib
             });
 
             return result;
+        }
+
+        /// <summary>
+        /// Parallel loading implementation - Phase 1: scan and group files, Phase 2: parse BMK files in parallel
+        /// </summary>
+        private static async Task<(List<PdfMetaDataReadResult>, List<string>)> LoadAllPdfMetaDataParallelAsync(
+            string rootMusicFolder,
+            IPdfDocumentProvider pdfDocumentProvider,
+            IExceptionHandler exceptionHandler)
+        {
+            var results = new ConcurrentBag<PdfMetaDataReadResult>();
+            var folders = new ConcurrentDictionary<string, byte>();
+
+            // Phase 1: Quick scan to find all Singles folders
+            var bmkFiles = new List<string>();
+            var singlesFolders = new List<string>();
+            var pdfFilesWithoutBmk = new List<string>();
+
+            // Helper to check if a path contains a 'hidden' folder segment
+            static bool IsInHiddenFolder(string path)
+            {
+                return path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                    .Any(segment => segment.Equals("hidden", StringComparison.OrdinalIgnoreCase));
+            }
+
+            // Helper to check if a path is inside a Singles folder
+            static bool IsInSinglesFolder(string path)
+            {
+                return path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                    .Any(segment => segment.EndsWith("singles", StringComparison.OrdinalIgnoreCase));
+            }
+
+            await Task.Run(() =>
+            {
+                try
+                {
+                    // First pass: identify all Singles folders
+                    var allSinglesFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var bmkFile in Directory.EnumerateFiles(rootMusicFolder, "*.bmk", SearchOption.AllDirectories))
+                    {
+                        if (IsInHiddenFolder(bmkFile))
+                            continue;
+
+                        var singlesDir = Path.Combine(Path.GetDirectoryName(bmkFile) ?? "", Path.GetFileNameWithoutExtension(bmkFile));
+                        if (Directory.Exists(singlesDir) && singlesDir.EndsWith("singles", StringComparison.OrdinalIgnoreCase))
+                        {
+                            allSinglesFolders.Add(singlesDir);
+                            singlesFolders.Add(singlesDir);
+                        }
+                    }
+
+                    // Group BMK files by directory for continuation detection
+                    var bmksByDirectory = new Dictionary<string, List<string>>();
+                    foreach (var bmkFile in Directory.EnumerateFiles(rootMusicFolder, "*.bmk", SearchOption.AllDirectories))
+                    {
+                        if (IsInHiddenFolder(bmkFile))
+                            continue;
+
+                        // Skip BMK files inside Singles folders
+                        if (IsInSinglesFolder(bmkFile))
+                            continue;
+
+                        // Skip Singles folder BMK files (already handled above)
+                        var singlesDir = Path.Combine(Path.GetDirectoryName(bmkFile) ?? "", Path.GetFileNameWithoutExtension(bmkFile));
+                        if (Directory.Exists(singlesDir) && singlesDir.EndsWith("singles", StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        var dir = Path.GetDirectoryName(bmkFile) ?? "";
+                        if (!bmksByDirectory.TryGetValue(dir, out var bmkList))
+                        {
+                            bmkList = new List<string>();
+                            bmksByDirectory[dir] = bmkList;
+                        }
+                        bmkList.Add(bmkFile);
+                    }
+
+                    // For each directory, detect which BMK files are base volumes vs continuations
+                    foreach (var kvp in bmksByDirectory)
+                    {
+                        var sortedBmks = kvp.Value.OrderBy(f => f.ToLower()).ToList();
+                        string currentBaseName = null;
+
+                        foreach (var bmkFile in sortedBmks)
+                        {
+                            var isContinuation = false;
+                            var justFnameCurrent = Path.GetFileNameWithoutExtension(bmkFile).Trim().ToLower();
+
+                            if (currentBaseName != null)
+                            {
+                                // Check if current file is a continuation of the base file
+                                if (currentBaseName.Length < justFnameCurrent.Length &&
+                                    currentBaseName == justFnameCurrent[..currentBaseName.Length])
+                                {
+                                    // Check if the extension starts with a digit
+                                    if (char.IsDigit(justFnameCurrent[currentBaseName.Length..][0]))
+                                    {
+                                        isContinuation = true;
+                                    }
+                                }
+                            }
+
+                            if (!isContinuation)
+                            {
+                                // This is a new base file
+                                bmkFiles.Add(bmkFile);
+
+                                // Calculate the base name for continuation detection
+                                var baseName = justFnameCurrent;
+                                var lastChar = baseName.LastOrDefault();
+                                if ("01".Contains(lastChar))
+                                {
+                                    baseName = baseName[..^1];
+                                }
+                                currentBaseName = baseName;
+                            }
+                            // If it's a continuation BMK, skip it - volume info is in the base BMK
+                        }
+                    }
+
+                    // Find PDFs without BMK files (new PDFs) - group by directory for proper continuation detection
+                    // Also need to check if a PDF is a continuation of a file that HAS a BMK
+                    var pdfsByDirectory = new Dictionary<string, List<string>>();
+                    
+                    // Build a set of all base names from BMK files for quick lookup
+                    var bmkBaseNames = new Dictionary<string, HashSet<string>>(); // dir -> set of base names
+                    foreach (var bmkFile in bmkFiles)
+                    {
+                        var dir = Path.GetDirectoryName(bmkFile);
+                        if (!bmkBaseNames.TryGetValue(dir, out var baseNames))
+                        {
+                            baseNames = new HashSet<string>();
+                            bmkBaseNames[dir] = baseNames;
+                        }
+                        var baseName = Path.GetFileNameWithoutExtension(bmkFile).Trim().ToLower();
+                        var lastChar = baseName.LastOrDefault();
+                        if ("01".Contains(lastChar))
+                        {
+                            baseName = baseName[..^1];
+                        }
+                        baseNames.Add(baseName);
+                    }
+                    
+                    foreach (var pdfFile in Directory.EnumerateFiles(rootMusicFolder, "*.pdf", SearchOption.AllDirectories))
+                    {
+                        // Skip files in 'hidden' folders
+                        if (IsInHiddenFolder(pdfFile))
+                            continue;
+
+                        // Skip files in 'Singles' folders - they're handled by LoadSinglesFolderAsync
+                        if (IsInSinglesFolder(pdfFile))
+                            continue;
+
+                        var fileName = Path.GetFileName(pdfFile);
+                        if (fileName.StartsWith("._") || pdfFile.Contains("__MACOSX"))
+                            continue;
+
+                        var bmkFile = Path.ChangeExtension(pdfFile, "bmk");
+                        if (!File.Exists(bmkFile))
+                        {
+                            // Check if this PDF is a continuation of a file that HAS a BMK
+                            var dir = Path.GetDirectoryName(pdfFile) ?? "";
+                            var pdfBaseName = Path.GetFileNameWithoutExtension(pdfFile).Trim().ToLower();
+                            
+                            // Check if this matches any BMK base name (meaning it's a continuation)
+                            bool isContinuationOfBmk = false;
+                            if (bmkBaseNames.TryGetValue(dir, out var dirBmkBaseNames))
+                            {
+                                foreach (var bmkBaseName in dirBmkBaseNames)
+                                {
+                                    if (bmkBaseName.Length < pdfBaseName.Length &&
+                                        pdfBaseName.StartsWith(bmkBaseName) &&
+                                        char.IsDigit(pdfBaseName[bmkBaseName.Length]))
+                                    {
+                                        isContinuationOfBmk = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            if (!isContinuationOfBmk)
+                            {
+                                if (!pdfsByDirectory.TryGetValue(dir, out var pdfList))
+                                {
+                                    pdfList = new List<string>();
+                                    pdfsByDirectory[dir] = pdfList;
+                                }
+                                pdfList.Add(pdfFile);
+                            }
+                        }
+                    }
+
+                    // For each directory, detect which PDFs are base volumes vs continuations
+                    foreach (var kvp in pdfsByDirectory)
+                    {
+                        var sortedPdfs = kvp.Value.OrderBy(f => f.ToLower()).ToList();
+                        string currentBaseFile = null;
+                        string currentBaseName = null;
+
+                        foreach (var pdfFile in sortedPdfs)
+                        {
+                            var isContinuation = false;
+
+                            if (currentBaseFile != null && currentBaseName != null)
+                            {
+                                var justfnameCurrent = Path.GetFileNameWithoutExtension(pdfFile).Trim().ToLower();
+                                
+                                // Check if current file is a continuation of the base file
+                                if (currentBaseName.Length < justfnameCurrent.Length &&
+                                    currentBaseName == justfnameCurrent[..currentBaseName.Length])
+                                {
+                                    // Check if the extension starts with a digit
+                                    if (char.IsDigit(justfnameCurrent[currentBaseName.Length..][0]))
+                                    {
+                                        isContinuation = true;
+                                    }
+                                }
+                            }
+
+                            if (!isContinuation)
+                            {
+                                // This is a new base file
+                                pdfFilesWithoutBmk.Add(pdfFile);
+                                
+                                // Calculate the base name for continuation detection
+                                var justFnameVol0 = Path.GetFileNameWithoutExtension(pdfFile).Trim().ToLower();
+                                var lastcharVol0 = justFnameVol0.LastOrDefault();
+                                if ("01".Contains(lastcharVol0))
+                                {
+                                    justFnameVol0 = justFnameVol0[..^1];
+                                }
+                                currentBaseFile = pdfFile;
+                                currentBaseName = justFnameVol0;
+                            }
+                            // If it's a continuation, we skip it - it will be handled when processing the base file
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    exceptionHandler?.OnException($"Scanning {rootMusicFolder}", ex);
+                }
+            });
+
+            Debug.WriteLine($"PdfMetaDataCore Parallel: Found {bmkFiles.Count} BMK files, {singlesFolders.Count} singles folders, {pdfFilesWithoutBmk.Count} new PDFs");
+
+            // Phase 2: Parse BMK files in parallel
+            var bmkTasks = bmkFiles.Select(async bmkFile =>
+            {
+                try
+                {
+                    var pdfFile = Path.ChangeExtension(bmkFile, "pdf");
+                    // Try to find the actual PDF (might have different casing or be volume 0)
+                    if (!File.Exists(pdfFile))
+                    {
+                        var dir = Path.GetDirectoryName(bmkFile);
+                        var baseName = Path.GetFileNameWithoutExtension(bmkFile);
+                        var candidates = Directory.EnumerateFiles(dir!, $"{baseName}*.pdf").OrderBy(f => f).ToList();
+                        if (candidates.Count > 0)
+                        {
+                            pdfFile = candidates[0];
+                        }
+                        else
+                        {
+                            // No matching PDF found - this is an orphaned BMK file, skip it
+                            // The sequential implementation only processes PDFs and their BMKs,
+                            // so orphaned BMKs without PDFs are never included
+                            Debug.WriteLine($"PdfMetaDataCore Parallel: Skipping orphaned BMK (no PDF): {bmkFile}");
+                            return;
+                        }
+                    }
+
+                    var metadata = await ReadPdfMetaDataAsync(pdfFile, false, pdfDocumentProvider, exceptionHandler);
+                    if (metadata != null)
+                    {
+                        // Skip entries with 0 total pages (cloud-only files that couldn't be read)
+                        var totalPages = metadata.VolumeInfoList.Sum(v => v.NPagesInThisVolume);
+                        if (totalPages == 0)
+                        {
+                            Debug.WriteLine($"PdfMetaDataCore Parallel: Skipping entry with 0 pages: {pdfFile}");
+                            return;
+                        }
+
+                        results.Add(metadata);
+                        
+                        var dir = Path.GetDirectoryName(pdfFile);
+                        if (dir != null && dir.Length > rootMusicFolder.Length)
+                        {
+                            folders.TryAdd(dir[(rootMusicFolder.Length + 1)..], 0);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    exceptionHandler?.OnException($"Reading BMK {bmkFile}", ex);
+                }
+            });
+
+            // Parse singles folders in parallel
+            var singlesTasks = singlesFolders.Select(async singlesFolder =>
+            {
+                try
+                {
+                    var metadata = await LoadSinglesFolderAsync(singlesFolder, pdfDocumentProvider, exceptionHandler);
+                    if (metadata != null)
+                    {
+                        results.Add(metadata);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    exceptionHandler?.OnException($"Reading singles folder {singlesFolder}", ex);
+                }
+            });
+
+            // Process new PDFs without BMK files in parallel
+            var newPdfTasks = pdfFilesWithoutBmk.Select(async pdfFile =>
+            {
+                try
+                {
+                    var metadata = await CreateNewMetaDataAsync(pdfFile, false, pdfDocumentProvider);
+                    if (metadata != null)
+                    {
+                        // Add default TOC entry for small PDFs
+                        if (metadata.TocEntries.Count == 0 && 
+                            metadata.VolumeInfoList.Sum(v => v.NPagesInThisVolume) < 11)
+                        {
+                            metadata.TocEntries.Add(new TOCEntry
+                            {
+                                SongName = Path.GetFileNameWithoutExtension(pdfFile)
+                            });
+                        }
+                        results.Add(metadata);
+
+                        var dir = Path.GetDirectoryName(pdfFile);
+                        if (dir != null && dir.Length > rootMusicFolder.Length)
+                        {
+                            folders.TryAdd(dir[(rootMusicFolder.Length + 1)..], 0);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    exceptionHandler?.OnException($"Creating metadata for {pdfFile}", ex);
+                }
+            });
+
+            // Wait for all parallel tasks
+            await Task.WhenAll(bmkTasks.Concat(singlesTasks).Concat(newPdfTasks));
+
+            Debug.WriteLine($"PdfMetaDataCore Parallel: Loaded {results.Count} metadata entries");
+
+            return (results.ToList(), folders.Keys.ToList());
         }
     }
 
