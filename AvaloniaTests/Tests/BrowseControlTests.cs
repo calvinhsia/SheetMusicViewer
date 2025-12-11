@@ -134,10 +134,161 @@ public class TraceExceptionHandler : IExceptionHandler
     }
 }
 
+/// <summary>
+/// PDF document provider that throws when trying to read PDFs without BMK files.
+/// This prevents creation of new BMK entries during testing.
+/// </summary>
+public class ThrowingPdfDocumentProvider : IPdfDocumentProvider
+{
+    public async Task<int> GetPageCountAsync(string pdfFilePath)
+    {
+        await Task.CompletedTask;
+        throw new InvalidOperationException($"Attempted to read PDF without BMK file: {pdfFilePath}");
+    }
+}
+
 [TestClass]
 [DoNotParallelize]
 public class BrowseControlTests : TestBase
 {
+    [TestMethod]
+    [TestCategory("Manual")]
+    public async Task TestCompareSerialVsParallelLoading()
+    {
+        var username = Environment.UserName;
+        var folder = $@"C:\Users\{username}\OneDrive\SheetMusic";
+
+        if (!Directory.Exists(folder))
+        {
+            Trace.WriteLine($"Folder not found: {folder}");
+            Assert.Inconclusive("SheetMusic folder not found");
+            return;
+        }
+
+        Trace.WriteLine($"Comparing Serial vs Parallel loading from: {folder}");
+        Trace.WriteLine(new string('=', 80));
+
+        // Use throwing provider to prevent reading PDFs without BMK files
+        var pdfDocumentProvider = new ThrowingPdfDocumentProvider();
+        var exceptionHandler = new TraceExceptionHandler();
+
+        // Load using sequential method
+        Trace.WriteLine("\n=== Loading with SEQUENTIAL method ===");
+        var swSerial = Stopwatch.StartNew();
+        var (serialResults, serialFolders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+            folder,
+            pdfDocumentProvider,
+            exceptionHandler,
+            useParallelLoading: false);
+        swSerial.Stop();
+        Trace.WriteLine($"Sequential: Loaded {serialResults.Count} entries in {swSerial.ElapsedMilliseconds}ms");
+
+        // Load using parallel method
+        Trace.WriteLine("\n=== Loading with PARALLEL method ===");
+        var swParallel = Stopwatch.StartNew();
+        var (parallelResults, parallelFolders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+            folder,
+            pdfDocumentProvider,
+            exceptionHandler,
+            useParallelLoading: true);
+        swParallel.Stop();
+        Trace.WriteLine($"Parallel: Loaded {parallelResults.Count} entries in {swParallel.ElapsedMilliseconds}ms");
+
+        // Create lookup dictionaries by FullPathFile
+        var serialDict = serialResults.ToDictionary(r => r.FullPathFile.ToLowerInvariant(), r => r);
+        var parallelDict = parallelResults.ToDictionary(r => r.FullPathFile.ToLowerInvariant(), r => r);
+
+        // Find differences
+        var onlyInSerial = serialDict.Keys.Except(parallelDict.Keys).ToList();
+        var onlyInParallel = parallelDict.Keys.Except(serialDict.Keys).ToList();
+        var inBoth = serialDict.Keys.Intersect(parallelDict.Keys).ToList();
+
+        Trace.WriteLine("\n" + new string('=', 80));
+        Trace.WriteLine("=== COMPARISON RESULTS ===");
+        Trace.WriteLine(new string('=', 80));
+        
+        // Calculate total song counts (TOC entries)
+        var serialSongCount = serialResults.Sum(r => r.TocEntries.Count);
+        var parallelSongCount = parallelResults.Sum(r => r.TocEntries.Count);
+        
+        Trace.WriteLine($"\nTotal in Sequential: {serialResults.Count} books, {serialSongCount} songs");
+        Trace.WriteLine($"Total in Parallel:   {parallelResults.Count} books, {parallelSongCount} songs");
+        Trace.WriteLine($"Difference:          {parallelResults.Count - serialResults.Count} books, {parallelSongCount - serialSongCount} songs");
+        
+        Trace.WriteLine($"\nIn both:            {inBoth.Count}");
+        Trace.WriteLine($"Only in Sequential: {onlyInSerial.Count}");
+        Trace.WriteLine($"Only in Parallel:   {onlyInParallel.Count}");
+
+        if (onlyInSerial.Count > 0)
+        {
+            Trace.WriteLine($"\n--- Files ONLY in SEQUENTIAL ({onlyInSerial.Count}) ---");
+            foreach (var path in onlyInSerial.OrderBy(p => p).Take(50))
+            {
+                var result = serialDict[path];
+                Trace.WriteLine($"  {result.FullPathFile}");
+                Trace.WriteLine($"    Vols={result.VolumeInfoList.Count}, Pages={result.VolumeInfoList.Sum(v => v.NPagesInThisVolume)}, TOC={result.TocEntries.Count}");
+            }
+            if (onlyInSerial.Count > 50)
+                Trace.WriteLine($"  ... and {onlyInSerial.Count - 50} more");
+        }
+
+        if (onlyInParallel.Count > 0)
+        {
+            Trace.WriteLine($"\n--- Files ONLY in PARALLEL ({onlyInParallel.Count}) ---");
+            foreach (var path in onlyInParallel.OrderBy(p => p).Take(50))
+            {
+                var result = parallelDict[path];
+                Trace.WriteLine($"  {result.FullPathFile}");
+                Trace.WriteLine($"    Vols={result.VolumeInfoList.Count}, Pages={result.VolumeInfoList.Sum(v => v.NPagesInThisVolume)}, TOC={result.TocEntries.Count}");
+            }
+            if (onlyInParallel.Count > 50)
+                Trace.WriteLine($"  ... and {onlyInParallel.Count - 50} more");
+        }
+
+        // Check for differences in matching entries
+        var differencesInContent = new List<string>();
+        foreach (var path in inBoth)
+        {
+            var serial = serialDict[path];
+            var parallel = parallelDict[path];
+            
+            var serialPages = serial.VolumeInfoList.Sum(v => v.NPagesInThisVolume);
+            var parallelPages = parallel.VolumeInfoList.Sum(v => v.NPagesInThisVolume);
+            
+            if (serial.VolumeInfoList.Count != parallel.VolumeInfoList.Count ||
+                serialPages != parallelPages ||
+                serial.TocEntries.Count != parallel.TocEntries.Count)
+            {
+                differencesInContent.Add($"{Path.GetFileName(serial.FullPathFile)}: " +
+                    $"Serial(Vols={serial.VolumeInfoList.Count}, Pages={serialPages}, TOC={serial.TocEntries.Count}) vs " +
+                    $"Parallel(Vols={parallel.VolumeInfoList.Count}, Pages={parallelPages}, TOC={parallel.TocEntries.Count})");
+            }
+        }
+
+        if (differencesInContent.Count > 0)
+        {
+            Trace.WriteLine($"\n--- Content differences in matching files ({differencesInContent.Count}) ---");
+            foreach (var diff in differencesInContent.Take(20))
+            {
+                Trace.WriteLine($"  {diff}");
+            }
+            if (differencesInContent.Count > 20)
+                Trace.WriteLine($"  ... and {differencesInContent.Count - 20} more");
+        }
+
+        Trace.WriteLine("\n" + new string('=', 80));
+        
+        // Assert that results match
+        if (onlyInSerial.Count > 0 || onlyInParallel.Count > 0 || differencesInContent.Count > 0)
+        {
+            Trace.WriteLine("DIFFERENCES FOUND - See above for details");
+        }
+        else
+        {
+            Trace.WriteLine("SUCCESS: Serial and Parallel results are identical!");
+        }
+    }
+
     [TestMethod]
     [TestCategory("Manual")]
     public async Task TestAvaloniaChooseMusicDialog()
@@ -216,6 +367,29 @@ public class BrowseControlTests : TestBase
             }
 
             Trace.WriteLine($"? Scanning folder: {folder}");
+            var lstFileInfos = new List<FileInfo>();
+            foreach (var bmkFile in Directory.EnumerateFiles(folder, "*.bmk", SearchOption.AllDirectories))
+            {
+                lstFileInfos.Add(new FileInfo(bmkFile));
+            }
+            // output to csv
+            var csvFilePath = Path.Combine(folder, "output.csv");
+            if (File.Exists(csvFilePath))
+            {
+                File.Delete(csvFilePath);
+            }
+            using (var writer = new StreamWriter(csvFilePath))
+            {
+                await writer.WriteLineAsync("FileName,FileSize,LastModified");
+                foreach (var fileInfo in lstFileInfos)
+                {
+                    // Quote filename in case it contains commas
+                    await writer.WriteLineAsync($"\"{fileInfo.FullName}\",{fileInfo.Length},{fileInfo.LastWriteTime:yyyy-MM-dd HH:mm:ss}");
+                }
+            }
+            testCompleted.TrySetResult(true);
+            return;
+
 
             var pdfDocumentProvider = new AvaloniaPdfDocumentProvider();
             var exceptionHandler = new TraceExceptionHandler();
