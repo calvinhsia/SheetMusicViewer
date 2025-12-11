@@ -153,6 +153,83 @@ public class BrowseControlTests : TestBase
 {
     [TestMethod]
     [TestCategory("Manual")]
+    public async Task TestConvertBmkToJson()
+    {
+        var username = Environment.UserName;
+        var folder = $@"C:\Users\{username}\OneDrive\SheetMusic";
+
+        if (!Directory.Exists(folder))
+        {
+            Trace.WriteLine($"Folder not found: {folder}");
+            Assert.Inconclusive("SheetMusic folder not found");
+            return;
+        }
+
+        Trace.WriteLine($"Converting and verifying BMK files to JSON in: {folder}");
+        Trace.WriteLine(new string('=', 80));
+
+        var errors = new List<string>();
+        var sw = Stopwatch.StartNew();
+        
+        var (converted, verified, errorCount) = await PdfMetaDataCore.ConvertAllBmkToJsonAsync(
+            folder, 
+            deleteOriginalBmk: false,
+            verifyCallback: error => errors.Add(error));
+        
+        sw.Stop();
+
+        Trace.WriteLine($"\nProcessed in {sw.ElapsedMilliseconds}ms");
+        Trace.WriteLine($"Converted: {converted}");
+        Trace.WriteLine($"Verified: {verified}");
+        Trace.WriteLine($"Errors: {errorCount}");
+
+        if (errors.Count > 0)
+        {
+            Trace.WriteLine("\n--- ERRORS ---");
+            foreach (var error in errors.Take(50))
+            {
+                Trace.WriteLine($"  {error}");
+            }
+            if (errors.Count > 50)
+                Trace.WriteLine($"  ... and {errors.Count - 50} more");
+        }
+
+        // Count JSON vs BMK files
+        var jsonCount = Directory.EnumerateFiles(folder, "*.json", SearchOption.AllDirectories).Count();
+        var bmkCount = Directory.EnumerateFiles(folder, "*.bmk", SearchOption.AllDirectories).Count();
+        Trace.WriteLine($"\nJSON files: {jsonCount}, BMK files: {bmkCount}");
+
+        // Load with JSON files available
+        var pdfDocumentProvider = new ThrowingPdfDocumentProvider();
+        var exceptionHandler = new TraceExceptionHandler();
+
+        Trace.WriteLine("\n=== Loading with JSON files (where available) ===");
+        var swJson = Stopwatch.StartNew();
+        var (jsonResults, _) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+            folder,
+            pdfDocumentProvider,
+            exceptionHandler,
+            useParallelLoading: true);
+        swJson.Stop();
+
+        var jsonSongCount = jsonResults.Sum(r => r.TocEntries.Count);
+        Trace.WriteLine($"Loaded {jsonResults.Count} books, {jsonSongCount} songs in {swJson.ElapsedMilliseconds}ms");
+
+        Trace.WriteLine("\n" + new string('=', 80));
+        if (errorCount == 0)
+        {
+            Trace.WriteLine("SUCCESS: All BMK files converted and verified!");
+            Trace.WriteLine("To complete migration, delete the .bmk files manually.");
+        }
+        else
+        {
+            Trace.WriteLine($"VERIFICATION FAILED: {errorCount} files had differences");
+            Assert.Fail($"{errorCount} files had conversion differences");
+        }
+    }
+
+    [TestMethod]
+    [TestCategory("Manual")]
     public async Task TestCompareSerialVsParallelLoading()
     {
         var username = Environment.UserName;
