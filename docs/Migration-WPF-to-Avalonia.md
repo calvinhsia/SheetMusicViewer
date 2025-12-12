@@ -56,7 +56,7 @@ SheetMusicViewer/
 
 | Component | Technology | Platform Support |
 |-----------|-----------|------------------|
-| UI Framework | Avalonia 11.x | Windows, macOS, Linux |
+| UI Framework | Avalonia 11.x | Windows, macOS, and Linux |
 | PDF Rendering | PDFtoImage (SkiaSharp + Pdfium) | Cross-platform |
 | Bitmap Images | Avalonia.Media.Imaging | Cross-platform |
 | Settings | AppSettings (JSON file) | Cross-platform |
@@ -421,6 +421,138 @@ public class PdfToImageDocumentProvider : IPdfDocumentProvider
 }
 ```
 
+### Phase 8: Touch/Gesture Support ✅ COMPLETED
+
+**Goal:** Port WPF touch manipulation gestures to Avalonia
+
+#### WPF Touch Handling
+
+WPF uses `ManipulationStarting`, `ManipulationDelta`, and `ManipulationInertiaStarting` events:
+
+```csharp
+// WPF - ManipulationDelta for pinch/zoom/pan/rotate
+private void DpPage_ManipulationDelta(object sender, ManipulationDeltaEventArgs e)
+{
+    var deltaManipulation = e.DeltaManipulation;
+    var matrix = ((MatrixTransform)element.RenderTransform).Matrix;
+    
+    // Scale (pinch zoom)
+    matrix.ScaleAt(deltaManipulation.Scale.X, deltaManipulation.Scale.Y, center.X, center.Y);
+    // Rotation
+    matrix.RotateAt(e.DeltaManipulation.Rotation, center.X, center.Y);
+    // Pan
+    matrix.Translate(e.DeltaManipulation.Translation.X, e.DeltaManipulation.Translation.Y);
+    
+    element.RenderTransform = new MatrixTransform(matrix);
+}
+
+// WPF - TouchDown for navigation
+private void DpPage_TouchDown(object sender, TouchEventArgs e)
+{
+    var pos = e.GetTouchPoint(this.dpPage).Position;
+    // Left/right navigation based on tap position
+}
+```
+
+#### Avalonia Gesture Handler
+
+Avalonia doesn't have built-in `ManipulationDelta` events, so we created a custom `GestureHandler` class:
+
+```csharp
+// AvaloniaTests/GestureHandler.cs
+public class GestureHandler
+{
+    private readonly Control _target;
+    private readonly Dictionary<int, PointerPoint> _activePointers = new();
+    
+    public GestureHandler(Control target)
+    {
+        _target = target;
+        
+        // Wire up pointer events for multi-touch
+        _target.PointerPressed += OnPointerPressed;
+        _target.PointerMoved += OnPointerMoved;
+        _target.PointerReleased += OnPointerReleased;
+        _target.PointerWheelChanged += OnPointerWheelChanged;
+    }
+    
+    // Track multiple pointers for pinch-zoom
+    private void OnPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_isGesturing && _activePointers.Count == 2)
+        {
+            ApplyGestureTransform(); // Calculate scale, rotation, translation
+        }
+    }
+    
+    // Ctrl+scroll for zoom
+    private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            var scaleFactor = e.Delta.Y > 0 ? 1.1 : 0.9;
+            // Apply zoom transform
+        }
+    }
+    
+    /// <summary>
+    /// Fired when the user taps to navigate
+    /// </summary>
+    public event EventHandler<NavigationEventArgs>? NavigationRequested;
+    
+    /// <summary>
+    /// If true, gestures are disabled (e.g., when inking is active)
+    /// </summary>
+    public bool IsDisabled { get; set; }
+}
+```
+
+#### Usage in PdfWindow
+
+```csharp
+// AvaloniaTests/PdfWindow.axaml.cs
+private void SetupGestureHandler()
+{
+    _gestureHandler = new GestureHandler(_dpPage)
+    {
+        NumPagesPerView = NumPagesPerView
+    };
+    
+    // Wire up navigation
+    _gestureHandler.NavigationRequested += (s, e) =>
+    {
+        NavigateAsync(e.Delta);
+    };
+    
+    // Wire up double-tap for zoom reset
+    _gestureHandler.DoubleTapped += (s, e) =>
+    {
+        _gestureHandler.ResetTransform();
+    };
+}
+
+// Disable gestures when inking
+private void UpdateGestureHandlerState()
+{
+    _gestureHandler.IsDisabled = 
+        (chkInk0?.IsChecked == true) || 
+        (chkInk1?.IsChecked == true);
+}
+```
+
+#### Feature Mapping
+
+| WPF Feature | Avalonia Implementation | Status |
+|-------------|------------------------|--------|
+| `ManipulationDelta.Scale` | `GestureHandler` with 2-pointer tracking | ✅ |
+| `ManipulationDelta.Translation` | Pan via pointer delta calculation | ✅ |
+| `ManipulationDelta.Rotation` | Angle calculation between pointers | ✅ |
+| `TouchDown` navigation | `PointerReleased` with position check | ✅ |
+| `IsDoubleTap()` | `DoubleTapped` event with distance/time check | ✅ |
+| `MouseWheel` zoom | `PointerWheelChanged` + Ctrl modifier | ✅ |
+| Keyboard navigation | `KeyDown` event handler | ✅ |
+| Inertia | Not implemented (manual if needed) | ⏳ |
+
 ---
 
 ## Feature Comparison
@@ -433,20 +565,25 @@ public class PdfToImageDocumentProvider : IPdfDocumentProvider
 | Favorites Tab | ✅ | ✅ | List with thumbnails |
 | Query Tab | ✅ | ✅ | BrowseControl with columns |
 | PDF Thumbnails | ✅ | ✅ | PDFtoImage rendering |
+| PDF Page Viewing | ✅ | ✅ | PdfWindow with navigation |
 | Multi-volume PDFs | ✅ | ✅ | Via SheetMusicLib |
 | BMK File Reading | ✅ | ✅ | XML and JSON support |
 | Cloud File Detection | ✅ | ✅ | Skip OneDrive placeholders |
 | Settings Persistence | ✅ | ✅ | JSON-based AppSettings |
 | Folder Browser | ✅ | ✅ | StorageProvider API |
 | MRU Folders | ✅ | ✅ | Integrated with AppSettings |
+| Touch Gestures | ✅ | ✅ | GestureHandler class |
+| Pinch-to-Zoom | ✅ | ✅ | Multi-pointer tracking |
+| Touch Navigation | ✅ | ✅ | Tap left/right to navigate |
+| Mouse Wheel Zoom | ✅ | ✅ | Ctrl+scroll |
+| Keyboard Navigation | ✅ | ✅ | Arrow keys, Home/End |
+| Ink Annotations | ✅ | ✅ | InkCanvasControl |
 
 ### Pending Features
 
 | Feature | WPF | Avalonia | Notes |
 |---------|-----|----------|-------|
-| PDF Page Viewing | ✅ | ⏳ | Need to implement viewer |
-| Ink Annotations | ✅ | ⏳ | Avalonia ink canvas |
-| Touch Gestures | ✅ | ⏳ | Avalonia gestures |
+| Inertia/Flick | ✅ | ⏳ | Momentum after gesture |
 | Playlists | ⏳ | ⏳ | Placeholder in both |
 
 ---
@@ -621,11 +758,10 @@ Windows-specific file attributes for OneDrive detection may not work on other pl
 
 ## Next Steps
 
-1. **Implement PDF Page Viewer** - Port `PdfViewerWindow` functionality using PDFtoImage
-2. **Add Ink Canvas Support** - Investigate Avalonia ink alternatives or SkiaSharp drawing
-3. **Touch/Gesture Support** - Port manipulation handlers to Avalonia gestures
-4. **Create macOS/Linux builds** - Test cross-platform deployment
-5. **Performance optimization** - Profile large library loading
+1. **Add Inertia Support** - Implement momentum/flick scrolling after gesture ends
+2. **Implement Playlists** - Port playlist functionality
+3. **Create macOS/Linux builds** - Test cross-platform deployment
+4. **Performance optimization** - Profile large library loading
 
 ---
 
@@ -646,6 +782,9 @@ Windows-specific file attributes for OneDrive detection may not work on other pl
 | `ChooseMusicWindow.cs` | Book/song chooser with folder picker |
 | `BrowseControl.cs` | Virtualized ListView with sorting/filtering |
 | `PdfToImageDocumentProvider` | PDFtoImage-based page count provider |
+| `GestureHandler.cs` | Multi-touch gesture support (pinch/zoom/pan) |
+| `PdfWindow.axaml.cs` | PDF viewer with gesture and navigation support |
+| `InkCanvasControl.cs` | SkiaSharp-based ink annotations |
 
 ---
 

@@ -581,7 +581,7 @@ public class ChooseMusicWindow : Window
                     };
 
         // Create BrowseControl with the query
-        _queryBrowseControl = new BrowseControl(query, colWidths: new[] { 250, 50, 40, 150, 80, 40, 200, 200, 130 });
+        _queryBrowseControl = new BrowseControl(query, colWidths: new[] { 250, 50, 40, 150, 80, 40, 300, 200, 150 });
         
         // Handle double-click on the BrowseControl's ListView
         _queryBrowseControl.ListView.DoubleTapped += (s, e) => BtnOk_Click(s, e);
