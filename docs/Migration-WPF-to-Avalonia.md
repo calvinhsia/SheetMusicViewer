@@ -16,6 +16,7 @@ This document describes the migration path for SheetMusicViewer from a Windows-o
 | Bitmap Images | System.Windows.Media.Imaging | Windows |
 | Ink/Annotations | System.Windows.Ink | Windows |
 | Settings | Properties.Settings | Windows |
+| Folder Browser | System.Windows.Forms.FolderBrowserDialog | Windows |
 
 ### Key WinRT Dependencies
 
@@ -58,7 +59,8 @@ SheetMusicViewer/
 | UI Framework | Avalonia 11.x | Windows, macOS, Linux |
 | PDF Rendering | PDFtoImage (SkiaSharp + Pdfium) | Cross-platform |
 | Bitmap Images | Avalonia.Media.Imaging | Cross-platform |
-| Settings | TBD (JSON file or Avalonia preferences) | Cross-platform |
+| Settings | AppSettings (JSON file) | Cross-platform |
+| Folder Browser | IStorageProvider | Cross-platform |
 
 ### New Project Structure
 
@@ -227,6 +229,8 @@ internal class MyContentControl : ContentControl
 ```csharp
 // Avalonia - Store data in control's Tag property
 var sp = new StackPanel { Tag = bookItemCache };
+```
+```csharp
 // ... add children ...
 listBox.Items.Add(sp);
 
@@ -261,6 +265,162 @@ if (SkipCloudOnlyFiles)
 }
 ```
 
+### Phase 5: Cross-Platform Settings ✅ COMPLETED
+
+**Goal:** Replace WPF's `Properties.Settings.Default` with cross-platform JSON settings
+
+#### WPF Settings (Windows-only)
+
+```csharp
+// WPF - Uses System.Configuration, stores in AppData or registry
+Properties.Settings.Default.MainWindowSize.Width;
+Properties.Settings.Default.RootFolderMRU;
+Properties.Settings.Default.Save();
+```
+
+#### Cross-Platform Settings (SheetMusicLib)
+
+```csharp
+// SheetMusicLib/AppSettings.cs - JSON file in AppData folder
+using SheetMusicLib;
+
+// Initialize once at startup
+AppSettings.Initialize("SheetMusicViewer");
+
+// Use singleton instance
+var settings = AppSettings.Instance;
+Width = settings.WindowWidth;
+Height = settings.WindowHeight;
+
+// Add to MRU
+settings.AddToMRU(selectedFolder);
+
+// Save on close
+settings.Save();
+```
+
+#### Settings Storage Location
+
+| Platform | Path |
+|----------|------|
+| Windows | `%APPDATA%\SheetMusicViewer\settings.json` |
+| macOS | `~/Library/Application Support/SheetMusicViewer/settings.json` |
+| Linux | `~/.config/SheetMusicViewer/settings.json` |
+
+#### Available Settings
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `WindowWidth` | double | 1200 | Window width |
+| `WindowHeight` | double | 800 | Window height |
+| `WindowTop` | double | 100 | Window Y position |
+| `WindowLeft` | double | 100 | Window X position |
+| `Show2Pages` | bool | true | Show two pages side-by-side |
+| `IsFullScreen` | bool | false | Full screen mode |
+| `LastPDFOpen` | string | null | Last opened PDF path |
+| `RootFolderMRU` | List&lt;string&gt; | [] | Most recently used folders |
+| `ChooseBooksSort` | string | "ByDate" | Book sort order |
+| `ChooseQueryTab` | string | "_Books" | Last active tab |
+
+### Phase 6: Cross-Platform Folder Browser ✅ COMPLETED
+
+**Goal:** Replace WPF's `FolderBrowserDialog` with Avalonia's `StorageProvider`
+
+#### WPF Folder Browser (Windows-only)
+
+```csharp
+// WPF - Uses Windows Forms dialog
+var d = new System.Windows.Forms.FolderBrowserDialog
+{
+    ShowNewFolderButton = false,
+    Description = "Choose a root folder with PDF music files",
+    SelectedPath = currentFolder
+};
+if (d.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+{
+    var selectedPath = d.SelectedPath;
+}
+```
+
+#### Avalonia Folder Browser (Cross-platform)
+
+```csharp
+// Avalonia - Uses StorageProvider API (async, native dialogs)
+using Avalonia.Platform.Storage;
+
+private async Task ShowFolderPickerAsync()
+{
+    var topLevel = TopLevel.GetTopLevel(this);
+    
+    // Try to set initial folder
+    IStorageFolder? startLocation = null;
+    if (!string.IsNullOrEmpty(_rootFolder) && Directory.Exists(_rootFolder))
+    {
+        startLocation = await topLevel.StorageProvider.TryGetFolderFromPathAsync(_rootFolder);
+    }
+    
+    var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+    {
+        Title = "Choose a root folder with PDF music files",
+        AllowMultiple = false,
+        SuggestedStartLocation = startLocation
+    });
+    
+    if (folders.Count > 0)
+    {
+        var selectedPath = folders[0].TryGetLocalPath();
+        if (!string.IsNullOrEmpty(selectedPath))
+        {
+            // Update MRU and change folder
+            AppSettings.Instance.AddToMRU(selectedPath);
+            AppSettings.Instance.Save();
+            await ChangeRootFolderAsync(selectedPath);
+        }
+    }
+}
+```
+
+#### Key Differences
+
+| Feature | WPF | Avalonia |
+|---------|-----|----------|
+| API | `FolderBrowserDialog` | `IStorageProvider.OpenFolderPickerAsync` |
+| Async | No (blocks UI) | Yes (native async) |
+| Return type | `DialogResult` + `SelectedPath` | `IReadOnlyList<IStorageFolder>` |
+| Initial folder | `SelectedPath` property | `SuggestedStartLocation` option |
+| Platform | Windows only | Windows, macOS, Linux |
+
+### Phase 7: PDF Document Provider ✅ COMPLETED
+
+**Goal:** Create cross-platform PDF page count provider
+
+```csharp
+// AvaloniaTests/ChooseMusicWindow.cs
+public class PdfToImageDocumentProvider : IPdfDocumentProvider
+{
+    public Task<int> GetPageCountAsync(string pdfFilePath)
+    {
+        return Task.Run(() =>
+        {
+            // Check for cloud-only files (Windows-specific)
+            var fileInfo = new FileInfo(pdfFilePath);
+            const FileAttributes RecallOnDataAccess = (FileAttributes)0x00400000;
+            const FileAttributes RecallOnOpen = (FileAttributes)0x00040000;
+            
+            var attrs = fileInfo.Attributes;
+            bool isCloudOnly = (attrs & RecallOnDataAccess) == RecallOnDataAccess ||
+                               (attrs & RecallOnOpen) == RecallOnOpen ||
+                               (attrs & FileAttributes.Offline) == FileAttributes.Offline;
+            
+            if (isCloudOnly)
+                return 0;
+            
+            return Conversion.GetPageCount(pdfFilePath);
+        });
+    }
+}
+```
+
 ---
 
 ## Feature Comparison
@@ -276,6 +436,9 @@ if (SkipCloudOnlyFiles)
 | Multi-volume PDFs | ✅ | ✅ | Via SheetMusicLib |
 | BMK File Reading | ✅ | ✅ | XML and JSON support |
 | Cloud File Detection | ✅ | ✅ | Skip OneDrive placeholders |
+| Settings Persistence | ✅ | ✅ | JSON-based AppSettings |
+| Folder Browser | ✅ | ✅ | StorageProvider API |
+| MRU Folders | ✅ | ✅ | Integrated with AppSettings |
 
 ### Pending Features
 
@@ -283,8 +446,6 @@ if (SkipCloudOnlyFiles)
 |---------|-----|----------|-------|
 | PDF Page Viewing | ✅ | ⏳ | Need to implement viewer |
 | Ink Annotations | ✅ | ⏳ | Avalonia ink canvas |
-| Settings Persistence | ✅ | ⏳ | Need JSON/preferences |
-| Folder Browser | ✅ | ⏳ | Use StorageProvider API |
 | Touch Gestures | ✅ | ⏳ | Avalonia gestures |
 | Playlists | ⏳ | ⏳ | Placeholder in both |
 
@@ -323,7 +484,8 @@ if (SkipCloudOnlyFiles)
 | `Grid` | `Grid` | Same |
 | `TreeView` | `TreeView` | Same |
 | `ContextMenu` | `ContextMenu` | Same |
-| `FolderBrowserDialog` | `StorageProvider.OpenFolderPickerAsync` | Different API |
+| `FolderBrowserDialog` | `IStorageProvider.OpenFolderPickerAsync` | Async, cross-platform |
+| `Properties.Settings` | `AppSettings` (JSON) | Cross-platform |
 | `ContentControl` | Use `Tag` property | Pattern change |
 
 ---
@@ -459,19 +621,38 @@ Windows-specific file attributes for OneDrive detection may not work on other pl
 
 ## Next Steps
 
-1. **Implement PDF Page Viewer** - Port `PdfViewerWindow` functionality
-2. **Add Ink Canvas Support** - Investigate Avalonia ink alternatives
-3. **Implement Settings** - JSON-based settings storage
-4. **Add Folder Picker** - Use Avalonia `StorageProvider` API
-5. **Touch/Gesture Support** - Port manipulation handlers
-6. **Create macOS/Linux builds** - Test cross-platform deployment
-7. **Performance optimization** - Profile large library loading
+1. **Implement PDF Page Viewer** - Port `PdfViewerWindow` functionality using PDFtoImage
+2. **Add Ink Canvas Support** - Investigate Avalonia ink alternatives or SkiaSharp drawing
+3. **Touch/Gesture Support** - Port manipulation handlers to Avalonia gestures
+4. **Create macOS/Linux builds** - Test cross-platform deployment
+5. **Performance optimization** - Profile large library loading
+
+---
+
+## Files Created/Modified
+
+### SheetMusicLib (Cross-platform core)
+
+| File | Description |
+|------|-------------|
+| `AppSettings.cs` | JSON-based settings with MRU support |
+| `PdfMetaDataCore.cs` | Platform-agnostic metadata loading |
+| `IPdfDocumentProvider.cs` | Interface for PDF operations |
+
+### AvaloniaTests (Avalonia implementation)
+
+| File | Description |
+|------|-------------|
+| `ChooseMusicWindow.cs` | Book/song chooser with folder picker |
+| `BrowseControl.cs` | Virtualized ListView with sorting/filtering |
+| `PdfToImageDocumentProvider` | PDFtoImage-based page count provider |
 
 ---
 
 ## References
 
 - [Avalonia Documentation](https://docs.avaloniaui.net/)
+- [Avalonia StorageProvider](https://docs.avaloniaui.net/docs/concepts/services/storage-provider/)
 - [PDFtoImage NuGet](https://www.nuget.org/packages/PDFtoImage)
 - [SkiaSharp](https://github.com/mono/SkiaSharp)
 - [WPF to Avalonia Migration Guide](https://docs.avaloniaui.net/docs/get-started/wpf)
