@@ -45,7 +45,7 @@ public class PdfViewerTests : TestBase
         var pdfPath = Environment.GetEnvironmentVariable("PDF_TEST_PATH");
         if (string.IsNullOrEmpty(pdfPath))
         {
-            pdfPath = TestHelpers.CreateTestPdf();
+            pdfPath = TestHelpers.CreateTestPdf(pageCount: 5);
         }
 
         var testCompleted = new TaskCompletionSource<bool>();
@@ -88,20 +88,6 @@ public class PdfViewerTests : TestBase
             window.Show();
             
             LogMessage($"✓ PdfWindow created and shown");
-            LogMessage($"✓ Window will close automatically after 10 seconds");
-            
-            var delay = 10000;
-            var timer = new System.Timers.Timer(delay);
-            timer.Elapsed += (s, e) =>
-            {
-                timer.Stop();
-                Dispatcher.UIThread.Post(() =>
-                {
-                    LogMessage("Closing PdfWindow and shutting down test");
-                    window?.Close();
-                });
-            };
-            timer.Start();
         };
 
         if (OperatingSystem.IsWindows())
@@ -110,7 +96,7 @@ public class PdfViewerTests : TestBase
         }
         uiThread.Start();
 
-        var completedTask = await Task.WhenAny(testCompleted.Task, Task.Delay(15000));
+        var completedTask = await Task.WhenAny(testCompleted.Task);
         if (completedTask != testCompleted.Task)
         {
             LogMessage("Test timed out - manually close the window to complete");

@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using System;
@@ -25,10 +26,12 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
     private string _pdfTitle = string.Empty;
     private string _description0 = string.Empty;
     private string _description1 = string.Empty;
-    private readonly int _pageNo = 1;
+    private int _pageCount = 0;
     
     private InkCanvasControl? _inkCanvas0;
     private InkCanvasControl? _inkCanvas1;
+    private GestureHandler? _gestureHandler;
+    private Panel? _dpPage;
 
     public PdfWindow()
     {
@@ -62,7 +65,8 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
             chkInk0.IsCheckedChanged += (s, e) => 
             { 
                 if (_inkCanvas0 != null) 
-                    _inkCanvas0.IsInkingEnabled = chkInk0.IsChecked == true; 
+                    _inkCanvas0.IsInkingEnabled = chkInk0.IsChecked == true;
+                UpdateGestureHandlerState();
             };
         }
         
@@ -71,7 +75,8 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
             chkInk1.IsCheckedChanged += (s, e) => 
             { 
                 if (_inkCanvas1 != null) 
-                    _inkCanvas1.IsInkingEnabled = chkInk1.IsChecked == true; 
+                    _inkCanvas1.IsInkingEnabled = chkInk1.IsChecked == true;
+                UpdateGestureHandlerState();
             };
         }
         
@@ -102,11 +107,40 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
             mnuQuit.Click += MnuQuit_Click;
         }
         
-        // Add keyboard handler for Alt-Q
+        // Wire up navigation buttons
+        var btnPrev = this.FindControl<Button>("btnPrev");
+        var btnNext = this.FindControl<Button>("btnNext");
+        if (btnPrev != null)
+        {
+            btnPrev.Click += (s, e) => NavigateAsync(-NumPagesPerView);
+        }
+        if (btnNext != null)
+        {
+            btnNext.Click += (s, e) => NavigateAsync(NumPagesPerView);
+        }
+        
+        // Add keyboard handler for navigation and Alt-Q
         this.KeyDown += Window_KeyDown;
         
         // Load and display the PDF pages
         Loaded += async (s, e) => await LoadAndDisplayPagesAsync();
+        
+        // Clean up on close
+        Closed += (s, e) => _gestureHandler?.Detach();
+    }
+
+    private void UpdateGestureHandlerState()
+    {
+        if (_gestureHandler != null)
+        {
+            var chkInk0 = this.FindControl<CheckBox>("chkInk0");
+            var chkInk1 = this.FindControl<CheckBox>("chkInk1");
+            
+            // Disable gestures when inking is enabled
+            _gestureHandler.IsDisabled = 
+                (chkInk0?.IsChecked == true) || 
+                (chkInk1?.IsChecked == true);
+        }
     }
 
     private void Window_KeyDown(object? sender, KeyEventArgs e)
@@ -116,6 +150,47 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
         {
             Close();
             e.Handled = true;
+            return;
+        }
+        
+        // Handle navigation keys
+        switch (e.Key)
+        {
+            case Key.Home:
+                CurrentPageNumber = 1;
+                _ = ShowPageAsync(1);
+                e.Handled = true;
+                break;
+            case Key.End:
+                CurrentPageNumber = _pageCount;
+                _ = ShowPageAsync(_pageCount);
+                e.Handled = true;
+                break;
+            case Key.Left:
+            case Key.Up:
+            case Key.PageUp:
+                NavigateAsync(-NumPagesPerView);
+                e.Handled = true;
+                break;
+            case Key.Right:
+            case Key.Down:
+            case Key.PageDown:
+                NavigateAsync(NumPagesPerView);
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void NavigateAsync(int delta)
+    {
+        TouchCount++;
+        var newPage = CurrentPageNumber + delta;
+        newPage = Math.Max(1, Math.Min(newPage, _pageCount));
+        
+        if (newPage != CurrentPageNumber)
+        {
+            CurrentPageNumber = newPage;
+            _ = ShowPageAsync(newPage);
         }
     }
 
@@ -165,29 +240,46 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
             }
 
             // Get page count
-            int pageCount;
             using (var pdfStream = File.OpenRead(_pdfFileName))
             {
-                pageCount = PDFtoImage.Conversion.GetPageCount(pdfStream);
+                _pageCount = PDFtoImage.Conversion.GetPageCount(pdfStream);
             }
-            MaxPageNumberMinus1 = pageCount - 1;
+            MaxPageNumberMinus1 = _pageCount - 1;
             
-            var page0Image = await RenderPageAsync(_pdfFileName, 1);
+            await ShowPageAsync(1);
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                Description0 = $"Error loading PDF: {ex.Message}";
+            });
+        }
+    }
+
+    private async Task ShowPageAsync(int pageNumber)
+    {
+        try
+        {
+            var page0Image = await RenderPageAsync(_pdfFileName, pageNumber);
             
             Bitmap? page1Image = null;
-            if (pageCount > 1)
+            if (_pageCount > pageNumber && Show2Pages)
             {
-                page1Image = await RenderPageAsync(_pdfFileName, 2);
+                page1Image = await RenderPageAsync(_pdfFileName, pageNumber + 1);
             }
             
             // Update UI on UI thread
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                var dpPage = this.FindControl<Panel>("dpPage");
-                if (dpPage != null)
+                _dpPage = this.FindControl<Panel>("dpPage");
+                if (_dpPage != null)
                 {
-                    dpPage.Children.Clear();
-                    dpPage.Background = Avalonia.Media.Brushes.LightGreen;
+                    _dpPage.Children.Clear();
+                    _dpPage.Background = Avalonia.Media.Brushes.LightGreen;
+                    
+                    // Reset any existing transform
+                    _gestureHandler?.ResetTransform();
 
                     var grid = new Grid
                     {
@@ -198,7 +290,7 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
                     grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Pixel) });
                     grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-                    // Left page (page 1) with ink annotation - aligned right
+                    // Left page with ink annotation - aligned right
                     _inkCanvas0 = new InkCanvasControl(page0Image)
                     {
                         HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
@@ -219,7 +311,7 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
                     Grid.SetColumn(divider, 1);
                     grid.Children.Add(divider);
 
-                    // Right page (page 2) with ink annotation - aligned left
+                    // Right page with ink annotation - aligned left
                     if (page1Image != null)
                     {
                         _inkCanvas1 = new InkCanvasControl(page1Image)
@@ -232,20 +324,65 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
                         grid.Children.Add(_inkCanvas1);
                     }
 
-                    dpPage.Children.Add(grid);
+                    _dpPage.Children.Add(grid);
+                    
+                    // Setup gesture handler for the page panel
+                    SetupGestureHandler();
                 }
                 
-                Description0 = $"Page 1 of {pageCount}";
-                Description1 = pageCount > 1 ? $"Page 2 of {pageCount}" : "";
+                Description0 = $"Page {pageNumber} of {_pageCount}";
+                Description1 = (page1Image != null && pageNumber + 1 <= _pageCount) ? 
+                    $"Page {pageNumber + 1} of {_pageCount}" : "";
+                    
+                // Update ink checkbox state
+                var chkInk0 = this.FindControl<CheckBox>("chkInk0");
+                var chkInk1 = this.FindControl<CheckBox>("chkInk1");
+                if (chkInk0 != null && _inkCanvas0 != null)
+                {
+                    _inkCanvas0.IsInkingEnabled = chkInk0.IsChecked == true;
+                }
+                if (chkInk1 != null && _inkCanvas1 != null)
+                {
+                    _inkCanvas1.IsInkingEnabled = chkInk1.IsChecked == true;
+                }
             });
         }
         catch (Exception ex)
         {
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                Description0 = $"Error loading PDF: {ex.Message}";
+                Description0 = $"Error showing page {pageNumber}: {ex.Message}";
             });
         }
+    }
+
+    private void SetupGestureHandler()
+    {
+        if (_dpPage == null) return;
+        
+        // Detach old handler if exists
+        _gestureHandler?.Detach();
+        
+        // Create new gesture handler
+        _gestureHandler = new GestureHandler(_dpPage)
+        {
+            NumPagesPerView = NumPagesPerView
+        };
+        
+        // Wire up navigation
+        _gestureHandler.NavigationRequested += (s, e) =>
+        {
+            NavigateAsync(e.Delta);
+        };
+        
+        // Wire up double-tap (could be used for zoom reset or other actions)
+        _gestureHandler.DoubleTapped += (s, e) =>
+        {
+            _gestureHandler.ResetTransform();
+        };
+        
+        // Update disabled state based on inking
+        UpdateGestureHandlerState();
     }
 
     private async Task<Bitmap> RenderPageAsync(string pdfFilePath, int pageIndex)
@@ -303,6 +440,15 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
             _show2Pages = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(NumPagesPerView));
+            
+            // Update gesture handler
+            if (_gestureHandler != null)
+            {
+                _gestureHandler.NumPagesPerView = NumPagesPerView;
+            }
+            
+            // Re-render current page
+            _ = ShowPageAsync(CurrentPageNumber);
         }
     }
 
