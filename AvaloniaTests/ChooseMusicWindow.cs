@@ -315,9 +315,22 @@ public class ChooseMusicWindow : Window
                 }
             }
             
+            // Get rotation from the volume info (0=Normal, 1=90, 2=180, 3=270)
+            var rotation = firstVolume.Rotation;
+            var pdfRotation = rotation switch
+            {
+                1 => PDFtoImage.PdfRotation.Rotate90,
+                2 => PDFtoImage.PdfRotation.Rotate180,
+                3 => PDFtoImage.PdfRotation.Rotate270,
+                _ => PDFtoImage.PdfRotation.Rotate0
+            };
+            
             // Use stream like MainWindow does - this avoids PDFtoImage string parsing issues
             using var pdfStream = File.OpenRead(pdfPath);
-            using var skBitmap = Conversion.ToImage(pdfStream, page: 0, options: new PDFtoImage.RenderOptions(Width: ThumbnailWidth, Height: ThumbnailHeight));
+            using var skBitmap = Conversion.ToImage(pdfStream, page: 0, options: new PDFtoImage.RenderOptions(
+                Width: ThumbnailWidth, 
+                Height: ThumbnailHeight,
+                Rotation: pdfRotation));
             
             // Convert SKBitmap to Avalonia Bitmap
             using var data = skBitmap.Encode(SKEncodedImageFormat.Png, 100);
