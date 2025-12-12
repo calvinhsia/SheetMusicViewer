@@ -1,4 +1,4 @@
-# SheetMusicViewer Migration: WPF/WinRT to Avalonia
+﻿# SheetMusicViewer Migration: WPF/WinRT to Avalonia
 
 ## Executive Summary
 
@@ -38,13 +38,13 @@ await pdfPage.RenderToStreamAsync(stream, renderOpts);
 
 ```
 SheetMusicViewer/
-??? SheetMusicViewer/          # WPF Application (Windows-only)
-?   ??? PdfViewerWindow.xaml   # Main PDF viewer
-?   ??? ChooseMusic.xaml       # Book/song chooser dialog
-?   ??? PdfMetaData.cs         # WPF-specific PDF metadata
-?   ??? BrowsePanel.cs         # ListView with filtering/sorting
-??? Tests/                     # Unit tests (WPF-dependent)
-??? WpfApp/                    # Additional WPF components
+├── SheetMusicViewer/          # WPF Application (Windows-only)
+│   ├── PdfViewerWindow.xaml   # Main PDF viewer
+│   ├── ChooseMusic.xaml       # Book/song chooser dialog
+│   ├── PdfMetaData.cs         # WPF-specific PDF metadata
+│   └── BrowsePanel.cs         # ListView with filtering/sorting
+├── Tests/                     # Unit tests (WPF-dependent)
+└── WpfApp/                    # Additional WPF components
 ```
 
 ---
@@ -64,25 +64,25 @@ SheetMusicViewer/
 
 ```
 SheetMusicViewer/
-??? SheetMusicViewer/          # Legacy WPF Application (Windows-only)
-??? SheetMusicLib/             # NEW: Platform-agnostic core library
-?   ??? PdfMetaDataCore.cs     # Portable metadata reading
-?   ??? TOCEntry.cs            # Table of contents
-?   ??? Favorite.cs            # Favorites
-?   ??? InkStrokeClass.cs      # Ink data (serialization only)
-??? AvaloniaTests/             # NEW: Avalonia implementation
-?   ??? ChooseMusicWindow.cs   # Avalonia book chooser
-?   ??? BrowseControl.cs       # Virtualized ListView
-?   ??? Tests/                 # Avalonia UI tests
-??? Tests/                     # Core library tests
-??? WpfApp/                    # Additional WPF components
+├── SheetMusicViewer/          # Legacy WPF Application (Windows-only)
+├── SheetMusicLib/             # NEW: Platform-agnostic core library
+│   ├── PdfMetaDataCore.cs     # Portable metadata reading
+│   ├── TOCEntry.cs            # Table of contents
+│   ├── Favorite.cs            # Favorites
+│   └── InkStrokeClass.cs      # Ink data (serialization only)
+├── AvaloniaTests/             # NEW: Avalonia implementation
+│   ├── ChooseMusicWindow.cs   # Avalonia book chooser
+│   ├── BrowseControl.cs       # Virtualized ListView
+│   └── Tests/                 # Avalonia UI tests
+├── Tests/                     # Core library tests
+└── WpfApp/                    # Additional WPF components
 ```
 
 ---
 
 ## Migration Strategy
 
-### Phase 1: Extract Platform-Agnostic Core ? COMPLETED
+### Phase 1: Extract Platform-Agnostic Core ✅ COMPLETED
 
 **Goal:** Separate business logic from WPF/WinRT dependencies
 
@@ -128,7 +128,7 @@ public class AvaloniaPdfDocumentProvider : IPdfDocumentProvider
 }
 ```
 
-### Phase 2: Replace PDF Rendering ? COMPLETED
+### Phase 2: Replace PDF Rendering ✅ COMPLETED
 
 **Goal:** Replace Windows.Data.Pdf with cross-platform PDFtoImage
 
@@ -177,7 +177,7 @@ private async Task<Bitmap> GetPdfThumbnailAsync(PdfMetaDataReadResult pdfMetaDat
 }
 ```
 
-### Phase 3: Rebuild UI Components ? COMPLETED
+### Phase 3: Rebuild UI Components ✅ COMPLETED
 
 **Goal:** Create Avalonia equivalents of WPF UI components
 
@@ -185,12 +185,12 @@ private async Task<Bitmap> GetPdfThumbnailAsync(PdfMetaDataReadResult pdfMetaDat
 
 | WPF Component | Avalonia Component | Status |
 |--------------|-------------------|--------|
-| `ChooseMusic.xaml` (Window) | `ChooseMusicWindow.cs` | ? |
-| `BrowsePanel` (ListView) | `BrowseControl.cs` | ? |
-| `MyContentControl` | `BookItemCache` + StackPanel.Tag | ? |
-| `MyTreeViewItem` | `FavoriteItem` + StackPanel.Tag | ? |
-| `TabControl` | `TabControl` | ? Same API |
-| `ListBox` with `WrapPanel` | `ListBox` with `FuncTemplate<Panel>` | ? |
+| `ChooseMusic.xaml` (Window) | `ChooseMusicWindow.cs` | ✅ |
+| `BrowsePanel` (ListView) | `BrowseControl.cs` | ✅ |
+| `MyContentControl` | `BookItemCache` + StackPanel.Tag | ✅ |
+| `MyTreeViewItem` | `FavoriteItem` + StackPanel.Tag | ✅ |
+| `TabControl` | `TabControl` | ✅ Same API |
+| `ListBox` with `WrapPanel` | `ListBox` with `FuncTemplate<Panel>` | ✅ |
 
 #### Key UI Differences
 
@@ -237,7 +237,7 @@ if (listBox.SelectedItem is StackPanel sp && sp.Tag is BookItemCache cache)
 }
 ```
 
-### Phase 4: Cloud File Handling ? COMPLETED
+### Phase 4: Cloud File Handling ✅ COMPLETED
 
 **Goal:** Handle OneDrive/cloud-only files without triggering downloads
 
@@ -269,24 +269,24 @@ if (SkipCloudOnlyFiles)
 
 | Feature | WPF | Avalonia | Notes |
 |---------|-----|----------|-------|
-| Books Tab | ? | ? | Thumbnails, filtering, sorting |
-| Favorites Tab | ? | ? | List with thumbnails |
-| Query Tab | ? | ? | BrowseControl with columns |
-| PDF Thumbnails | ? | ? | PDFtoImage rendering |
-| Multi-volume PDFs | ? | ? | Via SheetMusicLib |
-| BMK File Reading | ? | ? | XML and JSON support |
-| Cloud File Detection | ? | ? | Skip OneDrive placeholders |
+| Books Tab | ✅ | ✅ | Thumbnails, filtering, sorting |
+| Favorites Tab | ✅ | ✅ | List with thumbnails |
+| Query Tab | ✅ | ✅ | BrowseControl with columns |
+| PDF Thumbnails | ✅ | ✅ | PDFtoImage rendering |
+| Multi-volume PDFs | ✅ | ✅ | Via SheetMusicLib |
+| BMK File Reading | ✅ | ✅ | XML and JSON support |
+| Cloud File Detection | ✅ | ✅ | Skip OneDrive placeholders |
 
 ### Pending Features
 
 | Feature | WPF | Avalonia | Notes |
 |---------|-----|----------|-------|
-| PDF Page Viewing | ? | ? | Need to implement viewer |
-| Ink Annotations | ? | ? | Avalonia ink canvas |
-| Settings Persistence | ? | ? | Need JSON/preferences |
-| Folder Browser | ? | ? | Use StorageProvider API |
-| Touch Gestures | ? | ? | Avalonia gestures |
-| Playlists | ? | ? | Placeholder in both |
+| PDF Page Viewing | ✅ | ⏳ | Need to implement viewer |
+| Ink Annotations | ✅ | ⏳ | Avalonia ink canvas |
+| Settings Persistence | ✅ | ⏳ | Need JSON/preferences |
+| Folder Browser | ✅ | ⏳ | Use StorageProvider API |
+| Touch Gestures | ✅ | ⏳ | Avalonia gestures |
+| Playlists | ⏳ | ⏳ | Placeholder in both |
 
 ---
 
