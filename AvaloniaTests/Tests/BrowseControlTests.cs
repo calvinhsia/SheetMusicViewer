@@ -403,7 +403,8 @@ public class BrowseControlTests : TestBase
         {
             var window = new ChooseMusicWindow(results, folder)
             {
-                SkipCloudOnlyFiles = false
+                SkipCloudOnlyFiles = false,
+                WindowState = WindowState.Maximized
             };
             lifetime.MainWindow = window;
             
@@ -475,28 +476,28 @@ public class BrowseControlTests : TestBase
             }
 
             Trace.WriteLine($"? Scanning folder: {folder}");
-            var lstFileInfos = new List<FileInfo>();
-            foreach (var bmkFile in Directory.EnumerateFiles(folder, "*.bmk", SearchOption.AllDirectories))
-            {
-                lstFileInfos.Add(new FileInfo(bmkFile));
-            }
-            // output to csv
-            var csvFilePath = Path.Combine(folder, "output.csv");
-            if (File.Exists(csvFilePath))
-            {
-                File.Delete(csvFilePath);
-            }
-            using (var writer = new StreamWriter(csvFilePath))
-            {
-                await writer.WriteLineAsync("FileName,FileSize,LastModified");
-                foreach (var fileInfo in lstFileInfos)
-                {
-                    // Quote filename in case it contains commas
-                    await writer.WriteLineAsync($"\"{fileInfo.FullName}\",{fileInfo.Length},{fileInfo.LastWriteTime:yyyy-MM-dd HH:mm:ss}");
-                }
-            }
-            testCompleted.TrySetResult(true);
-            return;
+            //var lstFileInfos = new List<FileInfo>();
+            //foreach (var bmkFile in Directory.EnumerateFiles(folder, "*.bmk", SearchOption.AllDirectories))
+            //{
+            //    lstFileInfos.Add(new FileInfo(bmkFile));
+            //}
+            //// output to csv
+            //var csvFilePath = Path.Combine(folder, "output.csv");
+            //if (File.Exists(csvFilePath))
+            //{
+            //    File.Delete(csvFilePath);
+            //}
+            //using (var writer = new StreamWriter(csvFilePath))
+            //{
+            //    await writer.WriteLineAsync("FileName,FileSize,LastModified");
+            //    foreach (var fileInfo in lstFileInfos)
+            //    {
+            //        // Quote filename in case it contains commas
+            //        await writer.WriteLineAsync($"\"{fileInfo.FullName}\",{fileInfo.Length},{fileInfo.LastWriteTime:yyyy-MM-dd HH:mm:ss}");
+            //    }
+            //}
+            //testCompleted.TrySetResult(true);
+            //return;
 
 
             var pdfDocumentProvider = new AvaloniaPdfDocumentProvider();
