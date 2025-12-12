@@ -12,6 +12,7 @@ using SheetMusicLib;
 using SkiaSharp;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -34,12 +35,27 @@ public class ChooseMusicWindow : Window
     private RadioButton _rbtnByFolder;
     private RadioButton _rbtnByNumPages;
     
+    // Favorites tab
+    private ListBox _favoritesListBox;
+    private TextBlock _favoritesStatus;
+    
+    // Query tab
+    private ListBox _queryListBox;
+    private TextBox _queryFilterTextBox;
+    private TextBlock _queryStatus;
+    
     private List<PdfMetaDataReadResult> _pdfMetadata;
     private string _rootFolder;
     
     // Cache for book items (bitmap + metadata) to avoid re-rendering on filter/sort
     private List<BookItemCache> _bookItemCache = new();
     private bool _isLoading = false;
+    
+    // Query data source
+    private List<QueryItem> _allQueryItems = new();
+    
+    // Favorites data source
+    private List<FavoriteItem> _allFavoriteItems = new();
 
     private const int ThumbnailWidth = 150;
     private const int ThumbnailHeight = 225;
@@ -49,6 +65,16 @@ public class ChooseMusicWindow : Window
     /// Set to false to allow on-demand downloading of cloud files.
     /// </summary>
     public bool SkipCloudOnlyFiles { get; set; } = true;
+    
+    /// <summary>
+    /// The selected PDF metadata (set when user clicks OK)
+    /// </summary>
+    public PdfMetaDataReadResult ChosenPdfMetaData { get; private set; }
+    
+    /// <summary>
+    /// The selected page number (for favorites/query selection)
+    /// </summary>
+    public int ChosenPageNo { get; private set; }
 
     /// <summary>
     /// Cache entry for a book item - stores computed values to avoid recalculation on filter/sort.
@@ -66,6 +92,39 @@ public class ChooseMusicWindow : Window
         /// Gets the cached bitmap from the metadata object
         /// </summary>
         public Bitmap Bitmap => Metadata?.GetCachedThumbnail<Bitmap>();
+    }
+    
+    /// <summary>
+    /// Query item for the browse list - represents a song from the TOC
+    /// </summary>
+    public class QueryItem
+    {
+        public string SongName { get; set; }
+        public int Page { get; set; }
+        public int Vol { get; set; }
+        public string Composer { get; set; }
+        public string CompositionDate { get; set; }
+        public string Fav { get; set; }
+        public string BookName { get; set; }
+        public string Notes { get; set; }
+        public DateTime LastModified { get; set; }
+        
+        // Hidden reference to navigate
+        public PdfMetaDataReadResult Metadata { get; set; }
+        public TOCEntry TocEntry { get; set; }
+    }
+    
+    /// <summary>
+    /// Favorite item for the favorites list
+    /// </summary>
+    private class FavoriteItem
+    {
+        public PdfMetaDataReadResult Metadata { get; set; }
+        public Favorite Favorite { get; set; }
+        public string Description { get; set; }
+        public int PageNo { get; set; }
+        public Bitmap Thumbnail { get; set; }
+        public string BookName { get; set; }
     }
 
     public ChooseMusicWindow() : this(null, null)
@@ -111,6 +170,62 @@ public class ChooseMusicWindow : Window
         
         // Books tab
         var booksTab = new TabItem { Header = "_Books" };
+        booksTab.Content = BuildBooksTabContent();
+        _tabControl.Items.Add(booksTab);
+        
+        // Favorites tab
+        var favTab = new TabItem { Header = "Fa_vorites" };
+        favTab.Content = BuildFavoritesTabContent();
+        _tabControl.Items.Add(favTab);
+        
+        // Query tab
+        var queryTab = new TabItem { Header = "_Query" };
+        queryTab.Content = BuildQueryTabContent();
+        _tabControl.Items.Add(queryTab);
+        
+        // Playlists tab (placeholder)
+        var playlistsTab = new TabItem { Header = "_Playlists", Content = new TextBlock { Text = "Playlists go here", Margin = new Thickness(20) } };
+        _tabControl.Items.Add(playlistsTab);
+        
+        // Handle tab selection to lazy-load content
+        _tabControl.SelectionChanged += OnTabSelectionChanged;
+        
+        grid.Children.Add(_tabControl);
+        
+        // Top bar with totals and controls
+        var topBar = new StackPanel 
+        { 
+            Orientation = Orientation.Horizontal, 
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 5, 10, 5)
+        };
+        Grid.SetRow(topBar, 0);
+        
+        _tbxTotals = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0) };
+        topBar.Children.Add(_tbxTotals);
+        
+        topBar.Children.Add(new Label { Content = "Music Folder Path:", Margin = new Thickness(20, 0, 0, 0) });
+        _cboRootFolder = new ComboBox { Width = 300, Margin = new Thickness(10, 0, 10, 0) };
+        _cboRootFolder.Items.Add("C:\\Users\\Music\\SheetMusic");
+        _cboRootFolder.Items.Add("D:\\Music\\PDFs");
+        _cboRootFolder.SelectedIndex = 0;
+        topBar.Children.Add(_cboRootFolder);
+        
+        var btnCancel = new Button { Content = "Cancel", Margin = new Thickness(10, 0, 0, 0) };
+        btnCancel.Click += (s, e) => Close();
+        topBar.Children.Add(btnCancel);
+        
+        var btnOk = new Button { Content = "_OK", Width = 50, Margin = new Thickness(10, 0, 10, 0) };
+        btnOk.Click += BtnOk_Click;
+        topBar.Children.Add(btnOk);
+        
+        grid.Children.Add(topBar);
+        
+        Content = grid;
+    }
+    
+    private Control BuildBooksTabContent()
+    {
         var booksGrid = new Grid();
         booksGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
         booksGrid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star)));
@@ -141,7 +256,7 @@ public class ChooseMusicWindow : Window
         // Books list with wrap panel
         _lbBooks = new ListBox();
         
-        // Remove default ListBox item padding by setting a custom item container style
+        // Remove default ListBox item padding
         _lbBooks.ItemContainerTheme = new ControlTheme(typeof(ListBoxItem))
         {
             Setters =
@@ -158,6 +273,7 @@ public class ChooseMusicWindow : Window
             Orientation = Orientation.Horizontal
         });
         _lbBooks.ItemsPanel = wrapPanelFactory;
+        _lbBooks.DoubleTapped += (s, e) => BtnOk_Click(s, e);
         
         var scrollViewer = new ScrollViewer 
         { 
@@ -168,53 +284,332 @@ public class ChooseMusicWindow : Window
         Grid.SetRow(scrollViewer, 1);
         booksGrid.Children.Add(scrollViewer);
         
-        booksTab.Content = booksGrid;
-        _tabControl.Items.Add(booksTab);
+        return booksGrid;
+    }
+    
+    private Control BuildFavoritesTabContent()
+    {
+        var favGrid = new Grid();
+        favGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        favGrid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star)));
         
-        // Favorites tab (placeholder)
-        var favTab = new TabItem { Header = "Fa_vorites", Content = new TextBlock { Text = "Favorites go here", Margin = new Thickness(20) } };
-        _tabControl.Items.Add(favTab);
+        // Status bar
+        _favoritesStatus = new TextBlock { Margin = new Thickness(10, 5, 10, 5) };
+        Grid.SetRow(_favoritesStatus, 0);
+        favGrid.Children.Add(_favoritesStatus);
         
-        // Query tab (placeholder)
-        var queryTab = new TabItem { Header = "_Query", Content = new TextBlock { Text = "Query goes here", Margin = new Thickness(20) } };
-        _tabControl.Items.Add(queryTab);
+        // Favorites list
+        _favoritesListBox = new ListBox();
+        _favoritesListBox.DoubleTapped += (s, e) => BtnOk_Click(s, e);
         
-        // Playlists tab (placeholder)
-        var playlistsTab = new TabItem { Header = "_Playlists", Content = new TextBlock { Text = "Playlists go here", Margin = new Thickness(20) } };
-        _tabControl.Items.Add(playlistsTab);
+        Grid.SetRow(_favoritesListBox, 1);
+        favGrid.Children.Add(_favoritesListBox);
         
-        grid.Children.Add(_tabControl);
+        return favGrid;
+    }
+    
+    private Control BuildQueryTabContent()
+    {
+        var queryGrid = new Grid();
+        queryGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        queryGrid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star)));
         
-        // Top bar with totals and controls
-        var topBar = new StackPanel 
-        { 
-            Orientation = Orientation.Horizontal, 
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 5, 10, 5)
-        };
-        Grid.SetRow(topBar, 0);
+        // Filter bar for query
+        var filterPanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(5) };
+        _queryStatus = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(5, 0, 20, 0) };
+        filterPanel.Children.Add(_queryStatus);
+        filterPanel.Children.Add(new Label { Content = "Filter:", Margin = new Thickness(5, 0, 0, 0) });
+        _queryFilterTextBox = new TextBox { Width = 200, Margin = new Thickness(5, 0, 0, 0) };
+        _queryFilterTextBox.TextChanged += OnQueryFilterChanged;
+        filterPanel.Children.Add(_queryFilterTextBox);
         
-        _tbxTotals = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0) };
-        topBar.Children.Add(_tbxTotals);
+        Grid.SetRow(filterPanel, 0);
+        queryGrid.Children.Add(filterPanel);
         
-        topBar.Children.Add(new Label { Content = "Music Folder Path:", Margin = new Thickness(20, 0, 0, 0) });
-        _cboRootFolder = new ComboBox { Width = 300, Margin = new Thickness(10, 0, 10, 0) };
-        _cboRootFolder.Items.Add("C:\\Users\\Music\\SheetMusic");
-        _cboRootFolder.Items.Add("D:\\Music\\PDFs");
-        _cboRootFolder.SelectedIndex = 0;
-        topBar.Children.Add(_cboRootFolder);
+        // Browse-style ListBox for songs
+        _queryListBox = new ListBox();
+        _queryListBox.DoubleTapped += (s, e) => BtnOk_Click(s, e);
         
-        var btnCancel = new Button { Content = "Cancel", Margin = new Thickness(10, 0, 0, 0) };
-        btnCancel.Click += (s, e) => Close();
-        topBar.Children.Add(btnCancel);
+        Grid.SetRow(_queryListBox, 1);
+        queryGrid.Children.Add(_queryListBox);
         
-        var btnOk = new Button { Content = "_OK", Width = 50, Margin = new Thickness(10, 0, 10, 0) };
-        btnOk.Click += (s, e) => Close();
-        topBar.Children.Add(btnOk);
+        return queryGrid;
+    }
+    
+    private void OnTabSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_tabControl.SelectedItem is TabItem selectedTab)
+        {
+            var header = selectedTab.Header?.ToString() ?? "";
+            
+            if (header == "Fa_vorites" && _allFavoriteItems.Count == 0)
+            {
+                FillFavoritesTab();
+            }
+            else if (header == "_Query" && _allQueryItems.Count == 0)
+            {
+                FillQueryTab();
+            }
+        }
+    }
+    
+    private void FillFavoritesTab()
+    {
+        if (_pdfMetadata == null || _pdfMetadata.Count == 0)
+            return;
+            
+        _allFavoriteItems.Clear();
         
-        grid.Children.Add(topBar);
+        foreach (var pdfMetaData in _pdfMetadata.OrderBy(p => p.GetBookName(_rootFolder)))
+        {
+            foreach (var fav in pdfMetaData.Favorites)
+            {
+                var description = GetDescription(pdfMetaData, fav.Pageno);
+                var thumbnail = pdfMetaData.GetCachedThumbnail<Bitmap>();
+                
+                _allFavoriteItems.Add(new FavoriteItem
+                {
+                    Metadata = pdfMetaData,
+                    Favorite = fav,
+                    Description = description,
+                    PageNo = fav.Pageno,
+                    Thumbnail = thumbnail,
+                    BookName = pdfMetaData.GetBookName(_rootFolder)
+                });
+            }
+        }
         
-        Content = grid;
+        RefreshFavoritesDisplay();
+    }
+    
+    private void RefreshFavoritesDisplay()
+    {
+        var items = new List<Control>();
+        
+        foreach (var favItem in _allFavoriteItems)
+        {
+            var sp = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(5), Tag = favItem };
+            
+            if (favItem.Thumbnail != null)
+            {
+                sp.Children.Add(new Image { Source = favItem.Thumbnail, Height = 60, Width = 40, Margin = new Thickness(0, 0, 10, 0) });
+            }
+            
+            var textPanel = new StackPanel { Orientation = Orientation.Vertical, VerticalAlignment = VerticalAlignment.Center };
+            textPanel.Children.Add(new TextBlock { Text = favItem.Description, FontWeight = FontWeight.Bold });
+            textPanel.Children.Add(new TextBlock { Text = $"Page {favItem.PageNo} - {favItem.BookName}", Foreground = Brushes.Gray, FontSize = 11 });
+            sp.Children.Add(textPanel);
+            
+            items.Add(sp);
+        }
+        
+        _favoritesListBox.ItemsSource = items;
+        _favoritesStatus.Text = $"# Favorites = {_allFavoriteItems.Count}";
+    }
+    
+    private void FillQueryTab()
+    {
+        if (_pdfMetadata == null || _pdfMetadata.Count == 0)
+            return;
+            
+        _allQueryItems.Clear();
+        
+        foreach (var pdfMetaData in _pdfMetadata)
+        {
+            foreach (var tocEntry in pdfMetaData.TocEntries)
+            {
+                _allQueryItems.Add(new QueryItem
+                {
+                    SongName = tocEntry.SongName ?? "",
+                    Page = tocEntry.PageNo,
+                    Vol = pdfMetaData.GetVolNumFromPageNum(tocEntry.PageNo),
+                    Composer = tocEntry.Composer ?? "",
+                    CompositionDate = tocEntry.Date ?? "",
+                    Fav = pdfMetaData.IsFavorite(tocEntry.PageNo) ? "?" : "",
+                    BookName = pdfMetaData.GetBookName(_rootFolder),
+                    Notes = tocEntry.Notes ?? "",
+                    LastModified = pdfMetaData.LastWriteTime,
+                    Metadata = pdfMetaData,
+                    TocEntry = tocEntry
+                });
+            }
+        }
+        
+        RefreshQueryDisplay();
+    }
+    
+    private void RefreshQueryDisplay(string filterText = null)
+    {
+        filterText = filterText?.Trim() ?? "";
+        
+        IEnumerable<QueryItem> displayItems = _allQueryItems;
+        
+        if (!string.IsNullOrEmpty(filterText))
+        {
+            displayItems = displayItems.Where(q =>
+                q.SongName.Contains(filterText, StringComparison.OrdinalIgnoreCase) ||
+                q.Composer.Contains(filterText, StringComparison.OrdinalIgnoreCase) ||
+                q.BookName.Contains(filterText, StringComparison.OrdinalIgnoreCase) ||
+                q.Notes.Contains(filterText, StringComparison.OrdinalIgnoreCase));
+        }
+        
+        var sortedItems = displayItems.OrderBy(q => q.SongName).ToList();
+        
+        var items = new List<Control>();
+        
+        foreach (var queryItem in sortedItems)
+        {
+            // Create a browse-style row with columns
+            var rowGrid = new Grid { Margin = new Thickness(2), Tag = queryItem };
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(280))); // Song Name
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(50)));  // Page
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(35)));  // Vol
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(120))); // Composer
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(60)));  // Date
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(30)));  // Fav
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(200))); // Book
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star))); // Notes
+            
+            var songText = new TextBlock { Text = queryItem.SongName, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(songText, 0);
+            rowGrid.Children.Add(songText);
+            
+            var pageText = new TextBlock { Text = queryItem.Page.ToString(), VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(pageText, 1);
+            rowGrid.Children.Add(pageText);
+            
+            var volText = new TextBlock { Text = queryItem.Vol.ToString(), VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(volText, 2);
+            rowGrid.Children.Add(volText);
+            
+            var composerText = new TextBlock { Text = queryItem.Composer, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(composerText, 3);
+            rowGrid.Children.Add(composerText);
+            
+            var dateText = new TextBlock { Text = queryItem.CompositionDate, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(dateText, 4);
+            rowGrid.Children.Add(dateText);
+            
+            var favText = new TextBlock { Text = queryItem.Fav, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(favText, 5);
+            rowGrid.Children.Add(favText);
+            
+            var bookText = new TextBlock { Text = queryItem.BookName, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(bookText, 6);
+            rowGrid.Children.Add(bookText);
+            
+            var notesText = new TextBlock { Text = queryItem.Notes, TextTrimming = TextTrimming.CharacterEllipsis, Foreground = Brushes.Gray, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(notesText, 7);
+            rowGrid.Children.Add(notesText);
+            
+            items.Add(rowGrid);
+        }
+        
+        // Add header row
+        var headerItems = new List<Control>();
+        var headerGrid = new Grid { Margin = new Thickness(2), Background = Brushes.LightGray };
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(280)));
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(50)));
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(35)));
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(120)));
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(60)));
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(30)));
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(200)));
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
+        
+        var headers = new[] { "Song Name", "Page", "Vol", "Composer", "Date", "Fav", "Book", "Notes" };
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var headerText = new TextBlock { Text = headers[i], FontWeight = FontWeight.Bold, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(headerText, i);
+            headerGrid.Children.Add(headerText);
+        }
+        
+        headerItems.Add(headerGrid);
+        headerItems.AddRange(items);
+        
+        _queryListBox.ItemsSource = headerItems;
+        _queryStatus.Text = $"# Songs = {sortedItems.Count:n0}";
+    }
+    
+    private void OnQueryFilterChanged(object? sender, TextChangedEventArgs e)
+    {
+        RefreshQueryDisplay(_queryFilterTextBox?.Text);
+    }
+    
+    /// <summary>
+    /// Get description for a page (similar to WPF GetDescription)
+    /// </summary>
+    private string GetDescription(PdfMetaDataReadResult metadata, int pageNo)
+    {
+        // Find TOC entry for this page or nearest one before it
+        var tocEntry = metadata.TocEntries.FirstOrDefault(t => t.PageNo == pageNo);
+        
+        if (tocEntry == null)
+        {
+            // Find the nearest TOC entry before this page
+            tocEntry = metadata.TocEntries
+                .Where(t => t.PageNo <= pageNo)
+                .OrderByDescending(t => t.PageNo)
+                .FirstOrDefault();
+        }
+        
+        if (tocEntry != null)
+        {
+            var parts = new List<string>();
+            if (!string.IsNullOrEmpty(tocEntry.SongName)) parts.Add(tocEntry.SongName);
+            if (!string.IsNullOrEmpty(tocEntry.Composer)) parts.Add(tocEntry.Composer);
+            if (!string.IsNullOrEmpty(tocEntry.Date)) parts.Add(tocEntry.Date);
+            return string.Join(" - ", parts);
+        }
+        
+        return metadata.GetBookName(_rootFolder);
+    }
+    
+    private void BtnOk_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_tabControl.SelectedItem is TabItem selectedTab)
+        {
+            var header = selectedTab.Header?.ToString() ?? "";
+            
+            switch (header)
+            {
+                case "_Books":
+                    if (_lbBooks.SelectedItem is StackPanel sp && sp.Tag is BookItemCache cache)
+                    {
+                        ChosenPdfMetaData = cache.Metadata;
+                        ChosenPageNo = cache.Metadata.LastPageNo;
+                    }
+                    else if (_lbBooks.SelectedIndex >= 0 && _lbBooks.SelectedIndex < _bookItemCache.Count)
+                    {
+                        var selectedCache = _bookItemCache.ElementAtOrDefault(_lbBooks.SelectedIndex);
+                        if (selectedCache != null)
+                        {
+                            ChosenPdfMetaData = selectedCache.Metadata;
+                            ChosenPageNo = selectedCache.Metadata.LastPageNo;
+                        }
+                    }
+                    break;
+                    
+                case "Fa_vorites":
+                    if (_favoritesListBox.SelectedItem is StackPanel favSp && favSp.Tag is FavoriteItem favItem)
+                    {
+                        ChosenPdfMetaData = favItem.Metadata;
+                        ChosenPageNo = favItem.PageNo;
+                    }
+                    break;
+                    
+                case "_Query":
+                    if (_queryListBox.SelectedItem is Grid queryGrid && queryGrid.Tag is QueryItem queryItem)
+                    {
+                        ChosenPdfMetaData = queryItem.Metadata;
+                        ChosenPageNo = queryItem.Page;
+                    }
+                    break;
+            }
+        }
+        
+        Close();
     }
 
     private void OnSortChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -240,37 +635,32 @@ public class ChooseMusicWindow : Window
     {
         if (_rbtnByFolder?.IsChecked == true)
         {
-            // Sort by folder/path (alphabetically)
             return _pdfMetadata.OrderBy(p => p.GetBookName(_rootFolder));
         }
         else if (_rbtnByNumPages?.IsChecked == true)
         {
-            // Sort by number of pages (descending - largest first)
             return _pdfMetadata.OrderByDescending(p => p.VolumeInfoList.Sum(v => v.NPagesInThisVolume));
         }
-        else // ByDate (default)
+        else
         {
-            // Sort by last write time (most recent first)
             return _pdfMetadata.OrderByDescending(p => p.LastWriteTime);
         }
     }
 
     /// <summary>
-    /// Load all books and cache their bitmaps. Books are loaded in sort order
-    /// so new items appear at the end during progressive loading.
+    /// Load all books and cache their bitmaps.
     /// </summary>
     private async Task LoadBooksAsync()
     {
         _isLoading = true;
         _bookItemCache.Clear();
         
-        var random = new Random(42); // Fixed seed for consistent fallback colors
+        var random = new Random(42);
         int index = 0;
         int totalSongs = 0;
         int totalPages = 0;
         int totalFavs = 0;
         
-        // Pre-sort metadata so items load in correct order (new items appear at end)
         var sortedMetadata = GetSortedMetadata().ToList();
         
         foreach (var pdfMetaData in sortedMetadata)
@@ -284,9 +674,7 @@ public class ChooseMusicWindow : Window
             totalPages += numPages;
             totalFavs += numFavs;
             
-            // Use the caching mechanism on PdfMetaDataReadResult
-            // This allows the same thumbnail to be reused elsewhere (e.g., main window thumb)
-            var localIndex = index; // Capture for closure
+            var localIndex = index;
             var localBookName = bookName;
             try
             {
@@ -306,11 +694,9 @@ public class ChooseMusicWindow : Window
             catch (Exception ex)
             {
                 Trace.WriteLine($"Failed to get PDF thumbnail for {bookName}: {ex.Message}");
-                // Store fallback bitmap directly on the metadata
                 pdfMetaData.ThumbnailCache = GenerateBookCoverBitmap(ThumbnailWidth, ThumbnailHeight, random, bookName, index);
             }
             
-            // BookItemCache.Bitmap is now a computed property that reads from Metadata.ThumbnailCache
             _bookItemCache.Add(new BookItemCache
             {
                 Metadata = pdfMetaData,
@@ -320,7 +706,6 @@ public class ChooseMusicWindow : Window
                 NumFavs = numFavs
             });
             
-            // Show loading progress - just append new items, no re-sorting needed during load
             if (index % 10 == 9)
             {
                 UpdateBooksDisplayDuringLoad(totalSongs, totalPages, totalFavs);
@@ -334,14 +719,10 @@ public class ChooseMusicWindow : Window
         RefreshBooksDisplay();
     }
 
-    /// <summary>
-    /// Update display during loading - items are already in sort order, just append
-    /// </summary>
     private void UpdateBooksDisplayDuringLoad(int totalSongs, int totalPages, int totalFavs)
     {
         var filterText = _tbxFilter?.Text?.Trim() ?? string.Empty;
         
-        // Filter items if needed
         IEnumerable<BookItemCache> displayItems = _bookItemCache;
         if (!string.IsNullOrEmpty(filterText))
         {
@@ -349,7 +730,6 @@ public class ChooseMusicWindow : Window
                 item.BookName.Contains(filterText, StringComparison.OrdinalIgnoreCase));
         }
         
-        // Create UI items - no sorting needed, already in order
         var items = new List<Control>();
         foreach (var cacheItem in displayItems)
         {
@@ -360,12 +740,9 @@ public class ChooseMusicWindow : Window
         _tbxTotals.Text = $"Total #Books = {_bookItemCache.Count} # Songs = {totalSongs:n0} # Pages = {totalPages:n0} #Fav={totalFavs:n0}";
     }
 
-    /// <summary>
-    /// Create the UI control for a book item
-    /// </summary>
     private Control CreateBookItemControl(BookItemCache cacheItem)
     {
-        var sp = new StackPanel { Orientation = Orientation.Vertical, Width = 150 };
+        var sp = new StackPanel { Orientation = Orientation.Vertical, Width = 150, Tag = cacheItem };
         
         var img = new Image
         {
@@ -394,14 +771,10 @@ public class ChooseMusicWindow : Window
         return sp;
     }
 
-    /// <summary>
-    /// Refresh the books display with current filter and sort settings
-    /// </summary>
     private void RefreshBooksDisplay()
     {
         var filterText = _tbxFilter?.Text?.Trim() ?? string.Empty;
         
-        // Filter items
         IEnumerable<BookItemCache> filteredItems = _bookItemCache;
         if (!string.IsNullOrEmpty(filterText))
         {
@@ -409,25 +782,20 @@ public class ChooseMusicWindow : Window
                 item.BookName.Contains(filterText, StringComparison.OrdinalIgnoreCase));
         }
         
-        // Sort items based on selected radio button
         IEnumerable<BookItemCache> sortedItems;
         if (_rbtnByFolder?.IsChecked == true)
         {
-            // Sort by folder/path (alphabetically)
             sortedItems = filteredItems.OrderBy(item => item.BookName);
         }
         else if (_rbtnByNumPages?.IsChecked == true)
         {
-            // Sort by number of pages (descending - largest first)
             sortedItems = filteredItems.OrderByDescending(item => item.NumPages);
         }
-        else // ByDate (default)
+        else
         {
-            // Sort by last write time (most recent first)
             sortedItems = filteredItems.OrderByDescending(item => item.Metadata.LastWriteTime);
         }
         
-        // Create UI items
         var items = new List<Control>();
         int totalSongs = 0;
         int totalPages = 0;
@@ -446,14 +814,10 @@ public class ChooseMusicWindow : Window
         _tbxTotals.Text = $"Total #Books = {items.Count} # Songs = {totalSongs:n0} # Pages = {totalPages:n0} #Fav={totalFavs:n0}";
     }
 
-    /// <summary>
-    /// Get a thumbnail bitmap from the first page of the PDF, similar to WPF's GetBitmapImageThumbnailAsync
-    /// </summary>
     private async Task<Bitmap> GetPdfThumbnailAsync(PdfMetaDataReadResult pdfMetaData)
     {
         return await Task.Run(() =>
         {
-            // Check if we have any volumes
             if (pdfMetaData.VolumeInfoList == null || pdfMetaData.VolumeInfoList.Count == 0)
             {
                 throw new InvalidOperationException($"No volumes in metadata for: {pdfMetaData.FullPathFile}");
@@ -465,7 +829,6 @@ public class ChooseMusicWindow : Window
                 throw new InvalidOperationException($"Empty FileNameVolume for: {pdfMetaData.FullPathFile}");
             }
             
-            // Get the path to the first volume PDF
             var pdfPath = pdfMetaData.GetFullPathFileFromVolno(0);
             
             if (string.IsNullOrEmpty(pdfPath))
@@ -478,7 +841,6 @@ public class ChooseMusicWindow : Window
                 throw new FileNotFoundException($"PDF file not found: {pdfPath}");
             }
             
-            // Check for cloud-only files
             if (SkipCloudOnlyFiles)
             {
                 var fileInfo = new FileInfo(pdfPath);
@@ -490,7 +852,6 @@ public class ChooseMusicWindow : Window
                                    (attrs & RecallOnOpen) == RecallOnOpen ||
                                    (attrs & FileAttributes.Offline) == FileAttributes.Offline;
                 
-                // Small reparse point file is likely a cloud placeholder
                 if (!isCloudOnly && (attrs & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint && fileInfo.Length < 1024)
                 {
                     isCloudOnly = true;
@@ -502,7 +863,6 @@ public class ChooseMusicWindow : Window
                 }
             }
             
-            // Get rotation from the volume info (0=Normal, 1=90, 2=180, 3=270)
             var rotation = firstVolume.Rotation;
             var pdfRotation = rotation switch
             {
@@ -512,14 +872,12 @@ public class ChooseMusicWindow : Window
                 _ => PDFtoImage.PdfRotation.Rotate0
             };
             
-            // Use stream like MainWindow does - this avoids PDFtoImage string parsing issues
             using var pdfStream = File.OpenRead(pdfPath);
             using var skBitmap = Conversion.ToImage(pdfStream, page: 0, options: new PDFtoImage.RenderOptions(
                 Width: ThumbnailWidth, 
                 Height: ThumbnailHeight,
                 Rotation: pdfRotation));
             
-            // Convert SKBitmap to Avalonia Bitmap
             using var data = skBitmap.Encode(SKEncodedImageFormat.Png, 100);
             using var stream = new MemoryStream();
             data.SaveTo(stream);
@@ -531,39 +889,24 @@ public class ChooseMusicWindow : Window
 
     private async Task FillBooksTabAsync()
     {
-        var random = new Random(42); // Fixed seed for consistent colors
+        // Demo mode with generated data
+        var random = new Random(42);
         var items = new List<Control>();
         
-        // Generate 50 book items with colorful bitmaps
         var bookNames = new[]
         {
             "Classical Piano Vol 1", "Jazz Standards", "Pop Hits 2020", "Rock Classics",
             "Broadway Favorites", "Country Gold", "Blues Collection", "Folk Songs",
             "Movie Themes", "Video Game Music", "Christmas Carols", "Gospel Hymns",
             "Opera Arias", "Chamber Music", "Symphonies", "Concertos",
-            "Sonatas", "Etudes", "Preludes", "Fugues",
-            "Nocturnes", "Waltzes", "Mazurkas", "Ballades",
-            "Impromptus", "Scherzos", "Polonaises", "Rhapsodies",
-            "Variations", "Suites", "Partitas", "Inventions",
-            "Toccatas", "Fantasias", "Rondos", "Minuets",
-            "Gavottes", "Bourrees", "Sarabandes", "Gigues",
-            "Courantes", "Allemandes", "Passacaglias", "Chaconnes",
-            "Marches", "Serenades", "Divertimentos", "Overtures",
-            "Interludes", "Bagatelles"
+            "Sonatas", "Etudes", "Preludes", "Fugues"
         };
         
-        for (int i = 0; i < 50; i++)
+        for (int i = 0; i < 20; i++)
         {
             var bookName = bookNames[i % bookNames.Length];
-            if (i >= bookNames.Length)
-            {
-                bookName += $" Vol {i / bookNames.Length + 1}";
-            }
-            
-            // Create a colorful bitmap for this book - match WPF 150x225
             var bitmap = GenerateBookCoverBitmap(ThumbnailWidth, ThumbnailHeight, random, bookName, i);
             
-            // Create the book item UI - match WPF ItemWidth=150
             var sp = new StackPanel { Orientation = Orientation.Vertical, Width = 150 };
             
             var img = new Image
@@ -596,19 +939,17 @@ public class ChooseMusicWindow : Window
             
             items.Add(sp);
             
-            // Add incrementally to show loading progress
             if (i % 5 == 4)
             {
                 _lbBooks.ItemsSource = null;
                 _lbBooks.ItemsSource = new List<Control>(items);
-                _tbxTotals.Text = $"Total #Books = {items.Count} # Songs = {items.Count * 50} # Pages = {items.Count * 150} #Fav={items.Count * 5}";
-                await Task.Delay(10); // Small delay to show progressive loading
+                _tbxTotals.Text = $"Total #Books = {items.Count}";
+                await Task.Delay(10);
             }
         }
         
-        // Final update
         _lbBooks.ItemsSource = items;
-        _tbxTotals.Text = $"Total #Books = {items.Count} # Songs = {items.Count * 50:n0} # Pages = {items.Count * 150:n0} #Fav={items.Count * 5:n0}";
+        _tbxTotals.Text = $"Total #Books = {items.Count}";
     }
 
     private Bitmap GenerateBookCoverBitmap(int width, int height, Random random, string title, int index)
@@ -633,36 +974,6 @@ public class ChooseMusicWindow : Window
             IsAntialias = true
         };
         canvas.DrawRect(0, 0, width, height, paint);
-        
-        // Add some decorative elements
-        using var accentPaint = new SKPaint
-        {
-            Color = SKColors.White.WithAlpha(100),
-            IsAntialias = true,
-            StrokeWidth = 3,
-            Style = SKPaintStyle.Stroke
-        };
-        
-        // Draw some circles or rectangles as decoration
-        var shapeType = index % 4;
-        switch (shapeType)
-        {
-            case 0:
-                canvas.DrawCircle(width / 2, height / 3, 30, accentPaint);
-                break;
-            case 1:
-                canvas.DrawRect(width / 4, height / 4, width / 2, height / 2, accentPaint);
-                break;
-            case 2:
-                for (int i = 0; i < 3; i++)
-                {
-                    canvas.DrawLine(10, height / 4 + i * 20, width - 10, height / 4 + i * 20, accentPaint);
-                }
-                break;
-            case 3:
-                canvas.DrawOval(new SKRect(width / 4, height / 3, width * 3 / 4, height * 2 / 3), accentPaint);
-                break;
-        }
         
         // Add title text at bottom with word wrapping
         using var textPaint = new SKPaint
