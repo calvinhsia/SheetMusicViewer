@@ -12,7 +12,7 @@ namespace AvaloniaTests;
 /// Handles multi-touch gestures for Avalonia controls including:
 /// - Pinch-to-zoom
 /// - Two-finger pan
-/// - Two-finger rotation
+/// - Single-finger pan (when zoomed)
 /// - Touch navigation (tap left/right to navigate)
 /// - Double-tap detection
 /// 
@@ -26,21 +26,36 @@ public class GestureHandler
     
     // Gesture state
     private double _initialDistance;
-    private double _initialAngle;
     private Point _initialCenter;
     private Matrix _initialTransform;
     private bool _isGesturing;
-    private bool _gestureWasPerformed; // Track if any multi-touch gesture happened in this touch sequence
+    private bool _gestureWasPerformed;
+    private bool _hasMoved;
+    private Point _pointerDownPosition;
+    private Point _lastDragPosition;
+    private const double MoveThreshold = 10;
     
     // For double-tap detection
     private readonly Stopwatch _doubleTapStopwatch = new();
     private Point _lastTapLocation;
     private const double DoubleTapDistanceThreshold = 40;
-    private const int DoubleTapTimeThreshold = 500; // milliseconds
+    private const int DoubleTapTimeThreshold = 400;
     
     // For touch navigation debouncing
     private int _lastTouchTimestamp;
     private const int TouchDebounceMs = 300;
+    
+    // Diagnostic logging
+    public bool EnableLogging { get; set; }
+    public event EventHandler<string>? LogMessage;
+    
+    private void Log(string message)
+    {
+        if (!EnableLogging) return;
+        var msg = $"[Gesture] {DateTime.Now:HH:mm:ss.fff} {message}";
+        Debug.WriteLine(msg);
+        LogMessage?.Invoke(this, msg);
+    }
     
     /// <summary>
     /// Fired when the user taps to navigate (left side = previous, right side = next)
@@ -62,9 +77,11 @@ public class GestureHandler
     /// </summary>
     public int NumPagesPerView { get; set; } = 2;
 
-    public GestureHandler(Control target)
+    public GestureHandler(Control target, bool enableLogging = false)
     {
         _target = target;
+        EnableLogging = enableLogging;
+        Log($"GestureHandler created for {target.GetType().Name}");
         
         // Ensure the target has a transform we can manipulate
         if (_target.RenderTransform == null)
@@ -87,6 +104,7 @@ public class GestureHandler
     /// </summary>
     public void Detach()
     {
+        Log("Detaching gesture handler");
         _target.PointerPressed -= OnPointerPressed;
         _target.PointerMoved -= OnPointerMoved;
         _target.PointerReleased -= OnPointerReleased;
@@ -99,52 +117,45 @@ public class GestureHandler
     /// </summary>
     public void ResetTransform()
     {
+        Log("ResetTransform called");
         _target.RenderTransform = new MatrixTransform(Matrix.Identity);
     }
 
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        var pointerId = (int)e.Pointer.Id;
+        var pointerType = e.Pointer.Type;
+        
+        // Get position relative to parent (unaffected by our transform)
+        var pos = e.GetPosition(_target.Parent as Control ?? _target);
+        
+        Log($"PRESSED: id={pointerId} type={pointerType} pos=({pos.X:F0},{pos.Y:F0}) disabled={IsDisabled} count={_activePointers.Count}");
+        
         if (IsDisabled) return;
         
-        var pointer = e.GetCurrentPoint(_target);
-        var pointerId = (int)e.Pointer.Id;
-        
-        _activePointers[pointerId] = pointer;
-        
-        // Capture pointer for multi-touch
-        e.Pointer.Capture(_target);
+        _activePointers[pointerId] = e.GetCurrentPoint(_target.Parent as Control ?? _target);
+        _hasMoved = false;
+        _pointerDownPosition = pos;
+        _lastDragPosition = pos;
         
         if (_activePointers.Count == 2)
         {
-            // Two fingers down - start pinch/zoom/rotate gesture
-            // Mark that a gesture has started - this suppresses navigation
             _gestureWasPerformed = true;
+            Log("  -> 2 pointers - START GESTURE");
             StartGesture();
-            e.Handled = true; // Prevent this from being processed as navigation
+            e.Handled = true;
         }
         else if (_activePointers.Count == 1)
         {
-            // Single finger - reset gesture tracking for new touch sequence
             _gestureWasPerformed = false;
-            
-            // Check for double-tap or navigation
-            var pos = pointer.Position;
-            
-            // Check for double-tap
-            if (IsDoubleTap(pos))
-            {
-                DoubleTapped?.Invoke(this, pos);
-                e.Handled = true;
-                return;
-            }
-            
-            // Store for potential navigation on release
+            _initialTransform = GetCurrentMatrix();
+            Log("  -> 1 pointer - ready for tap or pan");
             _lastTapLocation = pos;
         }
         else if (_activePointers.Count > 2)
         {
-            // More than 2 fingers - also suppress navigation
             _gestureWasPerformed = true;
+            Log($"  -> {_activePointers.Count} pointers - suppress nav");
         }
     }
 
@@ -152,18 +163,34 @@ public class GestureHandler
     {
         if (IsDisabled) return;
         
-        var pointer = e.GetCurrentPoint(_target);
         var pointerId = (int)e.Pointer.Id;
         
         if (!_activePointers.ContainsKey(pointerId)) return;
         
-        _activePointers[pointerId] = pointer;
+        var pos = e.GetPosition(_target.Parent as Control ?? _target);
         
-        if (_isGesturing && _activePointers.Count >= 2)
+        var distance = GetDistance(pos, _pointerDownPosition);
+        if (distance > MoveThreshold && !_hasMoved)
         {
-            // Update the transform based on gesture
+            _hasMoved = true;
+            Log($"MOVED: id={pointerId} dist={distance:F1}px (threshold crossed)");
+        }
+        
+        _activePointers[pointerId] = e.GetCurrentPoint(_target.Parent as Control ?? _target);
+        
+        if (_isGesturing && _activePointers.Count == 2)
+        {
             ApplyGestureTransform();
             e.Handled = true;
+        }
+        else if (_activePointers.Count == 1 && _hasMoved && !_gestureWasPerformed)
+        {
+            var currentMatrix = GetCurrentMatrix();
+            if (!IsIdentityMatrix(currentMatrix))
+            {
+                ApplySingleFingerPan(pos);
+                e.Handled = true;
+            }
         }
     }
 
@@ -172,20 +199,28 @@ public class GestureHandler
         var pointerId = (int)e.Pointer.Id;
         var wasGesturing = _isGesturing || _gestureWasPerformed;
         
-        // Only consider navigation if:
-        // 1. This is the last pointer being released
-        // 2. No multi-touch gesture was performed
-        // 3. Handler is not disabled
-        if (_activePointers.Count == 1 && !wasGesturing && !IsDisabled)
+        var pos = e.GetPosition(_target.Parent as Control ?? _target);
+        
+        Log($"RELEASED: id={pointerId} pos=({pos.X:F0},{pos.Y:F0}) count={_activePointers.Count} wasGest={wasGesturing} moved={_hasMoved}");
+        
+        if (_activePointers.Count == 1 && !wasGesturing && !IsDisabled && !_hasMoved)
         {
-            // Single tap released - check for navigation
             var now = Environment.TickCount;
             var diff = Math.Abs(now - _lastTouchTimestamp);
             
+            Log($"  -> TAP candidate: timeDiff={diff}ms");
+            
             if (diff > TouchDebounceMs)
             {
-                var pos = e.GetCurrentPoint(_target).Position;
-                HandleTapNavigation(pos, e);
+                if (IsDoubleTap(pos))
+                {
+                    Log("  -> DOUBLE-TAP!");
+                    DoubleTapped?.Invoke(this, pos);
+                }
+                else
+                {
+                    HandleTapNavigation(pos, e);
+                }
                 _lastTouchTimestamp = now;
             }
         }
@@ -194,21 +229,22 @@ public class GestureHandler
         
         if (_activePointers.Count < 2)
         {
+            if (_isGesturing) Log("  -> Gesture ENDED");
             _isGesturing = false;
         }
         
-        // Reset gesture tracking when all fingers are lifted
         if (_activePointers.Count == 0)
         {
+            Log("  -> All released, reset state");
             _gestureWasPerformed = false;
+            _hasMoved = false;
         }
-        
-        e.Pointer.Capture(null);
     }
 
     private void OnPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
     {
         var pointerId = (int)e.Pointer.Id;
+        Log($"CAPTURE_LOST: id={pointerId}");
         _activePointers.Remove(pointerId);
         
         if (_activePointers.Count < 2)
@@ -221,28 +257,24 @@ public class GestureHandler
     {
         if (IsDisabled) return;
         
-        // Ctrl+scroll to zoom
+        Log($"WHEEL: delta={e.Delta.Y:F1} ctrl={e.KeyModifiers.HasFlag(KeyModifiers.Control)}");
+        
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
-            var pos = e.GetPosition(_target);
-            var matrix = GetCurrentMatrix();
-            pos = matrix.Transform(pos);
-            
+            var pos = e.GetPosition(_target.Parent as Control ?? _target);
+            var currentMatrix = GetCurrentMatrix();
             var scaleFactor = e.Delta.Y > 0 ? 1.1 : 0.9;
             
-            matrix = matrix * Matrix.CreateScale(scaleFactor, scaleFactor);
-            // Adjust for zoom center
             var newMatrix = Matrix.CreateTranslation(-pos.X, -pos.Y) *
                            Matrix.CreateScale(scaleFactor, scaleFactor) *
                            Matrix.CreateTranslation(pos.X, pos.Y) *
-                           GetCurrentMatrix();
+                           currentMatrix;
             
             _target.RenderTransform = new MatrixTransform(newMatrix);
             e.Handled = true;
         }
         else
         {
-            // Without Ctrl, reset transform
             ResetTransform();
             e.Handled = true;
         }
@@ -259,10 +291,11 @@ public class GestureHandler
         }
         
         _initialDistance = GetDistance(points[0], points[1]);
-        _initialAngle = GetAngle(points[0], points[1]);
         _initialCenter = GetCenter(points[0], points[1]);
         _initialTransform = GetCurrentMatrix();
         _isGesturing = true;
+        
+        Log($"  StartGesture: dist={_initialDistance:F1} center=({_initialCenter.X:F0},{_initialCenter.Y:F0})");
     }
 
     private void ApplyGestureTransform()
@@ -276,35 +309,17 @@ public class GestureHandler
         }
         
         var currentDistance = GetDistance(points[0], points[1]);
-        var currentAngle = GetAngle(points[0], points[1]);
         var currentCenter = GetCenter(points[0], points[1]);
         
-        // Calculate scale
         var scale = currentDistance / _initialDistance;
-        if (double.IsNaN(scale) || double.IsInfinity(scale)) scale = 1;
+        if (double.IsNaN(scale) || double.IsInfinity(scale) || scale <= 0) 
+            scale = 1;
         
-        // Calculate rotation
-        var rotation = currentAngle - _initialAngle;
+        scale = Math.Max(0.1, Math.Min(scale, 10));
         
-        // Calculate translation
         var translateX = currentCenter.X - _initialCenter.X;
         var translateY = currentCenter.Y - _initialCenter.Y;
         
-        // Build the new transform
-        var matrix = _initialTransform;
-        
-        // Transform the center point
-        var center = matrix.Transform(_initialCenter);
-        
-        // Apply scale at center
-        matrix = Matrix.CreateTranslation(-center.X, -center.Y) *
-                Matrix.CreateScale(scale, scale) *
-                Matrix.CreateRotation(rotation * Math.PI / 180) *
-                Matrix.CreateTranslation(center.X, center.Y) *
-                Matrix.CreateTranslation(translateX, translateY) *
-                _initialTransform;
-        
-        // Simplified approach: just apply scale and translate
         var newMatrix = Matrix.CreateTranslation(-_initialCenter.X, -_initialCenter.Y) *
                        Matrix.CreateScale(scale, scale) *
                        Matrix.CreateTranslation(_initialCenter.X, _initialCenter.Y) *
@@ -314,42 +329,62 @@ public class GestureHandler
         _target.RenderTransform = new MatrixTransform(newMatrix);
     }
 
+    private void ApplySingleFingerPan(Point currentPos)
+    {
+        var deltaX = currentPos.X - _lastDragPosition.X;
+        var deltaY = currentPos.Y - _lastDragPosition.Y;
+        
+        if (Math.Abs(deltaX) > 0.5 || Math.Abs(deltaY) > 0.5)
+        {
+            var currentMatrix = GetCurrentMatrix();
+            var newMatrix = Matrix.CreateTranslation(deltaX, deltaY) * currentMatrix;
+            _target.RenderTransform = new MatrixTransform(newMatrix);
+            _lastDragPosition = currentPos;
+        }
+    }
+
     private void HandleTapNavigation(Point pos, PointerReleasedEventArgs e)
     {
-        // Only handle navigation for touch in bottom 3/4 of screen (top 1/4 reserved for zooming)
-        // Mouse can navigate anywhere
         var isTouch = e.Pointer.Type == PointerType.Touch;
+        var parent = _target.Parent as Control ?? _target;
+        var boundsHeight = parent.Bounds.Height;
+        var boundsWidth = parent.Bounds.Width;
         var isInNavigationZone = isTouch ? 
-            pos.Y > 0.25 * _target.Bounds.Height : // Touch: bottom 75% (top 25% for zooming)
-            true; // Mouse: anywhere
+            pos.Y > 0.25 * boundsHeight : true;
         
-        if (!isInNavigationZone) return;
+        Log($"  -> NavCheck: touch={isTouch} bounds=({boundsWidth:F0}x{boundsHeight:F0}) inZone={isInNavigationZone}");
+        
+        if (!isInNavigationZone)
+        {
+            Log("  -> In ZOOM zone - no nav");
+            return;
+        }
         
         var delta = NumPagesPerView;
         
-        // If showing 2 pages and tap is near center, navigate by 1 page
         if (NumPagesPerView > 1)
         {
-            var distToMiddle = Math.Abs(_target.Bounds.Width / 2 - pos.X);
-            if (distToMiddle < _target.Bounds.Width / 4)
+            var distToMiddle = Math.Abs(boundsWidth / 2 - pos.X);
+            if (distToMiddle < boundsWidth / 4)
             {
                 delta = 1;
             }
         }
         
-        // Left side = previous, right side = next
-        var isLeftSide = pos.X < _target.Bounds.Width / 2;
+        var isLeftSide = pos.X < boundsWidth / 2;
         if (isLeftSide)
         {
             delta = -delta;
         }
         
+        Log($"  -> NAVIGATE: delta={delta} left={isLeftSide}");
         NavigationRequested?.Invoke(this, new NavigationEventArgs(delta));
     }
 
     private bool IsDoubleTap(Point currentPosition)
     {
-        var tapsAreCloseInDistance = GetDistance(currentPosition, _lastTapLocation) < DoubleTapDistanceThreshold;
+        var distance = GetDistance(currentPosition, _lastTapLocation);
+        var tapsAreCloseInDistance = distance < DoubleTapDistanceThreshold;
         
         var elapsed = _doubleTapStopwatch.Elapsed;
         _doubleTapStopwatch.Restart();
@@ -378,14 +413,20 @@ public class GestureHandler
         return Math.Sqrt(dx * dx + dy * dy);
     }
 
-    private static double GetAngle(Point p1, Point p2)
-    {
-        return Math.Atan2(p2.Y - p1.Y, p2.X - p1.X) * 180 / Math.PI;
-    }
-
     private static Point GetCenter(Point p1, Point p2)
     {
         return new Point((p1.X + p2.X) / 2, (p1.Y + p2.Y) / 2);
+    }
+
+    private static bool IsIdentityMatrix(Matrix m)
+    {
+        const double epsilon = 0.001;
+        return Math.Abs(m.M11 - 1) < epsilon &&
+               Math.Abs(m.M12) < epsilon &&
+               Math.Abs(m.M21) < epsilon &&
+               Math.Abs(m.M22 - 1) < epsilon &&
+               Math.Abs(m.M31) < epsilon &&
+               Math.Abs(m.M32) < epsilon;
     }
 }
 
