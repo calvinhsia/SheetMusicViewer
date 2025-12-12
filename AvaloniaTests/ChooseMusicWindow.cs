@@ -5,6 +5,7 @@ using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
 using PDFtoImage;
@@ -56,6 +57,8 @@ public class ChooseMusicWindow : Window
     private const int ThumbnailWidth = 150;
     private const int ThumbnailHeight = 225;
 
+    private const string NewFolderDialogString = "New...";
+    
     /// <summary>
     /// If true, skip cloud-only files instead of triggering download for thumbnails.
     /// Set to false to allow on-demand downloading of cloud files.
@@ -182,9 +185,10 @@ public class ChooseMusicWindow : Window
         
         topBar.Children.Add(new Label { Content = "Music Folder Path:", Margin = new Thickness(20, 0, 0, 0) });
         _cboRootFolder = new ComboBox { Width = 300, Margin = new Thickness(10, 0, 10, 0) };
-        _cboRootFolder.Items.Add("C:\\Users\\Music\\SheetMusic");
-        _cboRootFolder.Items.Add("D:\\Music\\PDFs");
-        _cboRootFolder.SelectedIndex = 0;
+        
+        // Populate from settings MRU
+        PopulateRootFolderComboBox();
+        _cboRootFolder.SelectionChanged += OnRootFolderSelectionChanged;
         topBar.Children.Add(_cboRootFolder);
         
         var btnCancel = new Button { Content = "Cancel", Margin = new Thickness(10, 0, 0, 0) };
@@ -198,6 +202,172 @@ public class ChooseMusicWindow : Window
         grid.Children.Add(topBar);
         
         Content = grid;
+    }
+    
+    /// <summary>
+    /// Populate the root folder combo box from settings MRU list
+    /// </summary>
+    private void PopulateRootFolderComboBox()
+    {
+        _cboRootFolder.Items.Clear();
+        
+        // Add current root folder if set
+        if (!string.IsNullOrEmpty(_rootFolder))
+        {
+            _cboRootFolder.Items.Add(new ComboBoxItem { Content = _rootFolder });
+        }
+        
+        // Add MRU folders from settings
+        var settings = AppSettings.Instance;
+        foreach (var folder in settings.RootFolderMRU)
+        {
+            // Don't add duplicates
+            if (folder != _rootFolder)
+            {
+                _cboRootFolder.Items.Add(new ComboBoxItem { Content = folder });
+            }
+        }
+        
+        // Add "New..." option at the end
+        _cboRootFolder.Items.Add(new ComboBoxItem { Content = NewFolderDialogString });
+        
+        // Select the first item (current folder)
+        if (_cboRootFolder.Items.Count > 0)
+        {
+            _cboRootFolder.SelectedIndex = 0;
+        }
+    }
+    
+    /// <summary>
+    /// Handle root folder selection change
+    /// </summary>
+    private async void OnRootFolderSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_cboRootFolder.SelectedItem is ComboBoxItem selectedItem)
+        {
+            var path = selectedItem.Content?.ToString();
+            
+            if (path == NewFolderDialogString)
+            {
+                await ShowFolderPickerAsync();
+            }
+            else if (!string.IsNullOrEmpty(path) && path != _rootFolder)
+            {
+                await ChangeRootFolderAsync(path);
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Show the folder picker dialog and change root folder if selected
+    /// </summary>
+    private async Task ShowFolderPickerAsync()
+    {
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel == null)
+        {
+            // Reset selection to previous folder
+            _cboRootFolder.SelectedIndex = 0;
+            return;
+        }
+        
+        // Try to set initial folder to current root
+        IStorageFolder? startLocation = null;
+        if (!string.IsNullOrEmpty(_rootFolder) && Directory.Exists(_rootFolder))
+        {
+            try
+            {
+                startLocation = await topLevel.StorageProvider.TryGetFolderFromPathAsync(_rootFolder);
+            }
+            catch
+            {
+                // Ignore errors getting start location
+            }
+        }
+        
+        var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Choose a root folder with PDF music files",
+            AllowMultiple = false,
+            SuggestedStartLocation = startLocation
+        });
+        
+        if (folders.Count > 0)
+        {
+            var selectedPath = folders[0].TryGetLocalPath();
+            if (!string.IsNullOrEmpty(selectedPath))
+            {
+                // Add to MRU and save settings
+                var settings = AppSettings.Instance;
+                settings.AddToMRU(selectedPath);
+                settings.Save();
+                
+                // Repopulate combo box and change folder
+                PopulateRootFolderComboBox();
+                await ChangeRootFolderAsync(selectedPath);
+                return;
+            }
+        }
+        
+        // User cancelled - reset selection to first item
+        if (_cboRootFolder.Items.Count > 0)
+        {
+            _cboRootFolder.SelectedIndex = 0;
+        }
+    }
+    
+    /// <summary>
+    /// Change the root folder and reload all data
+    /// </summary>
+    private async Task ChangeRootFolderAsync(string newRootFolder)
+    {
+        if (!Directory.Exists(newRootFolder))
+        {
+            Trace.WriteLine($"ChangeRootFolderAsync: Directory does not exist: {newRootFolder}");
+            return;
+        }
+        
+        _rootFolder = newRootFolder;
+        
+        // Update settings MRU
+        var settings = AppSettings.Instance;
+        settings.AddToMRU(newRootFolder);
+        settings.Save();
+        
+        // Clear existing data
+        _bookItemCache.Clear();
+        _allFavoriteItems.Clear();
+        _queryBrowseControl = null;
+        _lbBooks.ItemsSource = null;
+        _favoritesListBox.ItemsSource = null;
+        _queryTabGrid.Children.Clear();
+        _queryTabGrid.Children.Add(new TextBlock 
+        { 
+            Text = "Select this tab to load query data...", 
+            Margin = new Thickness(20),
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center
+        });
+        
+        // Load metadata from new folder
+        _tbxTotals.Text = "Loading...";
+        
+        try
+        {
+            var provider = new PdfToImageDocumentProvider();
+            (_pdfMetadata, _) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+                newRootFolder, 
+                provider,
+                useParallelLoading: true);
+            
+            // Reload books
+            await LoadBooksAsync();
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"ChangeRootFolderAsync: Error loading metadata: {ex.Message}");
+            _tbxTotals.Text = $"Error: {ex.Message}";
+        }
     }
     
     private Control BuildBooksTabContent()
@@ -920,6 +1090,44 @@ public class ChooseMusicWindow : Window
         stream.Seek(0, SeekOrigin.Begin);
         
         return new Bitmap(stream);
+    }
+}
+
+/// <summary>
+/// PDF document provider using PDFtoImage for cross-platform support
+/// </summary>
+public class PdfToImageDocumentProvider : IPdfDocumentProvider
+{
+    public Task<int> GetPageCountAsync(string pdfFilePath)
+    {
+        return Task.Run(() =>
+        {
+            try
+            {
+                // Check for cloud-only files
+                var fileInfo = new FileInfo(pdfFilePath);
+                const FileAttributes RecallOnDataAccess = (FileAttributes)0x00400000;
+                const FileAttributes RecallOnOpen = (FileAttributes)0x00040000;
+                
+                var attrs = fileInfo.Attributes;
+                bool isCloudOnly = (attrs & RecallOnDataAccess) == RecallOnDataAccess ||
+                                   (attrs & RecallOnOpen) == RecallOnOpen ||
+                                   (attrs & FileAttributes.Offline) == FileAttributes.Offline;
+                
+                if (isCloudOnly)
+                {
+                    Trace.WriteLine($"PdfToImageDocumentProvider: Skipping cloud-only file: {pdfFilePath}");
+                    return 0;
+                }
+                
+                return Conversion.GetPageCount(pdfFilePath);
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"PdfToImageDocumentProvider: Error getting page count for {pdfFilePath}: {ex.Message}");
+                return 0;
+            }
+        });
     }
 }
 
