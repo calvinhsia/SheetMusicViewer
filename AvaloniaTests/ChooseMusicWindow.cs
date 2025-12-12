@@ -6,16 +6,20 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Themes.Fluent;
+using PDFtoImage;
+using SheetMusicLib;
 using SkiaSharp;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace AvaloniaTests;
 
 /// <summary>
-/// ChooseMusic-style window with generated book cover bitmaps.
+/// ChooseMusic-style window with book cover bitmaps from actual PDFs.
 /// Reusable control that can be used in tests or as part of the application.
 /// </summary>
 public class ChooseMusicWindow : Window
@@ -25,9 +29,28 @@ public class ChooseMusicWindow : Window
     private TextBlock _tbxTotals;
     private ComboBox _cboRootFolder;
     private TextBox _tbxFilter;
+    
+    private List<PdfMetaDataReadResult> _pdfMetadata;
+    private string _rootFolder;
 
-    public ChooseMusicWindow()
+    private const int ThumbnailWidth = 150;
+    private const int ThumbnailHeight = 225;
+
+    /// <summary>
+    /// If true, skip cloud-only files instead of triggering download for thumbnails.
+    /// Set to false to allow on-demand downloading of cloud files.
+    /// </summary>
+    public bool SkipCloudOnlyFiles { get; set; } = true;
+
+    public ChooseMusicWindow() : this(null, null)
     {
+    }
+
+    public ChooseMusicWindow(List<PdfMetaDataReadResult> pdfMetadata, string rootFolder)
+    {
+        _pdfMetadata = pdfMetadata;
+        _rootFolder = rootFolder;
+        
         Title = "Choose Music - Avalonia Test";
         Width = 1200;
         Height = 800;
@@ -38,7 +61,14 @@ public class ChooseMusicWindow : Window
         // Generate books after window is loaded
         this.Opened += async (s, e) =>
         {
-            await FillBooksTabAsync();
+            if (_pdfMetadata != null && _pdfMetadata.Count > 0)
+            {
+                await FillBooksTabWithRealDataAsync();
+            }
+            else
+            {
+                await FillBooksTabAsync();
+            }
         };
     }
 
@@ -136,6 +166,157 @@ public class ChooseMusicWindow : Window
         grid.Children.Add(topBar);
         
         Content = grid;
+    }
+
+    private async Task FillBooksTabWithRealDataAsync()
+    {
+        var random = new Random(42); // Fixed seed for consistent fallback colors
+        var items = new List<Control>();
+        
+        int index = 0;
+        int totalSongs = 0;
+        int totalPages = 0;
+        int totalFavs = 0;
+        
+        foreach (var pdfMetaData in _pdfMetadata)
+        {
+            var bookName = pdfMetaData.GetBookName(_rootFolder);
+            var numSongs = pdfMetaData.TocEntries.Count;
+            var numPages = pdfMetaData.VolumeInfoList.Sum(v => v.NPagesInThisVolume);
+            var numFavs = pdfMetaData.Favorites.Count;
+            
+            totalSongs += numSongs;
+            totalPages += numPages;
+            totalFavs += numFavs;
+            
+            // Try to get actual PDF thumbnail, fall back to generated bitmap
+            Bitmap bitmap;
+            try
+            {
+                bitmap = await GetPdfThumbnailAsync(pdfMetaData);
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"Failed to get PDF thumbnail for {bookName}: {ex.Message}");
+                bitmap = GenerateBookCoverBitmap(200, 240, random, bookName, index);
+            }
+            
+            // Create the book item UI
+            var sp = new StackPanel { Orientation = Orientation.Vertical, Width = 150, Margin = new Thickness(5) };
+            
+            var img = new Image
+            {
+                Source = bitmap,
+                Width = 140,
+                Height = 200,
+                Stretch = Stretch.UniformToFill
+            };
+            sp.Children.Add(img);
+            
+            sp.Children.Add(new TextBlock
+            {
+                Text = bookName,
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = 140,
+                Margin = new Thickness(0, 5, 0, 0),
+                FontSize = 11
+            });
+            
+            sp.Children.Add(new TextBlock
+            {
+                Text = $"#Sngs={numSongs} Pg={numPages} Fav={numFavs}",
+                FontSize = 10,
+                Foreground = Brushes.Gray,
+                Margin = new Thickness(0, 2, 0, 0)
+            });
+            
+            items.Add(sp);
+            
+            // Add incrementally to show loading progress
+            if (index % 10 == 9)
+            {
+                _lbBooks.ItemsSource = null;
+                _lbBooks.ItemsSource = new List<Control>(items);
+                _tbxTotals.Text = $"Total #Books = {items.Count} # Songs = {totalSongs:n0} # Pages = {totalPages:n0} #Fav={totalFavs:n0}";
+                await Task.Delay(10); // Small delay to show progressive loading
+            }
+            
+            index++;
+        }
+        
+        // Final update
+        _lbBooks.ItemsSource = items;
+        _tbxTotals.Text = $"Total #Books = {items.Count} # Songs = {totalSongs:n0} # Pages = {totalPages:n0} #Fav={totalFavs:n0}";
+    }
+
+    /// <summary>
+    /// Get a thumbnail bitmap from the first page of the PDF, similar to WPF's GetBitmapImageThumbnailAsync
+    /// </summary>
+    private async Task<Bitmap> GetPdfThumbnailAsync(PdfMetaDataReadResult pdfMetaData)
+    {
+        return await Task.Run(() =>
+        {
+            // Check if we have any volumes
+            if (pdfMetaData.VolumeInfoList == null || pdfMetaData.VolumeInfoList.Count == 0)
+            {
+                throw new InvalidOperationException($"No volumes in metadata for: {pdfMetaData.FullPathFile}");
+            }
+            
+            var firstVolume = pdfMetaData.VolumeInfoList[0];
+            if (string.IsNullOrEmpty(firstVolume.FileNameVolume))
+            {
+                throw new InvalidOperationException($"Empty FileNameVolume for: {pdfMetaData.FullPathFile}");
+            }
+            
+            // Get the path to the first volume PDF
+            var pdfPath = pdfMetaData.GetFullPathFileFromVolno(0);
+            
+            if (string.IsNullOrEmpty(pdfPath))
+            {
+                throw new InvalidOperationException($"GetFullPathFileFromVolno returned empty for: {pdfMetaData.FullPathFile}");
+            }
+            
+            if (!File.Exists(pdfPath))
+            {
+                throw new FileNotFoundException($"PDF file not found: {pdfPath}");
+            }
+            
+            // Check for cloud-only files
+            if (SkipCloudOnlyFiles)
+            {
+                var fileInfo = new FileInfo(pdfPath);
+                const FileAttributes RecallOnDataAccess = (FileAttributes)0x00400000;
+                const FileAttributes RecallOnOpen = (FileAttributes)0x00040000;
+                
+                var attrs = fileInfo.Attributes;
+                bool isCloudOnly = (attrs & RecallOnDataAccess) == RecallOnDataAccess ||
+                                   (attrs & RecallOnOpen) == RecallOnOpen ||
+                                   (attrs & FileAttributes.Offline) == FileAttributes.Offline;
+                
+                // Small reparse point file is likely a cloud placeholder
+                if (!isCloudOnly && (attrs & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint && fileInfo.Length < 1024)
+                {
+                    isCloudOnly = true;
+                }
+                
+                if (isCloudOnly)
+                {
+                    throw new IOException($"Cloud-only file, skipping to avoid download: {pdfPath}");
+                }
+            }
+            
+            // Use stream like MainWindow does - this avoids PDFtoImage string parsing issues
+            using var pdfStream = File.OpenRead(pdfPath);
+            using var skBitmap = Conversion.ToImage(pdfStream, page: 0, options: new PDFtoImage.RenderOptions(Width: ThumbnailWidth, Height: ThumbnailHeight));
+            
+            // Convert SKBitmap to Avalonia Bitmap
+            using var data = skBitmap.Encode(SKEncodedImageFormat.Png, 100);
+            using var stream = new MemoryStream();
+            data.SaveTo(stream);
+            stream.Seek(0, SeekOrigin.Begin);
+            
+            return new Bitmap(stream);
+        });
     }
 
     private async Task FillBooksTabAsync()
