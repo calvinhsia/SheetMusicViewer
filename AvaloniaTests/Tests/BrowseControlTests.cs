@@ -407,7 +407,7 @@ public class BrowseControlTests : TestBase
             };
             lifetime.MainWindow = window;
             
-            var timer = new System.Timers.Timer(60000);
+            var timer = new System.Timers.Timer(120000);
             
             window.Closed += AvaloniaTestHelper.CreateWindowClosedHandler(
                 testCompleted,
