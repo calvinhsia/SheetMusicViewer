@@ -24,13 +24,13 @@
             
             <!-- Left side controls -->
             <StackPanel Orientation="Horizontal" Background="#FFF0F8FF" Opacity="0.5" Grid.RowSpan="2" Spacing="3">
-                <CheckBox Name="chkFav0" Foreground="Lime">
-                    <TextBlock Text="Fav"/>
+                <CheckBox Name="chkFav0" Foreground="Lime" IsEnabled="{Binding PdfUIEnabled}">
+                    <TextBlock Text="_Fav"/>
                 </CheckBox>
                 <CheckBox Name="chkInk0" ToolTip.Tip="Turn on/off inking with mouse or pen" IsEnabled="{Binding PdfUIEnabled}">
                     <TextBlock Text="Ink"/>
                 </CheckBox>
-                <Button Content="_Rotate" Margin="3,0,0,0" ToolTip.Tip="Rotate the document 90 degrees right" IsEnabled="{Binding PdfUIEnabled}"/>
+                <Button Name="btnRotate" Content="_Rotate" Margin="3,0,0,0" ToolTip.Tip="Rotate the document 90 degrees right" IsEnabled="{Binding PdfUIEnabled}"/>
                 <CheckBox Name="chkFullScreen" IsVisible="False" ToolTip.Tip="Full Screen" Margin="3,0,0,0">
                     <TextBlock Text="_Full Screen"/>
                 </CheckBox>
@@ -48,13 +48,21 @@
             <!-- Center slider controls -->
             <DockPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Background="#FFF0F8FF" Opacity="0.5">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <Slider Name="slider" 
-                            Value="{Binding CurrentPageNumber}" 
-                            Maximum="100" 
-                            Width="100"
-                            IsEnabled="{Binding PdfUIEnabled}" 
-                            SmallChange="{Binding NumPagesPerView}">
-                    </Slider>
+                    <Panel>
+                        <Slider Name="slider" 
+                                Value="{Binding CurrentPageNumber}" 
+                                Maximum="{Binding MaxPageNumberMinus1}" 
+                                Minimum="1"
+                                Width="100"
+                                IsEnabled="{Binding PdfUIEnabled}" 
+                                SmallChange="{Binding NumPagesPerView}">
+                        </Slider>
+                        <Popup Name="SliderPopup" PlacementTarget="{Binding #slider}" Placement="Bottom" HorizontalOffset="-100" VerticalOffset="0">
+                            <Border BorderThickness="1" BorderBrush="Gray" Background="LightYellow" Padding="5">
+                                <TextBlock Name="tbSliderPopup" Foreground="Black" />
+                            </Border>
+                        </Popup>
+                    </Panel>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Image Name="ImgThumb" Height="20" Width="16" Margin="0,0,5,0" 
@@ -67,23 +75,22 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="3">
                     <Menu Background="Transparent" VerticalAlignment="Center">
                         <MenuItem Header="_Menu">
-                            <MenuItem Name="mnuChooser" Header="_Chooser" ToolTip.Tip="Open another document, query songs, etc"/>
+                            <MenuItem Name="mnuChooser" Header="_Chooser" InputGesture="Alt+C" ToolTip.Tip="Open another document, query songs, etc"/>
                             <MenuItem Header="Show _2 Pages" IsEnabled="{Binding PdfUIEnabled}" ToolTip.Tip="Show 1 or 2 pages at a time">
                                 <MenuItem.Icon>
                                     <CheckBox IsChecked="{Binding Show2Pages}" BorderThickness="0"/>
                                 </MenuItem.Icon>
                             </MenuItem>
-                            <MenuItem Name="mnuFullScreen" Header="_Full Screen" ToolTip.Tip="Toggle Full Screen mode">
+                            <MenuItem Name="mnuFullScreen" Header="_Full Screen" InputGesture="Alt+F" ToolTip.Tip="Toggle Full Screen mode">
                                 <MenuItem.Icon>
                                     <CheckBox IsChecked="{Binding #chkFullScreen.IsChecked}" BorderThickness="0"/>
                                 </MenuItem.Icon>
                             </MenuItem>
                             <Separator/>
                             <MenuItem Header="_About" ToolTip.Tip="Show build information"/>
-                            <MenuItem Name="mnuQuit" Header="_Quit" ToolTip.Tip="Exit application (Alt-Q)"/>
+                            <MenuItem Name="mnuQuit" Header="_Quit" InputGesture="Alt+Q" ToolTip.Tip="Exit application"/>
                         </MenuItem>
                     </Menu>
-                    <Button Content="InvCache" ToolTip.Tip="Invalidate PDF cache to re-render"/>
                     <TextBlock Width="17" Text="{Binding TouchCount}" VerticalAlignment="Center"/>
                     <CheckBox Name="chkInk1" IsEnabled="{Binding PdfUIEnabled}" ToolTip.Tip="Turn on/off inking with mouse or pen">
                         <TextBlock Text="Ink"/>

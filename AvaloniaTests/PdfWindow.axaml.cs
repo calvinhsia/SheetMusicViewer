@@ -4,6 +4,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.Controls.Primitives;
 using System;
 using System.ComponentModel;
 using System.IO;
@@ -27,11 +28,16 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
     private string _description0 = string.Empty;
     private string _description1 = string.Empty;
     private int _pageCount = 0;
+    private bool _disableSliderValueChanged;
     
     private InkCanvasControl? _inkCanvas0;
     private InkCanvasControl? _inkCanvas1;
     private GestureHandler? _gestureHandler;
     private Panel? _dpPage;
+    private Slider? _slider;
+    private Popup? _sliderPopup;
+    private TextBlock? _tbSliderPopup;
+    private int _maxPageNumberMinus1;
 
     public PdfWindow()
     {
@@ -79,6 +85,27 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
             };
         }
         
+        // Wire up favorite checkbox events
+        var chkFav0 = this.FindControl<CheckBox>("chkFav0");
+        var chkFav1 = this.FindControl<CheckBox>("chkFav1");
+        
+        if (chkFav0 != null)
+        {
+            chkFav0.IsCheckedChanged += ChkFav_Toggled;
+        }
+        
+        if (chkFav1 != null)
+        {
+            chkFav1.IsCheckedChanged += ChkFav_Toggled;
+        }
+        
+        // Wire up rotate button
+        var btnRotate = this.FindControl<Button>("btnRotate");
+        if (btnRotate != null)
+        {
+            btnRotate.Click += BtnRotate_Click;
+        }
+        
         // Wire up full screen checkbox event and set it as default
         var chkFullScreen = this.FindControl<CheckBox>("chkFullScreen");
         if (chkFullScreen != null)
@@ -118,6 +145,18 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
             btnNext.Click += (s, e) => NavigateAsync(NumPagesPerView);
         }
         
+        // Wire up slider events
+        _slider = this.FindControl<Slider>("slider");
+        _sliderPopup = this.FindControl<Popup>("SliderPopup");
+        _tbSliderPopup = this.FindControl<TextBlock>("tbSliderPopup");
+        
+        if (_slider != null)
+        {
+            // Hook into template applied to get the thumb
+            _slider.TemplateApplied += Slider_TemplateApplied;
+            _slider.AddHandler(RangeBase.ValueChangedEvent, Slider_ValueChanged);
+        }
+        
         // Add keyboard handler for navigation and Alt-Q
         this.KeyDown += Window_KeyDown;
         
@@ -126,6 +165,110 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
         
         // Clean up on close
         Closed += (s, e) => _gestureHandler?.Detach();
+    }
+    
+    private void Slider_TemplateApplied(object? sender, TemplateAppliedEventArgs e)
+    {
+        // Try to find the thumb in the slider's template
+        if (_slider != null)
+        {
+            var thumb = e.NameScope.Find<Thumb>("thumb");
+            if (thumb == null)
+            {
+                // Try to find the track and get its thumb
+                var track = e.NameScope.Find<Track>("PART_Track");
+                thumb = track?.Thumb;
+            }
+            if (thumb != null)
+            {
+                thumb.DragStarted += OnSliderThumbDragStarted;
+                thumb.DragCompleted += OnSliderThumbDragCompleted;
+            }
+        }
+    }
+    
+    private void Slider_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
+    {
+        OnSliderValueChanged();
+    }
+    
+    private void OnSliderThumbDragStarted(object? sender, VectorEventArgs e)
+    {
+        _disableSliderValueChanged = true;
+        if (_sliderPopup != null)
+        {
+            _sliderPopup.IsOpen = true;
+        }
+        UpdateSliderPopupText();
+    }
+    
+    private void OnSliderThumbDragCompleted(object? sender, VectorEventArgs e)
+    {
+        _disableSliderValueChanged = false;
+        if (_sliderPopup != null)
+        {
+            _sliderPopup.IsOpen = false;
+        }
+        OnSliderValueChanged();
+    }
+    
+    private void OnSliderValueChanged()
+    {
+        UpdateSliderPopupText();
+        
+        if (!_disableSliderValueChanged && _pageCount > 0)
+        {
+            _ = ShowPageAsync(CurrentPageNumber);
+        }
+    }
+    
+    private void UpdateSliderPopupText()
+    {
+        if (_tbSliderPopup != null)
+        {
+            // Show page number and song name like WPF version
+            // Format: "47 Song Title Here" or just "47" if no description available
+            var description = GetDescription(CurrentPageNumber);
+            _tbSliderPopup.Text = string.IsNullOrEmpty(description) 
+                ? $"{CurrentPageNumber}" 
+                : $"{CurrentPageNumber} {description}";
+        }
+    }
+    
+    private string GetDescription(int pageNo)
+    {
+        // In the full implementation, this would query the TOC for the song name
+        // like the WPF version does with currentPdfMetaData?.GetDescription(pageNo)
+        // For now, return empty - the page number is already shown separately
+        return string.Empty;
+    }
+    
+    private void ChkFav_Toggled(object? sender, RoutedEventArgs e)
+    {
+        if (sender is CheckBox chk)
+        {
+            var isPage0 = chk.Name == "chkFav0";
+            var pageNo = CurrentPageNumber + (isPage0 ? 0 : 1);
+            var isFavorite = chk.IsChecked == true;
+            
+            // In the full implementation, this would toggle the favorite in metadata
+            // For now, just update the touch count to show feedback
+            TouchCount++;
+            
+            System.Diagnostics.Debug.WriteLine($"Favorite toggled: Page {pageNo}, IsFavorite: {isFavorite}");
+        }
+    }
+    
+    private async void BtnRotate_Click(object? sender, RoutedEventArgs e)
+    {
+        // In the full implementation, this would rotate the page in metadata
+        // For now, just reload the page to show it works
+        TouchCount++;
+        
+        System.Diagnostics.Debug.WriteLine($"Rotate clicked for page {CurrentPageNumber}");
+        
+        // Reload the current page
+        await ShowPageAsync(CurrentPageNumber);
     }
 
     private void SetupGestureHandler()
@@ -177,6 +320,18 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
         if (e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.Q)
         {
             Close();
+            e.Handled = true;
+            return;
+        }
+        
+        // Handle Alt-F for full screen toggle
+        if (e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.F)
+        {
+            var chkFullScreen = this.FindControl<CheckBox>("chkFullScreen");
+            if (chkFullScreen != null)
+            {
+                chkFullScreen.IsChecked = !chkFullScreen.IsChecked;
+            }
             e.Handled = true;
             return;
         }
@@ -422,7 +577,15 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
         }
     }
 
-    public int MaxPageNumberMinus1 { get; set; }
+    public int MaxPageNumberMinus1
+    {
+        get => _maxPageNumberMinus1;
+        set
+        {
+            _maxPageNumberMinus1 = value;
+            OnPropertyChanged();
+        }
+    }
 
     public int NumPagesPerView => _show2Pages ? 2 : 1;
 
