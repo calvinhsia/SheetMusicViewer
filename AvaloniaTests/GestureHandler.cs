@@ -30,6 +30,7 @@ public class GestureHandler
     private Point _initialCenter;
     private Matrix _initialTransform;
     private bool _isGesturing;
+    private bool _gestureWasPerformed; // Track if any multi-touch gesture happened in this touch sequence
     
     // For double-tap detection
     private readonly Stopwatch _doubleTapStopwatch = new();
@@ -116,11 +117,17 @@ public class GestureHandler
         if (_activePointers.Count == 2)
         {
             // Two fingers down - start pinch/zoom/rotate gesture
+            // Mark that a gesture has started - this suppresses navigation
+            _gestureWasPerformed = true;
             StartGesture();
+            e.Handled = true; // Prevent this from being processed as navigation
         }
         else if (_activePointers.Count == 1)
         {
-            // Single finger - check for double-tap or navigation
+            // Single finger - reset gesture tracking for new touch sequence
+            _gestureWasPerformed = false;
+            
+            // Check for double-tap or navigation
             var pos = pointer.Position;
             
             // Check for double-tap
@@ -133,6 +140,11 @@ public class GestureHandler
             
             // Store for potential navigation on release
             _lastTapLocation = pos;
+        }
+        else if (_activePointers.Count > 2)
+        {
+            // More than 2 fingers - also suppress navigation
+            _gestureWasPerformed = true;
         }
     }
 
@@ -147,7 +159,7 @@ public class GestureHandler
         
         _activePointers[pointerId] = pointer;
         
-        if (_isGesturing && _activePointers.Count == 2)
+        if (_isGesturing && _activePointers.Count >= 2)
         {
             // Update the transform based on gesture
             ApplyGestureTransform();
@@ -158,8 +170,13 @@ public class GestureHandler
     private void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         var pointerId = (int)e.Pointer.Id;
+        var wasGesturing = _isGesturing || _gestureWasPerformed;
         
-        if (_activePointers.Count == 1 && !_isGesturing && !IsDisabled)
+        // Only consider navigation if:
+        // 1. This is the last pointer being released
+        // 2. No multi-touch gesture was performed
+        // 3. Handler is not disabled
+        if (_activePointers.Count == 1 && !wasGesturing && !IsDisabled)
         {
             // Single tap released - check for navigation
             var now = Environment.TickCount;
@@ -178,6 +195,12 @@ public class GestureHandler
         if (_activePointers.Count < 2)
         {
             _isGesturing = false;
+        }
+        
+        // Reset gesture tracking when all fingers are lifted
+        if (_activePointers.Count == 0)
+        {
+            _gestureWasPerformed = false;
         }
         
         e.Pointer.Capture(null);
@@ -293,10 +316,11 @@ public class GestureHandler
 
     private void HandleTapNavigation(Point pos, PointerReleasedEventArgs e)
     {
-        // Only handle navigation for touch or mouse in bottom portion of screen
+        // Only handle navigation for touch in bottom 3/4 of screen (top 1/4 reserved for zooming)
+        // Mouse can navigate anywhere
         var isTouch = e.Pointer.Type == PointerType.Touch;
         var isInNavigationZone = isTouch ? 
-            pos.Y > 0.75 * _target.Bounds.Height : // Touch: bottom 25%
+            pos.Y > 0.25 * _target.Bounds.Height : // Touch: bottom 75% (top 25% for zooming)
             true; // Mouse: anywhere
         
         if (!isInNavigationZone) return;
