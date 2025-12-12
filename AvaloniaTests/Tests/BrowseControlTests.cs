@@ -370,12 +370,44 @@ public class BrowseControlTests : TestBase
     [TestCategory("Manual")]
     public async Task TestAvaloniaChooseMusicDialog()
     {
+        var username = Environment.UserName;
+        var folder = $@"C:\Users\{username}\OneDrive\SheetMusic";
+
+        if (!Directory.Exists(folder))
+        {
+            Trace.WriteLine($"Folder not found: {folder}");
+            Assert.Inconclusive("SheetMusic folder not found");
+            return;
+        }
+
+        Trace.WriteLine($"Loading PDF metadata from: {folder}");
+        
+        var pdfDocumentProvider = new ThrowingPdfDocumentProvider();
+        var exceptionHandler = new TraceExceptionHandler();
+
+        var sw = Stopwatch.StartNew();
+        var (results, folders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+            folder,
+            pdfDocumentProvider,
+            exceptionHandler,
+            useParallelLoading: true);
+        sw.Stop();
+
+        var totalTocEntries = results.Sum(r => r.TocEntries.Count);
+        var totalPages = results.Sum(r => r.VolumeInfoList.Sum(v => v.NPagesInThisVolume));
+        var totalFavorites = results.Sum(r => r.Favorites.Count);
+        
+        Trace.WriteLine($"Loaded {results.Count} books, {totalTocEntries} songs, {totalPages} pages in {sw.ElapsedMilliseconds}ms");
+
         await AvaloniaTestHelper.RunAvaloniaTest(async (lifetime, testCompleted) =>
         {
-            var window = new ChooseMusicWindow();
+            var window = new ChooseMusicWindow(results, folder)
+            {
+                SkipCloudOnlyFiles = false
+            };
             lifetime.MainWindow = window;
             
-            var timer = new System.Timers.Timer(30000);
+            var timer = new System.Timers.Timer(60000);
             
             window.Closed += AvaloniaTestHelper.CreateWindowClosedHandler(
                 testCompleted,
@@ -389,20 +421,19 @@ public class BrowseControlTests : TestBase
                 timer.Stop();
                 Dispatcher.UIThread.Post(() =>
                 {
-                    Trace.WriteLine("Auto-closing ChooseMusicWindow after 30 seconds");
+                    Trace.WriteLine("Auto-closing ChooseMusicWindow after 60 seconds");
                     window?.Close();
                 });
             };
             
             window.Show();
             
-            Trace.WriteLine($"? ChooseMusicWindow created and shown");
-            Trace.WriteLine($"? Generating bitmaps for books...");
-            Trace.WriteLine($"? Window will auto-close after 30 seconds, or close manually");
+            Trace.WriteLine($"ChooseMusicWindow created and shown with {results.Count} books");
+            Trace.WriteLine($"Window will auto-close after 60 seconds, or close manually");
 
             await Task.Delay(1000);
             timer.Start();
-        }, timeoutMs: 35000);
+        }, timeoutMs: 65000);
     }
 
     [TestMethod]
