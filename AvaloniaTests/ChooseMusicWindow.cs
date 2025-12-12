@@ -30,9 +30,16 @@ public class ChooseMusicWindow : Window
     private TextBlock _tbxTotals;
     private ComboBox _cboRootFolder;
     private TextBox _tbxFilter;
+    private RadioButton _rbtnByDate;
+    private RadioButton _rbtnByFolder;
+    private RadioButton _rbtnByNumPages;
     
     private List<PdfMetaDataReadResult> _pdfMetadata;
     private string _rootFolder;
+    
+    // Cache for book items (bitmap + metadata) to avoid re-rendering on filter/sort
+    private List<BookItemCache> _bookItemCache = new();
+    private bool _isLoading = false;
 
     private const int ThumbnailWidth = 150;
     private const int ThumbnailHeight = 225;
@@ -42,6 +49,24 @@ public class ChooseMusicWindow : Window
     /// Set to false to allow on-demand downloading of cloud files.
     /// </summary>
     public bool SkipCloudOnlyFiles { get; set; } = true;
+
+    /// <summary>
+    /// Cache entry for a book item - stores computed values to avoid recalculation on filter/sort.
+    /// The bitmap is stored on PdfMetaDataReadResult.ThumbnailCache for cross-component reuse.
+    /// </summary>
+    private class BookItemCache
+    {
+        public PdfMetaDataReadResult Metadata { get; set; }
+        public string BookName { get; set; }
+        public int NumSongs { get; set; }
+        public int NumPages { get; set; }
+        public int NumFavs { get; set; }
+        
+        /// <summary>
+        /// Gets the cached bitmap from the metadata object
+        /// </summary>
+        public Bitmap Bitmap => Metadata?.GetCachedThumbnail<Bitmap>();
+    }
 
     public ChooseMusicWindow() : this(null, null)
     {
@@ -64,7 +89,7 @@ public class ChooseMusicWindow : Window
         {
             if (_pdfMetadata != null && _pdfMetadata.Count > 0)
             {
-                await FillBooksTabWithRealDataAsync();
+                await LoadBooksAsync();
             }
             else
             {
@@ -92,16 +117,28 @@ public class ChooseMusicWindow : Window
         
         // Filter bar
         var filterPanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(5) };
-        filterPanel.Children.Add(new RadioButton { Content = "ByDate", GroupName = "Sort", IsChecked = true, Margin = new Thickness(20, 5, 0, 0) });
-        filterPanel.Children.Add(new RadioButton { Content = "ByFolder", GroupName = "Sort", Margin = new Thickness(20, 5, 0, 0) });
-        filterPanel.Children.Add(new RadioButton { Content = "ByNumPages", GroupName = "Sort", Margin = new Thickness(20, 5, 0, 0) });
+        
+        _rbtnByDate = new RadioButton { Content = "ByDate", GroupName = "Sort", IsChecked = true, Margin = new Thickness(20, 5, 0, 0) };
+        _rbtnByDate.IsCheckedChanged += OnSortChanged;
+        filterPanel.Children.Add(_rbtnByDate);
+        
+        _rbtnByFolder = new RadioButton { Content = "ByFolder", GroupName = "Sort", Margin = new Thickness(20, 5, 0, 0) };
+        _rbtnByFolder.IsCheckedChanged += OnSortChanged;
+        filterPanel.Children.Add(_rbtnByFolder);
+        
+        _rbtnByNumPages = new RadioButton { Content = "ByNumPages", GroupName = "Sort", Margin = new Thickness(20, 5, 0, 0) };
+        _rbtnByNumPages.IsCheckedChanged += OnSortChanged;
+        filterPanel.Children.Add(_rbtnByNumPages);
+        
         filterPanel.Children.Add(new Label { Content = "Filter", Margin = new Thickness(20, 0, 0, 0) });
         _tbxFilter = new TextBox { Width = 150, Margin = new Thickness(5, 0, 0, 0) };
+        _tbxFilter.TextChanged += OnFilterChanged;
         filterPanel.Children.Add(_tbxFilter);
+        
         Grid.SetRow(filterPanel, 0);
         booksGrid.Children.Add(filterPanel);
         
-        // Books list with wrap panel - use ItemsControl to avoid ListBox padding
+        // Books list with wrap panel
         _lbBooks = new ListBox();
         
         // Remove default ListBox item padding by setting a custom item container style
@@ -180,17 +217,63 @@ public class ChooseMusicWindow : Window
         Content = grid;
     }
 
-    private async Task FillBooksTabWithRealDataAsync()
+    private void OnSortChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        var random = new Random(42); // Fixed seed for consistent fallback colors
-        var items = new List<Control>();
+        if (!_isLoading && _bookItemCache.Count > 0)
+        {
+            RefreshBooksDisplay();
+        }
+    }
+
+    private void OnFilterChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (!_isLoading && _bookItemCache.Count > 0)
+        {
+            RefreshBooksDisplay();
+        }
+    }
+
+    /// <summary>
+    /// Get the sorted metadata based on current sort selection
+    /// </summary>
+    private IEnumerable<PdfMetaDataReadResult> GetSortedMetadata()
+    {
+        if (_rbtnByFolder?.IsChecked == true)
+        {
+            // Sort by folder/path (alphabetically)
+            return _pdfMetadata.OrderBy(p => p.GetBookName(_rootFolder));
+        }
+        else if (_rbtnByNumPages?.IsChecked == true)
+        {
+            // Sort by number of pages (descending - largest first)
+            return _pdfMetadata.OrderByDescending(p => p.VolumeInfoList.Sum(v => v.NPagesInThisVolume));
+        }
+        else // ByDate (default)
+        {
+            // Sort by last write time (most recent first)
+            return _pdfMetadata.OrderByDescending(p => p.LastWriteTime);
+        }
+    }
+
+    /// <summary>
+    /// Load all books and cache their bitmaps. Books are loaded in sort order
+    /// so new items appear at the end during progressive loading.
+    /// </summary>
+    private async Task LoadBooksAsync()
+    {
+        _isLoading = true;
+        _bookItemCache.Clear();
         
+        var random = new Random(42); // Fixed seed for consistent fallback colors
         int index = 0;
         int totalSongs = 0;
         int totalPages = 0;
         int totalFavs = 0;
         
-        foreach (var pdfMetaData in _pdfMetadata)
+        // Pre-sort metadata so items load in correct order (new items appear at end)
+        var sortedMetadata = GetSortedMetadata().ToList();
+        
+        foreach (var pdfMetaData in sortedMetadata)
         {
             var bookName = pdfMetaData.GetBookName(_rootFolder);
             var numSongs = pdfMetaData.TocEntries.Count;
@@ -201,60 +284,164 @@ public class ChooseMusicWindow : Window
             totalPages += numPages;
             totalFavs += numFavs;
             
-            // Try to get actual PDF thumbnail, fall back to generated bitmap
-            Bitmap bitmap;
+            // Use the caching mechanism on PdfMetaDataReadResult
+            // This allows the same thumbnail to be reused elsewhere (e.g., main window thumb)
+            var localIndex = index; // Capture for closure
+            var localBookName = bookName;
             try
             {
-                bitmap = await GetPdfThumbnailAsync(pdfMetaData);
+                await pdfMetaData.GetOrCreateThumbnailAsync(async () =>
+                {
+                    try
+                    {
+                        return await GetPdfThumbnailAsync(pdfMetaData);
+                    }
+                    catch (Exception ex)
+                    {
+                        Trace.WriteLine($"Failed to get PDF thumbnail for {localBookName}: {ex.Message}");
+                        return GenerateBookCoverBitmap(ThumbnailWidth, ThumbnailHeight, random, localBookName, localIndex);
+                    }
+                });
             }
             catch (Exception ex)
             {
                 Trace.WriteLine($"Failed to get PDF thumbnail for {bookName}: {ex.Message}");
-                bitmap = GenerateBookCoverBitmap(ThumbnailWidth, ThumbnailHeight, random, bookName, index);
+                // Store fallback bitmap directly on the metadata
+                pdfMetaData.ThumbnailCache = GenerateBookCoverBitmap(ThumbnailWidth, ThumbnailHeight, random, bookName, index);
             }
             
-            // Create the book item UI - match WPF ItemWidth=150, ItemHeight=255
-            var sp = new StackPanel { Orientation = Orientation.Vertical, Width = 150 };
-            
-            var img = new Image
+            // BookItemCache.Bitmap is now a computed property that reads from Metadata.ThumbnailCache
+            _bookItemCache.Add(new BookItemCache
             {
-                Source = bitmap,
-                Width = ThumbnailWidth,  // 150
-                Height = ThumbnailHeight, // 225
-                Stretch = Stretch.UniformToFill
-            };
-            sp.Children.Add(img);
-            
-            sp.Children.Add(new TextBlock
-            {
-                Text = bookName,
-                TextWrapping = TextWrapping.Wrap,
-                MaxWidth = 150,
-                FontSize = 11
+                Metadata = pdfMetaData,
+                BookName = bookName,
+                NumSongs = numSongs,
+                NumPages = numPages,
+                NumFavs = numFavs
             });
             
-            sp.Children.Add(new TextBlock
-            {
-                Text = $"#Sngs={numSongs} Pg={numPages} Fav={numFavs}",
-                FontSize = 10,
-                Foreground = Brushes.Gray
-            });
-            
-            items.Add(sp);
-            
-            // Add incrementally to show loading progress
+            // Show loading progress - just append new items, no re-sorting needed during load
             if (index % 10 == 9)
             {
-                _lbBooks.ItemsSource = null;
-                _lbBooks.ItemsSource = new List<Control>(items);
-                _tbxTotals.Text = $"Total #Books = {items.Count} # Songs = {totalSongs:n0} # Pages = {totalPages:n0} #Fav={totalFavs:n0}";
-                await Task.Delay(10); // Small delay to show progressive loading
+                UpdateBooksDisplayDuringLoad(totalSongs, totalPages, totalFavs);
+                await Task.Delay(10);
             }
             
             index++;
         }
         
-        // Final update
+        _isLoading = false;
+        RefreshBooksDisplay();
+    }
+
+    /// <summary>
+    /// Update display during loading - items are already in sort order, just append
+    /// </summary>
+    private void UpdateBooksDisplayDuringLoad(int totalSongs, int totalPages, int totalFavs)
+    {
+        var filterText = _tbxFilter?.Text?.Trim() ?? string.Empty;
+        
+        // Filter items if needed
+        IEnumerable<BookItemCache> displayItems = _bookItemCache;
+        if (!string.IsNullOrEmpty(filterText))
+        {
+            displayItems = displayItems.Where(item =>
+                item.BookName.Contains(filterText, StringComparison.OrdinalIgnoreCase));
+        }
+        
+        // Create UI items - no sorting needed, already in order
+        var items = new List<Control>();
+        foreach (var cacheItem in displayItems)
+        {
+            items.Add(CreateBookItemControl(cacheItem));
+        }
+        
+        _lbBooks.ItemsSource = items;
+        _tbxTotals.Text = $"Total #Books = {_bookItemCache.Count} # Songs = {totalSongs:n0} # Pages = {totalPages:n0} #Fav={totalFavs:n0}";
+    }
+
+    /// <summary>
+    /// Create the UI control for a book item
+    /// </summary>
+    private Control CreateBookItemControl(BookItemCache cacheItem)
+    {
+        var sp = new StackPanel { Orientation = Orientation.Vertical, Width = 150 };
+        
+        var img = new Image
+        {
+            Source = cacheItem.Bitmap,
+            Width = ThumbnailWidth,
+            Height = ThumbnailHeight,
+            Stretch = Stretch.UniformToFill
+        };
+        sp.Children.Add(img);
+        
+        sp.Children.Add(new TextBlock
+        {
+            Text = cacheItem.BookName,
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 150,
+            FontSize = 11
+        });
+        
+        sp.Children.Add(new TextBlock
+        {
+            Text = $"#Sngs={cacheItem.NumSongs} Pg={cacheItem.NumPages} Fav={cacheItem.NumFavs}",
+            FontSize = 10,
+            Foreground = Brushes.Gray
+        });
+        
+        return sp;
+    }
+
+    /// <summary>
+    /// Refresh the books display with current filter and sort settings
+    /// </summary>
+    private void RefreshBooksDisplay()
+    {
+        var filterText = _tbxFilter?.Text?.Trim() ?? string.Empty;
+        
+        // Filter items
+        IEnumerable<BookItemCache> filteredItems = _bookItemCache;
+        if (!string.IsNullOrEmpty(filterText))
+        {
+            filteredItems = filteredItems.Where(item =>
+                item.BookName.Contains(filterText, StringComparison.OrdinalIgnoreCase));
+        }
+        
+        // Sort items based on selected radio button
+        IEnumerable<BookItemCache> sortedItems;
+        if (_rbtnByFolder?.IsChecked == true)
+        {
+            // Sort by folder/path (alphabetically)
+            sortedItems = filteredItems.OrderBy(item => item.BookName);
+        }
+        else if (_rbtnByNumPages?.IsChecked == true)
+        {
+            // Sort by number of pages (descending - largest first)
+            sortedItems = filteredItems.OrderByDescending(item => item.NumPages);
+        }
+        else // ByDate (default)
+        {
+            // Sort by last write time (most recent first)
+            sortedItems = filteredItems.OrderByDescending(item => item.Metadata.LastWriteTime);
+        }
+        
+        // Create UI items
+        var items = new List<Control>();
+        int totalSongs = 0;
+        int totalPages = 0;
+        int totalFavs = 0;
+        
+        foreach (var cacheItem in sortedItems)
+        {
+            totalSongs += cacheItem.NumSongs;
+            totalPages += cacheItem.NumPages;
+            totalFavs += cacheItem.NumFavs;
+            
+            items.Add(CreateBookItemControl(cacheItem));
+        }
+        
         _lbBooks.ItemsSource = items;
         _tbxTotals.Text = $"Total #Books = {items.Count} # Songs = {totalSongs:n0} # Pages = {totalPages:n0} #Fav={totalFavs:n0}";
     }
