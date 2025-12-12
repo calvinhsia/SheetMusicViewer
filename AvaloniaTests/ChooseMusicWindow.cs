@@ -5,6 +5,7 @@ using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
 using PDFtoImage;
 using SheetMusicLib;
@@ -100,8 +101,19 @@ public class ChooseMusicWindow : Window
         Grid.SetRow(filterPanel, 0);
         booksGrid.Children.Add(filterPanel);
         
-        // Books list with wrap panel
+        // Books list with wrap panel - use ItemsControl to avoid ListBox padding
         _lbBooks = new ListBox();
+        
+        // Remove default ListBox item padding by setting a custom item container style
+        _lbBooks.ItemContainerTheme = new ControlTheme(typeof(ListBoxItem))
+        {
+            Setters =
+            {
+                new Setter(ListBoxItem.PaddingProperty, new Thickness(0)),
+                new Setter(ListBoxItem.MarginProperty, new Thickness(0)),
+                new Setter(ListBoxItem.MinHeightProperty, 0.0),
+            }
+        };
         
         // Create a WrapPanel as the items panel
         var wrapPanelFactory = new FuncTemplate<Panel?>(() => new WrapPanel
@@ -198,17 +210,17 @@ public class ChooseMusicWindow : Window
             catch (Exception ex)
             {
                 Trace.WriteLine($"Failed to get PDF thumbnail for {bookName}: {ex.Message}");
-                bitmap = GenerateBookCoverBitmap(200, 240, random, bookName, index);
+                bitmap = GenerateBookCoverBitmap(ThumbnailWidth, ThumbnailHeight, random, bookName, index);
             }
             
-            // Create the book item UI
-            var sp = new StackPanel { Orientation = Orientation.Vertical, Width = 150, Margin = new Thickness(5) };
+            // Create the book item UI - match WPF ItemWidth=150, ItemHeight=255
+            var sp = new StackPanel { Orientation = Orientation.Vertical, Width = 150 };
             
             var img = new Image
             {
                 Source = bitmap,
-                Width = 140,
-                Height = 200,
+                Width = ThumbnailWidth,  // 150
+                Height = ThumbnailHeight, // 225
                 Stretch = Stretch.UniformToFill
             };
             sp.Children.Add(img);
@@ -217,8 +229,7 @@ public class ChooseMusicWindow : Window
             {
                 Text = bookName,
                 TextWrapping = TextWrapping.Wrap,
-                MaxWidth = 140,
-                Margin = new Thickness(0, 5, 0, 0),
+                MaxWidth = 150,
                 FontSize = 11
             });
             
@@ -226,8 +237,7 @@ public class ChooseMusicWindow : Window
             {
                 Text = $"#Sngs={numSongs} Pg={numPages} Fav={numFavs}",
                 FontSize = 10,
-                Foreground = Brushes.Gray,
-                Margin = new Thickness(0, 2, 0, 0)
+                Foreground = Brushes.Gray
             });
             
             items.Add(sp);
@@ -350,17 +360,17 @@ public class ChooseMusicWindow : Window
                 bookName += $" Vol {i / bookNames.Length + 1}";
             }
             
-            // Create a colorful bitmap for this book
-            var bitmap = GenerateBookCoverBitmap(200, 240, random, bookName, i);
+            // Create a colorful bitmap for this book - match WPF 150x225
+            var bitmap = GenerateBookCoverBitmap(ThumbnailWidth, ThumbnailHeight, random, bookName, i);
             
-            // Create the book item UI
-            var sp = new StackPanel { Orientation = Orientation.Vertical, Width = 150, Margin = new Thickness(5) };
+            // Create the book item UI - match WPF ItemWidth=150
+            var sp = new StackPanel { Orientation = Orientation.Vertical, Width = 150 };
             
             var img = new Image
             {
                 Source = bitmap,
-                Width = 140,
-                Height = 200,
+                Width = ThumbnailWidth,
+                Height = ThumbnailHeight,
                 Stretch = Stretch.UniformToFill
             };
             sp.Children.Add(img);
@@ -369,8 +379,7 @@ public class ChooseMusicWindow : Window
             {
                 Text = bookName,
                 TextWrapping = TextWrapping.Wrap,
-                MaxWidth = 140,
-                Margin = new Thickness(0, 5, 0, 0),
+                MaxWidth = 150,
                 FontSize = 11
             });
             
@@ -382,8 +391,7 @@ public class ChooseMusicWindow : Window
             {
                 Text = $"#Sngs={numSongs} Pg={numPages} Fav={numFavs}",
                 FontSize = 10,
-                Foreground = Brushes.Gray,
-                Margin = new Thickness(0, 2, 0, 0)
+                Foreground = Brushes.Gray
             });
             
             items.Add(sp);
