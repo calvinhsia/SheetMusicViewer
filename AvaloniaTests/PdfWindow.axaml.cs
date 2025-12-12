@@ -286,34 +286,36 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
                         HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
                         VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch
                     };
-                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Pixel) });
-                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-                    // Left page with ink annotation - aligned right
-                    _inkCanvas0 = new InkCanvasControl(page0Image)
+                    if (Show2Pages && page1Image != null)
                     {
-                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
-                        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
-                        IsInkingEnabled = false
-                    };
-                    Grid.SetColumn(_inkCanvas0, 0);
-                    grid.Children.Add(_inkCanvas0);
+                        // Two-page layout: left page aligned right, right page aligned left
+                        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Pixel) });
+                        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-                    // Vertical divider line between pages
-                    var divider = new Border
-                    {
-                        Background = Avalonia.Media.Brushes.Gray,
-                        Width = 1,
-                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-                        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch
-                    };
-                    Grid.SetColumn(divider, 1);
-                    grid.Children.Add(divider);
+                        // Left page with ink annotation - aligned right
+                        _inkCanvas0 = new InkCanvasControl(page0Image)
+                        {
+                            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
+                            IsInkingEnabled = false
+                        };
+                        Grid.SetColumn(_inkCanvas0, 0);
+                        grid.Children.Add(_inkCanvas0);
 
-                    // Right page with ink annotation - aligned left
-                    if (page1Image != null)
-                    {
+                        // Vertical divider line between pages
+                        var divider = new Border
+                        {
+                            Background = Avalonia.Media.Brushes.Gray,
+                            Width = 1,
+                            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch
+                        };
+                        Grid.SetColumn(divider, 1);
+                        grid.Children.Add(divider);
+
+                        // Right page with ink annotation - aligned left
                         _inkCanvas1 = new InkCanvasControl(page1Image)
                         {
                             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
@@ -322,6 +324,18 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
                         };
                         Grid.SetColumn(_inkCanvas1, 2);
                         grid.Children.Add(_inkCanvas1);
+                    }
+                    else
+                    {
+                        // Single page layout: center the page
+                        _inkCanvas0 = new InkCanvasControl(page0Image)
+                        {
+                            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
+                            IsInkingEnabled = false
+                        };
+                        grid.Children.Add(_inkCanvas0);
+                        _inkCanvas1 = null;
                     }
 
                     _dpPage.Children.Add(grid);
