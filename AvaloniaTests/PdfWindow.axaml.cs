@@ -39,7 +39,6 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
         DataContext = this;
         
         // Get the PDF file path - cross-platform friendly
-        var username = Environment.UserName;
         var homeFolder = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var folder = Path.Combine(homeFolder, "OneDrive");
         if (!Directory.Exists(folder))
@@ -129,6 +128,35 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
         Closed += (s, e) => _gestureHandler?.Detach();
     }
 
+    private void SetupGestureHandler()
+    {
+        if (_dpPage == null) return;
+        
+        // Detach old handler if exists
+        _gestureHandler?.Detach();
+        
+        // Create new gesture handler (logging goes to Debug output window)
+        _gestureHandler = new GestureHandler(_dpPage, enableLogging: true)
+        {
+            NumPagesPerView = NumPagesPerView
+        };
+        
+        // Wire up navigation
+        _gestureHandler.NavigationRequested += (s, e) =>
+        {
+            NavigateAsync(e.Delta);
+        };
+        
+        // Wire up double-tap to reset zoom
+        _gestureHandler.DoubleTapped += (s, e) =>
+        {
+            _gestureHandler.ResetTransform();
+        };
+        
+        // Update disabled state based on inking
+        UpdateGestureHandlerState();
+    }
+
     private void UpdateGestureHandlerState()
     {
         if (_gestureHandler != null)
@@ -204,7 +232,6 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
         var chkFullScreen = this.FindControl<CheckBox>("chkFullScreen");
         if (chkFullScreen != null)
         {
-            // Toggle the checkbox state which will trigger ChkFullScreenToggled
             chkFullScreen.IsChecked = !chkFullScreen.IsChecked;
         }
     }
@@ -239,7 +266,6 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
                 return;
             }
 
-            // Get page count
             using (var pdfStream = File.OpenRead(_pdfFileName))
             {
                 _pageCount = PDFtoImage.Conversion.GetPageCount(pdfStream);
@@ -269,7 +295,6 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
                 page1Image = await RenderPageAsync(_pdfFileName, pageNumber + 1);
             }
             
-            // Update UI on UI thread
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 _dpPage = this.FindControl<Panel>("dpPage");
@@ -278,7 +303,6 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
                     _dpPage.Children.Clear();
                     _dpPage.Background = Avalonia.Media.Brushes.LightGreen;
                     
-                    // Reset any existing transform
                     _gestureHandler?.ResetTransform();
 
                     var grid = new Grid
@@ -289,12 +313,10 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
 
                     if (Show2Pages && page1Image != null)
                     {
-                        // Two-page layout: left page aligned right, right page aligned left
                         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Pixel) });
                         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-                        // Left page with ink annotation - aligned right
                         _inkCanvas0 = new InkCanvasControl(page0Image)
                         {
                             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
@@ -304,7 +326,6 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
                         Grid.SetColumn(_inkCanvas0, 0);
                         grid.Children.Add(_inkCanvas0);
 
-                        // Vertical divider line between pages
                         var divider = new Border
                         {
                             Background = Avalonia.Media.Brushes.Gray,
@@ -315,7 +336,6 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
                         Grid.SetColumn(divider, 1);
                         grid.Children.Add(divider);
 
-                        // Right page with ink annotation - aligned left
                         _inkCanvas1 = new InkCanvasControl(page1Image)
                         {
                             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
@@ -327,7 +347,6 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
                     }
                     else
                     {
-                        // Single page layout: center the page
                         _inkCanvas0 = new InkCanvasControl(page0Image)
                         {
                             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
@@ -339,8 +358,6 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
                     }
 
                     _dpPage.Children.Add(grid);
-                    
-                    // Setup gesture handler for the page panel
                     SetupGestureHandler();
                 }
                 
@@ -348,7 +365,6 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
                 Description1 = (page1Image != null && pageNumber + 1 <= _pageCount) ? 
                     $"Page {pageNumber + 1} of {_pageCount}" : "";
                     
-                // Update ink checkbox state
                 var chkInk0 = this.FindControl<CheckBox>("chkInk0");
                 var chkInk1 = this.FindControl<CheckBox>("chkInk1");
                 if (chkInk0 != null && _inkCanvas0 != null)
@@ -370,35 +386,6 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
         }
     }
 
-    private void SetupGestureHandler()
-    {
-        if (_dpPage == null) return;
-        
-        // Detach old handler if exists
-        _gestureHandler?.Detach();
-        
-        // Create new gesture handler
-        _gestureHandler = new GestureHandler(_dpPage)
-        {
-            NumPagesPerView = NumPagesPerView
-        };
-        
-        // Wire up navigation
-        _gestureHandler.NavigationRequested += (s, e) =>
-        {
-            NavigateAsync(e.Delta);
-        };
-        
-        // Wire up double-tap (could be used for zoom reset or other actions)
-        _gestureHandler.DoubleTapped += (s, e) =>
-        {
-            _gestureHandler.ResetTransform();
-        };
-        
-        // Update disabled state based on inking
-        UpdateGestureHandlerState();
-    }
-
     private async Task<Bitmap> RenderPageAsync(string pdfFilePath, int pageIndex)
     {
         if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
@@ -409,20 +396,13 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
         return await Task.Run(() =>
         {
             using var pdfStream = File.OpenRead(pdfFilePath);
-            
-            // PDFtoImage uses 0-based page indexing, so convert from 1-based to 0-based
             var zeroBasedPageIndex = pageIndex - 1;
-            
-            // Render PDF page to SKBitmap using PDFtoImage
             using var skBitmap = PDFtoImage.Conversion.ToImage(pdfStream, page: zeroBasedPageIndex, options: new(Dpi: 96));
-            
-            // Convert SKBitmap to Avalonia Bitmap
             using var image = SKImage.FromBitmap(skBitmap);
             using var data = image.Encode(SKEncodedImageFormat.Png, 100);
             using var stream = new MemoryStream();
             data.SaveTo(stream);
             stream.Seek(0, SeekOrigin.Begin);
-            
             return new Bitmap(stream);
         });
     }
@@ -455,13 +435,11 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
             OnPropertyChanged();
             OnPropertyChanged(nameof(NumPagesPerView));
             
-            // Update gesture handler
             if (_gestureHandler != null)
             {
                 _gestureHandler.NumPagesPerView = NumPagesPerView;
             }
             
-            // Re-render current page
             _ = ShowPageAsync(CurrentPageNumber);
         }
     }
