@@ -45,7 +45,7 @@ public class PdfViewerTests : TestBase
         var pdfPath = Environment.GetEnvironmentVariable("PDF_TEST_PATH");
         if (string.IsNullOrEmpty(pdfPath))
         {
-            pdfPath = TestHelpers.CreateTestPdf(pageCount: 5);
+            pdfPath = TestHelpers.CreateTestPdf(pageCount: 50);
         }
 
         var testCompleted = new TaskCompletionSource<bool>();
