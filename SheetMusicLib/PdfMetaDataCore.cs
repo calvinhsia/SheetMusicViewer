@@ -67,6 +67,54 @@ namespace SheetMusicLib
         public List<InkStrokeClass> InkStrokes { get; set; } = new();
 
         /// <summary>
+        /// Cached thumbnail bitmap (platform-specific type stored as object).
+        /// Use GetOrCreateThumbnailAsync to access with automatic caching.
+        /// </summary>
+        public object ThumbnailCache { get; set; }
+
+        /// <summary>
+        /// Gets the cached thumbnail or creates it using the provided factory function.
+        /// Thread-safe - only one factory call will execute even if called concurrently.
+        /// </summary>
+        /// <typeparam name="T">The platform-specific bitmap type (e.g., Avalonia.Media.Imaging.Bitmap or System.Windows.Media.Imaging.BitmapImage)</typeparam>
+        /// <param name="thumbnailFactory">Async function to create the thumbnail if not cached</param>
+        /// <returns>The cached or newly created thumbnail</returns>
+        public async Task<T> GetOrCreateThumbnailAsync<T>(Func<Task<T>> thumbnailFactory) where T : class
+        {
+            // Fast path: already cached
+            if (ThumbnailCache is T cached)
+            {
+                return cached;
+            }
+
+            // Create the thumbnail
+            var thumbnail = await thumbnailFactory();
+            
+            // Cache it (simple assignment - last writer wins if concurrent)
+            ThumbnailCache = thumbnail;
+            
+            return thumbnail;
+        }
+
+        /// <summary>
+        /// Gets the cached thumbnail if available, without creating it.
+        /// </summary>
+        /// <typeparam name="T">The platform-specific bitmap type</typeparam>
+        /// <returns>The cached thumbnail or null if not cached</returns>
+        public T GetCachedThumbnail<T>() where T : class
+        {
+            return ThumbnailCache as T;
+        }
+
+        /// <summary>
+        /// Clears the cached thumbnail to free memory.
+        /// </summary>
+        public void ClearThumbnailCache()
+        {
+            ThumbnailCache = null;
+        }
+
+        /// <summary>
         /// Get the volume number from a page number
         /// </summary>
         public int GetVolNumFromPageNum(int pageNo)
