@@ -16,6 +16,9 @@
     <Product>Sheet Music Viewer</Product>
     <Description>Cross-platform PDF sheet music viewer with annotations</Description>
     
+    <!-- Application icon - same as WPF version -->
+    <ApplicationIcon>Assets\Music.ico</ApplicationIcon>
+    
     <!-- Enable code coverage for all configurations -->
     <DebugType>portable</DebugType>
     <DebugSymbols>true</DebugSymbols>
