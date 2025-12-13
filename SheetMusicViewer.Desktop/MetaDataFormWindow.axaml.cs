@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SheetMusicLib;
@@ -155,6 +156,9 @@ public partial class MetaDataFormViewModel : ObservableObject
     [ObservableProperty]
     private bool _songNameIsEnabled = true;
 
+    [ObservableProperty]
+    private Bitmap? _thumbnail;
+
     public Action<bool>? CloseAction { get; set; }
     public Action<int>? CloseWithPageAction { get; set; }
     public Func<IClipboard?>? GetClipboardFunc { get; set; }
@@ -214,6 +218,9 @@ public partial class MetaDataFormViewModel : ObservableObject
         _pdfMetaData = pdfMetaData;
         _rootFolder = rootFolder;
         Title = $"MetaData Editor - {pdfMetaData.GetBookName(rootFolder)}";
+
+        // Get the cached thumbnail
+        Thumbnail = pdfMetaData.GetCachedThumbnail<Bitmap>();
 
         InitializeFromPdfMetaData(pdfMetaData, currentPageNo);
     }
