@@ -6,7 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 
-namespace AvaloniaTests;
+namespace SheetMusicViewer.Desktop;
 
 /// <summary>
 /// Handles multi-touch gestures for Avalonia controls including:

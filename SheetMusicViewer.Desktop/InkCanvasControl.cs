@@ -8,8 +8,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace AvaloniaTests;
+namespace SheetMusicViewer.Desktop;
 
+/// <summary>
+/// Custom ink canvas control that supports drawing on top of a PDF page image.
+/// Uses SkiaSharp-compatible rendering for cross-platform support.
+/// </summary>
 public class InkCanvasControl : Panel
 {
     private readonly List<List<Point>> _normalizedStrokes = new();
