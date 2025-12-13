@@ -224,14 +224,18 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
     
     private void UpdateSliderPopupText()
     {
-        if (_tbSliderPopup != null)
+        if (_tbSliderPopup != null && _slider != null)
         {
+            // Use the slider's current value directly, not CurrentPageNumber
+            // The slider value is 0-based, so add 1 to get the page number
+            var pageNumber = (int)_slider.Value + 1;
+            
             // Show page number and song name like WPF version
             // Format: "47 Song Title Here" or just "47" if no description available
-            var description = GetDescription(CurrentPageNumber);
+            var description = GetDescription(pageNumber);
             _tbSliderPopup.Text = string.IsNullOrEmpty(description) 
-                ? $"{CurrentPageNumber}" 
-                : $"{CurrentPageNumber} {description}";
+                ? $"{pageNumber}" 
+                : $"{pageNumber} {description}";
         }
     }
     
