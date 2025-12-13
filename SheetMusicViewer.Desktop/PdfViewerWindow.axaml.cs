@@ -61,6 +61,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private const int MaxCacheSize = 50;
     private int _currentCacheAge;
     private int _lastNavigationDelta; // Track navigation direction for prefetch priority
+    private bool _isShowingMetaDataForm; // Prevent showing multiple MetaDataForm dialogs
     
     private class PageCacheEntry
     {
@@ -207,11 +208,11 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             btnNext.Click += (s, e) => BtnPrevNext_Click(isPrevious: false);
         }
         
-        // Wire up thumbnail button for choosing music / metadata
+        // Wire up thumbnail button for metadata editor (Alt-E)
         var btnThumb = this.FindControl<Button>("btnThumb");
         if (btnThumb != null)
         {
-            btnThumb.Click += async (s, e) => await ChooseMusicAsync();
+            btnThumb.Click += async (s, e) => await ShowMetaDataFormAsync();
         }
         
         // Wire up slider events
@@ -321,6 +322,47 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         catch (Exception ex)
         {
             Trace.WriteLine($"ChooseMusicAsync error: {ex}");
+        }
+    }
+    
+    private async Task ShowMetaDataFormAsync()
+    {
+        if (_isShowingMetaDataForm || _currentPdfMetaData == null)
+            return;
+            
+        try
+        {
+            _isShowingMetaDataForm = true;
+            
+            var viewModel = new MetaDataFormViewModel(_currentPdfMetaData, _rootMusicFolder, CurrentPageNumber);
+            var metaDataForm = new MetaDataFormWindow(viewModel);
+            
+            await metaDataForm.ShowDialog(this);
+            
+            // Handle navigation to a specific page if user double-clicked a TOC entry or favorite
+            if (metaDataForm.PageNumberResult.HasValue)
+            {
+                var targetPage = metaDataForm.PageNumberResult.Value;
+                if (targetPage >= _currentPdfMetaData.PageNumberOffset && 
+                    targetPage < _currentPdfMetaData.VolumeInfoList.Sum(v => v.NPagesInThisVolume) + _currentPdfMetaData.PageNumberOffset)
+                {
+                    await ShowPageAsync(targetPage);
+                }
+            }
+            else if (metaDataForm.WasSaved)
+            {
+                // Reload the PDF metadata if it was saved (PageNumberOffset might have changed)
+                ClearCache();
+                await LoadPdfFileAndShowAsync(_currentPdfMetaData, CurrentPageNumber);
+            }
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"ShowMetaDataFormAsync error: {ex}");
+        }
+        finally
+        {
+            _isShowingMetaDataForm = false;
         }
     }
     
@@ -811,7 +853,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             else
             {
                 var nextFav = favPages.Where(p => p > CurrentPageNumber).FirstOrDefault();
-                if (nextFav > 0)
+                if(nextFav > 0)
                 {
                     _ = ShowPageAsync(nextFav);
                     return;
@@ -977,6 +1019,14 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         if (e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.C)
         {
             _ = ChooseMusicAsync();
+            e.Handled = true;
+            return;
+        }
+        
+        // Handle Alt-E for metadata editor
+        if (e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.E)
+        {
+            _ = ShowMetaDataFormAsync();
             e.Handled = true;
             return;
         }
