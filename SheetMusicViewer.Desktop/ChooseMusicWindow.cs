@@ -72,6 +72,16 @@ public class ChooseMusicWindow : Window
     /// The selected page number (for favorites/query selection)
     /// </summary>
     public int ChosenPageNo { get; private set; }
+    
+    /// <summary>
+    /// The current root folder (may have changed if user selected a new folder)
+    /// </summary>
+    public string CurrentRootFolder => _rootFolder;
+    
+    /// <summary>
+    /// The current PDF metadata list (may have changed if user selected a new folder)
+    /// </summary>
+    public List<PdfMetaDataReadResult> CurrentPdfMetadata => _pdfMetadata;
 
     private class BookItemCache
     {

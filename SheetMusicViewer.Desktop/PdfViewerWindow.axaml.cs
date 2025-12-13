@@ -306,6 +306,13 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             var chooser = new ChooseMusicWindow(_lstPdfMetaFileData, _rootMusicFolder);
             await chooser.ShowDialog(this);
             
+            // Update root folder and metadata if they changed in the chooser
+            if (!string.IsNullOrEmpty(chooser.CurrentRootFolder) && chooser.CurrentRootFolder != _rootMusicFolder)
+            {
+                _rootMusicFolder = chooser.CurrentRootFolder;
+                _lstPdfMetaFileData = chooser.CurrentPdfMetadata;
+            }
+            
             if (chooser.ChosenPdfMetaData != null)
             {
                 await LoadPdfFileAndShowAsync(chooser.ChosenPdfMetaData, chooser.ChosenPageNo);
