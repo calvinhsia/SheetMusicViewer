@@ -38,11 +38,11 @@
                 
                 <Button Name="btnPrev" Content="&lt;" Width="25" Margin="8,0,0,0" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center"
                         ToolTip.Tip="If there are any favorites, goes back to prior favorite. Else go back 1 screenful"/>
-                <TextBox Name="txtPageNo" Width="30" Height="20" Margin="2,0,2,0" Text="{Binding CurrentPageNumber}" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center" FontSize="11" Padding="2,1"/>
+                <TextBox Name="txtPageNo" MinWidth="28" Height="18" Margin="2,0,2,0" Text="{Binding CurrentPageNumber}" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center" FontSize="12" Padding="2,0" BorderThickness="1" VerticalContentAlignment="Center"/>
                 <Button Name="btnNext" Content="&gt;" Width="25" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center"
                         ToolTip.Tip="If there are any favorites, goes forward to next favorite. Else go forward 1 screenful"/>
                 <TextBlock Text="of" Margin="2,0,2,0" VerticalAlignment="Center" IsEnabled="{Binding PdfUIEnabled}"/>
-                <TextBox Margin="0,0,3,0" Width="30" Height="20" Text="{Binding MaxPageNumberMinus1, Mode=OneWay}" IsReadOnly="True" IsEnabled="{Binding PdfUIEnabled}" Background="#FFF9F3F3" VerticalAlignment="Center" FontSize="11" Padding="2,1"/>
+                <TextBox Margin="0,0,3,0" MinWidth="28" Height="18" Text="{Binding MaxPageNumberMinus1, Mode=OneWay}" IsReadOnly="True" IsEnabled="{Binding PdfUIEnabled}" Background="#FFF9F3F3" VerticalAlignment="Center" FontSize="12" Padding="2,0" BorderThickness="1" VerticalContentAlignment="Center"/>
             </StackPanel>
             
             <!-- Center slider controls -->
