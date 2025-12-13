@@ -47,12 +47,6 @@
             
             <!-- Center slider controls -->
             <DockPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Background="#FFF0F8FF" Opacity="0.5">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
-                    <Button Name="btnThumb" Margin="0,0,5,0" ToolTip.Tip="Click (or Alt-E) to show metadata editor"
-                            Padding="1">
-                        <Image Name="ImgThumb" Height="24" Width="16" Stretch="Uniform"/>
-                    </Button>
-                </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                     <Panel>
                         <Slider Name="slider" 
@@ -69,6 +63,12 @@
                             </Border>
                         </Popup>
                     </Panel>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
+                    <Button Name="btnThumb" Margin="0,0,5,0" ToolTip.Tip="Click (or Alt-E) to show metadata editor"
+                            Padding="1">
+                        <Image Name="ImgThumb" Height="24" Width="16" Stretch="Uniform"/>
+                    </Button>
                 </StackPanel>
             </DockPanel>
             
