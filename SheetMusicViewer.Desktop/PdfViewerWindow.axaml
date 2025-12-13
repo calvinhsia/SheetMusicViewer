@@ -58,8 +58,8 @@
                                 SmallChange="{Binding NumPagesPerView}">
                         </Slider>
                         <Popup Name="SliderPopup" PlacementTarget="{Binding #slider}" Placement="Bottom" HorizontalOffset="-100" VerticalOffset="0">
-                            <Border BorderThickness="1" BorderBrush="Gray" Background="LightYellow" Padding="5">
-                                <TextBlock Name="tbSliderPopup" Foreground="Black" />
+                            <Border BorderThickness="1" BorderBrush="Gray" Background="LightYellow" Padding="8">
+                                <TextBlock Name="tbSliderPopup" Foreground="Black" FontSize="24" FontWeight="SemiBold"/>
                             </Border>
                         </Popup>
                     </Panel>
