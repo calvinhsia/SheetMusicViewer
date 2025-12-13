@@ -113,13 +113,31 @@ public class ChooseMusicWindow : Window
         _rootFolder = rootFolder ?? string.Empty;
         
         Title = "Choose Music";
-        Width = 1200;
-        Height = 800;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        
+        // Restore window size/position from settings
+        var settings = AppSettings.Instance;
+        Width = settings.ChooseWindowWidth > 0 ? settings.ChooseWindowWidth : 900;
+        Height = settings.ChooseWindowHeight > 0 ? settings.ChooseWindowHeight : 700;
+        
+        if (settings.ChooseWindowLeft >= 0 && settings.ChooseWindowTop >= 0)
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Position = new Avalonia.PixelPoint((int)settings.ChooseWindowLeft, (int)settings.ChooseWindowTop);
+        }
+        else
+        {
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        }
+        
+        if (settings.ChooseWindowMaximized)
+        {
+            WindowState = WindowState.Maximized;
+        }
         
         BuildUI();
         
         this.Opened += OnWindowOpened;
+        this.Closing += OnWindowClosing;
     }
     
     private async void OnWindowOpened(object? sender, EventArgs e)
@@ -139,6 +157,24 @@ public class ChooseMusicWindow : Window
         }
     }
 
+    private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
+    {
+        // Save window state
+        var settings = AppSettings.Instance;
+        settings.ChooseWindowMaximized = WindowState == WindowState.Maximized;
+        
+        // Only save position/size if not maximized
+        if (WindowState != WindowState.Maximized)
+        {
+            settings.ChooseWindowWidth = Width;
+            settings.ChooseWindowHeight = Height;
+            settings.ChooseWindowLeft = Position.X;
+            settings.ChooseWindowTop = Position.Y;
+        }
+        
+        settings.Save();
+    }
+    
     private void BuildUI()
     {
         var grid = new Grid();

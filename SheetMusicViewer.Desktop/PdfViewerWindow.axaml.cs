@@ -93,6 +93,10 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         {
             Position = new Avalonia.PixelPoint((int)settings.WindowLeft, (int)settings.WindowTop);
         }
+        if (settings.WindowMaximized)
+        {
+            WindowState = WindowState.Maximized;
+        }
         
         WireUpEventHandlers();
         
@@ -285,10 +289,16 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         var settings = AppSettings.Instance;
         settings.Show2Pages = Show2Pages;
         settings.IsFullScreen = this.FindControl<CheckBox>("chkFullScreen")?.IsChecked == true;
-        settings.WindowWidth = Width;
-        settings.WindowHeight = Height;
-        settings.WindowLeft = Position.X;
-        settings.WindowTop = Position.Y;
+        settings.WindowMaximized = WindowState == WindowState.Maximized;
+        
+        // Only save position/size if not maximized
+        if (WindowState != WindowState.Maximized)
+        {
+            settings.WindowWidth = Width;
+            settings.WindowHeight = Height;
+            settings.WindowLeft = Position.X;
+            settings.WindowTop = Position.Y;
+        }
         
         if (_currentPdfMetaData != null)
         {

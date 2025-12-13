@@ -73,6 +73,7 @@ public class AppSettings
     public double WindowHeight { get; set; } = 800;
     public double WindowTop { get; set; } = 100;
     public double WindowLeft { get; set; } = 100;
+    public bool WindowMaximized { get; set; } = true;
 
     // View settings
     public bool Show2Pages { get; set; } = true;
@@ -87,6 +88,18 @@ public class AppSettings
     // Choose dialog settings
     public string ChooseBooksSort { get; set; } = "ByDate";
     public string ChooseQueryTab { get; set; } = "_Books";
+    public double ChooseWindowWidth { get; set; } = 900;
+    public double ChooseWindowHeight { get; set; } = 700;
+    public double ChooseWindowTop { get; set; } = -1;
+    public double ChooseWindowLeft { get; set; } = -1;
+    public bool ChooseWindowMaximized { get; set; } = true;
+    
+    // MetaData editor dialog settings
+    public double MetaDataWindowWidth { get; set; } = 1200;
+    public double MetaDataWindowHeight { get; set; } = 700;
+    public double MetaDataWindowTop { get; set; } = -1;
+    public double MetaDataWindowLeft { get; set; } = -1;
+    public bool MetaDataWindowMaximized { get; set; } = true;
 
     /// <summary>
     /// Load settings from disk, or create new settings if file doesn't exist.
@@ -172,15 +185,28 @@ public class AppSettings
     /// </summary>
     public void Reset()
     {
-        WindowWidth = 1200;
-        WindowHeight = 800;
-        WindowTop = 100;
-        WindowLeft = 100;
-        Show2Pages = true;
-        IsFullScreen = false;
-        LastPDFOpen = null;
+        var defaults = new AppSettings();
+        
+        WindowWidth = defaults.WindowWidth;
+        WindowHeight = defaults.WindowHeight;
+        WindowTop = defaults.WindowTop;
+        WindowLeft = defaults.WindowLeft;
+        WindowMaximized = defaults.WindowMaximized;
+        Show2Pages = defaults.Show2Pages;
+        IsFullScreen = defaults.IsFullScreen;
+        LastPDFOpen = defaults.LastPDFOpen;
         RootFolderMRU.Clear();
-        ChooseBooksSort = "ByDate";
-        ChooseQueryTab = "_Books";
+        ChooseBooksSort = defaults.ChooseBooksSort;
+        ChooseQueryTab = defaults.ChooseQueryTab;
+        ChooseWindowWidth = defaults.ChooseWindowWidth;
+        ChooseWindowHeight = defaults.ChooseWindowHeight;
+        ChooseWindowTop = defaults.ChooseWindowTop;
+        ChooseWindowLeft = defaults.ChooseWindowLeft;
+        ChooseWindowMaximized = defaults.ChooseWindowMaximized;
+        MetaDataWindowWidth = defaults.MetaDataWindowWidth;
+        MetaDataWindowHeight = defaults.MetaDataWindowHeight;
+        MetaDataWindowTop = defaults.MetaDataWindowTop;
+        MetaDataWindowLeft = defaults.MetaDataWindowLeft;
+        MetaDataWindowMaximized = defaults.MetaDataWindowMaximized;
     }
 }
