@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SheetMusicViewer.Desktop;
 using System;
 using System.Diagnostics;
 using System.IO;

@@ -20,6 +20,11 @@ namespace SheetMusicLib
         /// Whether this is a singles folder
         /// </summary>
         public bool IsSinglesFolder { get; set; }
+        
+        /// <summary>
+        /// Path to the BMK metadata file
+        /// </summary>
+        public string BmkFilePath => System.IO.Path.ChangeExtension(FullPathFile, ".bmk");
 
         /// <summary>
         /// Whether the metadata was modified and needs saving

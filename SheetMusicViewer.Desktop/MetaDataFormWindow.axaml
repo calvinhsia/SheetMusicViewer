@@ -1,11 +1,12 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:local="using:AvaloniaTests"
-        x:Class="AvaloniaTests.MetaDataFormWindow"
+        xmlns:local="clr-namespace:SheetMusicViewer.Desktop"
+        x:Class="SheetMusicViewer.Desktop.MetaDataFormWindow"
         x:DataType="local:MetaDataFormViewModel"
-        Title="MetaData Editor"
+        Title="{Binding Title}"
         Width="1200"
-        Height="700">
+        Height="700"
+        WindowStartupLocation="CenterOwner">
     <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -56,7 +57,7 @@
                     <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding SelectedItem.PageNo, Mode=TwoWay}" Width="60" HorizontalAlignment="Left"/>
 
                     <TextBlock Grid.Row="1" Grid.Column="0" Text="SongName:" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,5,0"/>
-                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding SelectedItem.SongName, Mode=TwoWay}"/>
+                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding SelectedItem.SongName, Mode=TwoWay}" IsEnabled="{Binding SongNameIsEnabled}"/>
 
                     <TextBlock Grid.Row="2" Grid.Column="0" Text="Composer:" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,5,0"/>
                     <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding SelectedItem.Composer, Mode=TwoWay}"/>
@@ -103,7 +104,8 @@
                       CanUserResizeColumns="True"
                       CanUserSortColumns="True"
                       IsReadOnly="False"
-                      SelectionMode="Single">
+                      SelectionMode="Single"
+                      DoubleTapped="TocDataGrid_DoubleTapped">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="PageNo" Binding="{Binding PageNo}" Width="70" x:DataType="local:TocEntryViewModel"/>
                     <DataGridTextColumn Header="SongName" Binding="{Binding SongName}" Width="250" x:DataType="local:TocEntryViewModel"/>
@@ -124,12 +126,14 @@
 
                 <TextBlock Grid.Row="0" Text="Favorites:" FontWeight="Bold" Margin="5,0,0,5"/>
                 <DataGrid Grid.Row="1"
+                          Name="FavoritesDataGrid"
                           ItemsSource="{Binding Favorites}"
                           GridLinesVisibility="All"
                           CanUserReorderColumns="False"
                           CanUserResizeColumns="True"
                           IsReadOnly="True"
-                          SelectionMode="Single">
+                          SelectionMode="Single"
+                          DoubleTapped="FavoritesDataGrid_DoubleTapped">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Page" Binding="{Binding PageNo}" Width="60" x:DataType="local:FavoriteViewModel"/>
                         <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="*" x:DataType="local:FavoriteViewModel"/>
