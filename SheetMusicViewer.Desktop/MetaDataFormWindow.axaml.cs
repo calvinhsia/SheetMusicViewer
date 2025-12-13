@@ -32,11 +32,14 @@ public partial class MetaDataFormWindow : Window
     public MetaDataFormWindow()
     {
         InitializeComponent();
+        ApplyWindowSettings();
     }
 
     public MetaDataFormWindow(MetaDataFormViewModel viewModel)
     {
         InitializeComponent();
+        ApplyWindowSettings();
+        
         _viewModel = viewModel;
         DataContext = viewModel;
         viewModel.CloseAction = (saved) =>
@@ -51,6 +54,49 @@ public partial class MetaDataFormWindow : Window
             Close();
         };
         viewModel.GetClipboardFunc = () => Clipboard;
+    }
+    
+    private void ApplyWindowSettings()
+    {
+        // Restore window size/position from settings
+        var settings = AppSettings.Instance;
+        Width = settings.MetaDataWindowWidth > 0 ? settings.MetaDataWindowWidth : 1200;
+        Height = settings.MetaDataWindowHeight > 0 ? settings.MetaDataWindowHeight : 700;
+        
+        if (settings.MetaDataWindowLeft >= 0 && settings.MetaDataWindowTop >= 0)
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Position = new Avalonia.PixelPoint((int)settings.MetaDataWindowLeft, (int)settings.MetaDataWindowTop);
+        }
+        else
+        {
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        }
+        
+        if (settings.MetaDataWindowMaximized)
+        {
+            WindowState = WindowState.Maximized;
+        }
+        
+        this.Closing += OnWindowClosing;
+    }
+    
+    private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
+    {
+        // Save window state
+        var settings = AppSettings.Instance;
+        settings.MetaDataWindowMaximized = WindowState == WindowState.Maximized;
+        
+        // Only save position/size if not maximized
+        if (WindowState != WindowState.Maximized)
+        {
+            settings.MetaDataWindowWidth = Width;
+            settings.MetaDataWindowHeight = Height;
+            settings.MetaDataWindowLeft = Position.X;
+            settings.MetaDataWindowTop = Position.Y;
+        }
+        
+        settings.Save();
     }
 
     private void InitializeComponent()
