@@ -6,6 +6,8 @@ namespace SheetMusicLib;
 /// <summary>
 /// Cross-platform application settings using JSON file storage.
 /// Works on Windows, macOS, and Linux.
+/// Uses LocalApplicationData (not Roaming) because settings contain machine-specific
+/// data like window positions, screen sizes, and file paths.
 /// </summary>
 public class AppSettings
 {
@@ -41,11 +43,13 @@ public class AppSettings
     /// <summary>
     /// Initialize the settings with a custom application name.
     /// Call this once at application startup.
+    /// Uses LocalApplicationData because settings are machine-specific
+    /// (window positions, file paths, screen sizes).
     /// </summary>
     /// <param name="appName">Application name for the settings folder</param>
     public static void Initialize(string appName = "SheetMusicViewer")
     {
-        var appDataFolder = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var appDataFolder = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         _settingsPath = Path.Combine(appDataFolder, appName, "settings.json");
     }
 

@@ -50,6 +50,9 @@ public class ChooseMusicWindow : Window
     
     // Favorites data source
     private List<FavoriteItem> _allFavoriteItems = new();
+    
+    // Flag to prevent recursive selection change handling
+    private bool _enableCboSelectionChange = true;
 
     private const int ThumbnailWidth = 150;
     private const int ThumbnailHeight = 225;
@@ -106,17 +109,24 @@ public class ChooseMusicWindow : Window
         
         BuildUI();
         
-        this.Opened += async (s, e) =>
+        this.Opened += OnWindowOpened;
+    }
+    
+    private async void OnWindowOpened(object? sender, EventArgs e)
+    {
+        // If no root folder and only "New..." is in the list, automatically show folder picker
+        if (string.IsNullOrEmpty(_rootFolder) || !Directory.Exists(_rootFolder))
         {
-            if (_pdfMetadata.Count > 0)
-            {
-                await LoadBooksAsync();
-            }
-            else
-            {
-                await FillBooksTabAsync();
-            }
-        };
+            await ShowFolderPickerAsync();
+        }
+        else if (_pdfMetadata.Count > 0)
+        {
+            await LoadBooksAsync();
+        }
+        else
+        {
+            await FillBooksTabAsync();
+        }
     }
 
     private void BuildUI()
@@ -168,6 +178,7 @@ public class ChooseMusicWindow : Window
         _cboRootFolder = new ComboBox { Width = 300, Margin = new Thickness(10, 0, 10, 0) };
         PopulateRootFolderComboBox();
         _cboRootFolder.SelectionChanged += OnRootFolderSelectionChanged;
+        _cboRootFolder.DropDownOpened += OnRootFolderDropDownOpened;
         topBar.Children.Add(_cboRootFolder);
         
         var btnCancel = new Button { Content = "Cancel", Margin = new Thickness(10, 0, 0, 0) };
@@ -185,6 +196,7 @@ public class ChooseMusicWindow : Window
     
     private void PopulateRootFolderComboBox()
     {
+        _enableCboSelectionChange = false;
         _cboRootFolder.Items.Clear();
         
         if (!string.IsNullOrEmpty(_rootFolder))
@@ -195,7 +207,7 @@ public class ChooseMusicWindow : Window
         var settings = AppSettings.Instance;
         foreach (var folder in settings.RootFolderMRU)
         {
-            if (folder != _rootFolder)
+            if (folder != _rootFolder && !string.IsNullOrEmpty(folder))
             {
                 _cboRootFolder.Items.Add(new ComboBoxItem { Content = folder });
             }
@@ -207,10 +219,24 @@ public class ChooseMusicWindow : Window
         {
             _cboRootFolder.SelectedIndex = 0;
         }
+        _enableCboSelectionChange = true;
+    }
+    
+    private void OnRootFolderDropDownOpened(object? sender, EventArgs e)
+    {
+        // If only "New..." is in the combo box, automatically show folder picker
+        if (_cboRootFolder.Items.Count == 1)
+        {
+            _cboRootFolder.IsDropDownOpen = false;
+            _ = ShowFolderPickerAsync();
+        }
     }
     
     private async void OnRootFolderSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
+        if (!_enableCboSelectionChange)
+            return;
+            
         if (_cboRootFolder.SelectedItem is ComboBoxItem selectedItem)
         {
             var path = selectedItem.Content?.ToString();
@@ -231,7 +257,13 @@ public class ChooseMusicWindow : Window
         var topLevel = TopLevel.GetTopLevel(this);
         if (topLevel == null)
         {
-            _cboRootFolder.SelectedIndex = 0;
+            // Reset to first valid folder if available
+            if (_cboRootFolder.Items.Count > 1)
+            {
+                _enableCboSelectionChange = false;
+                _cboRootFolder.SelectedIndex = 0;
+                _enableCboSelectionChange = true;
+            }
             return;
         }
         
@@ -255,22 +287,27 @@ public class ChooseMusicWindow : Window
         if (folders.Count > 0)
         {
             var selectedPath = folders[0].TryGetLocalPath();
-            if (!string.IsNullOrEmpty(selectedPath))
+            if (!string.IsNullOrEmpty(selectedPath) && Directory.Exists(selectedPath))
             {
+                // Update settings MRU
                 var settings = AppSettings.Instance;
                 settings.AddToMRU(selectedPath);
                 settings.Save();
                 
+                // Re-populate combo box and change to new folder
                 PopulateRootFolderComboBox();
                 await ChangeRootFolderAsync(selectedPath);
                 return;
             }
         }
         
-        if (_cboRootFolder.Items.Count > 0)
+        // User cancelled - reset selection to first valid folder if available
+        _enableCboSelectionChange = false;
+        if (_cboRootFolder.Items.Count > 1)
         {
             _cboRootFolder.SelectedIndex = 0;
         }
+        _enableCboSelectionChange = true;
     }
     
     private async Task ChangeRootFolderAsync(string newRootFolder)
@@ -282,10 +319,12 @@ public class ChooseMusicWindow : Window
         
         _rootFolder = newRootFolder;
         
+        // Update settings
         var settings = AppSettings.Instance;
         settings.AddToMRU(newRootFolder);
         settings.Save();
         
+        // Clear cached data
         _bookItemCache.Clear();
         _allFavoriteItems.Clear();
         _queryBrowseControl = null;
@@ -307,6 +346,7 @@ public class ChooseMusicWindow : Window
         catch (Exception ex)
         {
             _tbxTotals.Text = $"Error: {ex.Message}";
+            Trace.WriteLine($"ChangeRootFolderAsync error: {ex}");
         }
     }
     
