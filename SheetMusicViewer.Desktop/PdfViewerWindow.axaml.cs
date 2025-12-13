@@ -16,6 +16,7 @@ using System.Threading.Tasks;
 using PDFtoImage;
 using SheetMusicLib;
 using SkiaSharp;
+using System.Threading;
 
 namespace SheetMusicViewer.Desktop;
 
@@ -55,9 +56,21 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private Popup? _sliderPopup;
     private TextBlock? _tbSliderPopup;
     
-    // Page cache for performance
-    private readonly Dictionary<int, Bitmap> _pageCache = new();
-    private const int MaxCacheSize = 10;
+    // Page cache for performance - cache Tasks like WPF version for better parallelism
+    private readonly Dictionary<int, PageCacheEntry> _pageCache = new();
+    private const int MaxCacheSize = 50;
+    private int _currentCacheAge;
+    private int _lastNavigationDelta; // Track navigation direction for prefetch priority
+    
+    private class PageCacheEntry
+    {
+        public CancellationTokenSource Cts { get; } = new();
+        public int PageNo { get; init; }
+        public required Task<Bitmap> Task { get; init; }
+        public int Age { get; set; }
+        
+        public override string ToString() => $"{PageNo} age={Age} IsCompleted={Task.IsCompleted}";
+    }
 
     public PdfViewerWindow()
     {
@@ -394,13 +407,68 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             CurrentPageNumber = pageNo;
             _disableSliderValueChanged = false;
             
-            // Render pages
-            var page0Image = await RenderPageAsync(pageNo);
+            // Start cache entries for current and adjacent pages immediately (parallel prefetch like WPF)
+            var cacheEntry0 = TryAddCacheEntry(pageNo);
+            var cacheEntry1 = Show2Pages && pageNo + 1 < maxPageNum ? TryAddCacheEntry(pageNo + 1) : null;
+            
+            // Start prefetch of adjacent pages (these run in background, in parallel)
+            if (NumPagesPerView == 1)
+            {
+                TryAddCacheEntry(pageNo + 1);
+                TryAddCacheEntry(pageNo + 2);
+                TryAddCacheEntry(pageNo - 1);
+            }
+            else
+            {
+                TryAddCacheEntry(pageNo + 2);
+                TryAddCacheEntry(pageNo + 3);
+                TryAddCacheEntry(pageNo + 4);
+                TryAddCacheEntry(pageNo + 5);
+                TryAddCacheEntry(pageNo - 1);
+                TryAddCacheEntry(pageNo - 2);
+            }
+            
+            // Now await the current page(s)
+            if (cacheEntry0 == null)
+            {
+                return;
+            }
+            
+            Bitmap page0Image;
+            try
+            {
+                page0Image = await cacheEntry0.Task;
+            }
+            catch (OperationCanceledException)
+            {
+                // Task was cancelled, try again
+                cacheEntry0 = TryAddCacheEntry(pageNo);
+                if (cacheEntry0 == null) return;
+                page0Image = await cacheEntry0.Task;
+            }
             
             Bitmap? page1Image = null;
-            if (Show2Pages && pageNo + 1 < maxPageNum)
+            if (cacheEntry1 != null)
             {
-                page1Image = await RenderPageAsync(pageNo + 1);
+                try
+                {
+                    page1Image = await cacheEntry1.Task;
+                }
+                catch (OperationCanceledException)
+                {
+                    cacheEntry1 = TryAddCacheEntry(pageNo + 1);
+                    if (cacheEntry1 != null)
+                    {
+                        page1Image = await cacheEntry1.Task;
+                    }
+                }
+            }
+            
+            // Check if user navigated away while we were rendering (type-ahead detection)
+            if (CurrentPageNumber != pageNo)
+            {
+                PurgeIfNecessary(CurrentPageNumber);
+                return;
             }
             
             await Dispatcher.UIThread.InvokeAsync(() =>
@@ -510,40 +578,73 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
     }
     
-    private string GetDescription(int pageNo)
+    private PageCacheEntry? TryAddCacheEntry(int pageNo)
     {
-        if (_currentPdfMetaData == null) return string.Empty;
+        if (_currentPdfMetaData == null)
+            return null;
+            
+        var pageNumberOffset = _currentPdfMetaData.PageNumberOffset;
+        var maxPageNum = _currentPdfMetaData.VolumeInfoList.Sum(v => v.NPagesInThisVolume) + pageNumberOffset;
         
-        // Find TOC entry for this page or nearest one before it
-        var tocEntry = _currentPdfMetaData.TocEntries.FirstOrDefault(t => t.PageNo == pageNo);
+        if (pageNo < pageNumberOffset || pageNo >= maxPageNum)
+            return null;
         
-        if (tocEntry == null)
+        // Check if we already have a valid entry
+        if (_pageCache.TryGetValue(pageNo, out var existing) && 
+            !existing.Cts.IsCancellationRequested && 
+            !existing.Task.IsCanceled)
         {
-            tocEntry = _currentPdfMetaData.TocEntries
-                .Where(t => t.PageNo <= pageNo)
-                .OrderByDescending(t => t.PageNo)
-                .FirstOrDefault();
+            existing.Age = _currentCacheAge++; // Update age on access
+            return existing;
         }
         
-        if (tocEntry != null)
+        // Create new entry
+        var entry = new PageCacheEntry
         {
-            var parts = new List<string>();
-            if (!string.IsNullOrEmpty(tocEntry.SongName)) parts.Add(tocEntry.SongName);
-            if (!string.IsNullOrEmpty(tocEntry.Composer)) parts.Add(tocEntry.Composer);
-            return string.Join(" - ", parts);
+            PageNo = pageNo,
+            Age = _currentCacheAge++,
+            Task = RenderPageInternalAsync(pageNo)
+        };
+        
+        // Evict old entries if cache is full
+        if (_pageCache.Count >= MaxCacheSize)
+        {
+            var toRemove = _pageCache.Values
+                .OrderBy(e => e.Age)
+                .Take(_pageCache.Count - MaxCacheSize + 1)
+                .ToList();
+            foreach (var old in toRemove)
+            {
+                _pageCache.Remove(old.PageNo);
+            }
         }
         
-        return $"Page {pageNo}";
+        _pageCache[pageNo] = entry;
+        return entry;
     }
     
-    private async Task<Bitmap> RenderPageAsync(int pageNo)
+    private void PurgeIfNecessary(int currentPageNo)
     {
-        // Check cache first
-        if (_pageCache.TryGetValue(pageNo, out var cached))
+        // Cancel tasks for pages that are far from current page (user typed ahead)
+        var toDelete = new List<int>();
+        foreach (var entry in _pageCache.Values.Where(v => !v.Task.IsCompleted))
         {
-            return cached;
+            if (entry.PageNo != currentPageNo && 
+                entry.PageNo != currentPageNo + 1 &&
+                _currentCacheAge - entry.Age > 5)
+            {
+                toDelete.Add(entry.PageNo);
+                entry.Cts.Cancel();
+            }
         }
-        
+        foreach (var pageNo in toDelete)
+        {
+            _pageCache.Remove(pageNo);
+        }
+    }
+    
+    private async Task<Bitmap> RenderPageInternalAsync(int pageNo)
+    {
         if (_currentPdfMetaData == null)
         {
             throw new InvalidOperationException("No PDF loaded");
@@ -561,7 +662,6 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             }
             
             // Calculate the page index within this volume
-            // Sum up pages in all previous volumes to get the page index in this volume
             var pagesInPreviousVolumes = _currentPdfMetaData.VolumeInfoList
                 .Take(volNo)
                 .Sum(v => v.NPagesInThisVolume);
@@ -586,23 +686,44 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             data.SaveTo(stream);
             stream.Seek(0, SeekOrigin.Begin);
             
-            var bitmap = new Bitmap(stream);
-            
-            // Add to cache (evict oldest if necessary)
-            if (_pageCache.Count >= MaxCacheSize)
-            {
-                var keyToRemove = _pageCache.Keys.First();
-                _pageCache.Remove(keyToRemove);
-            }
-            _pageCache[pageNo] = bitmap;
-            
-            return bitmap;
+            return new Bitmap(stream);
         });
     }
     
     private void ClearCache()
     {
+        foreach (var entry in _pageCache.Values)
+        {
+            entry.Cts.Cancel();
+        }
         _pageCache.Clear();
+        _currentCacheAge = 0;
+    }
+    
+    private string GetDescription(int pageNo)
+    {
+        if (_currentPdfMetaData == null) return string.Empty;
+        
+        // Find TOC entry for this page or nearest one before it
+        var tocEntry = _currentPdfMetaData.TocEntries.FirstOrDefault(t => t.PageNo == pageNo);
+        
+        if (tocEntry == null)
+        {
+            tocEntry = _currentPdfMetaData.TocEntries
+                .Where(t => t.PageNo <= pageNo)
+                .OrderByDescending(t => t.PageNo)
+                .FirstOrDefault();
+        }
+        
+        if (tocEntry != null)
+        {
+            var parts = new List<string>();
+            if (!string.IsNullOrEmpty(tocEntry.SongName)) parts.Add(tocEntry.SongName);
+            if (!string.IsNullOrEmpty(tocEntry.Composer)) parts.Add(tocEntry.Composer);
+            return string.Join(" - ", parts);
+        }
+        
+        return $"Page {pageNo}";
     }
     
     private void SetupGestureHandler()
@@ -644,6 +765,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     
     private void NavigateAsync(int delta)
     {
+        _lastNavigationDelta = delta; // Track navigation direction
         TouchCount++;
         var newPage = CurrentPageNumber + delta;
         
