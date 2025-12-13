@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -13,8 +13,12 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 
-namespace AvaloniaTests;
+namespace SheetMusicViewer.Desktop;
 
+/// <summary>
+/// A control that displays a filterable, sortable list with column headers.
+/// Similar to WPF's BrowsePanel but using Avalonia's ListBox with virtualization.
+/// </summary>
 public class BrowseControl : DockPanel
 {
     public ListBoxBrowseView ListView { get; private set; } = null!;
@@ -386,11 +390,11 @@ public class ListBoxBrowseView : UserControl
                 }
             }
             
-            Trace.WriteLine($"  ✓ Customized {customizedCount} visible containers");
+            Trace.WriteLine($"  ? Customized {customizedCount} visible containers");
             
             // Subscribe to EffectiveViewportChanged for scrolling
             _listBox.EffectiveViewportChanged += OnEffectiveViewportChanged;
-            Trace.WriteLine($"  ✓ Subscribed to EffectiveViewportChanged for dynamic customization");
+            Trace.WriteLine($"  ? Subscribed to EffectiveViewportChanged for dynamic customization");
         }
         catch (Exception ex)
         {
@@ -431,7 +435,7 @@ public class ListBoxBrowseView : UserControl
                     if (isToStringBefore)
                     {
                         toStringCount++;
-                        Trace.WriteLine($"  ⚠️ Container {i}: WAS ToString ({contentBeforeType}), fixing now...");
+                        Trace.WriteLine($"  ?? Container {i}: WAS ToString ({contentBeforeType}), fixing now...");
                     }
                     else if (isGridBefore)
                     {
@@ -509,7 +513,7 @@ public class ListBoxBrowseView : UserControl
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"ERROR in OnExportCsvClick: {ex.Message}");
+            Trace.WriteLine($"ERROR in OnListBoxLayoutUpdated: {ex.Message}");
         }
     }
 
@@ -901,7 +905,7 @@ public class ListBoxBrowseView : UserControl
                 var col = _columns[buttonIndex];
                 if (buttonIndex == sortedColumnIndex)
                 {
-                    btn.Content = $"{col.HeaderText} {(ascending ? "↑" : "↓")}";
+                    btn.Content = $"{col.HeaderText} {(ascending ? "?" : "?")}";
                 }
                 else
                 {

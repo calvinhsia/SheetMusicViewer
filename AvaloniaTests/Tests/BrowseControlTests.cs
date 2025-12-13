@@ -7,6 +7,7 @@ using Avalonia.VisualTree;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using PDFtoImage;
 using SheetMusicLib;
+using SheetMusicViewer.Desktop;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;

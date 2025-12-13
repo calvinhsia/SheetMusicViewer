@@ -13,8 +13,12 @@ using System.Threading.Tasks;
 using PDFtoImage;
 using SkiaSharp;
 
-namespace AvaloniaTests;
+namespace SheetMusicViewer.Desktop;
 
+/// <summary>
+/// A simple PDF viewer window for testing and demonstration purposes.
+/// This is a lighter-weight version compared to PdfViewerWindow, which uses the full metadata system.
+/// </summary>
 public partial class PdfWindow : Window, INotifyPropertyChanged
 {
     public new event PropertyChangedEventHandler? PropertyChanged;
@@ -556,7 +560,7 @@ public partial class PdfWindow : Window, INotifyPropertyChanged
         {
             using var pdfStream = File.OpenRead(pdfFilePath);
             var zeroBasedPageIndex = pageIndex - 1;
-            using var skBitmap = PDFtoImage.Conversion.ToImage(pdfStream, page: zeroBasedPageIndex, options: new(Dpi: 96));
+            using var skBitmap = PDFtoImage.Conversion.ToImage(pdfStream, page: zeroBasedPageIndex, options: new PDFtoImage.RenderOptions(Dpi: 96));
             using var image = SKImage.FromBitmap(skBitmap);
             using var data = image.Encode(SKEncodedImageFormat.Png, 100);
             using var stream = new MemoryStream();

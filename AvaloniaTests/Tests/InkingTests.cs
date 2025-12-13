@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SheetMusicViewer.Desktop;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
