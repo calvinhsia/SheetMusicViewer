@@ -257,12 +257,16 @@ public class ChooseMusicWindow : Window
         var topLevel = TopLevel.GetTopLevel(this);
         if (topLevel == null)
         {
-            // Reset to first valid folder if available
+            // Reset to first valid folder if available, otherwise close
             if (_cboRootFolder.Items.Count > 1)
             {
                 _enableCboSelectionChange = false;
                 _cboRootFolder.SelectedIndex = 0;
                 _enableCboSelectionChange = true;
+            }
+            else
+            {
+                Close();
             }
             return;
         }
@@ -301,13 +305,37 @@ public class ChooseMusicWindow : Window
             }
         }
         
-        // User cancelled - reset selection to first valid folder if available
+        // User cancelled - if we have a valid folder to fall back to, use it; otherwise close
         _enableCboSelectionChange = false;
-        if (_cboRootFolder.Items.Count > 1)
+        if (!string.IsNullOrEmpty(_rootFolder) && Directory.Exists(_rootFolder))
         {
+            // We have a valid root folder, just reset the combo selection
             _cboRootFolder.SelectedIndex = 0;
+            _enableCboSelectionChange = true;
         }
-        _enableCboSelectionChange = true;
+        else if (_cboRootFolder.Items.Count > 1)
+        {
+            // Try the first item (not "New...")
+            var firstItem = _cboRootFolder.Items[0] as ComboBoxItem;
+            var firstPath = firstItem?.Content?.ToString();
+            if (!string.IsNullOrEmpty(firstPath) && firstPath != NewFolderDialogString && Directory.Exists(firstPath))
+            {
+                _cboRootFolder.SelectedIndex = 0;
+                _enableCboSelectionChange = true;
+                await ChangeRootFolderAsync(firstPath);
+            }
+            else
+            {
+                _enableCboSelectionChange = true;
+                Close();
+            }
+        }
+        else
+        {
+            // No valid folders available, close the dialog
+            _enableCboSelectionChange = true;
+            Close();
+        }
     }
     
     private async Task ChangeRootFolderAsync(string newRootFolder)
