@@ -22,10 +22,6 @@
                     ToolTip.Tip="Import TOC from clipboard tab separated values (PageNo, SongName, Composer, Date, Notes)"/>
             <Button Content="_Export to Clipboard" Command="{Binding ExportCommand}"
                     ToolTip.Tip="Export TOC to clipboard to paste to Excel"/>
-            <Button Content="Add _Row" Command="{Binding AddRowCommand}"
-                    ToolTip.Tip="Add a new TOC entry"/>
-            <Button Content="_Delete Row" Command="{Binding DeleteRowCommand}"
-                    ToolTip.Tip="Delete selected TOC entry"/>
             <Button Content="_Cancel" Command="{Binding CancelCommand}"/>
             <Button Content="_Save" Command="{Binding SaveCommand}"/>
         </StackPanel>
@@ -34,18 +30,26 @@
         <Grid Grid.Row="1" Margin="0,0,0,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
+            <!-- Thumbnail image -->
+            <Image Grid.Column="0" 
+                   Source="{Binding Thumbnail}" 
+                   Width="100" 
+                   Height="200" 
+                   Stretch="Uniform"
+                   Margin="0,0,20,0"/>
+
             <!-- Edit panel for selected item -->
-            <StackPanel Grid.Column="0" Orientation="Vertical" Spacing="5" Width="500">
+            <StackPanel Grid.Column="1" Orientation="Vertical" Spacing="5" Width="400">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="80"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
@@ -67,15 +71,12 @@
 
                     <TextBlock Grid.Row="4" Grid.Column="0" Text="Notes:" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,5,0"/>
                     <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding SelectedItem.Notes, Mode=TwoWay}"/>
-
-                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Doc Notes:" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,5,0"/>
-                    <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding DocNotes, Mode=TwoWay}" ToolTip.Tip="Notes for entire collection of volumes"/>
                 </Grid>
             </StackPanel>
 
             <!-- Volume Info panel -->
-            <StackPanel Grid.Column="1" Orientation="Vertical" Margin="20,0,0,0">
-                <TextBlock Text="Volume Info:" FontWeight="Bold"/>
+            <StackPanel Grid.Column="2" Orientation="Vertical" Margin="20,0,0,0">
+                <TextBlock Text="VolInfo:" FontWeight="Bold"/>
                 <ListBox ItemsSource="{Binding VolInfoDisplay}" MaxHeight="120" MinWidth="400">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
@@ -136,7 +137,7 @@
                           DoubleTapped="FavoritesDataGrid_DoubleTapped">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Page" Binding="{Binding PageNo}" Width="60" x:DataType="local:FavoriteViewModel"/>
-                        <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="*" x:DataType="local:FavoriteViewModel"/>
+                        <DataGridTextColumn Header="Desc" Binding="{Binding Description}" Width="*" x:DataType="local:FavoriteViewModel"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </Grid>

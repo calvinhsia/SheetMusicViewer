@@ -467,14 +467,40 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         PdfUIEnabled = true;
         PdfTitle = pdfMetaData.GetBookName(_rootMusicFolder);
         
-        // Update thumbnail
-        var thumbnail = pdfMetaData.GetCachedThumbnail<Bitmap>();
-        if (thumbnail != null)
+        // Update thumbnail - load it if not cached
+        var imgThumb = this.FindControl<Image>("ImgThumb");
+        if (imgThumb != null)
         {
-            var imgThumb = this.FindControl<Image>("ImgThumb");
-            if (imgThumb != null)
+            var thumbnail = pdfMetaData.GetCachedThumbnail<Bitmap>();
+            if (thumbnail != null)
             {
                 imgThumb.Source = thumbnail;
+            }
+            else
+            {
+                // Load thumbnail in background and update when ready
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var newThumb = await pdfMetaData.GetOrCreateThumbnailAsync(async () =>
+                        {
+                            return await GetThumbnailForMetadataAsync(pdfMetaData);
+                        });
+                        
+                        await Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            if (_currentPdfMetaData == pdfMetaData && newThumb is Bitmap bmp)
+                            {
+                                imgThumb.Source = bmp;
+                            }
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Trace.WriteLine($"Error loading thumbnail: {ex.Message}");
+                    }
+                });
             }
         }
         

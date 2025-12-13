@@ -50,7 +50,7 @@ public class PdfViewerTests : TestBase
         }
 
         var testCompleted = new TaskCompletionSource<bool>();
-        PdfWindow? window = null;
+        PdfViewerWindow? window = null;
 
         var uiThread = new Thread(() =>
         {
@@ -68,14 +68,7 @@ public class PdfViewerTests : TestBase
 
         PdfViewerApp.OnSetupWindow = (app, lifetime) =>
         {
-            window = new PdfWindow();
-            
-            if (!string.IsNullOrEmpty(pdfPath))
-            {
-                var field = typeof(PdfWindow).GetField("_pdfFileName", 
-                    BindingFlags.NonPublic | BindingFlags.Instance);
-                field?.SetValue(window, pdfPath);
-            }
+            window = new PdfViewerWindow();
             
             lifetime.MainWindow = window;
             
@@ -88,7 +81,7 @@ public class PdfViewerTests : TestBase
             
             window.Show();
             
-            LogMessage($"✓ PdfWindow created and shown");
+            LogMessage($"✓ PdfViewerWindow created and shown");
         };
 
         if (OperatingSystem.IsWindows())
@@ -139,7 +132,7 @@ public class PdfViewerTests : TestBase
         try
         {
             var testCompleted = new TaskCompletionSource<bool>();
-            var window = default(TestablePdfWindow);
+            var window = default(TestablePdfViewerWindow);
             
             var uiThread = new Thread(() =>
             {
@@ -172,7 +165,7 @@ public class PdfViewerTests : TestBase
             
             TestPdfViewerApp.OnSetupWindow = async (app, lifetime) =>
             {
-                window = new TestablePdfWindow(testPdfPath);
+                window = new TestablePdfViewerWindow(testPdfPath);
                 lifetime.MainWindow = window;
                 window.Show();
                 
