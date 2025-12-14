@@ -389,6 +389,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         
         settings.Save();
         
+        // CloseCurrentPdfFile will save the lastPageNo to the PDF metadata JSON
         CloseCurrentPdfFile();
     }
     
@@ -530,6 +531,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         if (_currentPdfMetaData != null)
         {
             _currentPdfMetaData.LastPageNo = CurrentPageNumber;
+            _currentPdfMetaData.IsDirty = true;
+            _ = PdfMetaDataCore.SaveToJsonAsync(_currentPdfMetaData);
+            
             _currentPdfMetaData = null;
             CurrentPageNumber = 0;
         }
