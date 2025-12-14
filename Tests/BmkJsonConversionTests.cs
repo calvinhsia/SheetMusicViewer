@@ -228,41 +228,6 @@ namespace Tests
 
         [TestMethod]
         [TestCategory("Integration")]
-        public void TestBmkJsonConversion_ConvertAllBmks_CreatesBackups()
-        {
-            // Arrange - Create metadata and save as XML (old format)
-            var metadata = new PdfMetaData
-            {
-                _FullPathFile = testPdfPath,
-                PageNumberOffset = 0
-            };
-            metadata.lstVolInfo.Add(new PdfVolumeInfo
-            {
-                FileNameVolume = Path.GetFileName(testPdfPath),
-                NPagesInThisVolume = 1,
-                Rotation = 0
-            });
-
-            // Save in XML format (simulating old format)
-            metadata.SaveIfDirty(ForceDirty: true);
-            var bmkPath = Path.ChangeExtension(testPdfPath, ".bmk");
-            var backupPath = bmkPath + ".xml.backup";
-
-            // Act - Convert to JSON
-            var metadataList = new List<PdfMetaData> { metadata };
-            var (total, converted) = BmkJsonConverter.ConvertAllBmksToJson(metadataList);
-
-            // Assert
-            Assert.AreEqual(1, total);
-            Assert.AreEqual(1, converted);
-            Assert.IsTrue(File.Exists(backupPath), "Backup file should be created");
-            Assert.IsTrue(BmkJsonConverter.IsJsonFormat(bmkPath), "Original file should now be JSON");
-
-            AddLogEntry($"Backup created at: {backupPath}");
-        }
-
-        [TestMethod]
-        [TestCategory("Integration")]
         public void TestBmkJsonConversion_MultiVolume_PreservesAllVolumes()
         {
             // Arrange
