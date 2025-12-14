@@ -410,7 +410,8 @@ namespace SheetMusicViewer
         }
 
         /// <summary>
-        /// Convert all BMK files in a list to JSON format
+        /// Convert all BMK files in a list to JSON format with .json extension
+        /// Overwrites any existing JSON files to ensure correct format with portable ink strokes
         /// Returns (total count, converted count)
         /// </summary>
         public static (int total, int converted) ConvertAllBmksToJson(List<PdfMetaData> metadataList)
@@ -424,19 +425,11 @@ namespace SheetMusicViewer
                 try
                 {
                     var bmkPath = metadata.PdfBmkMetadataFileName;
-                    if (File.Exists(bmkPath) && !IsJsonFormat(bmkPath))
-                    {
-                        // Create backup of original XML file
-                        var backupPath = bmkPath + ".xml.backup";
-                        if (!File.Exists(backupPath))
-                        {
-                            File.Copy(bmkPath, backupPath);
-                        }
-
-                        // Convert and save as JSON
-                        SaveAsJson(metadata, bmkPath);
-                        converted++;
-                    }
+                    var jsonPath = Path.ChangeExtension(bmkPath, ".json");
+                    
+                    // Always convert - overwrite any existing JSON (it might be incorrectly formatted)
+                    SaveAsJson(metadata, jsonPath);
+                    converted++;
                 }
                 catch (Exception)
                 {
