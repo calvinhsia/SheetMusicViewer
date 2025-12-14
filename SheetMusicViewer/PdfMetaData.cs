@@ -658,12 +658,13 @@ namespace SheetMusicViewer
         /// </summary>
         public static async Task<PdfMetaData> ReadPdfMetaDataAsync(string FullPathPdfFileOrSinglesFolder, bool IsSingles = false)
         {
-            // Use the portable core to read metadata
+            // Use the portable core to read metadata - WPF only uses BMK (ignores JSON)
             var coreResult = await SheetMusicLib.PdfMetaDataCore.ReadPdfMetaDataAsync(
                 FullPathPdfFileOrSinglesFolder,
                 IsSingles,
                 WpfPdfDocumentProvider.Instance,
-                WpfExceptionHandler.Instance);
+                WpfExceptionHandler.Instance,
+                preferJsonOverBmk: false); // WPF only uses BMK format
 
             if (coreResult == null)
             {
