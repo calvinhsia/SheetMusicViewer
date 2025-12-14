@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
@@ -74,12 +75,98 @@ public partial class MetaDataFormWindow : Window
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
         }
         
-        if (settings.MetaDataWindowMaximized)
+        // Note: WindowState is set in Opened event because setting it in constructor 
+        // doesn't work reliably in Avalonia
+        this.Opened += (s, e) =>
         {
-            WindowState = WindowState.Maximized;
-        }
+            if (AppSettings.Instance.MetaDataWindowMaximized)
+            {
+                WindowState = WindowState.Maximized;
+            }
+        };
         
         this.Closing += OnWindowClosing;
+        this.KeyDown += OnKeyDown;
+    }
+    
+    private async void OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            await TryCloseAsync();
+        }
+    }
+    
+    private async Task TryCloseAsync()
+    {
+        if (_viewModel?.IsDirty == true)
+        {
+            // Show confirmation dialog
+            var dialog = new Window
+            {
+                Title = "Unsaved Changes",
+                Width = 350,
+                Height = 150,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                CanResize = false
+            };
+            
+            var result = false;
+            var save = false;
+            
+            var panel = new StackPanel
+            {
+                Margin = new Avalonia.Thickness(20),
+                Spacing = 20
+            };
+            
+            panel.Children.Add(new TextBlock
+            {
+                Text = "You have unsaved changes. Do you want to save before closing?",
+                TextWrapping = Avalonia.Media.TextWrapping.Wrap
+            });
+            
+            var buttonPanel = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                Spacing = 10
+            };
+            
+            var saveButton = new Button { Content = "_Save" };
+            saveButton.Click += (s, e) => { result = true; save = true; dialog.Close(); };
+            
+            var discardButton = new Button { Content = "_Discard" };
+            discardButton.Click += (s, e) => { result = true; save = false; dialog.Close(); };
+            
+            var cancelButton = new Button { Content = "_Cancel" };
+            cancelButton.Click += (s, e) => { result = false; dialog.Close(); };
+            
+            buttonPanel.Children.Add(saveButton);
+            buttonPanel.Children.Add(discardButton);
+            buttonPanel.Children.Add(cancelButton);
+            panel.Children.Add(buttonPanel);
+            
+            dialog.Content = panel;
+            
+            await dialog.ShowDialog(this);
+            
+            if (!result)
+            {
+                return; // User cancelled
+            }
+            
+            if (save)
+            {
+                _viewModel.SaveCommand.Execute(null);
+                return;
+            }
+        }
+        
+        // Close without saving
+        WasSaved = false;
+        Close();
     }
     
     private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
@@ -134,6 +221,11 @@ public partial class MetaDataFormViewModel : ObservableObject
 {
     private readonly PdfMetaDataReadResult? _pdfMetaData;
     private readonly string _rootFolder;
+    
+    // Original values to track dirty state
+    private int _originalPageNumberOffset;
+    private string? _originalDocNotes;
+    private List<(int PageNo, string? SongName, string? Composer, string? Date, string? Notes)> _originalTocEntries = new();
 
     [ObservableProperty]
     private int _pageNumberOffset;
@@ -164,6 +256,37 @@ public partial class MetaDataFormViewModel : ObservableObject
     public Func<IClipboard?>? GetClipboardFunc { get; set; }
 
     public string Title { get; }
+    
+    /// <summary>
+    /// Returns true if any changes have been made since loading
+    /// </summary>
+    public bool IsDirty
+    {
+        get
+        {
+            if (PageNumberOffset != _originalPageNumberOffset) return true;
+            if (DocNotes != _originalDocNotes) return true;
+            
+            if (TocEntries.Count != _originalTocEntries.Count) return true;
+            
+            for (int i = 0; i < TocEntries.Count; i++)
+            {
+                var current = TocEntries[i];
+                var original = _originalTocEntries[i];
+                
+                if (current.PageNo != original.PageNo ||
+                    current.SongName != original.SongName ||
+                    current.Composer != original.Composer ||
+                    current.Date != original.Date ||
+                    current.Notes != original.Notes)
+                {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+    }
 
     public MetaDataFormViewModel()
     {
@@ -262,6 +385,11 @@ public partial class MetaDataFormViewModel : ObservableObject
             var closestEntry = TocEntries.LastOrDefault(t => t.PageNo <= currentPageNo) ?? TocEntries[0];
             SelectedItem = closestEntry;
         }
+        
+        // Store original values for dirty tracking
+        _originalPageNumberOffset = PageNumberOffset;
+        _originalDocNotes = DocNotes;
+        _originalTocEntries = TocEntries.Select(t => (t.PageNo, t.SongName, t.Composer, t.Date, t.Notes)).ToList();
     }
 
     private static string GetDescription(int pageNo, PdfMetaDataReadResult data)

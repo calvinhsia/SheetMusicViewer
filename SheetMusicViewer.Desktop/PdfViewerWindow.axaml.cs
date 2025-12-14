@@ -83,6 +83,8 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         _show2Pages = settings.Show2Pages;
         _rootMusicFolder = settings.RootFolderMRU.FirstOrDefault() ?? string.Empty;
         
+        Trace.WriteLine($"PdfViewerWindow constructor: WindowMaximized={settings.WindowMaximized} from {AppSettings.SettingsPath}");
+        
         // Apply window position/size from settings
         if (settings.WindowWidth > 0 && settings.WindowHeight > 0)
         {
@@ -93,15 +95,25 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         {
             Position = new Avalonia.PixelPoint((int)settings.WindowLeft, (int)settings.WindowTop);
         }
-        if (settings.WindowMaximized)
-        {
-            WindowState = WindowState.Maximized;
-        }
+        
+        // Note: WindowState is set in Opened event because setting it in constructor 
+        // doesn't work reliably in Avalonia
         
         WireUpEventHandlers();
         
         // Load and display the last opened PDF
         Loaded += async (s, e) => await OnWindowLoadedAsync();
+        
+        // Apply maximized state after window opens
+        Opened += (s, e) =>
+        {
+            Trace.WriteLine($"PdfViewerWindow Opened: Reading WindowMaximized={AppSettings.Instance.WindowMaximized}");
+            if (AppSettings.Instance.WindowMaximized)
+            {
+                WindowState = WindowState.Maximized;
+                Trace.WriteLine($"PdfViewerWindow Opened: Set WindowState to Maximized");
+            }
+        };
         
         // Save settings and cleanup on close
         Closing += OnWindowClosing;
@@ -1096,7 +1108,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         else
         {
             this.SystemDecorations = SystemDecorations.Full;
-            this.WindowState = WindowState.Normal;
+            // Only reset to Normal if we're coming FROM full screen, not on startup
+            // Check if we should restore maximized state from settings
+            if (!AppSettings.Instance.WindowMaximized)
+            {
+                this.WindowState = WindowState.Normal;
+            }
         }
     }
     

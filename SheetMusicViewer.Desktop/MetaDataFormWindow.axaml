@@ -6,6 +6,7 @@
         Title="{Binding Title}"
         Width="1200"
         Height="700"
+        ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner">
     <Grid Margin="10">
         <Grid.RowDefinitions>
