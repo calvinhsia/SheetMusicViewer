@@ -677,37 +677,53 @@ namespace SheetMusicLib
         }
 
         /// <summary>
-        /// Read PDF metadata from a JSON file asynchronously using a page count provider for PDF files
+        /// Read PDF metadata from a BMK or JSON file asynchronously using a page count provider for PDF files.
+        /// Supports both WPF (BMK XML) and Avalonia (JSON) formats.
         /// </summary>
         /// <param name="fullPathPdfFileOrSinglesFolder">Full path to PDF file or singles folder</param>
         /// <param name="isSingles">Whether this is a singles folder</param>
         /// <param name="pdfDocumentProvider">Provider to get PDF page count</param>
         /// <param name="exceptionHandler">Optional exception handler</param>
+        /// <param name="preferJsonOverBmk">If true, prefer .json over .bmk when both exist. Default true for Avalonia.</param>
         /// <returns>Metadata read result or null if failed</returns>
         public static async Task<PdfMetaDataReadResult> ReadPdfMetaDataAsync(
             string fullPathPdfFileOrSinglesFolder,
             bool isSingles,
             IPdfDocumentProvider pdfDocumentProvider,
-            IExceptionHandler exceptionHandler = null)
+            IExceptionHandler exceptionHandler = null,
+            bool preferJsonOverBmk = true)
         {
             PdfMetaDataReadResult result = null;
 
-            // Only use JSON format (BMK/XML is deprecated)
+            // Check for both JSON and BMK files
             var jsonFile = Path.ChangeExtension(fullPathPdfFileOrSinglesFolder, "json");
+            var bmkFile = Path.ChangeExtension(fullPathPdfFileOrSinglesFolder, "bmk");
 
-            if (File.Exists(jsonFile))
+            string metadataFile = null;
+            if (preferJsonOverBmk)
+            {
+                // Prefer JSON over BMK (Avalonia default)
+                metadataFile = File.Exists(jsonFile) ? jsonFile : (File.Exists(bmkFile) ? bmkFile : null);
+            }
+            else
+            {
+                // Prefer BMK over JSON (WPF default - for backward compatibility)
+                metadataFile = File.Exists(bmkFile) ? bmkFile : (File.Exists(jsonFile) ? jsonFile : null);
+            }
+
+            if (metadataFile != null)
             {
                 try
                 {
-                    result = await ReadFromJsonFileAsync(
+                    result = await ReadFromMetadataFileAsync(
                         fullPathPdfFileOrSinglesFolder,
-                        jsonFile,
+                        metadataFile,
                         isSingles,
                         pdfDocumentProvider);
                 }
                 catch (Exception ex)
                 {
-                    exceptionHandler?.OnException($"Reading {jsonFile}", ex);
+                    exceptionHandler?.OnException($"Reading {metadataFile}", ex);
                 }
             }
             else
@@ -721,26 +737,38 @@ namespace SheetMusicLib
             return result;
         }
 
-        private static async Task<PdfMetaDataReadResult> ReadFromJsonFileAsync(
+        private static async Task<PdfMetaDataReadResult> ReadFromMetadataFileAsync(
             string fullPathPdfFileOrSinglesFolder,
-            string jsonFile,
+            string metadataFile,
             bool isSingles,
             IPdfDocumentProvider pdfDocumentProvider)
         {
-            var fileContent = await File.ReadAllTextAsync(jsonFile);
+            var fileContent = await File.ReadAllTextAsync(metadataFile);
+            var isJson = fileContent.TrimStart().StartsWith("{");
 
-            // Detect which JSON schema is used
-            // BmkJsonFormat has "volumes" and "inkStrokes" keys
-            if (fileContent.Contains("\"volumes\"") || fileContent.Contains("\"inkStrokes\""))
+            if (isJson)
             {
-                // BmkJsonFormat (from BmkJsonConverter)
-                return await ReadFromBmkJsonFormatAsync(fullPathPdfFileOrSinglesFolder, fileContent, isSingles, pdfDocumentProvider);
+                // Detect which JSON schema is used
+                // BmkJsonFormat has "volumes" and "inkStrokes" keys
+                if (fileContent.Contains("\"volumes\"") || fileContent.Contains("\"inkStrokes\""))
+                {
+                    // BmkJsonFormat (from BmkJsonConverter) - proper portable format
+                    return await ReadFromBmkJsonFormatAsync(fullPathPdfFileOrSinglesFolder, fileContent, isSingles, pdfDocumentProvider);
+                }
+                else
+                {
+                    // SerializablePdfMetaData format (legacy JSON from ConvertAllBmkToJsonAsync)
+                    var serializedData = JsonSerializer.Deserialize<SerializablePdfMetaData>(fileContent, JsonReadOptions);
+                    return await ConvertSerializableToResultAsync(fullPathPdfFileOrSinglesFolder, metadataFile, serializedData, isSingles, pdfDocumentProvider);
+                }
             }
             else
             {
-                // SerializablePdfMetaData format (legacy JSON)
-                var serializedData = JsonSerializer.Deserialize<SerializablePdfMetaData>(fileContent, JsonReadOptions);
-                return await ConvertSerializableToResultAsync(fullPathPdfFileOrSinglesFolder, jsonFile, serializedData, isSingles, pdfDocumentProvider);
+                // XML format (legacy .bmk) - WPF still uses this
+                var serializer = new XmlSerializer(typeof(SerializablePdfMetaData));
+                using var sr = new StringReader(fileContent);
+                var serializedData = (SerializablePdfMetaData)serializer.Deserialize(sr);
+                return await ConvertSerializableToResultAsync(fullPathPdfFileOrSinglesFolder, metadataFile, serializedData, isSingles, pdfDocumentProvider);
             }
         }
 
@@ -893,9 +921,8 @@ namespace SheetMusicLib
                 Notes = serializedData.Notes,
                 TocEntries = serializedData.lstTocEntries ?? new List<TOCEntry>(),
                 Favorites = serializedData.Favorites ?? new List<Favorite>(),
-                // NOTE: InkStrokes from XML/legacy format are in ISF binary format
-                // which cannot be parsed without Windows APIs. We skip loading them.
-                InkStrokes = new List<InkStrokeClass>()
+                // Pass through ink strokes - WPF can handle ISF binary format, Avalonia will skip them
+                InkStrokes = serializedData.LstInkStrokes ?? new List<InkStrokeClass>()
             };
 
             // Convert volume info
