@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -113,9 +114,11 @@ public class ChooseMusicWindow : Window
         _rootFolder = rootFolder ?? string.Empty;
         
         Title = "Choose Music";
+        ShowInTaskbar = false; // Don't show separate taskbar icon
         
         // Restore window size/position from settings
         var settings = AppSettings.Instance;
+        
         Width = settings.ChooseWindowWidth > 0 ? settings.ChooseWindowWidth : 900;
         Height = settings.ChooseWindowHeight > 0 ? settings.ChooseWindowHeight : 700;
         
@@ -129,19 +132,33 @@ public class ChooseMusicWindow : Window
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
         }
         
-        if (settings.ChooseWindowMaximized)
-        {
-            WindowState = WindowState.Maximized;
-        }
+        // Note: WindowState is set in Opened event because setting it in constructor 
+        // doesn't work reliably in Avalonia
         
         BuildUI();
         
         this.Opened += OnWindowOpened;
         this.Closing += OnWindowClosing;
+        this.KeyDown += OnKeyDown;
     }
     
+    private void OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            Close();
+        }
+    }
+
     private async void OnWindowOpened(object? sender, EventArgs e)
     {
+        // Apply maximized state after window opens (doesn't work reliably in constructor)
+        if (AppSettings.Instance.ChooseWindowMaximized)
+        {
+            WindowState = WindowState.Maximized;
+        }
+        
         // If no root folder and only "New..." is in the list, automatically show folder picker
         if (string.IsNullOrEmpty(_rootFolder) || !Directory.Exists(_rootFolder))
         {
