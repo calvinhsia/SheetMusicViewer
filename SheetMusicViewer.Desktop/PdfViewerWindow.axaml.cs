@@ -1077,8 +1077,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             var isFavorite = chk.IsChecked == true;
             
             // Toggle favorite in metadata
-            // Note: PdfMetaDataReadResult is read-only in the current implementation
-            // In a full implementation, you would update the favorites and save the BMK file
+            // TODO: Update the favorites list and save using PdfMetaDataCore.SaveToJson()
             
             TouchCount++;
             Trace.WriteLine($"Favorite toggled: Page {pageNo}, IsFavorite: {isFavorite}");
@@ -1089,8 +1088,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     {
         TouchCount++;
         
-        // Note: In the full implementation, this would rotate the page in metadata
-        // and save the BMK file
+        // TODO: Rotate the page in metadata and save using PdfMetaDataCore.SaveToJson()
         
         Trace.WriteLine($"Rotate clicked for page {CurrentPageNumber}");
         

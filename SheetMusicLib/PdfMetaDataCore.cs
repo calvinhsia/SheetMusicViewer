@@ -189,6 +189,11 @@ namespace SheetMusicLib
             var name = GetFullPathFileFromVolno(0, MakeRelative: true, rootFolder: rootFolder);
             return name ?? Path.GetFileNameWithoutExtension(FullPathFile);
         }
+
+        /// <summary>
+        /// Path to the JSON metadata file (used by Avalonia/Desktop app)
+        /// </summary>
+        public string JsonFilePath => System.IO.Path.ChangeExtension(FullPathFile, ".json");
     }
 
     /// <summary>
@@ -1268,6 +1273,129 @@ namespace SheetMusicLib
             await Task.WhenAll(metadataTasks.Concat(singlesTasks).Concat(newPdfTasks));
             Debug.WriteLine($"PdfMetaDataCore Parallel: Loaded {results.Count} metadata entries");
             return (results.ToList(), folders.Keys.ToList());
+        }
+
+        /// <summary>
+        /// Save PDF metadata to a JSON file.
+        /// This is the single place where the Desktop/Avalonia app saves metadata.
+        /// Similar to WPF's PdfMetaData.SaveIfDirty() but uses JSON format.
+        /// </summary>
+        /// <param name="metadata">The metadata to save</param>
+        /// <param name="forceSave">If true, save even if IsDirty is false</param>
+        /// <returns>True if saved successfully</returns>
+        public static async Task<bool> SaveToJsonAsync(PdfMetaDataReadResult metadata, bool forceSave = false)
+        {
+            if (metadata == null)
+                return false;
+
+            if (!metadata.IsDirty && !forceSave)
+                return true; // Nothing to save
+
+            try
+            {
+                var jsonPath = metadata.JsonFilePath;
+
+                // Convert to BmkJsonFormat for saving
+                var jsonData = new BmkJsonFormat
+                {
+                    Version = 1,
+                    LastWrite = DateTime.Now,
+                    LastPageNo = metadata.LastPageNo,
+                    PageNumberOffset = metadata.PageNumberOffset,
+                    Notes = metadata.Notes,
+                };
+
+                // Convert volumes
+                foreach (var vol in metadata.VolumeInfoList)
+                {
+                    jsonData.Volumes.Add(new JsonPdfVolumeInfo
+                    {
+                        FileName = vol.FileNameVolume,
+                        PageCount = vol.NPagesInThisVolume,
+                        Rotation = vol.Rotation
+                    });
+                }
+
+                // Convert TOC entries
+                foreach (var toc in metadata.TocEntries)
+                {
+                    jsonData.TableOfContents.Add(new JsonTOCEntry
+                    {
+                        PageNo = toc.PageNo,
+                        SongName = toc.SongName,
+                        Composer = toc.Composer,
+                        Date = toc.Date,
+                        Notes = toc.Notes
+                    });
+                }
+
+                // Convert favorites
+                foreach (var fav in metadata.Favorites)
+                {
+                    jsonData.Favorites.Add(new JsonFavorite
+                    {
+                        PageNo = fav.Pageno,
+                        Name = fav.FavoriteName
+                    });
+                }
+
+                // Convert ink strokes
+                foreach (var ink in metadata.InkStrokes)
+                {
+                    // Try to deserialize existing portable ink data
+                    if (ink.StrokeData != null && ink.StrokeData.Length > 0)
+                    {
+                        try
+                        {
+                            var jsonStr = System.Text.Encoding.UTF8.GetString(ink.StrokeData);
+                            if (jsonStr.TrimStart().StartsWith("{"))
+                            {
+                                // Already in portable JSON format
+                                var portableCollection = JsonSerializer.Deserialize<PortableInkStrokeCollection>(jsonStr, JsonOptions);
+                                if (portableCollection != null)
+                                {
+                                    jsonData.InkStrokes[ink.Pageno] = new JsonInkStrokes
+                                    {
+                                        CanvasWidth = portableCollection.CanvasWidth,
+                                        CanvasHeight = portableCollection.CanvasHeight,
+                                        Strokes = portableCollection.Strokes
+                                    };
+                                }
+                            }
+                            // Note: Binary ISF format from WPF cannot be converted here - skip those
+                        }
+                        catch
+                        {
+                            // Skip ink strokes that can't be parsed
+                        }
+                    }
+                }
+
+                // Write JSON file
+                var jsonContent = JsonSerializer.Serialize(jsonData, JsonOptions);
+                await File.WriteAllTextAsync(jsonPath, jsonContent);
+
+                // Update metadata state
+                metadata.IsDirty = false;
+                metadata.LastWriteTime = DateTime.Now;
+
+                Debug.WriteLine($"PdfMetaDataCore: Saved metadata to {Path.GetFileName(jsonPath)}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"PdfMetaDataCore: Error saving metadata: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Save PDF metadata to JSON if dirty or forced.
+        /// Synchronous wrapper for SaveToJsonAsync.
+        /// </summary>
+        public static bool SaveToJson(PdfMetaDataReadResult metadata, bool forceSave = false)
+        {
+            return SaveToJsonAsync(metadata, forceSave).GetAwaiter().GetResult();
         }
     }
 
