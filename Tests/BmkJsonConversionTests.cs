@@ -326,6 +326,115 @@ namespace Tests
 
         [TestMethod]
         [TestCategory("Manual")]
+        [Ignore()]
+        [Description("Manual test to convert all BMK XML files to JSON format in the sheet music folder. Will overwrite existing JSON files.")]
+        public async Task TestConvertAllBmksToJsonFromXml()
+        {
+            // This test directly reads BMK XML files and converts them to proper JSON format
+            // It bypasses PdfMetaDataCore.ReadPdfMetaDataAsync which might read incorrectly converted JSON
+            await RunInSTAExecutionContextAsync(async () =>
+            {
+                var folder = GetSheetMusicFolder();
+                if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder))
+                {
+                    Assert.Inconclusive("Sheet music folder not found");
+                    return;
+                }
+
+                int totalBmks = 0;
+                int convertedToJson = 0;
+                int alreadyCorrectJson = 0;
+                int errors = 0;
+                int inkConverted = 0;
+
+                var xmlSerializer = new System.Xml.Serialization.XmlSerializer(typeof(PdfMetaData));
+
+                foreach (var bmkFile in Directory.EnumerateFiles(folder, "*.bmk", SearchOption.AllDirectories))
+                {
+                    totalBmks++;
+                    try
+                    {
+                        var jsonFile = Path.ChangeExtension(bmkFile, ".json");
+                        var content = await File.ReadAllTextAsync(bmkFile);
+
+                        // Only process XML BMK files
+                        if (content.TrimStart().StartsWith("<?xml") || content.TrimStart().StartsWith("<"))
+                        {
+                            // Parse XML
+                            PdfMetaData metadata;
+                            using (var sr = new StringReader(content))
+                            {
+                                metadata = (PdfMetaData)xmlSerializer.Deserialize(sr);
+                            }
+
+                            // Set the full path
+                            var pdfFile = Path.ChangeExtension(bmkFile, ".pdf");
+                            if (Directory.Exists(Path.ChangeExtension(bmkFile, null)) && 
+                                Path.GetFileNameWithoutExtension(bmkFile).EndsWith("singles", StringComparison.OrdinalIgnoreCase))
+                            {
+                                // Singles folder
+                                metadata._FullPathFile = Path.ChangeExtension(bmkFile, null);
+                                metadata.IsSinglesFolder = true;
+                            }
+                            else
+                            {
+                                metadata._FullPathFile = pdfFile;
+                            }
+
+                            // Initialize dictionaries from lists
+                            metadata.InitializeDictToc(metadata.lstTocEntries);
+                            metadata.InitializeFavList();
+                            metadata.InitializeInkStrokes();
+
+                            // Check if there's ink to convert
+                            int inkCount = metadata.dictInkStrokes.Count;
+
+                            // Convert to proper JSON format and save
+                            BmkJsonConverter.SaveAsJson(metadata, jsonFile);
+                            convertedToJson++;
+
+                            if (inkCount > 0)
+                            {
+                                inkConverted++;
+                                Trace.WriteLine($"Converted with ink ({inkCount} pages): {Path.GetFileName(bmkFile)}");
+                            }
+                        }
+                        else
+                        {
+                            // Already JSON - check if it's the correct format
+                            if (content.Contains("\"volumes\"") || content.Contains("\"inkStrokes\""))
+                            {
+                                alreadyCorrectJson++;
+                            }
+                            else
+                            {
+                                // Incorrect JSON format (from PdfMetaDataCore.ConvertAllBmkToJsonAsync)
+                                // We can't convert these without the original BMK XML
+                                Trace.WriteLine($"Incorrect JSON format (needs original BMK): {Path.GetFileName(bmkFile)}");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        errors++;
+                        Trace.WriteLine($"Error converting {Path.GetFileName(bmkFile)}: {ex.Message}");
+                    }
+                }
+
+                Trace.WriteLine($"");
+                Trace.WriteLine($"=== Conversion Summary ===");
+                Trace.WriteLine($"Total BMK files: {totalBmks}");
+                Trace.WriteLine($"Converted to JSON: {convertedToJson}");
+                Trace.WriteLine($"Already correct JSON: {alreadyCorrectJson}");
+                Trace.WriteLine($"With ink strokes: {inkConverted}");
+                Trace.WriteLine($"Errors: {errors}");
+
+                Assert.IsTrue(convertedToJson > 0 || alreadyCorrectJson > 0, "Should have converted some files");
+            });
+        }
+
+        [TestMethod]
+        [TestCategory("Manual")]
         public async Task TestBmkJsonStats()
         {
             await RunInSTAExecutionContextAsync(async () =>

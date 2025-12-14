@@ -626,6 +626,10 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 return;
             }
             
+            // Get ink stroke data for the pages
+            var inkStroke0 = GetInkStrokeForPage(pageNo);
+            var inkStroke1 = page1Image != null ? GetInkStrokeForPage(pageNo + 1) : null;
+            
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 _dpPage = this.FindControl<Panel>("dpPage");
@@ -648,7 +652,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Pixel) });
                         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-                        _inkCanvas0 = new InkCanvasControl(page0Image)
+                        _inkCanvas0 = new InkCanvasControl(page0Image, pageNo, inkStroke0)
                         {
                             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
                             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
@@ -667,7 +671,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                         Grid.SetColumn(divider, 1);
                         grid.Children.Add(divider);
 
-                        _inkCanvas1 = new InkCanvasControl(page1Image)
+                        _inkCanvas1 = new InkCanvasControl(page1Image, pageNo + 1, inkStroke1)
                         {
                             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
                             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
@@ -678,7 +682,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                     }
                     else
                     {
-                        _inkCanvas0 = new InkCanvasControl(page0Image)
+                        _inkCanvas0 = new InkCanvasControl(page0Image, pageNo, inkStroke0)
                         {
                             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
                             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
@@ -879,6 +883,17 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
         
         return $"Page {pageNo}";
+    }
+    
+    /// <summary>
+    /// Gets ink stroke data for a specific page, if available
+    /// </summary>
+    private InkStrokeClass? GetInkStrokeForPage(int pageNo)
+    {
+        if (_currentPdfMetaData == null)
+            return null;
+        
+        return _currentPdfMetaData.InkStrokes.FirstOrDefault(ink => ink.Pageno == pageNo);
     }
     
     private void SetupGestureHandler()
