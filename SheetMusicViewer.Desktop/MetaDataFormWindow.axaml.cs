@@ -20,6 +20,7 @@ namespace SheetMusicViewer.Desktop;
 public partial class MetaDataFormWindow : Window
 {
     private MetaDataFormViewModel? _viewModel;
+    private DataGrid? _tocDataGrid;
     
     /// <summary>
     /// Page number to navigate to after closing (set when user double-clicks a TOC entry or favorite)
@@ -44,6 +45,7 @@ public partial class MetaDataFormWindow : Window
         
         _viewModel = viewModel;
         DataContext = viewModel;
+        _tocDataGrid = this.FindControl<DataGrid>("TocDataGrid");
         viewModel.CloseAction = (saved) =>
         {
             WasSaved = saved;
@@ -94,6 +96,8 @@ public partial class MetaDataFormWindow : Window
         if (e.Key == Key.Escape)
         {
             e.Handled = true;
+            // Commit any pending DataGrid edits before checking dirty state
+            _tocDataGrid?.CommitEdit();
             await TryCloseAsync();
         }
     }
@@ -296,43 +300,33 @@ public partial class MetaDataFormViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Constructor for testing - loads metadata directly from a BMK file path
+    /// Constructor for testing - loads metadata directly from a JSON file path
     /// </summary>
-    public MetaDataFormViewModel(string bmkFilePath)
+    public MetaDataFormViewModel(string jsonFilePath)
     {
-        _rootFolder = Path.GetDirectoryName(bmkFilePath) ?? string.Empty;
-        Title = $"MetaData Editor - {Path.GetFileName(bmkFilePath)}";
+        _rootFolder = Path.GetDirectoryName(jsonFilePath) ?? string.Empty;
+        Title = $"MetaData Editor - {Path.GetFileName(jsonFilePath)}";
 
-        // Load metadata from BMK file
-        var serializer = new System.Xml.Serialization.XmlSerializer(typeof(SerializablePdfMetaData));
-        SerializablePdfMetaData? data = null;
+        // Load metadata from JSON file using the centralized reader
+        var pdfPath = Path.ChangeExtension(jsonFilePath, ".pdf");
+        var provider = new DummyPdfDocumentProvider(); // For testing only
         
-        if (File.Exists(bmkFilePath))
+        try
         {
-            using var sr = new StreamReader(bmkFilePath);
-            data = (SerializablePdfMetaData?)serializer.Deserialize(sr);
-        }
-        
-        if (data != null)
-        {
-            // Create a minimal PdfMetaDataReadResult for the data
-            _pdfMetaData = new PdfMetaDataReadResult
-            {
-                FullPathFile = bmkFilePath.Replace(".bmk", ".pdf"),
-                IsSinglesFolder = false,
-                PageNumberOffset = data.PageNumberOffset,
-                Notes = data.Notes ?? string.Empty,
-                TocEntries = data.lstTocEntries ?? new List<TOCEntry>(),
-                Favorites = data.Favorites ?? new List<Favorite>(),
-                VolumeInfoList = data.lstVolInfo?.Select(v => new PdfVolumeInfoBase
-                {
-                    FileNameVolume = v.FileNameVolume,
-                    NPagesInThisVolume = v.NPagesInThisVolume,
-                    Rotation = v.Rotation
-                }).ToList() ?? new List<PdfVolumeInfoBase>()
-            };
+            _pdfMetaData = PdfMetaDataCore.ReadPdfMetaDataAsync(
+                pdfPath,
+                isSingles: false,
+                provider,
+                preferJsonOverBmk: true).GetAwaiter().GetResult();
             
-            InitializeFromPdfMetaData(_pdfMetaData, 0);
+            if (_pdfMetaData != null)
+            {
+                InitializeFromPdfMetaData(_pdfMetaData, 0);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"Error loading metadata: {ex.Message}");
         }
     }
 
@@ -508,39 +502,13 @@ public partial class MetaDataFormViewModel : ObservableObject
     {
         if (_pdfMetaData == null) return;
 
-        // Update the metadata with changes
-        // Note: PdfMetaDataReadResult may need methods to update its data
-        // For now, we'll update the BMK file directly
-        
-        var bmkPath = _pdfMetaData.BmkFilePath;
-        if (string.IsNullOrEmpty(bmkPath) || !File.Exists(bmkPath))
-        {
-            CloseAction?.Invoke(false);
-            return;
-        }
-
         try
         {
-            // Load the serializable data
-            var serializer = new System.Xml.Serialization.XmlSerializer(typeof(SerializablePdfMetaData));
-            SerializablePdfMetaData? data;
-            
-            using (var sr = new StreamReader(bmkPath))
-            {
-                data = (SerializablePdfMetaData?)serializer.Deserialize(sr);
-            }
-            
-            if (data == null)
-            {
-                CloseAction?.Invoke(false);
-                return;
-            }
-
-            // Update with changes
-            var delta = data.PageNumberOffset - PageNumberOffset;
-            data.PageNumberOffset = PageNumberOffset;
-            data.Notes = DocNotes;
-            data.lstTocEntries = TocEntries.Select(t => new TOCEntry
+            // Update the PdfMetaDataReadResult directly
+            var delta = _pdfMetaData.PageNumberOffset - PageNumberOffset;
+            _pdfMetaData.PageNumberOffset = PageNumberOffset;
+            _pdfMetaData.Notes = DocNotes;
+            _pdfMetaData.TocEntries = TocEntries.Select(t => new TOCEntry
             {
                 PageNo = t.PageNo,
                 SongName = t.SongName,
@@ -548,33 +516,27 @@ public partial class MetaDataFormViewModel : ObservableObject
                 Date = t.Date,
                 Notes = t.Notes
             }).ToList();
-            data.dtLastWrite = DateTime.Now;
             
             // Adjust favorites if PageNumberOffset changed
             if (delta != 0)
             {
-                foreach (var fav in data.Favorites)
+                foreach (var fav in _pdfMetaData.Favorites)
                 {
                     fav.Pageno -= delta;
                 }
             }
 
-            // Save to file
-            var settings = new System.Xml.XmlWriterSettings
-            {
-                Indent = true,
-                IndentChars = " "
-            };
+            // Mark as dirty so it will be saved
+            _pdfMetaData.IsDirty = true;
+            
+            // Use the centralized save method from PdfMetaDataCore
+            var success = PdfMetaDataCore.SaveToJson(_pdfMetaData, forceSave: true);
 
-            using var strm = File.Create(bmkPath);
-            using var writer = System.Xml.XmlWriter.Create(strm, settings);
-            serializer.Serialize(writer, data);
-
-            CloseAction?.Invoke(true);
+            CloseAction?.Invoke(success);
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.WriteLine($"Error saving BMK file: {ex}");
+            System.Diagnostics.Trace.WriteLine($"Error saving metadata file: {ex}");
             CloseAction?.Invoke(false);
         }
     }
@@ -633,5 +595,17 @@ public partial class FavoriteViewModel : ObservableObject
     {
         _pageNo = pageNo;
         _description = description;
+    }
+}
+
+/// <summary>
+/// Dummy PDF document provider for testing when PDF files may not exist
+/// </summary>
+internal class DummyPdfDocumentProvider : IPdfDocumentProvider
+{
+    public Task<int> GetPageCountAsync(string pdfFilePath)
+    {
+        // Return a default page count for testing
+        return Task.FromResult(1);
     }
 }
