@@ -4,7 +4,8 @@ PDF Sheet Music Viewer by Calvin Hsia 2019
 
 Allows users to view downloaded or scanned Sheet Music in PDF format to play on a musical instrument, such as a piano
 
-Runs on Windows 10
+Runs on Windows 10, 11, Mac, Linux
+Updated 2025 to move from WPF to Avalonia UI to support cross platform.
 
 To view on a piano, a tablet like Windows 10 device, like Microsoft Surface Pro and SurfaceBook are very good.
 Keep in mind the page size will be roughly the screen size.
