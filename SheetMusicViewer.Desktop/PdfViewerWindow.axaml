@@ -75,7 +75,7 @@
             <!-- Right side controls -->
             <DockPanel Grid.Row="0" Grid.Column="2" Background="#FFF0F8FF" Opacity="0.5">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="3">
-                    <Menu Background="Transparent" VerticalAlignment="Center">
+                    <Menu Name="mainMenu" Background="Transparent" VerticalAlignment="Center">
                         <MenuItem Header="_Menu">
                             <MenuItem Name="mnuChooser" Header="_Chooser" InputGesture="Alt+C" ToolTip.Tip="Open another document, query songs, etc"/>
                             <MenuItem Header="Show _2 Pages" IsEnabled="{Binding PdfUIEnabled}" ToolTip.Tip="Show 1 or 2 pages at a time">

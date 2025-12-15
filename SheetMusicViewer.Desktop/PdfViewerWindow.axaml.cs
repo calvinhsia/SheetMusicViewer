@@ -1215,74 +1215,81 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     
     private void Window_KeyDown(object? sender, KeyEventArgs e)
     {
-        // Handle Alt-Q for quit
-        if (e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.Q)
+        // Handle Alt+key combinations
+        if (e.KeyModifiers == KeyModifiers.Alt)
         {
-            Close();
-            e.Handled = true;
-            return;
-        }
-        
-        // Handle Alt-C for chooser
-        if (e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.C)
-        {
-            _ = ChooseMusicAsync();
-            e.Handled = true;
-            return;
-        }
-        
-        // Handle Alt-E for metadata editor
-        if (e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.E)
-        {
-            _ = ShowMetaDataFormAsync();
-            e.Handled = true;
-            return;
-        }
-        
-        // Handle Alt-F for full screen toggle
-        if (e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.F)
-        {
-            var chkFullScreen = this.FindControl<CheckBox>("chkFullScreen");
-            if (chkFullScreen != null)
+            switch (e.Key)
             {
-                chkFullScreen.IsChecked = !chkFullScreen.IsChecked;
+                case Key.Q:
+                    Close();
+                    e.Handled = true;
+                    return;
+                case Key.C:
+                    _ = ChooseMusicAsync();
+                    e.Handled = true;
+                    return;
+                case Key.E:
+                    _ = ShowMetaDataFormAsync();
+                    e.Handled = true;
+                    return;
+                case Key.F:
+                    var chkFullScreen = this.FindControl<CheckBox>("chkFullScreen");
+                    if (chkFullScreen != null)
+                    {
+                        chkFullScreen.IsChecked = !chkFullScreen.IsChecked;
+                    }
+                    e.Handled = true;
+                    return;
+                case Key.M:
+                    // Open the menu - find and open the MenuItem
+                    var menu = this.FindControl<Menu>("mainMenu");
+                    if (menu?.Items.Count > 0 && menu.Items[0] is MenuItem menuItem)
+                    {
+                        menuItem.Open();
+                    }
+                    e.Handled = true;
+                    return;
+                default:
+                    // Don't handle other Alt+key combos - let them pass through for menu access keys
+                    return;
             }
-            e.Handled = true;
-            return;
         }
         
-        // Handle navigation keys
-        switch (e.Key)
+        // Handle navigation keys (no modifiers)
+        if (e.KeyModifiers == KeyModifiers.None)
         {
-            case Key.Home:
-                if (_currentPdfMetaData != null)
-                {
-                    CurrentPageNumber = _currentPdfMetaData.PageNumberOffset;
-                    _ = ShowPageAsync(CurrentPageNumber);
-                }
-                e.Handled = true;
-                break;
-            case Key.End:
-                if (_currentPdfMetaData != null)
-                {
-                    var maxPageNum = _currentPdfMetaData.VolumeInfoList.Sum(v => v.NPagesInThisVolume) + _currentPdfMetaData.PageNumberOffset;
-                    CurrentPageNumber = (int)maxPageNum - 1;
-                    _ = ShowPageAsync(CurrentPageNumber);
-                }
-                e.Handled = true;
-                break;
-            case Key.Left:
-            case Key.Up:
-            case Key.PageUp:
-                NavigateAsync(-NumPagesPerView);
-                e.Handled = true;
-                break;
-            case Key.Right:
-            case Key.Down:
-            case Key.PageDown:
-                NavigateAsync(NumPagesPerView);
-                e.Handled = true;
-                break;
+            switch (e.Key)
+            {
+                case Key.Home:
+                    if (_currentPdfMetaData != null)
+                    {
+                        CurrentPageNumber = _currentPdfMetaData.PageNumberOffset;
+                        _ = ShowPageAsync(CurrentPageNumber);
+                    }
+                    e.Handled = true;
+                    break;
+                case Key.End:
+                    if (_currentPdfMetaData != null)
+                    {
+                        var maxPageNum = _currentPdfMetaData.VolumeInfoList.Sum(v => v.NPagesInThisVolume) + _currentPdfMetaData.PageNumberOffset;
+                        CurrentPageNumber = (int)maxPageNum - 1;
+                        _ = ShowPageAsync(CurrentPageNumber);
+                    }
+                    e.Handled = true;
+                    break;
+                case Key.Left:
+                case Key.Up:
+                case Key.PageUp:
+                    NavigateAsync(-NumPagesPerView);
+                    e.Handled = true;
+                    break;
+                case Key.Right:
+                case Key.Down:
+                case Key.PageDown:
+                    NavigateAsync(NumPagesPerView);
+                    e.Handled = true;
+                    break;
+            }
         }
     }
     
