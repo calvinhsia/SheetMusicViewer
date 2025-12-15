@@ -90,8 +90,39 @@ namespace SheetMusicViewer
                     ActivateTab(tabItemHeader);
                     et.Handled = true;
                 };
+            
+            // Add keyboard shortcuts for tab navigation
+            this.KeyDown += ChooseMusic_KeyDown;
+            
             doneLoading = true;
         }
+
+        private void ChooseMusic_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyboardDevice.Modifiers == ModifierKeys.Alt)
+            {
+                switch (e.SystemKey)
+                {
+                    case Key.Q:
+                        ActivateTab("_Query");
+                        e.Handled = true;
+                        break;
+                    case Key.B:
+                        ActivateTab("_Books");
+                        e.Handled = true;
+                        break;
+                    case Key.V:
+                        ActivateTab("Fa_vorites");
+                        e.Handled = true;
+                        break;
+                    case Key.P:
+                        ActivateTab("_Playlists");
+                        e.Handled = true;
+                        break;
+                }
+            }
+        }
+
         private void CboRootFolder_DropDownOpened(object sender, EventArgs e)
         {
             if (this.cboRootFolder.Items.Count == 1)
