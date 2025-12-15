@@ -22,6 +22,12 @@
     <!-- Enable code coverage for all configurations -->
     <DebugType>portable</DebugType>
     <DebugSymbols>true</DebugSymbols>
+    
+    <!-- Publish settings -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
   
   <!-- Inline task to calculate Pacific time (cross-platform) -->
