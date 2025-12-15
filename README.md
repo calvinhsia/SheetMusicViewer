@@ -16,6 +16,37 @@ Keep in mind the page size will be roughly the screen size.
 * Optionally persists views by Date, to see which music viewed recently
 * The SheetMusic/Ragtime folder has sample PDFs which you can use if as samples if you need to.
 
+## Installation
+
+### Download
+Download the latest release for your platform from the [Releases page](https://github.com/calvinhsia/SheetMusicViewer/releases).
+
+| Platform | File |
+|----------|------|
+| Windows (64-bit) | `SheetMusicViewer-win-x64.zip` |
+| Linux (64-bit) | `SheetMusicViewer-linux-x64.tar.gz` |
+| macOS Intel | `SheetMusicViewer-osx-x64.tar.gz` |
+| macOS Apple Silicon | `SheetMusicViewer-osx-arm64.tar.gz` |
+
+### Windows
+1. Download and extract the ZIP file
+2. Run `SheetMusicViewer.exe`
+
+### Linux
+```bash
+tar -xzf SheetMusicViewer-linux-x64.tar.gz
+chmod +x SheetMusicViewer
+./SheetMusicViewer
+```
+
+### macOS
+```bash
+tar -xzf SheetMusicViewer-osx-arm64.tar.gz
+xattr -cr SheetMusicViewer  # Remove quarantine for unsigned app
+chmod +x SheetMusicViewer
+./SheetMusicViewer
+```
+
 ## Testing Strategy
 
 This project includes comprehensive automated testing to ensure quality and reliability:
