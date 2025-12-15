@@ -52,7 +52,15 @@ jobs:
 
     - name: Run all tests (Windows)
       if: matrix.os == 'windows-latest'
-      run: dotnet test SheetMusicViewer.sln --configuration ${{ env.CONFIGURATION }} --no-build --verbosity normal --filter "TestCategory!=Manual"
+      run: |
+        dotnet test SheetMusicViewer.sln `
+          --configuration ${{ env.CONFIGURATION }} `
+          --no-build `
+          --verbosity normal `
+          --filter "TestCategory!=Manual" `
+          --logger "trx;LogFileName=test-results-${{ matrix.rid }}.trx" `
+          --results-directory ./TestResults
+      shell: pwsh
 
     # Linux/macOS: Build only cross-platform projects
     - name: Restore cross-platform projects (Linux/macOS)
@@ -71,7 +79,46 @@ jobs:
 
     - name: Run Avalonia tests (Linux/macOS)
       if: matrix.os != 'windows-latest'
-      run: dotnet test AvaloniaTests/AvaloniaTests.csproj --configuration ${{ env.CONFIGURATION }} --no-build --verbosity normal --filter "TestCategory!=Manual"
+      run: |
+        dotnet test AvaloniaTests/AvaloniaTests.csproj \
+          --configuration ${{ env.CONFIGURATION }} \
+          --no-build \
+          --verbosity normal \
+          --filter "TestCategory!=Manual" \
+          --logger "trx;LogFileName=test-results-${{ matrix.rid }}.trx" \
+          --results-directory ./TestResults
+      shell: bash
+
+    # Upload test results
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-${{ matrix.rid }}
+        path: ./TestResults/*.trx
+        retention-days: 30
+
+    # Publish test results summary
+    - name: Publish test results summary
+      uses: EnricoMi/publish-unit-test-result-action@v2
+      if: always() && matrix.os == 'ubuntu-latest'
+      with:
+        files: ./TestResults/*.trx
+        check_name: "Test Results (${{ matrix.rid }})"
+
+    - name: Publish test results summary (Windows)
+      uses: EnricoMi/publish-unit-test-result-action/windows@v2
+      if: always() && matrix.os == 'windows-latest'
+      with:
+        files: ./TestResults/*.trx
+        check_name: "Test Results (${{ matrix.rid }})"
+
+    - name: Publish test results summary (macOS)
+      uses: EnricoMi/publish-unit-test-result-action/macos@v2
+      if: always() && matrix.os == 'macos-latest'
+      with:
+        files: ./TestResults/*.trx
+        check_name: "Test Results (${{ matrix.rid }})"
 
     # All platforms: Publish SheetMusicViewer.Desktop
     - name: Publish SheetMusicViewer.Desktop
