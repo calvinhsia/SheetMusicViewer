@@ -41,15 +41,39 @@ jobs:
     - name: Display .NET info
       run: dotnet --info
 
-    - name: Restore dependencies
+    # Windows: Build entire solution (includes WPF projects)
+    - name: Restore solution (Windows)
+      if: matrix.os == 'windows-latest'
       run: dotnet restore SheetMusicViewer.sln
 
-    - name: Build solution
+    - name: Build solution (Windows)
+      if: matrix.os == 'windows-latest'
       run: dotnet build SheetMusicViewer.sln --configuration ${{ env.CONFIGURATION }} --no-restore
 
-    - name: Run tests
+    - name: Run all tests (Windows)
+      if: matrix.os == 'windows-latest'
       run: dotnet test SheetMusicViewer.sln --configuration ${{ env.CONFIGURATION }} --no-build --verbosity normal --filter "TestCategory!=Manual"
 
+    # Linux/macOS: Build only cross-platform projects
+    - name: Restore cross-platform projects (Linux/macOS)
+      if: matrix.os != 'windows-latest'
+      run: |
+        dotnet restore SheetMusicLib/SheetMusicLib.csproj
+        dotnet restore SheetMusicViewer.Desktop/SheetMusicViewer.Desktop.csproj
+        dotnet restore AvaloniaTests/AvaloniaTests.csproj
+
+    - name: Build cross-platform projects (Linux/macOS)
+      if: matrix.os != 'windows-latest'
+      run: |
+        dotnet build SheetMusicLib/SheetMusicLib.csproj --configuration ${{ env.CONFIGURATION }} --no-restore
+        dotnet build SheetMusicViewer.Desktop/SheetMusicViewer.Desktop.csproj --configuration ${{ env.CONFIGURATION }} --no-restore
+        dotnet build AvaloniaTests/AvaloniaTests.csproj --configuration ${{ env.CONFIGURATION }} --no-restore
+
+    - name: Run Avalonia tests (Linux/macOS)
+      if: matrix.os != 'windows-latest'
+      run: dotnet test AvaloniaTests/AvaloniaTests.csproj --configuration ${{ env.CONFIGURATION }} --no-build --verbosity normal --filter "TestCategory!=Manual"
+
+    # All platforms: Publish SheetMusicViewer.Desktop
     - name: Publish SheetMusicViewer.Desktop
       run: |
         dotnet publish SheetMusicViewer.Desktop/SheetMusicViewer.Desktop.csproj \
