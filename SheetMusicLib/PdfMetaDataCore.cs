@@ -883,6 +883,25 @@ namespace SheetMusicLib
                 result.IsDirty = true;
             }
 
+            // Fix volumes with pageCount=0 (e.g., if PDF was cloud-only during initial load)
+            for (int i = 0; i < result.VolumeInfoList.Count; i++)
+            {
+                if (result.VolumeInfoList[i].NPagesInThisVolume == 0)
+                {
+                    var pdfPath = result.GetFullPathFileFromVolno(i);
+                    if (!string.IsNullOrEmpty(pdfPath) && File.Exists(pdfPath))
+                    {
+                        Debug.WriteLine($"PdfMetaDataCore: Volume {i} has pageCount=0, re-reading PDF: {Path.GetFileName(pdfPath)}");
+                        var pageCount = await pdfDocumentProvider.GetPageCountAsync(pdfPath);
+                        if (pageCount > 0)
+                        {
+                            result.VolumeInfoList[i].NPagesInThisVolume = pageCount;
+                            result.IsDirty = true;
+                        }
+                    }
+                }
+            }
+
             // Ensure at least one TOC entry exists
             if (result.TocEntries.Count == 0)
             {

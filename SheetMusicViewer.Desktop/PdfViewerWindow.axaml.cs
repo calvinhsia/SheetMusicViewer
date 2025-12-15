@@ -262,7 +262,23 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             
             if (string.IsNullOrEmpty(_rootMusicFolder) || !Directory.Exists(_rootMusicFolder))
             {
-                await ChooseMusicAsync();
+                // First time user - create and use sample data
+                _rootMusicFolder = await SampleDataHelper.EnsureSampleDataExistsAsync();
+                settings.AddToMRU(_rootMusicFolder);
+                settings.Save();
+                
+                // Load the sample PDF metadata
+                var provider = new PdfToImageDocumentProvider();
+                (_lstPdfMetaFileData, _lstFolders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+                    _rootMusicFolder, 
+                    provider,
+                    useParallelLoading: true);
+                
+                // Open the first (and only) sample PDF
+                if (_lstPdfMetaFileData.Count > 0)
+                {
+                    await LoadPdfFileAndShowAsync(_lstPdfMetaFileData[0], 0);
+                }
             }
             else
             {
