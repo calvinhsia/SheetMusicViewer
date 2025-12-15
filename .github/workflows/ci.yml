@@ -1,0 +1,179 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, tests, develop, extractToLib ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, tests ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  CONFIGURATION: Release
+
+jobs:
+  build-and-test:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-latest
+            rid: osx-arm64
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Display .NET info
+      run: dotnet --info
+
+    # Windows: Build entire solution (includes WPF projects)
+    - name: Restore solution (Windows)
+      if: matrix.os == 'windows-latest'
+      run: dotnet restore SheetMusicViewer.sln
+
+    - name: Build solution (Windows)
+      if: matrix.os == 'windows-latest'
+      run: dotnet build SheetMusicViewer.sln --configuration ${{ env.CONFIGURATION }} --no-restore
+
+    - name: Run all tests (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        dotnet test SheetMusicViewer.sln `
+          --configuration ${{ env.CONFIGURATION }} `
+          --no-build `
+          --verbosity normal `
+          --filter "TestCategory!=Manual" `
+          --logger "trx;LogFileName=test-results-${{ matrix.rid }}.trx" `
+          --results-directory ./TestResults
+      shell: pwsh
+
+    # Linux/macOS: Build only cross-platform projects
+    - name: Restore cross-platform projects (Linux/macOS)
+      if: matrix.os != 'windows-latest'
+      run: |
+        dotnet restore SheetMusicLib/SheetMusicLib.csproj
+        dotnet restore SheetMusicViewer.Desktop/SheetMusicViewer.Desktop.csproj
+        dotnet restore AvaloniaTests/AvaloniaTests.csproj
+
+    - name: Build cross-platform projects (Linux/macOS)
+      if: matrix.os != 'windows-latest'
+      run: |
+        dotnet build SheetMusicLib/SheetMusicLib.csproj --configuration ${{ env.CONFIGURATION }} --no-restore
+        dotnet build SheetMusicViewer.Desktop/SheetMusicViewer.Desktop.csproj --configuration ${{ env.CONFIGURATION }} --no-restore
+        dotnet build AvaloniaTests/AvaloniaTests.csproj --configuration ${{ env.CONFIGURATION }} --no-restore
+
+    - name: Run Avalonia tests (Linux/macOS)
+      if: matrix.os != 'windows-latest'
+      run: |
+        dotnet test AvaloniaTests/AvaloniaTests.csproj \
+          --configuration ${{ env.CONFIGURATION }} \
+          --no-build \
+          --verbosity normal \
+          --filter "TestCategory!=Manual" \
+          --logger "trx;LogFileName=test-results-${{ matrix.rid }}.trx" \
+          --results-directory ./TestResults
+      shell: bash
+
+    # Upload test results
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-${{ matrix.rid }}
+        path: ./TestResults/*.trx
+        retention-days: 30
+
+    # Publish test results summary
+    - name: Publish test results summary
+      uses: EnricoMi/publish-unit-test-result-action@v2
+      if: always() && matrix.os == 'ubuntu-latest'
+      with:
+        files: ./TestResults/*.trx
+        check_name: "Test Results (${{ matrix.rid }})"
+
+    - name: Publish test results summary (Windows)
+      uses: EnricoMi/publish-unit-test-result-action/windows@v2
+      if: always() && matrix.os == 'windows-latest'
+      with:
+        files: ./TestResults/*.trx
+        check_name: "Test Results (${{ matrix.rid }})"
+
+    - name: Publish test results summary (macOS)
+      uses: EnricoMi/publish-unit-test-result-action/macos@v2
+      if: always() && matrix.os == 'macos-latest'
+      with:
+        files: ./TestResults/*.trx
+        check_name: "Test Results (${{ matrix.rid }})"
+
+    # All platforms: Publish SheetMusicViewer.Desktop
+    - name: Publish SheetMusicViewer.Desktop
+      run: |
+        dotnet publish SheetMusicViewer.Desktop/SheetMusicViewer.Desktop.csproj \
+          -c ${{ env.CONFIGURATION }} \
+          -r ${{ matrix.rid }} \
+          --self-contained true \
+          -p:PublishSingleFile=true \
+          -p:EnableCompressionInSingleFile=true \
+          -o ./publish/${{ matrix.rid }}
+      shell: bash
+
+    - name: Create zip (Windows)
+      if: matrix.os == 'windows-latest'
+      run: Compress-Archive -Path ./publish/${{ matrix.rid }}/* -DestinationPath ./SheetMusicViewer-${{ matrix.rid }}.zip
+      shell: pwsh
+
+    - name: Create tar.gz (Linux/macOS)
+      if: matrix.os != 'windows-latest'
+      run: |
+        cd ./publish/${{ matrix.rid }}
+        tar -czvf ../../SheetMusicViewer-${{ matrix.rid }}.tar.gz *
+      shell: bash
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: SheetMusicViewer-${{ matrix.rid }}
+        path: |
+          ./SheetMusicViewer-${{ matrix.rid }}.zip
+          ./SheetMusicViewer-${{ matrix.rid }}.tar.gz
+        if-no-files-found: ignore
+        retention-days: 30
+
+  release:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Display downloaded files
+      run: ls -R artifacts
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          artifacts/**/*.zip
+          artifacts/**/*.tar.gz
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

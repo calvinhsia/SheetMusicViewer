@@ -1,0 +1,160 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:SheetMusicViewer.Desktop"
+        x:Class="SheetMusicViewer.Desktop.MetaDataFormWindow"
+        x:DataType="local:MetaDataFormViewModel"
+        x:Name="MetaDataWindow"
+        Title="{Binding Title}"
+        Width="1200"
+        Height="700"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Top toolbar with buttons -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10" Spacing="10">
+            <TextBlock Text="PageNumberOffset:" VerticalAlignment="Center"/>
+            <TextBox Text="{Binding PageNumberOffset}" Width="50"/>
+            <Button Content="_Import from Clipboard" Command="{Binding ImportCommand}" 
+                    ToolTip.Tip="Import TOC from clipboard tab separated values (PageNo, SongName, Composer, Date, Notes)"/>
+            <Button Content="_Export to Clipboard" Command="{Binding ExportCommand}"
+                    ToolTip.Tip="Export TOC to clipboard to paste to Excel"/>
+            <Button Content="_Cancel" Command="{Binding CancelCommand}"/>
+            <Button Content="_Save" Command="{Binding SaveCommand}"/>
+        </StackPanel>
+
+        <!-- Header info panel -->
+        <Grid Grid.Row="1" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Thumbnail image -->
+            <Image Grid.Column="0" 
+                   Source="{Binding Thumbnail}" 
+                   Width="100" 
+                   Height="200" 
+                   Stretch="Uniform"
+                   Margin="0,0,20,0"/>
+
+            <!-- Edit panel for selected item -->
+            <StackPanel Grid.Column="1" Orientation="Vertical" Spacing="5" Width="400">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="PageNo:" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,5,0"/>
+                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding SelectedItem.PageNo, Mode=TwoWay}" Width="60" HorizontalAlignment="Left"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="SongName:" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,5,0"/>
+                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding SelectedItem.SongName, Mode=TwoWay}" IsEnabled="{Binding SongNameIsEnabled}"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Composer:" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,5,0"/>
+                    <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding SelectedItem.Composer, Mode=TwoWay}"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Date:" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,5,0"/>
+                    <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding SelectedItem.Date, Mode=TwoWay}"/>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Notes:" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,5,0"/>
+                    <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding SelectedItem.Notes, Mode=TwoWay}"/>
+                </Grid>
+            </StackPanel>
+
+            <!-- Volume Info panel -->
+            <StackPanel Grid.Column="2" Orientation="Vertical" Margin="20,0,0,0">
+                <TextBlock Text="VolInfo:" FontWeight="Bold"/>
+                <ListBox ItemsSource="{Binding VolInfoDisplay}" MaxHeight="120" MinWidth="400">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </StackPanel>
+        </Grid>
+
+        <!-- Main content with TOC DataGrid and Favorites -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- TOC DataGrid -->
+            <DataGrid Grid.Column="0"
+                      Name="TocDataGrid"
+                      ItemsSource="{Binding TocEntries}"
+                      SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                      GridLinesVisibility="All"
+                      CanUserReorderColumns="True"
+                      CanUserResizeColumns="True"
+                      CanUserSortColumns="True"
+                      IsReadOnly="False"
+                      SelectionMode="Single"
+                      DoubleTapped="TocDataGrid_DoubleTapped">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="PageNo" Binding="{Binding PageNo}" Width="70" x:DataType="local:TocEntryViewModel"/>
+                    <DataGridTemplateColumn Header="SongName" Width="250" x:DataType="local:TocEntryViewModel">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TocEntryViewModel">
+                                <TextBlock Text="{Binding SongName}" VerticalAlignment="Center" Margin="2,0"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                        <DataGridTemplateColumn.CellEditingTemplate>
+                            <DataTemplate x:DataType="local:TocEntryViewModel">
+                                <TextBox Text="{Binding SongName, Mode=TwoWay}" 
+                                         IsEnabled="{Binding #MetaDataWindow.((local:MetaDataFormViewModel)DataContext).SongNameIsEnabled}"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellEditingTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="Composer" Binding="{Binding Composer}" Width="200" x:DataType="local:TocEntryViewModel"/>
+                    <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="100" x:DataType="local:TocEntryViewModel"/>
+                    <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*" x:DataType="local:TocEntryViewModel"/>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <GridSplitter Grid.Column="1" Width="5" ResizeDirection="Columns"/>
+
+            <!-- Favorites panel -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="Favorites:" FontWeight="Bold" Margin="5,0,0,5"/>
+                <DataGrid Grid.Row="1"
+                          Name="FavoritesDataGrid"
+                          ItemsSource="{Binding Favorites}"
+                          GridLinesVisibility="All"
+                          CanUserReorderColumns="False"
+                          CanUserResizeColumns="True"
+                          IsReadOnly="True"
+                          SelectionMode="Single"
+                          DoubleTapped="FavoritesDataGrid_DoubleTapped">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Page" Binding="{Binding PageNo}" Width="60" x:DataType="local:FavoriteViewModel"/>
+                        <DataGridTextColumn Header="Desc" Binding="{Binding Description}" Width="*" x:DataType="local:FavoriteViewModel"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

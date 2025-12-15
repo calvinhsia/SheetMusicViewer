@@ -1,0 +1,797 @@
+﻿# SheetMusicViewer Migration: WPF/WinRT to Avalonia
+
+## Executive Summary
+
+This document describes the migration path for SheetMusicViewer from a Windows-only WPF application using Windows Runtime (WinRT) APIs to a cross-platform Avalonia application. The migration enables the application to run on Windows, macOS, and Linux while maintaining the same functionality.
+
+## Current Architecture (WPF + WinRT)
+
+### Technology Stack
+
+| Component | Technology | Windows Version |
+|-----------|-----------|-----------------|
+| UI Framework | WPF (.NET 8) | Windows 10+ |
+| PDF Rendering | Windows.Data.Pdf (WinRT) | Windows 10 SDK 19041 |
+| File Access | Windows.Storage (WinRT) | Windows 10+ |
+| Bitmap Images | System.Windows.Media.Imaging | Windows |
+| Ink/Annotations | System.Windows.Ink | Windows |
+| Settings | Properties.Settings | Windows |
+| Folder Browser | System.Windows.Forms.FolderBrowserDialog | Windows |
+
+### Key WinRT Dependencies
+
+The current implementation relies heavily on Windows Runtime APIs that are not available on other platforms:
+
+```csharp
+// PDF rendering via WinRT
+using Windows.Data.Pdf;
+using Windows.Storage;
+using Windows.Storage.Streams;
+
+// In PdfViewerWindow.xaml.cs and PdfMetaData.cs
+StorageFile f = await StorageFile.GetFileFromPathAsync(pathPdfFileVol);
+var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
+using var pdfPage = pdfDoc.GetPage(pageNo);
+await pdfPage.RenderToStreamAsync(stream, renderOpts);
+```
+
+### Project Structure (Before)
+
+```
+SheetMusicViewer/
+├── SheetMusicViewer/          # WPF Application (Windows-only)
+│   ├── PdfViewerWindow.xaml   # Main PDF viewer
+│   ├── ChooseMusic.xaml       # Book/song chooser dialog
+│   ├── PdfMetaData.cs         # WPF-specific PDF metadata
+│   └── BrowsePanel.cs         # ListView with filtering/sorting
+├── Tests/                     # Unit tests (WPF-dependent)
+└── WpfApp/                    # Additional WPF components
+```
+
+---
+
+## Target Architecture (Avalonia + PDFtoImage)
+
+### Technology Stack
+
+| Component | Technology | Platform Support |
+|-----------|-----------|------------------|
+| UI Framework | Avalonia 11.x | Windows, macOS, and Linux |
+| PDF Rendering | PDFtoImage (SkiaSharp + Pdfium) | Cross-platform |
+| Bitmap Images | Avalonia.Media.Imaging | Cross-platform |
+| Settings | AppSettings (JSON file) | Cross-platform |
+| Folder Browser | IStorageProvider | Cross-platform |
+
+### New Project Structure
+
+```
+SheetMusicViewer/
+├── SheetMusicViewer/          # Legacy WPF Application (Windows-only)
+├── SheetMusicLib/             # NEW: Platform-agnostic core library
+│   ├── PdfMetaDataCore.cs     # Portable metadata reading
+│   ├── TOCEntry.cs            # Table of contents
+│   ├── Favorite.cs            # Favorites
+│   └── InkStrokeClass.cs      # Ink data (serialization only)
+├── AvaloniaTests/             # NEW: Avalonia implementation
+│   ├── ChooseMusicWindow.cs   # Avalonia book chooser
+│   ├── BrowseControl.cs       # Virtualized ListView
+│   └── Tests/                 # Avalonia UI tests
+├── Tests/                     # Core library tests
+└── WpfApp/                    # Additional WPF components
+```
+
+---
+
+## Migration Strategy
+
+### Phase 1: Extract Platform-Agnostic Core ✅ COMPLETED
+
+**Goal:** Separate business logic from WPF/WinRT dependencies
+
+**Created:** `SheetMusicLib` - A portable .NET 8 class library
+
+#### Key Components Extracted
+
+| Component | Description |
+|-----------|-------------|
+| `PdfMetaDataCore.cs` | Metadata reading/writing without PDF rendering |
+| `PdfMetaDataReadResult` | Platform-agnostic metadata container |
+| `IPdfDocumentProvider` | Interface for PDF page count |
+| `IExceptionHandler` | Interface for error handling |
+| `TOCEntry`, `Favorite`, `InkStrokeClass` | Data models |
+| `PdfVolumeInfoBase` | Volume information base class |
+
+#### Abstraction Pattern
+
+```csharp
+// SheetMusicLib/PdfMetaDataCore.cs - Platform-agnostic interface
+public interface IPdfDocumentProvider
+{
+    Task<int> GetPageCountAsync(string pdfFilePath);
+}
+
+// SheetMusicViewer/PdfMetaData.cs - WPF implementation
+public class WpfPdfDocumentProvider : IPdfDocumentProvider
+{
+    public async Task<int> GetPageCountAsync(string pdfFilePath)
+    {
+        var pdfDoc = await PdfDocument.LoadFromFileAsync(file);
+        return (int)pdfDoc.PageCount;
+    }
+}
+
+// AvaloniaTests/... - Avalonia implementation uses PDFtoImage
+public class AvaloniaPdfDocumentProvider : IPdfDocumentProvider
+{
+    public Task<int> GetPageCountAsync(string pdfFilePath)
+    {
+        return Task.FromResult(PDFtoImage.Conversion.GetPageCount(pdfFilePath));
+    }
+}
+```
+
+### Phase 2: Replace PDF Rendering ✅ COMPLETED
+
+**Goal:** Replace Windows.Data.Pdf with cross-platform PDFtoImage
+
+#### PDFtoImage Integration
+
+```xml
+<!-- AvaloniaTests.csproj -->
+<PackageReference Include="PDFtoImage" Version="5.0.0" />
+<PackageReference Include="SkiaSharp" Version="3.116.1" />
+```
+
+#### Rendering Implementation
+
+```csharp
+// AvaloniaTests/ChooseMusicWindow.cs
+private async Task<Bitmap> GetPdfThumbnailAsync(PdfMetaDataReadResult pdfMetaData)
+{
+    return await Task.Run(() =>
+    {
+        var pdfPath = pdfMetaData.GetFullPathFileFromVolno(0);
+        
+        // Handle rotation
+        var rotation = firstVolume.Rotation switch
+        {
+            1 => PDFtoImage.PdfRotation.Rotate90,
+            2 => PDFtoImage.PdfRotation.Rotate180,
+            3 => PDFtoImage.PdfRotation.Rotate270,
+            _ => PDFtoImage.PdfRotation.Rotate0
+        };
+        
+        using var pdfStream = File.OpenRead(pdfPath);
+        using var skBitmap = Conversion.ToImage(pdfStream, page: 0, 
+            options: new RenderOptions(
+                Width: ThumbnailWidth, 
+                Height: ThumbnailHeight,
+                Rotation: rotation));
+        
+        // Convert SkiaSharp bitmap to Avalonia bitmap
+        using var data = skBitmap.Encode(SKEncodedImageFormat.Png, 100);
+        using var stream = new MemoryStream();
+        data.SaveTo(stream);
+        stream.Seek(0, SeekOrigin.Begin);
+        
+        return new Avalonia.Media.Imaging.Bitmap(stream);
+    });
+}
+```
+
+### Phase 3: Rebuild UI Components ✅ COMPLETED
+
+**Goal:** Create Avalonia equivalents of WPF UI components
+
+#### Component Mapping
+
+| WPF Component | Avalonia Component | Status |
+|--------------|-------------------|--------|
+| `ChooseMusic.xaml` (Window) | `ChooseMusicWindow.cs` | ✅ |
+| `BrowsePanel` (ListView) | `BrowseControl.cs` | ✅ |
+| `MyContentControl` | `BookItemCache` + StackPanel.Tag | ✅ |
+| `MyTreeViewItem` | `FavoriteItem` + StackPanel.Tag | ✅ |
+| `TabControl` | `TabControl` | ✅ Same API |
+| `ListBox` with `WrapPanel` | `ListBox` with `FuncTemplate<Panel>` | ✅ |
+
+#### Key UI Differences
+
+**WPF WrapPanel in ListBox:**
+```csharp
+// WPF - XAML
+<ListBox.ItemsPanel>
+    <ItemsPanelTemplate>
+        <WrapPanel/>
+    </ItemsPanelTemplate>
+</ListBox.ItemsPanel>
+```
+
+**Avalonia WrapPanel in ListBox:**
+```csharp
+// Avalonia - Code
+var wrapPanelFactory = new FuncTemplate<Panel?>(() => new WrapPanel
+{
+    Orientation = Orientation.Horizontal
+});
+_lbBooks.ItemsPanel = wrapPanelFactory;
+```
+
+**WPF Custom ContentControl:**
+```csharp
+// WPF
+internal class MyContentControl : ContentControl
+{
+    public PdfMetaData pdfMetaDataItem;
+}
+```
+
+**Avalonia Pattern (using Tag):**
+```csharp
+// Avalonia - Store data in control's Tag property
+var sp = new StackPanel { Tag = bookItemCache };
+```
+```csharp
+// ... add children ...
+listBox.Items.Add(sp);
+
+// Retrieve on selection
+if (listBox.SelectedItem is StackPanel sp && sp.Tag is BookItemCache cache)
+{
+    var metadata = cache.Metadata;
+}
+```
+
+### Phase 4: Cloud File Handling ✅ COMPLETED
+
+**Goal:** Handle OneDrive/cloud-only files without triggering downloads
+
+```csharp
+// AvaloniaTests/ChooseMusicWindow.cs
+if (SkipCloudOnlyFiles)
+{
+    var fileInfo = new FileInfo(pdfPath);
+    const FileAttributes RecallOnDataAccess = (FileAttributes)0x00400000;
+    const FileAttributes RecallOnOpen = (FileAttributes)0x00040000;
+    
+    var attrs = fileInfo.Attributes;
+    bool isCloudOnly = (attrs & RecallOnDataAccess) == RecallOnDataAccess ||
+                       (attrs & RecallOnOpen) == RecallOnOpen ||
+                       (attrs & FileAttributes.Offline) == FileAttributes.Offline;
+    
+    if (isCloudOnly)
+    {
+        throw new IOException($"Cloud-only file, skipping: {pdfPath}");
+    }
+}
+```
+
+### Phase 5: Cross-Platform Settings ✅ COMPLETED
+
+**Goal:** Replace WPF's `Properties.Settings.Default` with cross-platform JSON settings
+
+#### WPF Settings (Windows-only)
+
+```csharp
+// WPF - Uses System.Configuration, stores in AppData or registry
+Properties.Settings.Default.MainWindowSize.Width;
+Properties.Settings.Default.RootFolderMRU;
+Properties.Settings.Default.Save();
+```
+
+#### Cross-Platform Settings (SheetMusicLib)
+
+```csharp
+// SheetMusicLib/AppSettings.cs - JSON file in AppData folder
+using SheetMusicLib;
+
+// Initialize once at startup
+AppSettings.Initialize("SheetMusicViewer");
+
+// Use singleton instance
+var settings = AppSettings.Instance;
+Width = settings.WindowWidth;
+Height = settings.WindowHeight;
+
+// Add to MRU
+settings.AddToMRU(selectedFolder);
+
+// Save on close
+settings.Save();
+```
+
+#### Settings Storage Location
+
+| Platform | Path |
+|----------|------|
+| Windows | `%APPDATA%\SheetMusicViewer\settings.json` |
+| macOS | `~/Library/Application Support/SheetMusicViewer/settings.json` |
+| Linux | `~/.config/SheetMusicViewer/settings.json` |
+
+#### Available Settings
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `WindowWidth` | double | 1200 | Window width |
+| `WindowHeight` | double | 800 | Window height |
+| `WindowTop` | double | 100 | Window Y position |
+| `WindowLeft` | double | 100 | Window X position |
+| `Show2Pages` | bool | true | Show two pages side-by-side |
+| `IsFullScreen` | bool | false | Full screen mode |
+| `LastPDFOpen` | string | null | Last opened PDF path |
+| `RootFolderMRU` | List&lt;string&gt; | [] | Most recently used folders |
+| `ChooseBooksSort` | string | "ByDate" | Book sort order |
+| `ChooseQueryTab` | string | "_Books" | Last active tab |
+
+### Phase 6: Cross-Platform Folder Browser ✅ COMPLETED
+
+**Goal:** Replace WPF's `FolderBrowserDialog` with Avalonia's `StorageProvider`
+
+#### WPF Folder Browser (Windows-only)
+
+```csharp
+// WPF - Uses Windows Forms dialog
+var d = new System.Windows.Forms.FolderBrowserDialog
+{
+    ShowNewFolderButton = false,
+    Description = "Choose a root folder with PDF music files",
+    SelectedPath = currentFolder
+};
+if (d.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+{
+    var selectedPath = d.SelectedPath;
+}
+```
+
+#### Avalonia Folder Browser (Cross-platform)
+
+```csharp
+// Avalonia - Uses StorageProvider API (async, native dialogs)
+using Avalonia.Platform.Storage;
+
+private async Task ShowFolderPickerAsync()
+{
+    var topLevel = TopLevel.GetTopLevel(this);
+    
+    // Try to set initial folder
+    IStorageFolder? startLocation = null;
+    if (!string.IsNullOrEmpty(_rootFolder) && Directory.Exists(_rootFolder))
+    {
+        startLocation = await topLevel.StorageProvider.TryGetFolderFromPathAsync(_rootFolder);
+    }
+    
+    var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+    {
+        Title = "Choose a root folder with PDF music files",
+        AllowMultiple = false,
+        SuggestedStartLocation = startLocation
+    });
+    
+    if (folders.Count > 0)
+    {
+        var selectedPath = folders[0].TryGetLocalPath();
+        if (!string.IsNullOrEmpty(selectedPath))
+        {
+            // Update MRU and change folder
+            AppSettings.Instance.AddToMRU(selectedPath);
+            AppSettings.Instance.Save();
+            await ChangeRootFolderAsync(selectedPath);
+        }
+    }
+}
+```
+
+#### Key Differences
+
+| Feature | WPF | Avalonia |
+|---------|-----|----------|
+| API | `FolderBrowserDialog` | `IStorageProvider.OpenFolderPickerAsync` |
+| Async | No (blocks UI) | Yes (native async) |
+| Return type | `DialogResult` + `SelectedPath` | `IReadOnlyList<IStorageFolder>` |
+| Initial folder | `SelectedPath` property | `SuggestedStartLocation` option |
+| Platform | Windows only | Windows, macOS, Linux |
+
+### Phase 7: PDF Document Provider ✅ COMPLETED
+
+**Goal:** Create cross-platform PDF page count provider
+
+```csharp
+// AvaloniaTests/ChooseMusicWindow.cs
+public class PdfToImageDocumentProvider : IPdfDocumentProvider
+{
+    public Task<int> GetPageCountAsync(string pdfFilePath)
+    {
+        return Task.Run(() =>
+        {
+            // Check for cloud-only files (Windows-specific)
+            var fileInfo = new FileInfo(pdfFilePath);
+            const FileAttributes RecallOnDataAccess = (FileAttributes)0x00400000;
+            const FileAttributes RecallOnOpen = (FileAttributes)0x00040000;
+            
+            var attrs = fileInfo.Attributes;
+            bool isCloudOnly = (attrs & RecallOnDataAccess) == RecallOnDataAccess ||
+                               (attrs & RecallOnOpen) == RecallOnOpen ||
+                               (attrs & FileAttributes.Offline) == FileAttributes.Offline;
+            
+            if (isCloudOnly)
+                return 0;
+            
+            return Conversion.GetPageCount(pdfFilePath);
+        });
+    }
+}
+```
+
+### Phase 8: Touch/Gesture Support ✅ COMPLETED
+
+**Goal:** Port WPF touch manipulation gestures to Avalonia
+
+#### WPF Touch Handling
+
+WPF uses `ManipulationStarting`, `ManipulationDelta`, and `ManipulationInertiaStarting` events:
+
+```csharp
+// WPF - ManipulationDelta for pinch/zoom/pan/rotate
+private void DpPage_ManipulationDelta(object sender, ManipulationDeltaEventArgs e)
+{
+    var deltaManipulation = e.DeltaManipulation;
+    var matrix = ((MatrixTransform)element.RenderTransform).Matrix;
+    
+    // Scale (pinch zoom)
+    matrix.ScaleAt(deltaManipulation.Scale.X, deltaManipulation.Scale.Y, center.X, center.Y);
+    // Rotation
+    matrix.RotateAt(e.DeltaManipulation.Rotation, center.X, center.Y);
+    // Pan
+    matrix.Translate(e.DeltaManipulation.Translation.X, e.DeltaManipulation.Translation.Y);
+    
+    element.RenderTransform = new MatrixTransform(matrix);
+}
+
+// WPF - TouchDown for navigation
+private void DpPage_TouchDown(object sender, TouchEventArgs e)
+{
+    var pos = e.GetTouchPoint(this.dpPage).Position;
+    // Left/right navigation based on tap position
+}
+```
+
+#### Avalonia Gesture Handler
+
+Avalonia doesn't have built-in `ManipulationDelta` events, so we created a custom `GestureHandler` class:
+
+```csharp
+// AvaloniaTests/GestureHandler.cs
+public class GestureHandler
+{
+    private readonly Control _target;
+    private readonly Dictionary<int, PointerPoint> _activePointers = new();
+    
+    public GestureHandler(Control target)
+    {
+        _target = target;
+        
+        // Wire up pointer events for multi-touch
+        _target.PointerPressed += OnPointerPressed;
+        _target.PointerMoved += OnPointerMoved;
+        _target.PointerReleased += OnPointerReleased;
+        _target.PointerWheelChanged += OnPointerWheelChanged;
+    }
+    
+    // Track multiple pointers for pinch-zoom
+    private void OnPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_isGesturing && _activePointers.Count == 2)
+        {
+            ApplyGestureTransform(); // Calculate scale, rotation, translation
+        }
+    }
+    
+    // Ctrl+scroll for zoom
+    private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            var scaleFactor = e.Delta.Y > 0 ? 1.1 : 0.9;
+            // Apply zoom transform
+        }
+    }
+    
+    /// <summary>
+    /// Fired when the user taps to navigate
+    /// </summary>
+    public event EventHandler<NavigationEventArgs>? NavigationRequested;
+    
+    /// <summary>
+    /// If true, gestures are disabled (e.g., when inking is active)
+    /// </summary>
+    public bool IsDisabled { get; set; }
+}
+```
+
+#### Usage in PdfWindow
+
+```csharp
+// AvaloniaTests/PdfWindow.axaml.cs
+private void SetupGestureHandler()
+{
+    _gestureHandler = new GestureHandler(_dpPage)
+    {
+        NumPagesPerView = NumPagesPerView
+    };
+    
+    // Wire up navigation
+    _gestureHandler.NavigationRequested += (s, e) =>
+    {
+        NavigateAsync(e.Delta);
+    };
+    
+    // Wire up double-tap for zoom reset
+    _gestureHandler.DoubleTapped += (s, e) =>
+    {
+        _gestureHandler.ResetTransform();
+    };
+}
+
+// Disable gestures when inking
+private void UpdateGestureHandlerState()
+{
+    _gestureHandler.IsDisabled = 
+        (chkInk0?.IsChecked == true) || 
+        (chkInk1?.IsChecked == true);
+}
+```
+
+#### Feature Mapping
+
+| WPF Feature | Avalonia Implementation | Status |
+|-------------|------------------------|--------|
+| `ManipulationDelta.Scale` | `GestureHandler` with 2-pointer tracking | ✅ |
+| `ManipulationDelta.Translation` | Pan via pointer delta calculation | ✅ |
+| `ManipulationDelta.Rotation` | Angle calculation between pointers | ✅ |
+| `TouchDown` navigation | `PointerReleased` with position check | ✅ |
+| `IsDoubleTap()` | `DoubleTapped` event with distance/time check | ✅ |
+| `MouseWheel` zoom | `PointerWheelChanged` + Ctrl modifier | ✅ |
+| Keyboard navigation | `KeyDown` event handler | ✅ |
+| Inertia | Not implemented (manual if needed) | ⏳ |
+
+---
+
+## Feature Comparison
+
+### Completed Features
+
+| Feature | WPF | Avalonia | Notes |
+|---------|-----|----------|-------|
+| Books Tab | ✅ | ✅ | Thumbnails, filtering, sorting |
+| Favorites Tab | ✅ | ✅ | List with thumbnails |
+| Query Tab | ✅ | ✅ | BrowseControl with columns |
+| PDF Thumbnails | ✅ | ✅ | PDFtoImage rendering |
+| PDF Page Viewing | ✅ | ✅ | PdfWindow with navigation |
+| Multi-volume PDFs | ✅ | ✅ | Via SheetMusicLib |
+| BMK File Reading | ✅ | ✅ | XML and JSON support |
+| Cloud File Detection | ✅ | ✅ | Skip OneDrive placeholders |
+| Settings Persistence | ✅ | ✅ | JSON-based AppSettings |
+| Folder Browser | ✅ | ✅ | StorageProvider API |
+| MRU Folders | ✅ | ✅ | Integrated with AppSettings |
+| Touch Gestures | ✅ | ✅ | GestureHandler class |
+| Pinch-to-Zoom | ✅ | ✅ | Multi-pointer tracking |
+| Touch Navigation | ✅ | ✅ | Tap left/right to navigate |
+| Mouse Wheel Zoom | ✅ | ✅ | Ctrl+scroll |
+| Keyboard Navigation | ✅ | ✅ | Arrow keys, Home/End |
+| Ink Annotations | ✅ | ✅ | InkCanvasControl |
+
+### Pending Features
+
+| Feature | WPF | Avalonia | Notes |
+|---------|-----|----------|-------|
+| Inertia/Flick | ✅ | ⏳ | Momentum after gesture |
+| Playlists | ⏳ | ⏳ | Placeholder in both |
+
+---
+
+## API Migration Reference
+
+### PDF Document Loading
+
+| Operation | WPF (Windows.Data.Pdf) | Avalonia (PDFtoImage) |
+|-----------|------------------------|----------------------|
+| Open PDF | `PdfDocument.LoadFromFileAsync(file)` | `File.OpenRead(path)` |
+| Get Page | `pdfDoc.GetPage(pageNo)` | N/A (render directly) |
+| Render | `page.RenderToStreamAsync(stream)` | `Conversion.ToImage(stream, page)` |
+| Page Count | `pdfDoc.PageCount` | `Conversion.GetPageCount(path)` |
+
+### Image Types
+
+| Operation | WPF | Avalonia |
+|-----------|-----|----------|
+| Bitmap type | `BitmapImage` | `Avalonia.Media.Imaging.Bitmap` |
+| Create from stream | `bmi.StreamSource = stream` | `new Bitmap(stream)` |
+| Image control | `System.Windows.Controls.Image` | `Avalonia.Controls.Image` |
+
+### Control Types
+
+| WPF | Avalonia | Notes |
+|-----|----------|-------|
+| `Window` | `Window` | Same |
+| `TabControl` | `TabControl` | Same |
+| `ListBox` | `ListBox` | Same |
+| `ComboBox` | `ComboBox` | Same |
+| `Button` | `Button` | Same |
+| `TextBlock` | `TextBlock` | Same |
+| `StackPanel` | `StackPanel` | Same |
+| `Grid` | `Grid` | Same |
+| `TreeView` | `TreeView` | Same |
+| `ContextMenu` | `ContextMenu` | Same |
+| `FolderBrowserDialog` | `IStorageProvider.OpenFolderPickerAsync` | Async, cross-platform |
+| `Properties.Settings` | `AppSettings` (JSON) | Cross-platform |
+| `ContentControl` | Use `Tag` property | Pattern change |
+
+---
+
+## Testing Strategy
+
+### Unit Tests (SheetMusicLib)
+- BMK file parsing (XML and JSON)
+- TOC entry handling
+- Volume info management
+- Path calculations
+
+### Integration Tests (AvaloniaTests)
+- UI component rendering
+- PDF thumbnail generation
+- Filter and sort operations
+- Tab navigation
+
+### Manual Tests
+- Cross-platform execution (Windows, macOS, Linux)
+- Cloud file handling
+- Large library performance
+
+---
+
+## Build Configuration
+
+### SheetMusicLib (Portable)
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+</Project>
+```
+
+### AvaloniaTests (Cross-platform)
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SheetMusicLib\SheetMusicLib.csproj" />
+    <PackageReference Include="Avalonia" Version="11.3.9" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.9" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.9" />
+    <PackageReference Include="PDFtoImage" Version="5.0.0" />
+    <PackageReference Include="SkiaSharp" Version="3.116.1" />
+  </ItemGroup>
+</Project>
+```
+
+### SheetMusicViewer (Legacy WPF)
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SheetMusicLib\SheetMusicLib.csproj" />
+    <PackageReference Include="Microsoft.Windows.Compatibility" Version="8.0.11" />
+  </ItemGroup>
+</Project>
+```
+
+---
+
+## Performance Considerations
+
+### Parallel BMK Loading
+The new `PdfMetaDataCore` supports parallel loading of BMK files:
+
+```csharp
+// SheetMusicLib/PdfMetaDataCore.cs
+public static async Task<(List<PdfMetaDataReadResult>, List<string>)> 
+    LoadAllPdfMetaDataFromDiskAsync(
+        string rootMusicFolder,
+        IPdfDocumentProvider pdfDocumentProvider,
+        IExceptionHandler exceptionHandler = null,
+        bool useParallelLoading = true)  // Enable parallel loading
+```
+
+### Thumbnail Caching
+Thumbnails are cached on the metadata object to avoid re-rendering:
+
+```csharp
+// SheetMusicLib/PdfMetaDataCore.cs
+public async Task<T> GetOrCreateThumbnailAsync<T>(Func<Task<T>> thumbnailFactory)
+{
+    if (ThumbnailCache is T cached)
+        return cached;
+    
+    var thumbnail = await thumbnailFactory();
+    ThumbnailCache = thumbnail;
+    return thumbnail;
+}
+```
+
+### UI Virtualization
+The Avalonia `BrowseControl` uses a virtualized `ListBox` with on-demand container customization to handle large datasets efficiently.
+
+---
+
+## Known Issues and Workarounds
+
+### 1. Avalonia ListBox Item Styling
+Default ListBoxItem has padding that affects item appearance:
+
+```csharp
+// Remove default padding
+_lbBooks.ItemContainerTheme = new ControlTheme(typeof(ListBoxItem))
+{
+    Setters =
+    {
+        new Setter(ListBoxItem.PaddingProperty, new Thickness(0)),
+        new Setter(ListBoxItem.MarginProperty, new Thickness(0)),
+    }
+};
+```
+
+### 2. Context Menu on Custom Containers
+When using custom Grid containers in ListBox, context menu must be attached to the ListBox, not individual items.
+
+### 3. Cloud File Attributes
+Windows-specific file attributes for OneDrive detection may not work on other platforms. Consider platform-specific implementations.
+
+---
+
+## Next Steps
+
+1. **Add Inertia Support** - Implement momentum/flick scrolling after gesture ends
+2. **Implement Playlists** - Port playlist functionality
+3. **Create macOS/Linux builds** - Test cross-platform deployment
+4. **Performance optimization** - Profile large library loading
+
+---
+
+## Files Created/Modified
+
+### SheetMusicLib (Cross-platform core)
+
+| File | Description |
+|------|-------------|
+| `AppSettings.cs` | JSON-based settings with MRU support |
+| `PdfMetaDataCore.cs` | Platform-agnostic metadata loading |
+| `IPdfDocumentProvider.cs` | Interface for PDF operations |
+
+### AvaloniaTests (Avalonia implementation)
+
+| File | Description |
+|------|-------------|
+| `ChooseMusicWindow.cs` | Book/song chooser with folder picker |
+| `BrowseControl.cs` | Virtualized ListView with sorting/filtering |
+| `PdfToImageDocumentProvider` | PDFtoImage-based page count provider |
+| `GestureHandler.cs` | Multi-touch gesture support (pinch/zoom/pan) |
+| `PdfWindow.axaml.cs` | PDF viewer with gesture and navigation support |
+| `InkCanvasControl.cs` | SkiaSharp-based ink annotations |
+
+---
+
+## References
+
+- [Avalonia Documentation](https://docs.avaloniaui.net/)
+- [Avalonia StorageProvider](https://docs.avaloniaui.net/docs/concepts/services/storage-provider/)
+- [PDFtoImage NuGet](https://www.nuget.org/packages/PDFtoImage)
+- [SkiaSharp](https://github.com/mono/SkiaSharp)
+- [WPF to Avalonia Migration Guide](https://docs.avaloniaui.net/docs/get-started/wpf)

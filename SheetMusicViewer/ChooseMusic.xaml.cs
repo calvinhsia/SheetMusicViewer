@@ -11,6 +11,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using SheetMusicLib;
 
 namespace SheetMusicViewer
 {
@@ -89,8 +90,39 @@ namespace SheetMusicViewer
                     ActivateTab(tabItemHeader);
                     et.Handled = true;
                 };
+            
+            // Add keyboard shortcuts for tab navigation
+            this.KeyDown += ChooseMusic_KeyDown;
+            
             doneLoading = true;
         }
+
+        private void ChooseMusic_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyboardDevice.Modifiers == ModifierKeys.Alt)
+            {
+                switch (e.SystemKey)
+                {
+                    case Key.Q:
+                        ActivateTab("_Query");
+                        e.Handled = true;
+                        break;
+                    case Key.B:
+                        ActivateTab("_Books");
+                        e.Handled = true;
+                        break;
+                    case Key.V:
+                        ActivateTab("Fa_vorites");
+                        e.Handled = true;
+                        break;
+                    case Key.P:
+                        ActivateTab("_Playlists");
+                        e.Handled = true;
+                        break;
+                }
+            }
+        }
+
         private void CboRootFolder_DropDownOpened(object sender, EventArgs e)
         {
             if (this.cboRootFolder.Items.Count == 1)
@@ -563,7 +595,7 @@ namespace SheetMusicViewer
         }
         private void WrapPanel_ManipulationDelta(object sender, ManipulationDeltaEventArgs e)
         {
-            //this just gets the source. 
+            //thisjust gets the source. 
             // I cast it to FE because I wanted to use ActualWidth for Center. You could try RenderSize as alternate
             if (e.Source is FrameworkElement element)
             {
@@ -574,7 +606,7 @@ namespace SheetMusicViewer
 
                 var deltaManipulation = e.DeltaManipulation;
                 var matrix = ((MatrixTransform)element.RenderTransform).Matrix;
-                // find the old center; arguaby this could be cached 
+                // find the old center; arguably this could be cached 
                 Point center = new(element.ActualWidth / 2, element.ActualHeight / 2);
                 // transform it to take into account transforms from previous manipulations 
                 center = matrix.Transform(center);

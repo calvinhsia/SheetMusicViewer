@@ -1,0 +1,504 @@
+%PDF-1.4
+%âãÏÓ
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R 6 0 R 7 0 R 8 0 R 9 0 R 10 0 R 11 0 R] /Count 9 >>
+endobj
+21 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+22 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R
+/Resources << /Font << /F1 21 0 R /F2 22 0 R >> >>
+/MediaBox [0 0 612 792]
+/Contents 12 0 R >>
+endobj
+12 0 obj
+<< /Length 694 >>
+stream
+BT
+/F2 22 Tf
+72 720 Td
+(Welcome to SheetMusicViewer!) Tj
+/F1 11 Tf
+0 -28 Td
+() Tj
+0 -15 Td
+(A cross-platform PDF sheet music viewer) Tj
+0 -15 Td
+(by Calvin Hsia \(2019, updated 2025\)) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(This sample PDF will help you learn) Tj
+0 -15 Td
+(how to use the application.) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(Features:) Tj
+0 -15 Td
+(  - Display 1 or 2 pages at a time) Tj
+0 -15 Td
+(  - Mark pages as Favorites) Tj
+0 -15 Td
+(  - Add ink annotations with stylus/finger) Tj
+0 -15 Td
+(  - Table of Contents support) Tj
+0 -15 Td
+(  - Supports multi-volume PDF sets) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(Navigate to the next page to continue...) Tj
+0 -15 Td
+ET
+endstream
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R
+/Resources << /Font << /F1 21 0 R /F2 22 0 R >> >>
+/MediaBox [0 0 612 792]
+/Contents 13 0 R >>
+endobj
+13 0 obj
+<< /Length 770 >>
+stream
+BT
+/F2 22 Tf
+72 720 Td
+(Getting Started) Tj
+/F1 11 Tf
+0 -28 Td
+() Tj
+0 -15 Td
+(To use your own PDF sheet music:) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(1. Run the program and choose a path to a) Tj
+0 -15 Td
+(   root folder containing PDF music files.) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(2. PDFs can contain 1-N pages.) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(3. The PDFs are never altered by the program.) Tj
+0 -15 Td
+(   All auxiliary data \(TOC, Favorites, Inking,) Tj
+0 -15 Td
+(   LastPageNumberViewed\) is stored in JSON files.) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(4. The program needs write permission to write) Tj
+0 -15 Td
+(   the JSON metadata files alongside your PDFs.) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(Press Alt+C to open the Music Chooser dialog.) Tj
+0 -15 Td
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R
+/Resources << /Font << /F1 21 0 R /F2 22 0 R >> >>
+/MediaBox [0 0 612 792]
+/Contents 14 0 R >>
+endobj
+14 0 obj
+<< /Length 822 >>
+stream
+BT
+/F2 22 Tf
+72 720 Td
+(Multi-Volume PDF Support) Tj
+/F1 11 Tf
+0 -28 Td
+() Tj
+0 -15 Td
+(Large books can be scanned to multiple PDFs:) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(NAMING CONVENTION:) Tj
+0 -15 Td
+(  book.pdf  \(or book0.pdf\) - first volume) Tj
+0 -15 Td
+(  book1.pdf               - second volume) Tj
+0 -15 Td
+(  book1a.pdf              - insert after book1) Tj
+0 -15 Td
+(  book2.pdf               - third volume) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(All volumes with same root name are treated) Tj
+0 -15 Td
+(as one continuous book!) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(Example: SonatenI.pdf and SonatenI1.pdf form) Tj
+0 -15 Td
+(one book, while SonatenII.pdf is separate.) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(This allows rescanning pages without) Tj
+0 -15 Td
+(renumbering subsequent volumes.) Tj
+0 -15 Td
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R
+/Resources << /Font << /F1 21 0 R /F2 22 0 R >> >>
+/MediaBox [0 0 612 792]
+/Contents 15 0 R >>
+endobj
+15 0 obj
+<< /Length 802 >>
+stream
+BT
+/F2 22 Tf
+72 720 Td
+(Singles Folders) Tj
+/F1 11 Tf
+0 -28 Td
+() Tj
+0 -15 Td
+(A subfolder ending in 'Singles' \(like) Tj
+0 -15 Td
+('GershwinSingles'\) treats each PDF as a) Tj
+0 -15 Td
+(single song with possibly multiple pages.) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(SINGLES FOLDER FEATURES:) Tj
+0 -15 Td
+(  - Maintained in alphabetical order) Tj
+0 -15 Td
+(  - First page of first song is the icon) Tj
+0 -15 Td
+(  - Dynamically updates as items are) Tj
+0 -15 Td
+(    added, removed, or renamed) Tj
+0 -15 Td
+(  - TOC entries auto-adjust) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(A subfolder called 'Hidden' will not) Tj
+0 -15 Td
+(be searched.) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(TIP: Create a custom PDF title page that) Tj
+0 -15 Td
+(sorts first alphabetically for the icon.) Tj
+0 -15 Td
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R
+/Resources << /Font << /F1 21 0 R /F2 22 0 R >> >>
+/MediaBox [0 0 612 792]
+/Contents 16 0 R >>
+endobj
+16 0 obj
+<< /Length 763 >>
+stream
+BT
+/F2 22 Tf
+72 720 Td
+(Display Modes & Navigation) Tj
+/F1 11 Tf
+0 -28 Td
+() Tj
+0 -15 Td
+(TWO DISPLAY MODES:) Tj
+0 -15 Td
+(  - Single page per screen) Tj
+0 -15 Td
+(  - Two pages \(side by side\) per screen) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(NAVIGATION:) Tj
+0 -15 Td
+(  - Thumb arrows: Move by screenful) Tj
+0 -15 Td
+(    \(or jump to next/prev favorite\)) Tj
+0 -15 Td
+(  - Arrow keys: Move by 1 screenful) Tj
+0 -15 Td
+(  - Bottom quarter: Tap to turn pages) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(IN 2-PAGE MODE:) Tj
+0 -15 Td
+(  Bottom is divided into 4 quarters.) Tj
+0 -15 Td
+(  Outer quarters: advance 2 pages) Tj
+0 -15 Td
+(  Inner quarters: advance 1 page) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(Top 3/4: Zoom/pan with two fingers) Tj
+0 -15 Td
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R
+/Resources << /Font << /F1 21 0 R /F2 22 0 R >> >>
+/MediaBox [0 0 612 792]
+/Contents 17 0 R >>
+endobj
+17 0 obj
+<< /Length 765 >>
+stream
+BT
+/F2 22 Tf
+72 720 Td
+(Inking & Annotations) Tj
+/F1 11 Tf
+0 -28 Td
+() Tj
+0 -15 Td
+(Inking is off by default.) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(TO INK A PAGE:) Tj
+0 -15 Td
+(1. Click the Ink checkbox for the page) Tj
+0 -15 Td
+(   \(in 2-page mode, each page has its own\)) Tj
+0 -15 Td
+(2. Draw with mouse, pen, or finger) Tj
+0 -15 Td
+(3. Right-click for color options:) Tj
+0 -15 Td
+(   - Black pen) Tj
+0 -15 Td
+(   - Red pen) Tj
+0 -15 Td
+(   - Yellow highlighter) Tj
+0 -15 Td
+(4. Click Ink checkbox again to save) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(TIP: Zoom in before inking for accuracy) Tj
+0 -15 Td
+(when correcting typos on the musical staff.) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(All ink is stored in the JSON metadata file.) Tj
+0 -15 Td
+ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R
+/Resources << /Font << /F1 21 0 R /F2 22 0 R >> >>
+/MediaBox [0 0 612 792]
+/Contents 18 0 R >>
+endobj
+18 0 obj
+<< /Length 760 >>
+stream
+BT
+/F2 22 Tf
+72 720 Td
+(Performance & Caching) Tj
+/F1 11 Tf
+0 -28 Td
+() Tj
+0 -15 Td
+(Rendering PDF pages takes time. The app) Tj
+0 -15 Td
+(prefetches and caches pages for instant) Tj
+0 -15 Td
+(page turns!) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(SINGLE PAGE MODE \(showing page 5\):) Tj
+0 -15 Td
+(  Prefetched: pages 4, 6, 7) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(DOUBLE PAGE MODE \(showing 5,6\):) Tj
+0 -15 Td
+(  Prefetched: pages 3, 4, 7, 8) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(For multi-volume sets, volumes are read) Tj
+0 -15 Td
+(asynchronously as needed.) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(NOTE: Some PDFs consume lots of memory.) Tj
+0 -15 Td
+(If so, print to 'Microsoft Print to PDF') Tj
+0 -15 Td
+(or use an online PDF resizer tool.) Tj
+0 -15 Td
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R
+/Resources << /Font << /F1 21 0 R /F2 22 0 R >> >>
+/MediaBox [0 0 612 792]
+/Contents 19 0 R >>
+endobj
+19 0 obj
+<< /Length 755 >>
+stream
+BT
+/F2 22 Tf
+72 720 Td
+(PDF Table of Contents) Tj
+/F1 11 Tf
+0 -28 Td
+() Tj
+0 -15 Td
+(Edit the TOC by clicking the thumbnail) Tj
+0 -15 Td
+(to the right of the slider, or press Alt+E.) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(TOC FEATURES:) Tj
+0 -15 Td
+(  - Import/export to clipboard \(Excel format\)) Tj
+0 -15 Td
+(  - Add composer, date, notes) Tj
+0 -15 Td
+(  - OCR a scanned TOC for import) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(PAGE NUMBER OFFSET:) Tj
+0 -15 Td
+(Physical page numbers in scanned books may) Tj
+0 -15 Td
+(not match PDF page numbers \(due to cover) Tj
+0 -15 Td
+(pages, intros, etc.\).) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(PageNumberOffset maps between them so the) Tj
+0 -15 Td
+(imported TOC doesn't need adjustment.) Tj
+0 -15 Td
+ET
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R
+/Resources << /Font << /F1 21 0 R /F2 22 0 R >> >>
+/MediaBox [0 0 612 792]
+/Contents 20 0 R >>
+endobj
+20 0 obj
+<< /Length 738 >>
+stream
+BT
+/F2 22 Tf
+72 720 Td
+(About SheetMusicViewer) Tj
+/F1 11 Tf
+0 -28 Td
+() Tj
+0 -15 Td
+(Created by Calvin Hsia) Tj
+0 -15 Td
+(Email: calvin_hsia@alum.mit.edu) Tj
+0 -15 Td
+(Website: http://calvinhsia.com) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(I have hundreds of piano music books) Tj
+0 -15 Td
+(collected over decades, kept on OneDrive.) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(I digitized 30,000+ pages of music using) Tj
+0 -15 Td
+(a Xerox WorkCentre scanner.) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(I really love Ragtime! There's something) Tj
+0 -15 Td
+(so binary about it: powers of 2, 16 measures) Tj
+0 -15 Td
+(per verse, 2/4 time, syncopation.) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(Enjoy your music!) Tj
+0 -15 Td
+(- Calvin) Tj
+0 -15 Td
+ET
+endstream
+endobj
+xref
+0 23
+0000000000 65535 f 
+0000000009 00000 n 
+0000000159 00000 n 
+0000000309 00000 n 
+0000000459 00000 n 
+0000000609 00000 n 
+0000000759 00000 n 
+0000000909 00000 n 
+0000001059 00000 n 
+0000001209 00000 n 
+0000001359 00000 n 
+0000001509 00000 n 
+0000001659 00000 n 
+0000001809 00000 n 
+0000001959 00000 n 
+0000002109 00000 n 
+0000002259 00000 n 
+0000002409 00000 n 
+0000002559 00000 n 
+0000002709 00000 n 
+0000002859 00000 n 
+0000003009 00000 n 
+0000003159 00000 n 
+trailer
+<< /Size 23 /Root 1 0 R >>
+startxref
+3309
+%%EOF
