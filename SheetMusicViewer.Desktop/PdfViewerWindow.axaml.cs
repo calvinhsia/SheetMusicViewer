@@ -274,10 +274,16 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                     provider,
                     useParallelLoading: true);
                 
-                // Open the first (and only) sample PDF
+                // Find and open the GettingStarted PDF specifically (for first-time users)
                 if (_lstPdfMetaFileData.Count > 0)
                 {
-                    await LoadPdfFileAndShowAsync(_lstPdfMetaFileData[0], 0);
+                    // Look for GettingStarted.pdf first
+                    var gettingStartedPdf = _lstPdfMetaFileData.FirstOrDefault(p => 
+                        p.GetFullPathFileFromVolno(0)?.Contains("GettingStarted", StringComparison.OrdinalIgnoreCase) == true);
+                    
+                    // Fall back to first PDF if GettingStarted not found
+                    var pdfToLoad = gettingStartedPdf ?? _lstPdfMetaFileData[0];
+                    await LoadPdfFileAndShowAsync(pdfToLoad, 0);
                 }
             }
             else
