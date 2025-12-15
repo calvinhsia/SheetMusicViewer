@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PdfMetaData xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+ <lstVolInfo>
+  <PdfVolumeInfo>
+   <NPages>100</NPages>
+   <Rotation>0</Rotation>
+   <FileName>TestBook.pdf</FileName>
+  </PdfVolumeInfo>
+ </lstVolInfo>
+ <LastPageNo>15</LastPageNo>
+ <PageNumberOffset>0</PageNumberOffset>
+ <LstInkStrokes />
+ <Favorites>
+  <Favorite>
+   <Pageno>10</Pageno>
+   <FavoriteName>My Favorite Page</FavoriteName>
+  </Favorite>
+  <Favorite>
+   <Pageno>25</Pageno>
+   <FavoriteName>Another Favorite</FavoriteName>
+  </Favorite>
+ </Favorites>
+ <lstTocEntries />
+</PdfMetaData>

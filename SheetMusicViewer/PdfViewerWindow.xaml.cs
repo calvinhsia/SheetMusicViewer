@@ -24,6 +24,7 @@ using System.Windows.Threading;
 using Windows.Data.Pdf;
 using Windows.Storage;
 using Windows.Storage.Streams;
+using SheetMusicLib;
 
 namespace SheetMusicViewer
 {
@@ -32,6 +33,8 @@ namespace SheetMusicViewer
         public const string MyAppName = "MyPdfViewer";
         public event PropertyChangedEventHandler PropertyChanged;
         // zoom gesture: https://stackoverflow.com/questions/25861840/zoom-pinch-detection-in-a-wpf-usercontrol
+
+        public ICommand ChooserCommand { get; private set; }
 
         //public static readonly RoutedEvent PdfExceptionEvent =
         //    EventManager.RegisterRoutedEvent("PdfExceptionEvent",
@@ -107,13 +110,16 @@ namespace SheetMusicViewer
             get { return _fShow2Pages; }
             set
             {
-                _fShow2Pages = value;
-                chkFav1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
-                chkInk1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
-                txtDesc1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
-                this.Dispatcher.InvokeAsync(async () => await ShowPageAsync(CurrentPageNumber, ClearCache: true, resetRenderTransform: true));
-                OnMyPropertyChanged();
-                OnMyPropertyChanged(nameof(NumPagesPerView));
+                if (_fShow2Pages != value)
+                {
+                    _fShow2Pages = value;
+                    chkFav1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
+                    chkInk1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
+                    txtDesc1.Visibility = value ? Visibility.Visible : Visibility.Hidden;
+                    this.Dispatcher.InvokeAsync(async () => await ShowPageAsync(CurrentPageNumber, ClearCache: true, resetRenderTransform: true));
+                    OnMyPropertyChanged();
+                    OnMyPropertyChanged(nameof(NumPagesPerView));
+                }
             }
         }
         public int NumPagesPerView => _fShow2Pages ? 2 : 1;
@@ -130,6 +136,8 @@ namespace SheetMusicViewer
         internal MyInkCanvas[] inkCanvas = new MyInkCanvas[2];
 
         internal PageCache _pageCache;
+        internal IMessageBoxService _messageBoxService;
+
         public PdfViewerWindow(string rootFolderForTesting, bool UseSettings)
         {
             this._RootMusicFolder = rootFolderForTesting;
@@ -146,7 +154,12 @@ namespace SheetMusicViewer
             InitializeComponent();
             s_pdfViewerWindow = this;
             _pageCache = new PageCache(this);
+            _messageBoxService ??= new MessageBoxService(); // Use injected service or default
             this.DataContext = this;
+
+            // Initialize the ChooserCommand
+            ChooserCommand = new RelayCommand(async _ => await ChooseMusic(), _ => true);
+
             if (_UseSettings)
             {
                 this.Width = Properties.Settings.Default.MainWindowSize.Width;
@@ -170,7 +183,7 @@ namespace SheetMusicViewer
                 var logfile = System.IO.Path.Combine(_RootMusicFolder, $"{MyAppName}.log");
                 var dt = DateTime.Now.ToString("MM/dd/yy hh:mm:ss");
                 File.AppendAllText(logfile, $"\r\n{dt} {Environment.GetEnvironmentVariable("COMPUTERNAME")} {e.Message} {e.ErrorException} ");
-                MessageBox.Show(e.Message + "\r\r" + e.ErrorException.ToString());
+                _messageBoxService.Show(e.Message + "\r\r" + e.ErrorException.ToString());
             };
 
 
@@ -229,7 +242,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 23 00afef50 0fea6087 Windows_Data_Pdf!Windows::Data::Pdf::CPdfStatics::~CPdfStatics+0xc6
 24 00afef60 77039272 Windows_Data_Pdf!std::_Ref_count_base::_Decref+0x27 [internal\sdk\inc\ucrt\stl120\memory @ 808] 
 25 00afef9c 7703917e ucrtbase!<lambda_f03950bc5685219e0bcd2087efbe011e>::operator()+0xc2 [minkernel\crts\ucrt\src\appcrt\startup\onexit.cpp @ 206] 
-26 00afefd0 7703914a ucrtbase!__crt_seh_guarded_call<int>::operator()<<lambda_69a2805e680e0e292e8ba93315fe43a8>,<lambda_f03950bc5685219e0bcd2087efbe011e> &,<lambda_03fcd07e894ec930e3f35da366ca99d6> >+0x30 [minkernel\crts\ucrt\devdiv\vcruntime\inc\internal_shared.h @ 204] 
+26 00aff0d0 7703914a ucrtbase!__crt_seh_guarded_call<int>::operator()<<lambda_69a2805e680e0e292e8ba93315fe43a8>,<lambda_f03950bc5685219e0bcd2087efbe011e> &,<lambda_03fcd07e894ec930e3f35da366ca99d6> >+0x30 [minkernel\crts\ucrt\devdiv\vcruntime\inc\internal_shared.h @ 204] 
 27 (Inline) -------- ucrtbase!__acrt_lock_and_call+0x17 [minkernel\crts\ucrt\inc\corecrt_internal.h @ 970] 
 28 00afeff0 77037397 ucrtbase!_execute_onexit_table+0x2a [minkernel\crts\ucrt\src\appcrt\startup\onexit.cpp @ 231] 
 29 00aff028 0ff1ec14 ucrtbase!__crt_state_management::wrapped_invoke<int (__cdecl*)(_onexit_table_t *),_onexit_table_t *,int>+0x56 [minkernel\crts\ucrt\inc\corecrt_internal_state_isolation.h @ 362] 
@@ -283,7 +296,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 else
                 {
                     (lstPdfMetaFileData, lstFolders) = await PdfMetaData.LoadAllPdfMetaDataFromDiskAsync(_RootMusicFolder);
-                    this.btnChooser.IsEnabled = true;
+                    this.mnuChooser.IsEnabled = true;
                     var lastPdfMetaData = lstPdfMetaFileData.Where(p => p.GetFullPathFileFromVolno(volNo: 0, MakeRelative: true) == lastPdfOpen).FirstOrDefault();
                     if (lastPdfMetaData != null)
                     {
@@ -513,7 +526,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                 this.dpPage.Children.Clear();
 
                 //RaiseEvent(new PdfExceptionEventAgs(PdfExceptionEvent, this, null));
-                System.Windows.Forms.MessageBox.Show($"Exception showing {currentPdfMetaData.GetFullPathFileFromPageNo(pageNo)}\r\n {ex}");
+                _messageBoxService.Show($"Exception showing {currentPdfMetaData.GetFullPathFileFromPageNo(pageNo)}\r\n {ex}");
                 OnException($"Showing {currentPdfMetaData.GetFullPathFileFromPageNo(pageNo)}", ex);
                 CloseCurrentPdfFile();
             }
@@ -525,6 +538,13 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             base.OnPreviewKeyDown(e);
             var elmWithFocus = Keyboard.FocusedElement;
             var isCtrlKeyDown = e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Control);
+
+            // Don't handle arrow keys if a menu is open - let the menu system handle it
+            if (elmWithFocus is MenuItem || (elmWithFocus is FrameworkElement fe && fe.TemplatedParent is MenuItem))
+            {
+                return;
+            }
+
             if (isCtrlKeyDown || elmWithFocus is not TextBox && elmWithFocus is not Slider) // tbx and slider should get the keystroke and process it 
             {
                 switch (e.Key)
@@ -787,7 +807,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
             // if we're inking, we don't want to be zooming too... makes a messs
             if (chkInk0.IsChecked == false && chkInk1.IsChecked == false)
             {
-                //this just gets the source. 
+                //thisjust gets the source. 
                 // I cast it to FE because I wanted to use ActualWidth for Center. You could try RenderSize as alternate
                 if (e.Source is FrameworkElement element)
                 {
@@ -798,7 +818,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
 
                     var deltaManipulation = e.DeltaManipulation;
                     var matrix = ((MatrixTransform)element.RenderTransform).Matrix;
-                    // find the old center; arguaby this could be cached 
+                    // find the old center; arguably this could be cached 
                     Point center = new(e.ManipulationOrigin.X, e.ManipulationOrigin.Y); // new Point(element.ActualWidth / 2, element.ActualHeight / 2);
                     // transform it to take into account transforms from previous manipulations 
                     center = matrix.Transform(center);
@@ -845,7 +865,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         async Task<bool> ChooseMusic()
         {
             var retval = false;
-            this.btnChooser.IsEnabled = false;
+            this.mnuChooser.IsEnabled = false;
             var win = new ChooseMusic(this);
             if (win.ShowDialog() == true)
             {
@@ -860,7 +880,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
                     CloseCurrentPdfFile();
                 }
             }
-            this.btnChooser.IsEnabled = true;
+            this.mnuChooser.IsEnabled = true;
             return retval;
 
         }
@@ -873,7 +893,52 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         {
             this.Close();
         }
-        async void BtnInvCache_Click(object sender, RoutedEventArgs e) {
+        void BtnAbout_Click(object sender, RoutedEventArgs e)
+        {
+            var aboutMessage = $"{MyAppName}\n\n" +
+                              $"Branch: {BuildInfo.GitBranch}\n" +
+                              $"Build Time: {BuildInfo.BuildTime}";
+            _messageBoxService.Show(aboutMessage, "About", MessageBoxButton.OK);
+        }
+
+        async void BtnConvertInkToJson_Click(object sender, RoutedEventArgs e)
+        {
+            TouchCount++;
+
+            try
+            {
+                var result = _messageBoxService.Show(
+                    "This will convert all BMK files from XML format to JSON format.\n\n" +
+                    "The original XML files will be backed up with .xml.backup extension.\n\n" +
+                    "Continue?",
+                    "Convert BMK Files to JSON",
+                    MessageBoxButton.YesNo);
+
+                if (result != MessageBoxResult.Yes)
+                    return;
+
+                // Convert all BMK files to JSON format
+                var (total, converted) = BmkJsonConverter.ConvertAllBmksToJson(lstPdfMetaFileData);
+
+                // Count how many had ink strokes
+                int bmksWithInk = lstPdfMetaFileData.Count(m => m.dictInkStrokes.Count > 0);
+
+                // Show results
+                var message = $"Conversion complete!\n\n" +
+                             $"Total BMKs processed: {total}\n" +
+                             $"BMKs converted to JSON: {converted}\n" +
+                             $"BMKs with ink annotations: {bmksWithInk}\n\n" +
+                             $"Original XML files backed up as *.bmk.xml.backup";
+                _messageBoxService.Show(message, "BMK Conversion Results", MessageBoxButton.OK);
+            }
+            catch (Exception ex)
+            {
+                _messageBoxService.Show($"Error converting BMK files:\n\n{ex.Message}", "Conversion Error", MessageBoxButton.OK);
+            }
+        }
+
+        async void BtnInvCache_Click(object sender, RoutedEventArgs e)
+        {
             //Bug 43106054: PDF RenderToStreamAsync produces different results with same page https://microsoft.visualstudio.com/OS/_workitems/edit/43106054/  
             await ShowPageAsync(CurrentPageNumber, ClearCache: true, forceRedraw: true, resetRenderTransform: true);
         }
@@ -1029,7 +1094,7 @@ WARNING: Stack unwind information not available. Following frames may be wrong.
         void OnSliderValueChanged(object sender, RoutedEventArgs e)
         {
             // now get the title of the page
-            var title =$"{CurrentPageNumber} {currentPdfMetaData?.GetDescription(CurrentPageNumber)}";
+            var title = $"{CurrentPageNumber} {currentPdfMetaData?.GetDescription(CurrentPageNumber)}";
             tbSliderPopup.Text = title;
             if (!_DisableSliderValueChanged)
             {

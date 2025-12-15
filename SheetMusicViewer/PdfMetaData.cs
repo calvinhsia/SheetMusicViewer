@@ -14,9 +14,46 @@ using System.Xml.Serialization;
 using Windows.Data.Pdf;
 using Windows.Storage;
 using Windows.Storage.Streams;
+using SheetMusicLib;
 
 namespace SheetMusicViewer
 {
+    // Re-export types from SheetMusicLib for backward compatibility
+    // These using directives make the types available without fully qualifying
+    using TOCEntry = SheetMusicLib.TOCEntry;
+    using Favorite = SheetMusicLib.Favorite;
+    using InkStrokeClass = SheetMusicLib.InkStrokeClass;
+    using PageNoBaseClass = SheetMusicLib.PageNoBaseClass;
+    using TocEntryComparer = SheetMusicLib.TocEntryComparer;
+    using PageNoBaseClassComparer = SheetMusicLib.PageNoBaseClassComparer;
+
+    /// <summary>
+    /// WPF implementation of IPdfDocumentProvider using Windows.Data.Pdf
+    /// </summary>
+    public class WpfPdfDocumentProvider : IPdfDocumentProvider
+    {
+        public static readonly WpfPdfDocumentProvider Instance = new();
+
+        public async Task<int> GetPageCountAsync(string pdfFilePath)
+        {
+            var pdfDoc = await PdfMetaData.GetPdfDocumentForFileAsync(pdfFilePath);
+            return (int)pdfDoc.PageCount;
+        }
+    }
+
+    /// <summary>
+    /// WPF implementation of IExceptionHandler
+    /// </summary>
+    public class WpfExceptionHandler : IExceptionHandler
+    {
+        public static readonly WpfExceptionHandler Instance = new();
+
+        public void OnException(string context, Exception ex)
+        {
+            PdfViewerWindow.s_pdfViewerWindow?.OnException(context, ex);
+        }
+    }
+
     /// <summary>
     /// The serialized info for a PDF is in a file with the same name as the PDF with the extension changed to ".bmk"
     /// Some PDFs are a series of scanned docs, numbered, e.g. 0,1,2,3...
@@ -266,6 +303,13 @@ namespace SheetMusicViewer
                         var retval = false;
                         try
                         {
+                            // Skip macOS metadata files
+                            var fileName = Path.GetFileName(curFullPathFile);
+                            if (fileName.StartsWith("._") || curFullPathFile.Contains("__MACOSX"))
+                            {
+                                return true; // Skip but don't treat as error
+                            }
+                            
                             curmetadata = await PdfMetaData.ReadPdfMetaDataAsync(curFullPathFile);
                             if (curmetadata != null)
                             {
@@ -275,7 +319,7 @@ namespace SheetMusicViewer
                         }
                         catch (Exception ex)
                         {
-                            PdfViewerWindow.s_pdfViewerWindow.OnException($"Reading {curFullPathFile}", ex);
+                            PdfViewerWindow.s_pdfViewerWindow?.OnException($"Reading {curFullPathFile}", ex);
                         }
                         return retval;
                     }
@@ -418,7 +462,7 @@ namespace SheetMusicViewer
                             {
                                 lastFile += " " + ex.Data["Filename"];
                             }
-                            PdfViewerWindow.s_pdfViewerWindow.OnException($"Exception reading files {curPath} near {lastFile}", ex);
+                            PdfViewerWindow.s_pdfViewerWindow?.OnException($"Exception reading files {curPath} near {lastFile}", ex);
                         }
                         SaveMetaData(); // last one in dir
                         foreach (var dir in Directory.EnumerateDirectories(curPath))
@@ -608,74 +652,58 @@ namespace SheetMusicViewer
         }
 
         public string PdfBmkMetadataFileName => Path.ChangeExtension(_FullPathFile, "bmk");
+
+        /// <summary>
+        /// Read PDF metadata from disk, using the portable core from SheetMusicLib
+        /// </summary>
         public static async Task<PdfMetaData> ReadPdfMetaDataAsync(string FullPathPdfFileOrSinglesFolder, bool IsSingles = false)
         {
-            PdfMetaData pdfFileData = null;
-            var bmkFile = Path.ChangeExtension(FullPathPdfFileOrSinglesFolder, "bmk");
-            if (File.Exists(bmkFile))
+            // Use the portable core to read metadata - WPF only uses BMK (ignores JSON)
+            var coreResult = await SheetMusicLib.PdfMetaDataCore.ReadPdfMetaDataAsync(
+                FullPathPdfFileOrSinglesFolder,
+                IsSingles,
+                WpfPdfDocumentProvider.Instance,
+                WpfExceptionHandler.Instance,
+                preferJsonOverBmk: false); // WPF only uses BMK format
+
+            if (coreResult == null)
             {
-                try
-                {
-                    var serializer = new XmlSerializer(typeof(PdfMetaData));
-                    //                    var dtLastWriteTime = (new FileInfo(bmkFile)).LastWriteTime;
-                    using var sr = new StreamReader(bmkFile);
-                    pdfFileData = (PdfMetaData)serializer.Deserialize(sr);
-                    pdfFileData._FullPathFile = FullPathPdfFileOrSinglesFolder;
-                    //                        pdfFileData.dtLastWrite = dtLastWriteTime;
-                    if (pdfFileData.dtLastWrite.Year < 1900)
-                    {
-                        pdfFileData.dtLastWrite = (new FileInfo(bmkFile)).LastWriteTime;
-                    }
-                    pdfFileData.initialLastPageNo = pdfFileData.LastPageNo;
-                    pdfFileData.IsSinglesFolder = IsSingles;
-                    if (pdfFileData.lstVolInfo.Count == 0) // There should be at least one for each PDF in a series. If no series, there should be 1 for itself.
-                    {
-                        var doc = await GetPdfDocumentForFileAsync(FullPathPdfFileOrSinglesFolder);
-                        pdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
-                        {
-                            FileNameVolume = Path.GetFileName(FullPathPdfFileOrSinglesFolder),
-                            NPagesInThisVolume = (int)doc.PageCount,
-                            Rotation = 0
-                        });
-                        pdfFileData.IsDirty = true;
-                    }
-                    if (string.IsNullOrEmpty(pdfFileData.lstVolInfo[0].FileNameVolume))
-                    {
-                        pdfFileData.lstVolInfo[0].FileNameVolume = Path.GetFileName(FullPathPdfFileOrSinglesFolder); //temptemp
-                        pdfFileData.IsDirty = true;
-                    }
-                    if (pdfFileData.LastPageNo < pdfFileData.PageNumberOffset || pdfFileData.LastPageNo >= pdfFileData.MaxPageNum) // make sure lastpageno is in range
-                    {
-                        pdfFileData.LastPageNo = pdfFileData.PageNumberOffset; // go to first page
-                    }
-                }
-                catch (Exception ex)
-                {
-                    PdfViewerWindow.s_pdfViewerWindow.OnException($"Reading {bmkFile}", ex);
-                    // we don't want to delete the file because the user might have valuable bookmarks/favorites.
-                    // let the user have an opportunity to fix it.
-                }
+                return null;
             }
-            else
+
+            // Convert the portable result to WPF-specific PdfMetaData
+            var pdfFileData = new PdfMetaData
             {
-                pdfFileData = new PdfMetaData()
+                _FullPathFile = coreResult.FullPathFile,
+                IsSinglesFolder = coreResult.IsSinglesFolder,
+                IsDirty = coreResult.IsDirty,
+                PageNumberOffset = coreResult.PageNumberOffset,
+                LastPageNo = coreResult.LastPageNo,
+                dtLastWrite = coreResult.LastWriteTime,
+                Notes = coreResult.Notes,
+                lstTocEntries = coreResult.TocEntries,
+                Favorites = coreResult.Favorites,
+                LstInkStrokes = coreResult.InkStrokes
+            };
+
+            pdfFileData.initialLastPageNo = pdfFileData.LastPageNo;
+
+            // Convert PdfVolumeInfoBase to WPF-specific PdfVolumeInfo
+            foreach (var volBase in coreResult.VolumeInfoList)
+            {
+                pdfFileData.lstVolInfo.Add(new PdfVolumeInfo
                 {
-                    _FullPathFile = FullPathPdfFileOrSinglesFolder,
-                    IsSinglesFolder = IsSingles,
-                    dtLastWrite = DateTime.Now,
-                    IsDirty = true
-                };
-                var doc = await GetPdfDocumentForFileAsync(FullPathPdfFileOrSinglesFolder);
-                pdfFileData.lstVolInfo.Add(new PdfVolumeInfo()
-                {
-                    FileNameVolume = Path.GetFileName(FullPathPdfFileOrSinglesFolder),
-                    NPagesInThisVolume = (int)doc.PageCount,
-                    Rotation = 0
+                    FileNameVolume = volBase.FileNameVolume,
+                    NPagesInThisVolume = volBase.NPagesInThisVolume,
+                    Rotation = volBase.Rotation
                 });
             }
+
+            // Initialize dictionaries
             pdfFileData.InitializeDictToc(pdfFileData.lstTocEntries);
             pdfFileData.InitializeFavList();
             pdfFileData.InitializeInkStrokes();
+
             return pdfFileData;
         }
 
@@ -817,7 +845,7 @@ namespace SheetMusicViewer
         public void SaveIfDirty(bool ForceDirty = false)
         {
             InitializeListPdfDocuments(); // reinit list to clear out results to save mem
-            if (!PdfViewerWindow.s_pdfViewerWindow.IsTesting)
+            if (PdfViewerWindow.s_pdfViewerWindow?.IsTesting != false)
             {
                 if (IsDirty || ForceDirty || initialLastPageNo != LastPageNo) // must change pageno to dirty
                 {
@@ -944,59 +972,9 @@ namespace SheetMusicViewer
             var size = 0ul;
             using (var strm = new InMemoryRandomAccessStream())
             {
-                /*
->	KernelBase.dll!RaiseException(unsigned long dwExceptionCode, unsigned long dwExceptionFlags, unsigned long nNumberOfArguments, const unsigned long * lpArguments) Line 938	C
- 	msvcrt.dll!_CxxThrowException(void * pExceptionObject, const _s__ThrowInfo * pThrowInfo) Line 170	C++
- 	d3d11.dll!ThrowFailure(HRESULT hr) Line 17	C++
- 	d3d11.dll!NDXGI::CDevice::CreateContextVirtual2(D3DWDDM2_0DDICB_CREATECONTEXTVIRTUAL * pArgs) Line 9853	C++
- 	d3d11.dll!NDXGI::CDevice::CreateContextVirtualCB(void * hDevice, _D3DDDICB_CREATECONTEXTVIRTUAL * pArgs) Line 9795	C++
- 	nvwgf2um.dll!6953935e()	Unknown
- 	nvwgf2um.dll![Frames below may be incorrect and/or missing, no symbols loaded for nvwgf2um.dll]	Unknown
- 	nvwgf2um.dll!695cab4e()	Unknown
- 	nvwgf2um.dll!68eea40f()	Unknown
-
-
- 	KernelBase.dll!RaiseException(unsigned long dwExceptionCode, unsigned long dwExceptionFlags, unsigned long nNumberOfArguments, const unsigned long * lpArguments) Line 938	C
- 	msvcrt.dll!_CxxThrowException(void * pExceptionObject, const _s__ThrowInfo * pThrowInfo) Line 170	C++
- 	d3d11.dll!ThrowFailure(HRESULT hr) Line 17	C++
- 	d3d11.dll!NDXGI::CDevice::CreateDriverInstance(void * DDIInterface, void * DDIHandle, void * CoreLayerHandle, void * pUMCallbacks, bool bLegacyDDIThreading, bool bDisableGpuTimeout, D3D_FEATURE_LEVEL FeatureLevel, unsigned int DDIFlags, HRESULT(__stdcall*)(D3D10DDI_HDEVICE, unsigned int, unsigned long, void *, unsigned long, void *) * ppRetrieveSubObject) Line 1223	C++
- 	d3d11.dll!CDevice::CreateDriverInstance(CContext * pCtx, void * DDIInterface, void * DDIHandle, void * CoreLayerHandle, void * pUMCallbacks, unsigned int DDIFlags, HRESULT(__stdcall*)(D3D10DDI_HDEVICE, unsigned int, unsigned long, void *, unsigned long, void *) * ppRetrieveSubObject) Line 10214	C++
- 	d3d11.dll!CContext::LUCCompleteLayerConstruction() Line 9953	C++
- 	d3d11.dll!CBridgeImpl<ILayeredUseCounted,ID3D11LayeredUseCounted,CLayeredObject<CContext> >::LUCCompleteLayerConstruction() Line 147	C++
- 	d3d11.dll!NOutermost::CDeviceChild::LUCCompleteLayerConstruction() Line 371	C++
- 	[Inline Frame] d3d11.dll!CUseCountedObject<NOutermost::CDeviceChild>::LUCCompleteLayerConstruction() Line 464	C++
- 	[Inline Frame] d3d11.dll!NOutermost::CDeviceChild::FinalConstruct(const NOutermost::CDeviceChild::TConstructorArgs &) Line 804	C++
- 	[Inline Frame] d3d11.dll!CUseCountedObject<NOutermost::CDeviceChild>::{ctor}(void *) Line 245	C++
- 	[Inline Frame] d3d11.dll!CUseCountedObject<NOutermost::CDeviceChild>::CreateInstance(const NOutermost::CDeviceChild::TConstructorArgs &) Line 523	C++
- 	d3d11.dll!NOutermost::CDevice::CreateLayeredChild(unsigned int ChildType, const void * pLayeredChildArgs, unsigned long uiArgSize, ID3D11LayeredUseCounted * pOuterUnk, const _GUID & iid, void * * ppUnk) Line 151	C++
- 	d3d11.dll!CDevice::LLOCompleteLayerConstruction() Line 9209	C++
- 	d3d11.dll!CBridgeImpl<ILayeredLockOwner,ID3D11LayeredDevice,CLayeredObject<CDevice> >::LLOCompleteLayerConstruction() Line 136	C++
- 	d3d11.dll!NDXGI::CDevice::LLOCompleteLayerConstruction() Line 344	C++
- 	d3d11.dll!CBridgeImpl<ILayeredLockOwner,ID3D11LayeredDevice,CLayeredObject<NDXGI::CDevice> >::LLOCompleteLayerConstruction() Line 136	C++
- 	d3d11.dll!NOutermost::CDevice::LLOCompleteLayerConstruction() Line 71	C++
- 	d3d11.dll!NOutermost::CDevice::FinalConstruct(const NOutermost::CDevice::TConstructorArgs & args) Line 171	C++
- 	d3d11.dll!TComObject<NOutermost::CDevice>::TComObject<NOutermost::CDevice>(void * args, const NOutermost::CDevice::TConstructorArgs & riid, const _GUID & ppv, void * *) Line 35	C++
- 	[Inline Frame] d3d11.dll!TComObject<NOutermost::CDevice>::CreateInstance(const NOutermost::CDevice::TConstructorArgs & pMemLocation, void *) Line 112	C++
- 	d3d11.dll!D3D11CreateLayeredDevice(unsigned int uiLayerID, const void * pLayeredDeviceArgs, unsigned long uiArgSize, ID3D11LayeredDevice * pOuterUnk, const _GUID & iid, void * * ppUnk) Line 568	C++
- 	d3d11.dll!D3D11CoreCreateLayeredDevice(const void * pLayeredDeviceArgs, unsigned long uiArgSize, ID3D11LayeredDevice * pOuterUnk, const _GUID & iid, void * * ppUnk) Line 856	C++
- 	d3d11.dll!D3D11RegisterLayersAndCreateDevice(const D3D11_EXTENSIONS & Ext, NDXGI::CUMDAdapter * HardwareFL, D3D_FEATURE_LEVEL APIFeatureLevel, D3D_FEATURE_LEVEL DDIVersion, unsigned __int64 Flags, unsigned int ppDevice, ID3D11Device * *) Line 2603	C++
- 	d3d11.dll!D3D11CoreCreateDevice(const D3D11_EXTENSIONS * pExtensions, IDXGIAdapter * pAdapter, D3D_DRIVER_TYPE DriverType, HINSTANCE__ * Software, unsigned int Flags, const D3D_FEATURE_LEVEL * pRequestedFeatureLevels, unsigned int RequestedFeatureLevels, unsigned int __formal, ID3D11Device * * ppDevice, D3D_FEATURE_LEVEL * pFeatureLevel) Line 2985	C++
- 	d3d11.dll!D3D11CreateDeviceAndSwapChainImpl(IDXGIAdapter * pAdapter, D3D_DRIVER_TYPE DriverType, HINSTANCE__ * Software, unsigned int Flags, const D3D_FEATURE_LEVEL * pFeatureLevels, unsigned int FeatureLevels, unsigned int SDKVersion, const DXGI_SWAP_CHAIN_DESC * pSwapChainDesc, IDXGISwapChain * * ppSwapChain, ID3D11Device * * ppDevice, D3D_FEATURE_LEVEL * pFeatureLevel, ID3D11DeviceContext * * ppImmediateContext) Line 4126	C++
- 	[Inline Frame] d3d11.dll!D3D11CreateDeviceAndSwapChain(IDXGIAdapter *) Line 4207	C++
- 	d3d11.dll!D3D11CreateDeviceImpl(IDXGIAdapter * pAdapter, D3D_DRIVER_TYPE DriverType, HINSTANCE__ * Software, unsigned int Flags, const D3D_FEATURE_LEVEL * pFeatureLevels, unsigned int FeatureLevels, unsigned int SDKVersion, ID3D11Device * * ppDevice, D3D_FEATURE_LEVEL * pFeatureLevel, ID3D11DeviceContext * * ppImmediateContext) Line 3071	C++
- 	Windows.Data.Pdf.dll!Windows::Data::Pdf::CPdfStreamRenderer::_CreateDevices(const Microsoft::WRL::ComPtr<ID2D1Factory1> & spD2DFactory, const std::shared_ptr<Graphics::IGraphicsFactory> &) Line 445	C++
- 	[Inline Frame] Windows.Data.Pdf.dll!Windows::Data::Pdf::CPdfStreamRenderer::Initialize(const Microsoft::WRL::ComPtr<ID2D1Factory1> &) Line 38	C++
- 	Windows.Data.Pdf.dll!Windows::Data::Pdf::CPdfStatics::_CreateStreamRenderer() Line 173	C++
- 	Windows.Data.Pdf.dll!Windows::Data::Pdf::CPdfStatics::GetStreamRenderer() Line 108	C++
- 	Windows.Data.Pdf.dll!Windows::Data::Pdf::CPdfPage::RenderWithOptionsToStreamAsync(Windows::Storage::Streams::IRandomAccessStream * pOutputStream, Windows::Data::Pdf::IPdfPageRenderOptions * pOptions, Windows::Foundation::IAsyncAction * * ppAsyncInfo) Line 105	C++
- 	[Managed to Native Transition]	
->	WpfPdfViewer.exe!WpfPdfViewer.PdfMetaData.GetBitMapImageFromPdfPage(Windows.Data.Pdf.PdfPage pdfPage, int PageNoLogical, Windows.Data.Pdf.PdfPageRenderOptions renderOpts, System.Threading.CancellationTokenSource cts) Line 952	C#
- 	WpfPdfViewer.exe!WpfPdfViewer.PdfMetaData.CalculateBitMapImageForPageAsync(int PageNo, System.Threading.CancellationTokenSource cts, System.Windows.Size? SizeDesired) Line 935	C#
-
-
-                */
                 await pdfPage.RenderToStreamAsync(strm, renderOpts);
                 cts?.Token.ThrowIfCancellationRequested();
+                strm.Seek(0);
                 //                bmi.CreateOptions = BitmapCreateOptions.DelayCreation;
                 bmi.BeginInit();
                 bmi.StreamSource = strm.AsStream();
@@ -1111,108 +1089,19 @@ namespace SheetMusicViewer
             return string.Compare(x.FileNameVolume, y.FileNameVolume);
         }
     }
-    public class TocEntryComparer : IComparer<TOCEntry>
-    {
-        public int Compare(TOCEntry x, TOCEntry y)
-        {
-            return string.Compare(x.SongName, y.SongName);
-        }
-    }
 
-    public class PageNoBaseClassComparer : IComparer<PageNoBaseClass>
-    {
-        public int Compare(PageNoBaseClass x, PageNoBaseClass y)
-        {
-            return x.Pageno == y.Pageno ? 0 : (x.Pageno < y.Pageno ? -1 : 1);
-        }
-    }
-
+    /// <summary>
+    /// WPF-specific PDF volume info with Task for async document loading
+    /// </summary>
     [Serializable]
-    public class PdfVolumeInfo
+    public class PdfVolumeInfo : PdfVolumeInfoBase
     {
-        /// <summary>
-        /// The num PDF pages in this PDF file
-        /// </summary>
-        [XmlElement("NPages")]
-        public int NPagesInThisVolume;
-        /*Normal = 0,Rotate90 = 1,Rotate180 = 2,Rotate270 = 3*/
-        public int Rotation;
         [XmlIgnore]
         public Task<PdfDocument> TaskPdfDocument;
-
-        [XmlElement("FileName")]
-        /// <summary>
-        /// the JustFilename (with extension) Can't be rel to rootfolder: user could change rootfolder to folder inside, so must be rel to fullpath: needs to be portable from machine to machine) path filename for the PDF document
-        /// </summary>
-        public string FileNameVolume;
 
         public override string ToString()
         {
             return $"{FileNameVolume} #Pgs={NPagesInThisVolume,4} Rotation={(Rotation)Rotation}";
-        }
-    }
-
-    public class PageNoBaseClass
-    {
-        public int Pageno { get; set; }
-    }
-
-    [Serializable]
-    public class Favorite : PageNoBaseClass //: ICloneable
-    {
-        public string FavoriteName { get; set; }
-
-        //public object Clone()
-        //{
-        //    return new Favorite()
-        //    {
-        //        FavoriteName = this.FavoriteName,
-        //        Pageno = this.Pageno
-        //    };
-        //}
-
-        public override string ToString()
-        {
-            return $"{FavoriteName} {Pageno}".Trim();
-        }
-    }
-
-    [Serializable]
-    public class InkStrokeClass : PageNoBaseClass
-    {
-        public Point InkStrokeDimension;
-        public byte[] StrokeData { get; set; }
-    }
-
-    /// <summary>
-    /// Not really bookmark: Table of Contents Entry
-    /// </summary>
-    [Serializable]
-    public class TOCEntry : ICloneable
-    {
-        public string SongName { get; set; }
-        public string Composer { get; set; }
-        public string Notes { get; set; }
-        /// <summary>
-        /// Composition Date
-        /// </summary>
-        public string Date { get; set; }
-        public int PageNo { get; set; }
-        public object Clone()
-        {
-            return new TOCEntry()
-            {
-                SongName = this.SongName,
-                Composer = this.Composer,
-                Notes = this.Notes,
-                Date = this.Date,
-                PageNo = this.PageNo
-            };
-        }
-
-        public override string ToString()
-        {
-            return $"{PageNo} {SongName} {Composer} {Date} {Notes}".Trim();
         }
     }
 }

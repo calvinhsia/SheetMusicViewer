@@ -1,0 +1,25 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="AvaloniaTests.MainWindow"
+        Title="Avalonia PDF Stress Test"
+        WindowState="Maximized">
+    
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="10" Spacing="10">
+            <TextBlock x:Name="StatusText"
+                       Text="Starting stress test..."
+                       FontSize="12"
+                       VerticalAlignment="Center"
+                       Foreground="Gray"/>
+        </StackPanel>
+        
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" 
+                      VerticalScrollBarVisibility="Auto">
+            <Image x:Name="PdfImage"
+                   Stretch="None"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"/>
+        </ScrollViewer>
+    </DockPanel>
+    
+</Window>

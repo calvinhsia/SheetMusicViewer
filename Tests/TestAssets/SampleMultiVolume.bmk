@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PdfMetaData xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+ <lstVolInfo>
+  <PdfVolumeInfo>
+   <NPages>1</NPages>
+   <Rotation>0</Rotation>
+   <FileName>59 Piano Solos You Like To Play.pdf</FileName>
+  </PdfVolumeInfo>
+  <PdfVolumeInfo>
+   <NPages>84</NPages>
+   <Rotation>2</Rotation>
+   <FileName>59 Piano Solos You Like to Play1.pdf</FileName>
+  </PdfVolumeInfo>
+  <PdfVolumeInfo>
+   <NPages>10</NPages>
+   <Rotation>2</Rotation>
+   <FileName>59 Piano Solos You Like to Play2.pdf</FileName>
+  </PdfVolumeInfo>
+  <PdfVolumeInfo>
+   <NPages>62</NPages>
+   <Rotation>2</Rotation>
+   <FileName>59 Piano Solos You Like to Play3.pdf</FileName>
+  </PdfVolumeInfo>
+ </lstVolInfo>
+ <LastPageNo>27</LastPageNo>
+ <dtLastWrite>2024-04-27T15:40:35.066011-07:00</dtLastWrite>
+ <PageNumberOffset>0</PageNumberOffset>
+ <LstInkStrokes />
+ <Favorites />
+ <lstTocEntries>
+  <TOCEntry>
+   <SongName>Tango in D</SongName>
+   <Composer>ALBENIZ ISAAC</Composer>
+   <PageNo>4</PageNo>
+  </TOCEntry>
+  <TOCEntry>
+   <SongName>Solfeggietto</SongName>
+   <Composer>BACH C P E</Composer>
+   <PageNo>6</PageNo>
+  </TOCEntry>
+  <TOCEntry>
+   <SongName>Prelude in C (Well -Tempered Clavier, Book 1)</SongName>
+   <Composer>BACH, JS</Composer>
+   <PageNo>10</PageNo>
+  </TOCEntry>
+ </lstTocEntries>
+</PdfMetaData>

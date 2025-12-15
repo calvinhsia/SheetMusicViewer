@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PdfMetaData xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+ <lstVolInfo>
+  <PdfVolumeInfo>
+   <NPages>50</NPages>
+   <Rotation>0</Rotation>
+   <FileName>InkBook.pdf</FileName>
+  </PdfVolumeInfo>
+ </lstVolInfo>
+ <LastPageNo>5</LastPageNo>
+ <PageNumberOffset>0</PageNumberOffset>
+ <LstInkStrokes>
+  <InkStrokeClass>
+   <Pageno>5</Pageno>
+   <StrokeData>AQIDBA==</StrokeData>
+  </InkStrokeClass>
+ </LstInkStrokes>
+ <Favorites />
+ <lstTocEntries />
+</PdfMetaData>
