@@ -1062,7 +1062,9 @@ public class PdfToImageDocumentProvider : IPdfDocumentProvider
                     return 0;
                 }
                 
-                return Conversion.GetPageCount(pdfFilePath);
+                // Use byte array overload to avoid base64 detection issues
+                var pdfBytes = File.ReadAllBytes(pdfFilePath);
+                return Conversion.GetPageCount(pdfBytes);
             }
             catch (Exception ex)
             {

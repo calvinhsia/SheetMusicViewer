@@ -1,4 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SheetMusicViewer.Desktop;
 using System;
 using System.IO;
 using System.Linq;
@@ -410,7 +411,7 @@ public class SamplePdfGeneratorTests : TestBase
   ""volumes"": [
     { ""fileName"": ""GettingStarted.pdf"", ""pageCount"": 9, ""rotation"": 0 }
   ],
-  ""tocEntries"": [
+  ""tableOfContents"": [
     { ""pageNo"": 0, ""songName"": ""Welcome"", ""composer"": ""Introduction"" },
     { ""pageNo"": 1, ""songName"": ""Getting Started"", ""composer"": ""Setup Guide"" },
     { ""pageNo"": 2, ""songName"": ""Multi-Volume PDFs"", ""composer"": ""Feature Guide"" },
@@ -418,13 +419,147 @@ public class SamplePdfGeneratorTests : TestBase
     { ""pageNo"": 4, ""songName"": ""Display & Navigation"", ""composer"": ""User Guide"" },
     { ""pageNo"": 5, ""songName"": ""Inking & Annotations"", ""composer"": ""User Guide"" },
     { ""pageNo"": 6, ""songName"": ""Performance & Caching"", ""composer"": ""Technical Info"" },
-    { ""pageNo"": 7, ""songName"": ""Table of Contents"", ""composer"": ""Feature Guide"" },
+    { ""pageNo"": 7, ""songName"": ""PDF Table of Contents"", ""composer"": ""Feature Guide"" },
     { ""pageNo"": 8, ""songName"": ""About"", ""composer"": ""Calvin Hsia"" }
   ],
   ""favorites"": [],
-  ""inkStrokes"": []
+  ""inkStrokes"": {}
 }";
         
         await File.WriteAllTextAsync(path, metadata);
+    }
+
+    /// <summary>
+    /// Integration test that copies sample music to a temp folder and verifies
+    /// that the metadata loading process creates JSON files for PDFs without existing metadata.
+    /// GettingStarted.pdf has pre-existing JSON, other PDFs do not.
+    /// </summary>
+    [TestMethod]
+    [TestCategory("Integration")]
+    public async Task TestMetadataCreationForSamplePdfs()
+    {
+        var sampleFolder = GetProjectSampleMusicFolder();
+        Assert.IsTrue(Directory.Exists(sampleFolder), $"Sample folder should exist at {sampleFolder}");
+        
+        // Create a temp folder for the test
+        var tempFolder = Path.Combine(Path.GetTempPath(), $"SheetMusicViewerTest_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempFolder);
+        LogMessage($"Created temp folder: {tempFolder}");
+        
+        try
+        {
+            // Copy all PDF files from sample folder to temp folder
+            var pdfFiles = Directory.GetFiles(sampleFolder, "*.pdf");
+            Assert.IsTrue(pdfFiles.Length > 0, "Sample folder should contain at least one PDF");
+            
+            foreach (var pdfFile in pdfFiles)
+            {
+                var destPath = Path.Combine(tempFolder, Path.GetFileName(pdfFile));
+                File.Copy(pdfFile, destPath);
+                LogMessage($"Copied: {Path.GetFileName(pdfFile)}");
+            }
+            
+            // Copy the GettingStarted.json (it's bundled with the app)
+            var gettingStartedJson = Path.Combine(sampleFolder, "GettingStarted.json");
+            if (File.Exists(gettingStartedJson))
+            {
+                File.Copy(gettingStartedJson, Path.Combine(tempFolder, "GettingStarted.json"));
+                LogMessage("Copied: GettingStarted.json (pre-existing metadata)");
+            }
+            
+            // Count JSON files before loading - should be 1 (GettingStarted.json)
+            var jsonFilesBefore = Directory.GetFiles(tempFolder, "*.json");
+            Assert.AreEqual(1, jsonFilesBefore.Length, "Should have 1 JSON file before loading (GettingStarted.json)");
+            
+            // Load metadata using the same provider the Avalonia app uses
+            var provider = new PdfToImageDocumentProvider();
+            var (metadataList, folders) = await SheetMusicLib.PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+                tempFolder,
+                provider,
+                exceptionHandler: null,
+                useParallelLoading: true);
+            
+            LogMessage($"Loaded {metadataList.Count} metadata entries");
+            Assert.IsTrue(metadataList.Count > 0, "Should load at least one metadata entry");
+            
+            // Verify metadata was created correctly
+            foreach (var metadata in metadataList)
+            {
+                var fileName = Path.GetFileName(metadata.FullPathFile);
+                var hasPreExistingJson = fileName.Equals("GettingStarted.pdf", StringComparison.OrdinalIgnoreCase);
+                
+                if (hasPreExistingJson)
+                {
+                    Assert.IsFalse(metadata.IsDirty, $"GettingStarted.pdf should NOT be dirty (has pre-existing JSON)");
+                }
+                else
+                {
+                    Assert.IsTrue(metadata.IsDirty, $"{fileName} should be dirty (no pre-existing JSON)");
+                }
+                
+                Assert.IsTrue(metadata.VolumeInfoList.Count > 0, "Should have at least one volume");
+                
+                var totalPages = metadata.VolumeInfoList.Sum(v => v.NPagesInThisVolume);
+                Assert.IsTrue(totalPages > 0, $"Should have pages: {fileName}");
+                
+                LogMessage($"  {fileName}: {totalPages} pages, {metadata.TocEntries.Count} TOC entries, IsDirty={metadata.IsDirty}");
+            }
+            
+            // Save dirty metadata to JSON
+            int savedCount = 0;
+            foreach (var metadata in metadataList.Where(m => m.IsDirty))
+            {
+                var saved = await SheetMusicLib.PdfMetaDataCore.SaveToJsonAsync(metadata, forceSave: true);
+                Assert.IsTrue(saved, $"Should save metadata for {Path.GetFileName(metadata.FullPathFile)}");
+                savedCount++;
+            }
+            LogMessage($"Saved {savedCount} new JSON metadata files");
+            
+            // Verify JSON files exist for all PDFs
+            var jsonFilesAfter = Directory.GetFiles(tempFolder, "*.json");
+            Assert.AreEqual(metadataList.Count, jsonFilesAfter.Length, "Should have one JSON file per PDF");
+            
+            foreach (var jsonFile in jsonFilesAfter)
+            {
+                var content = await File.ReadAllTextAsync(jsonFile);
+                Assert.IsTrue(content.StartsWith("{"), $"JSON file should be valid JSON: {Path.GetFileName(jsonFile)}");
+                Assert.IsTrue(content.Contains("\"volumes\""), "JSON should contain volumes array");
+                Assert.IsTrue(content.Contains("\"tableOfContents\""), "JSON should contain tableOfContents array");
+                LogMessage($"  Verified: {Path.GetFileName(jsonFile)} ({content.Length:N0} bytes)");
+            }
+            
+            // Reload metadata and verify it reads from JSON correctly
+            var (reloadedList, _) = await SheetMusicLib.PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+                tempFolder,
+                provider,
+                exceptionHandler: null,
+                useParallelLoading: true);
+            
+            Assert.AreEqual(metadataList.Count, reloadedList.Count, "Should reload same number of entries");
+            
+            foreach (var reloaded in reloadedList)
+            {
+                Assert.IsFalse(reloaded.IsDirty, $"Reloaded metadata should not be dirty: {Path.GetFileName(reloaded.FullPathFile)}");
+                LogMessage($"  Reloaded: {Path.GetFileName(reloaded.FullPathFile)} - IsDirty={reloaded.IsDirty}");
+            }
+            
+            LogMessage("Integration test passed: JSON metadata files created and reloaded successfully");
+        }
+        finally
+        {
+            // Cleanup temp folder
+            try
+            {
+                if (Directory.Exists(tempFolder))
+                {
+                    Directory.Delete(tempFolder, recursive: true);
+                    LogMessage($"Cleaned up temp folder: {tempFolder}");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogMessage($"Warning: Could not delete temp folder: {ex.Message}");
+            }
+        }
     }
 }

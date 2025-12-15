@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "lastWrite": "2025-12-15T22:11:37.2450274Z",
+  "lastWrite": "2025-12-15T22:43:52.3192211Z",
   "lastPageNo": 0,
   "pageNumberOffset": 0,
   "notes": "Sample PDF with comprehensive instructions for using SheetMusicViewer",
   "volumes": [
     { "fileName": "GettingStarted.pdf", "pageCount": 9, "rotation": 0 }
   ],
-  "tocEntries": [
+  "tableOfContents": [
     { "pageNo": 0, "songName": "Welcome", "composer": "Introduction" },
     { "pageNo": 1, "songName": "Getting Started", "composer": "Setup Guide" },
     { "pageNo": 2, "songName": "Multi-Volume PDFs", "composer": "Feature Guide" },
@@ -19,5 +19,5 @@
     { "pageNo": 8, "songName": "About", "composer": "Calvin Hsia" }
   ],
   "favorites": [],
-  "inkStrokes": []
+  "inkStrokes": {}
 }
