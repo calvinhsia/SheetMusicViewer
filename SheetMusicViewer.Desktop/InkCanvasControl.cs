@@ -38,12 +38,23 @@ public class InkCanvasControl : Panel
     private readonly int _pageNo;
     private InkStrokeClass? _inkStrokeClass;
     private bool _inkLoaded;
+    private bool _hasUnsavedStrokes;
 
     // Store stroke metadata (color, thickness, opacity) for each stroke
     private readonly List<(IBrush Brush, double Thickness)> _strokeMetadata = new();
     private (IBrush Brush, double Thickness)? _currentStrokeMetadata;
 
     public bool IsInkingEnabled { get; set; }
+    
+    /// <summary>
+    /// Returns true if there are strokes that haven't been saved yet
+    /// </summary>
+    public bool HasUnsavedStrokes => _hasUnsavedStrokes;
+    
+    /// <summary>
+    /// The page number this canvas represents
+    /// </summary>
+    public int PageNo => _pageNo;
 
     public InkCanvasControl(Bitmap backgroundImage, int pageNo = 0, InkStrokeClass? inkStrokeClass = null)
     {
@@ -346,6 +357,7 @@ public class InkCanvasControl : Panel
             {
                 _strokeMetadata.Add(_currentStrokeMetadata.Value);
             }
+            _hasUnsavedStrokes = true; // Mark as having unsaved changes
         }
         
         if (_currentPolyline != null)
@@ -389,6 +401,38 @@ public class InkCanvasControl : Panel
         _currentPolyline = null;
         _currentNormalizedStroke = null;
         _currentStrokeMetadata = null;
+        _hasUnsavedStrokes = true; // Clearing strokes is also a change
+    }
+
+    /// <summary>
+    /// Saves ink strokes to the provided metadata. Returns an InkStrokeClass if there are strokes to save, null otherwise.
+    /// </summary>
+    public InkStrokeClass? GetInkStrokeDataForSaving()
+    {
+        if (_normalizedStrokes.Count == 0 || Bounds.Width <= 0 || Bounds.Height <= 0)
+        {
+            // No strokes or invalid bounds - return null to indicate deletion
+            return null;
+        }
+        
+        var portableStrokes = GetPortableStrokes();
+        var json = System.Text.Json.JsonSerializer.Serialize(portableStrokes);
+        var strokeData = System.Text.Encoding.UTF8.GetBytes(json);
+        
+        return new InkStrokeClass
+        {
+            Pageno = _pageNo,
+            InkStrokeDimension = new PortablePoint(Bounds.Width, Bounds.Height),
+            StrokeData = strokeData
+        };
+    }
+    
+    /// <summary>
+    /// Marks the strokes as saved
+    /// </summary>
+    public void MarkAsSaved()
+    {
+        _hasUnsavedStrokes = false;
     }
 
     /// <summary>

@@ -524,6 +524,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     
     internal void CloseCurrentPdfFile()
     {
+        // Save any unsaved ink strokes before closing
+        SaveInkFromCurrentCanvases();
+        
         _dpPage = this.FindControl<Panel>("dpPage");
         _dpPage?.Children.Clear();
         ClearCache();
@@ -537,6 +540,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             _currentPdfMetaData = null;
             CurrentPageNumber = 0;
         }
+        
+        _inkCanvas0 = null;
+        _inkCanvas1 = null;
         
         Title = MyAppName;
         MaxPageNumberMinus1 = 0;
@@ -556,6 +562,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 _dpPage?.Children.Clear();
                 return;
             }
+            
+            // Save any unsaved ink strokes from the current page before navigating
+            SaveInkFromCurrentCanvases();
             
             // Clamp page number
             var pageNumberOffset = _currentPdfMetaData.PageNumberOffset;
@@ -910,6 +919,65 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             return null;
         
         return _currentPdfMetaData.InkStrokes.FirstOrDefault(ink => ink.Pageno == pageNo);
+    }
+    
+    /// <summary>
+    /// Saves ink strokes from the current ink canvases to the PDF metadata
+    /// </summary>
+    private void SaveInkFromCurrentCanvases()
+    {
+        if (_currentPdfMetaData == null)
+            return;
+            
+        bool anyChanges = false;
+        
+        // Save ink from canvas 0
+        if (_inkCanvas0 != null && _inkCanvas0.HasUnsavedStrokes)
+        {
+            var inkData = _inkCanvas0.GetInkStrokeDataForSaving();
+            UpdateInkStrokeInMetadata(_inkCanvas0.PageNo, inkData);
+            _inkCanvas0.MarkAsSaved();
+            anyChanges = true;
+        }
+        
+        // Save ink from canvas 1
+        if (_inkCanvas1 != null && _inkCanvas1.HasUnsavedStrokes)
+        {
+            var inkData = _inkCanvas1.GetInkStrokeDataForSaving();
+            UpdateInkStrokeInMetadata(_inkCanvas1.PageNo, inkData);
+            _inkCanvas1.MarkAsSaved();
+            anyChanges = true;
+        }
+        
+        // Save metadata if there were changes
+        if (anyChanges)
+        {
+            _currentPdfMetaData.IsDirty = true;
+            _ = PdfMetaDataCore.SaveToJsonAsync(_currentPdfMetaData);
+            Trace.WriteLine($"Saved ink strokes for current pages");
+        }
+    }
+    
+    /// <summary>
+    /// Updates or removes ink stroke data for a specific page in the metadata
+    /// </summary>
+    private void UpdateInkStrokeInMetadata(int pageNo, InkStrokeClass? inkData)
+    {
+        if (_currentPdfMetaData == null)
+            return;
+            
+        // Remove existing ink stroke for this page
+        var existingIndex = _currentPdfMetaData.InkStrokes.FindIndex(ink => ink.Pageno == pageNo);
+        if (existingIndex >= 0)
+        {
+            _currentPdfMetaData.InkStrokes.RemoveAt(existingIndex);
+        }
+        
+        // Add new ink stroke if there's data
+        if (inkData != null)
+        {
+            _currentPdfMetaData.InkStrokes.Add(inkData);
+        }
     }
     
     private void SetupGestureHandler()
