@@ -2,187 +2,107 @@ name: CI/CD Pipeline
 
 on:
   push:
+    branches: [ main, tests, develop, extractToLib ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ main, tests ]
   workflow_dispatch:
 
 env:
-  DOTNET_VERSION: '8.0.x'
-  SOLUTION_FILE: SheetMusicViewer.sln
+  DOTNET_VERSION: '10.0.x'
   CONFIGURATION: Release
 
 jobs:
   build-and-test:
-    runs-on: windows-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # Shallow clones should be disabled for better analysis
-    
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
-    
-    - name: Display .NET info
-      run: dotnet --info
-    
-    - name: Restore dependencies
-      run: dotnet restore ${{ env.SOLUTION_FILE }}
-    
-    - name: Build solution
-      run: dotnet build ${{ env.SOLUTION_FILE }} --configuration ${{ env.CONFIGURATION }} --no-restore
-    
-    - name: Run unit tests
-      run: |
-        dotnet test ${{ env.SOLUTION_FILE }} `
-          --configuration ${{ env.CONFIGURATION }} `
-          --no-build `
-          --verbosity normal `
-          --logger "trx;LogFileName=unit-test-results.trx" `
-          --results-directory ./TestResults/Unit `
-          --filter "TestCategory=Unit&TestCategory!=Manual"
-      continue-on-error: false
-      shell: powershell
-    
-    - name: Run integration tests
-      run: |
-        dotnet test ${{ env.SOLUTION_FILE }} `
-          --configuration ${{ env.CONFIGURATION }} `
-          --no-build `
-          --verbosity normal `
-          --logger "trx;LogFileName=integration-test-results.trx" `
-          --results-directory ./TestResults/Integration `
-          --filter "TestCategory=Integration&TestCategory!=Manual"
-      continue-on-error: false
-      shell: powershell
-    
-    - name: Upload test results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: test-results
-        path: '**/*-test-results.trx'
-        retention-days: 30
-    
-    - name: Publish test results summary
-      uses: EnricoMi/publish-unit-test-result-action/windows@v2
-      if: always()
-      with:
-        files: '**/*-test-results.trx'
-        check_name: 'Test Results'
-    
-    - name: Build SheetMusicViewer WPF project
-      run: dotnet build SheetMusicViewer/SheetMusicViewer.csproj --configuration ${{ env.CONFIGURATION }} --no-restore
-    
-    - name: Build SheetMusicViewer.Desktop Avalonia project
-      run: dotnet build SheetMusicViewer.Desktop/SheetMusicViewer.Desktop.csproj --configuration ${{ env.CONFIGURATION }} --no-restore
-    
-    - name: Publish WPF application
-      run: dotnet publish SheetMusicViewer/SheetMusicViewer.csproj --configuration ${{ env.CONFIGURATION }} --output ./publish-wpf --no-build
-    
-    - name: Publish Avalonia Desktop application
-      run: dotnet publish SheetMusicViewer.Desktop/SheetMusicViewer.Desktop.csproj --configuration ${{ env.CONFIGURATION }} --output ./publish-desktop --no-build
-    
-    - name: Upload WPF build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: sheetmusicviewer-wpf-build
-        path: ./publish-wpf
-        retention-days: 30
-    
-    - name: Upload Desktop build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: sheetmusicviewer-desktop-build
-        path: ./publish-desktop
-        retention-days: 30
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-latest
+            rid: osx-arm64
 
-  code-analysis:
-    runs-on: windows-latest
-    needs: build-and-test
+    runs-on: ${{ matrix.os }}
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
-    
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
-    
+
+    - name: Display .NET info
+      run: dotnet --info
+
     - name: Restore dependencies
-      run: dotnet restore ${{ env.SOLUTION_FILE }}
-    
-    - name: Build for analysis
-      run: dotnet build ${{ env.SOLUTION_FILE }} --configuration ${{ env.CONFIGURATION }} --no-restore
-    
-    # Optional: SonarCloud analysis
-    # - name: SonarCloud Scan
-    #   uses: SonarSource/sonarcloud-github-action@master
-    #   env:
-    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      run: dotnet restore SheetMusicViewer.sln
+
+    - name: Build solution
+      run: dotnet build SheetMusicViewer.sln --configuration ${{ env.CONFIGURATION }} --no-restore
+
+    - name: Run tests
+      run: dotnet test SheetMusicViewer.sln --configuration ${{ env.CONFIGURATION }} --no-build --verbosity normal --filter "TestCategory!=Manual"
+
+    - name: Publish SheetMusicViewer.Desktop
+      run: |
+        dotnet publish SheetMusicViewer.Desktop/SheetMusicViewer.Desktop.csproj \
+          -c ${{ env.CONFIGURATION }} \
+          -r ${{ matrix.rid }} \
+          --self-contained true \
+          -p:PublishSingleFile=true \
+          -p:EnableCompressionInSingleFile=true \
+          -o ./publish/${{ matrix.rid }}
+      shell: bash
+
+    - name: Create zip (Windows)
+      if: matrix.os == 'windows-latest'
+      run: Compress-Archive -Path ./publish/${{ matrix.rid }}/* -DestinationPath ./SheetMusicViewer-${{ matrix.rid }}.zip
+      shell: pwsh
+
+    - name: Create tar.gz (Linux/macOS)
+      if: matrix.os != 'windows-latest'
+      run: |
+        cd ./publish/${{ matrix.rid }}
+        tar -czvf ../../SheetMusicViewer-${{ matrix.rid }}.tar.gz *
+      shell: bash
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: SheetMusicViewer-${{ matrix.rid }}
+        path: |
+          ./SheetMusicViewer-${{ matrix.rid }}.zip
+          ./SheetMusicViewer-${{ matrix.rid }}.tar.gz
+        if-no-files-found: ignore
+        retention-days: 30
 
   release:
-    runs-on: windows-latest
-    needs: [build-and-test, code-analysis]
-    if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
-    
-    - name: Download WPF build artifacts
+    - name: Download all artifacts
       uses: actions/download-artifact@v4
       with:
-        name: sheetmusicviewer-wpf-build
-        path: ./publish-wpf
-    
-    - name: Download Desktop build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: sheetmusicviewer-desktop-build
-        path: ./publish-desktop
-    
-    - name: Create Release Archives
-      run: |
-        Compress-Archive -Path ./publish-wpf/* -DestinationPath SheetMusicViewer-WPF-${{ github.sha }}.zip
-        Compress-Archive -Path ./publish-desktop/* -DestinationPath SheetMusicViewer-Desktop-${{ github.sha }}.zip
-      shell: powershell
-    
-    - name: Upload WPF Release Archive
-      uses: actions/upload-artifact@v4
-      with:
-        name: sheetmusicviewer-wpf-release
-        path: SheetMusicViewer-WPF-*.zip
-        retention-days: 90
-    
-    - name: Upload Desktop Release Archive
-      uses: actions/upload-artifact@v4
-      with:
-        name: sheetmusicviewer-desktop-release
-        path: SheetMusicViewer-Desktop-*.zip
-        retention-days: 90
-    
+        path: artifacts
+
+    - name: Display downloaded files
+      run: ls -R artifacts
+
     - name: Create GitHub Release
-      if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          SheetMusicViewer-WPF-*.zip
-          SheetMusicViewer-Desktop-*.zip
+          artifacts/**/*.zip
+          artifacts/**/*.tar.gz
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

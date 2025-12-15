@@ -47,6 +47,52 @@ chmod +x SheetMusicViewer
 ./SheetMusicViewer
 ```
 
+## Development
+
+### Building from Source
+```bash
+# Clone the repository
+git clone https://github.com/calvinhsia/SheetMusicViewer.git
+cd SheetMusicViewer
+
+# Build the solution
+dotnet build SheetMusicViewer.sln
+
+# Run the Avalonia Desktop app
+dotnet run --project SheetMusicViewer.Desktop
+```
+
+### Creating a Release
+
+The project uses GitHub Actions for CI/CD. To create a new release:
+
+1. **Tag the commit** with a version number starting with `v`:
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+
+2. **GitHub Actions will automatically**:
+   - Build the application on Windows, macOS, and Linux
+   - Run all tests on each platform
+   - Create self-contained, single-file executables
+   - Create a GitHub Release with:
+     - `SheetMusicViewer-win-x64.zip`
+     - `SheetMusicViewer-linux-x64.tar.gz`
+     - `SheetMusicViewer-osx-arm64.tar.gz`
+   - Auto-generate release notes from commit history
+
+3. **Version format**: Use semantic versioning (e.g., `v1.0.0`, `v1.2.3`, `v2.0.0-beta`)
+
+### CI/CD Pipeline
+
+Every push and pull request triggers the CI pipeline which:
+- Builds the entire solution on Windows, macOS, and Linux
+- Runs all unit and integration tests
+- Creates platform-specific artifacts (available for 30 days)
+
+See `.github/workflows/ci.yml` for the full workflow configuration.
+
 ## Testing Strategy
 
 This project includes comprehensive automated testing to ensure quality and reliability:
