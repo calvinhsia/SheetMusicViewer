@@ -1,4 +1,4 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
@@ -41,6 +41,8 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private bool _disableSliderValueChanged;
     private bool _chkFavoriteEnabled;
     private bool _isThumbnailLoadingInProgress;
+    private int _cacheLoadingCount;
+    private string _cacheStatus = string.Empty;
     
     // PDF metadata
     private string _rootMusicFolder = string.Empty;
@@ -813,12 +815,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             return existing;
         }
         
-        // Create new entry
+        // Create new entry with tracking wrapper
         var entry = new PageCacheEntry
         {
             PageNo = pageNo,
             Age = _currentCacheAge++,
-            Task = RenderPageInternalAsync(pageNo)
+            Task = RenderPageWithTrackingAsync(pageNo)
         };
         
         // Evict old entries if cache is full
@@ -835,6 +837,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
         
         _pageCache[pageNo] = entry;
+        UpdateCacheStatus();
         return entry;
     }
     
@@ -855,6 +858,22 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         foreach (var pageNo in toDelete)
         {
             _pageCache.Remove(pageNo);
+        }
+        UpdateCacheStatus();
+    }
+    
+    private async Task<Bitmap> RenderPageWithTrackingAsync(int pageNo)
+    {
+        Interlocked.Increment(ref _cacheLoadingCount);
+        UpdateCacheStatus();
+        try
+        {
+            return await RenderPageInternalAsync(pageNo);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _cacheLoadingCount);
+            UpdateCacheStatus();
         }
     }
     
@@ -899,7 +918,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             using var data = image.Encode(SKEncodedImageFormat.Png, 100);
             using var stream = new MemoryStream();
             data.SaveTo(stream);
-            stream.Seek(0, SeekOrigin.Begin);
+           stream.Seek(0, SeekOrigin.Begin);
             
             return new Bitmap(stream);
         });
@@ -913,6 +932,30 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
         _pageCache.Clear();
         _currentCacheAge = 0;
+        UpdateCacheStatus();
+    }
+    
+    private void UpdateCacheStatus()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            var pendingCount = _cacheLoadingCount;
+            var cachedCount = _pageCache.Count;
+            
+            // Always show cache count; add loading indicator if busy
+            if (pendingCount > 0)
+            {
+                CacheStatus = $"C:{cachedCount} ⏳{pendingCount}";
+            }
+            else if (cachedCount > 0)
+            {
+                CacheStatus = $"C:{cachedCount}";
+            }
+            else
+            {
+                CacheStatus = string.Empty;
+            }
+        });
     }
     
     private string GetDescription(int pageNo)
@@ -1438,12 +1481,32 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
     }
 
+    public string CacheStatus
+    {
+        get => _cacheStatus;
+        set
+        {
+            _cacheStatus = value;
+            OnPropertyChanged();
+        }
+    }
+
     public int TouchCount
     {
         get => _touchCount;
         set
         {
             _touchCount = value;
+            OnPropertyChanged();
+        }
+    }
+    
+    public int CacheLoadingCount
+    {
+        get => _cacheLoadingCount;
+        set
+        {
+            _cacheLoadingCount = value;
             OnPropertyChanged();
         }
     }
