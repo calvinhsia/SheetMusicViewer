@@ -1044,16 +1044,14 @@ public class ChooseMusicWindow : Window
         using var paint = new SKPaint { Shader = shader, IsAntialias = true };
         canvas.DrawRect(0, 0, width, height, paint);
         
+        using var font = new SKFont(SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold), 14);
         using var textPaint = new SKPaint
         {
             Color = SKColors.White,
-            IsAntialias = true,
-            TextSize = 14,
-            Typeface = SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold),
-            TextAlign = SKTextAlign.Center
+            IsAntialias = true
         };
         
-        canvas.DrawText(title, width / 2, height - 30, textPaint);
+        canvas.DrawText(title, width / 2f, height - 30, SKTextAlign.Center, font, textPaint);
         
         using var image = surface.Snapshot();
         using var data = image.Encode(SKEncodedImageFormat.Png, 100);
