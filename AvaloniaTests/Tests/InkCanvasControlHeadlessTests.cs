@@ -15,59 +15,82 @@ using System.Threading.Tasks;
 namespace AvaloniaTests.Tests;
 
 /// <summary>
-/// Manual tests for InkCanvasControl.
-/// These tests require Avalonia.Headless and must be run manually because:
-/// 1. They require the Avalonia UI thread to be properly set up
-/// 2. They can hang in CI environments without proper display/headless setup
+/// Unit tests for InkCanvasControl.
+/// These tests use Avalonia.Headless for testing UI components without a display.
 /// 
-/// To run these tests locally, use: dotnet test --filter "FullyQualifiedName~InkCanvasControlTests"
+/// Note: Avalonia must be initialized on the test thread, so we use [TestInitialize]
+/// instead of [ClassInitialize] to ensure proper thread affinity.
 /// </summary>
 [TestClass]
-[DoNotParallelize]
+[DoNotParallelize] // Avalonia initialization is not thread-safe across test classes
 public class InkCanvasControlTests : TestBase
 {
     private static bool _avaloniaInitialized = false;
     private static bool _initializationFailed = false;
+    private static string _initializationError = null;
     private static readonly object _initLock = new();
+    private static int _initThreadId = -1;
 
-    [ClassInitialize]
-    public static void ClassInitialize(TestContext context)
+    /// <summary>
+    /// Initialize Avalonia on the test thread if not already done.
+    /// Must be called at the start of each test to ensure thread affinity.
+    /// </summary>
+    private void EnsureAvaloniaInitialized()
     {
         lock (_initLock)
         {
-            if (_avaloniaInitialized || _initializationFailed)
+            // If already initialized on this thread, we're good
+            if (_avaloniaInitialized && _initThreadId == Environment.CurrentManagedThreadId)
                 return;
+            
+            // If initialization failed previously, skip
+            if (_initializationFailed)
+                return;
+
+            // If initialized on a different thread, that's a problem - but try to continue
+            if (_avaloniaInitialized && _initThreadId != Environment.CurrentManagedThreadId)
+            {
+                LogMessage($"WARNING: Avalonia was initialized on thread {_initThreadId}, but test is running on thread {Environment.CurrentManagedThreadId}");
+                return;
+            }
 
             try
             {
-                // Initialize Avalonia with headless platform for testing on the current thread
+                // Initialize Avalonia with headless platform for testing
                 AppBuilder.Configure<TestApp>()
                     .UseHeadless(new AvaloniaHeadlessPlatformOptions())
                     .SetupWithoutStarting();
 
                 _avaloniaInitialized = true;
+                _initThreadId = Environment.CurrentManagedThreadId;
+                LogMessage($"Avalonia headless platform initialized on thread {_initThreadId}");
             }
             catch (InvalidOperationException ex) when (ex.Message.Contains("already") || ex.Message.Contains("initialized"))
             {
-                // Avalonia already initialized by another test class - that's fine
+                // Avalonia already initialized - that's fine
                 _avaloniaInitialized = true;
+                _initThreadId = Environment.CurrentManagedThreadId;
+                LogMessage("Avalonia already initialized");
             }
             catch (Exception ex)
             {
                 _initializationFailed = true;
-                context.WriteLine($"WARNING: Avalonia headless initialization failed: {ex.Message}");
+                _initializationError = ex.Message;
+                LogMessage($"WARNING: Avalonia headless initialization failed: {ex.Message}");
             }
         }
     }
 
     /// <summary>
-    /// Skip test if Avalonia initialization failed
+    /// Skip test if Avalonia initialization failed (e.g., in CI without display)
     /// </summary>
     private void SkipIfAvaloniaNotInitialized()
     {
+        EnsureAvaloniaInitialized();
+        
         if (_initializationFailed)
         {
-            Assert.Inconclusive("Avalonia headless initialization failed - skipping test");
+            Assert.Inconclusive($"Avalonia headless initialization failed: {_initializationError}");
         }
         if (!_avaloniaInitialized)
         {
@@ -126,7 +149,8 @@ public class InkCanvasControlTests : TestBase
     }
 
     [TestMethod]
-    [TestCategory("Manual")]
+    [TestCategory("Unit")]
+    [Timeout(30000)] // 30 second timeout to prevent CI hangs
     public void InkCanvasControl_Creation_Succeeds()
     {
         SkipIfAvaloniaNotInitialized();
@@ -145,7 +169,8 @@ public class InkCanvasControlTests : TestBase
     }
 
     [TestMethod]
-    [TestCategory("Manual")]
+    [TestCategory("Unit")]
+    [Timeout(30000)]
     public void InkCanvasControl_IsInkingEnabled_CanBeToggled()
     {
         SkipIfAvaloniaNotInitialized();
@@ -167,7 +192,8 @@ public class InkCanvasControlTests : TestBase
     }
 
     [TestMethod]
-    [TestCategory("Manual")]
+    [TestCategory("Unit")]
+    [Timeout(30000)]
     public void InkCanvasControl_GetPortableStrokes_ReturnsEmptyWhenNoStrokes()
     {
         SkipIfAvaloniaNotInitialized();
@@ -187,7 +213,8 @@ public class InkCanvasControlTests : TestBase
     }
 
     [TestMethod]
-    [TestCategory("Manual")]
+    [TestCategory("Unit")]
+    [Timeout(30000)]
     public void InkCanvasControl_SetPenColor_DoesNotThrow()
     {
         SkipIfAvaloniaNotInitialized();
@@ -207,7 +234,8 @@ public class InkCanvasControlTests : TestBase
     }
 
     [TestMethod]
-    [TestCategory("Manual")]
+    [TestCategory("Unit")]
+    [Timeout(30000)]
     public void InkCanvasControl_SetPenThickness_DoesNotThrow()
     {
         SkipIfAvaloniaNotInitialized();
@@ -227,7 +255,8 @@ public class InkCanvasControlTests : TestBase
     }
 
     [TestMethod]
-    [TestCategory("Manual")]
+    [TestCategory("Unit")]
+    [Timeout(30000)]
     public void InkCanvasControl_SetHighlighter_DoesNotThrow()
     {
         SkipIfAvaloniaNotInitialized();
@@ -245,7 +274,8 @@ public class InkCanvasControlTests : TestBase
     }
 
     [TestMethod]
-    [TestCategory("Manual")]
+    [TestCategory("Unit")]
+    [Timeout(30000)]
     public void InkCanvasControl_ClearStrokes_SetsHasUnsavedStrokes()
     {
         SkipIfAvaloniaNotInitialized();
@@ -266,7 +296,8 @@ public class InkCanvasControlTests : TestBase
     }
 
     [TestMethod]
-    [TestCategory("Manual")]
+    [TestCategory("Unit")]
+    [Timeout(30000)]
     public void InkCanvasControl_MarkAsSaved_ClearsUnsavedFlag()
     {
         SkipIfAvaloniaNotInitialized();
@@ -289,7 +320,8 @@ public class InkCanvasControlTests : TestBase
     }
 
     [TestMethod]
-    [TestCategory("Manual")]
+    [TestCategory("Unit")]
+    [Timeout(30000)]
     public void InkCanvasControl_PageNo_IsPreserved()
     {
         SkipIfAvaloniaNotInitialized();
@@ -310,7 +342,8 @@ public class InkCanvasControlTests : TestBase
     }
 
     [TestMethod]
-    [TestCategory("Manual")]
+    [TestCategory("Unit")]
+    [Timeout(30000)]
     public void InkCanvasControl_WithNullInkData_CreatesSuccessfully()
     {
         SkipIfAvaloniaNotInitialized();
@@ -330,7 +363,8 @@ public class InkCanvasControlTests : TestBase
     }
 
     [TestMethod]
-    [TestCategory("Manual")]
+    [TestCategory("Unit")]
+    [Timeout(30000)]
     public void InkCanvasControl_WithEmptyStrokeData_CreatesSuccessfully()
     {
         SkipIfAvaloniaNotInitialized();
@@ -355,7 +389,8 @@ public class InkCanvasControlTests : TestBase
     }
 
     [TestMethod]
-    [TestCategory("Manual")]
+    [TestCategory("Unit")]
+    [Timeout(30000)]
     public void InkCanvasControl_GetPortableStrokes_ReturnsValidStructure()
     {
         SkipIfAvaloniaNotInitialized();
@@ -378,7 +413,8 @@ public class InkCanvasControlTests : TestBase
     }
 
     [TestMethod]
-    [TestCategory("Manual")]
+    [TestCategory("Unit")]
+    [Timeout(30000)]
     public void InkCanvasControl_MultipleBitmapSizes_AllSucceed()
     {
         SkipIfAvaloniaNotInitialized();
