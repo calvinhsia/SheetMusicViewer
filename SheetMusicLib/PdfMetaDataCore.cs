@@ -788,7 +788,7 @@ namespace SheetMusicLib
         {
             var bmkJson = JsonSerializer.Deserialize<BmkJsonFormat>(fileContent, JsonReadOptions);
             
-            Debug.WriteLine($"ReadFromBmkJsonFormatAsync: Loaded {bmkJson.InkStrokes.Count} ink stroke entries from JSON");
+            //Debug.WriteLine($"ReadFromBmkJsonFormatAsync: Loaded {bmkJson.InkStrokes.Count} ink stroke entries from JSON");
 
             var result = new PdfMetaDataReadResult
             {
