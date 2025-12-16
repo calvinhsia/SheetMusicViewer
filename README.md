@@ -66,23 +66,44 @@ dotnet run --project SheetMusicViewer.Desktop
 
 The project uses GitHub Actions for CI/CD. To create a new release:
 
-1. **Tag the commit** with a version number starting with `v`:
+1. **Ensure you're on the `main` branch** with all changes merged:
+   ```bash
+   git checkout main
+   git pull origin main
+   ```
+
+2. **Tag the commit** with a version number starting with `v`:
    ```bash
    git tag v1.0.0
    git push origin v1.0.0
    ```
 
-2. **GitHub Actions will automatically**:
+3. **GitHub Actions will automatically**:
    - Build the application on Windows, macOS, and Linux
    - Run all tests on each platform
    - Create self-contained, single-file executables
-   - Create a GitHub Release with:
-     - `SheetMusicViewer-win-x64.zip`
-     - `SheetMusicViewer-linux-x64.tar.gz`
-     - `SheetMusicViewer-osx-arm64.tar.gz`
-   - Auto-generate release notes from commit history
+   - Create a GitHub Release with downloadable binaries
+   - Embed the version number in the application (visible in **Menu ? About**)
 
-3. **Version format**: Use semantic versioning (e.g., `v1.0.0`, `v1.2.3`, `v2.0.0-beta`)
+4. **Version format**: Use semantic versioning (e.g., `v1.0.0`, `v1.2.3`, `v2.0.0-beta`)
+
+> **Note**: Releases should always be created from `main` to ensure they contain stable, reviewed code.
+
+### Listing Prior Releases
+
+```bash
+# List all version tags
+git tag -l "v*"
+
+# List tags with dates (most recent first)
+git tag -l "v*" --sort=-version:refname
+
+# Show details of a specific release
+git show v1.0.0
+
+# View releases on GitHub
+# https://github.com/calvinhsia/SheetMusicViewer/releases
+```
 
 ### CI/CD Pipeline
 
