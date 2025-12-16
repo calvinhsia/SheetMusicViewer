@@ -65,6 +65,13 @@
                     </Panel>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
+                    <TextBlock Text="Loading..." 
+                               FontSize="10" 
+                               Foreground="DarkBlue" 
+                               VerticalAlignment="Center" 
+                               Margin="0,0,5,0"
+                               IsVisible="{Binding IsThumbnailLoadingInProgress}"
+                               ToolTip.Tip="Loading thumbnails in background for faster browsing"/>
                     <Button Name="btnThumb" Margin="0,0,5,0" ToolTip.Tip="Click (or Alt-E) to show metadata editor"
                             Padding="1">
                         <Image Name="ImgThumb" Height="24" Width="16" Stretch="Uniform"/>
