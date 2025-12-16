@@ -232,6 +232,44 @@ For the boundary between volumes (e.g. a book contains 1000 pages, volume 1 is p
 The thumb of the slider at the top can be used to navigate the entire 1000 pages. 
 The controls at the top are transparent so that the music can use more vertical screen space.
 
+## Page Turning for Musicians: Why Instant Response Matters
+
+When playing a musical instrument, especially piano, **page turns must be instantaneous**. A musician cannot pause mid-performance to wait for a page to render - the music must continue flowing. Even a half-second delay breaks concentration and disrupts the performance.
+
+### The Challenge
+PDF rendering is computationally expensive. A high-resolution scanned page might take 100-500ms to render, depending on:
+- Page complexity and resolution
+- Device CPU/GPU capabilities
+- Available memory
+
+### The Solution: Intelligent Page Caching
+
+SheetMusicViewer uses predictive caching to ensure pages are ready *before* you need them:
+
+**Single Page Mode** (showing page 5):
+- Cache contains: pages 4, 5, 6, 7
+- When you turn to page 6, page 8 is immediately queued for rendering
+- Backward navigation is also instant (page 4 is already cached)
+
+**Two Page Mode** (showing pages 5-6):
+- Cache contains: pages 3, 4, 5, 6, 7, 8
+- Forward/backward turns are instant
+- Inner page turns (5-6 ? 6-7) are also cached
+
+**Multi-Volume Books**:
+- Volumes are loaded asynchronously as you approach volume boundaries
+- The last pages of volume N and first pages of volume N+1 are both cached
+
+### Memory Management
+- Cache size is automatically managed based on available memory
+- Least-recently-used pages are evicted when memory is constrained
+- High-resolution PDFs may need optimization (print to "Microsoft Print to PDF" to reduce size)
+
+### Result
+Page turns feel **instant** - tap or swipe, and the next page appears immediately, just like turning a physical page. This allows musicians to focus entirely on their performance.
+
+---
+
 (Note: some PDF files consume a lot of memory per page, perhaps because they were captured at very high resolution. 
 The size can be reduced If you print the PDF to "Microsoft Print To PDF" printer driver or use an online PDFResizer tool)
 
