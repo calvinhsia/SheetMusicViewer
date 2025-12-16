@@ -1,6 +1,8 @@
 using Avalonia;
 using Avalonia.Headless;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Themes.Fluent;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SheetMusicLib;
@@ -111,41 +113,46 @@ public class InkCanvasControlTests : TestBase
 
     /// <summary>
     /// Creates a simple test bitmap for use in InkCanvasControl tests.
+    /// Uses Avalonia's WriteableBitmap to avoid SkiaSharp version conflicts in CI.
     /// </summary>
-    private static Bitmap CreateTestBitmap(int width = 200, int height = 300)
+    private static WriteableBitmap CreateTestBitmap(int width = 200, int height = 300)
     {
-        // Create a simple bitmap using SkiaSharp
-        using var skBitmap = new SkiaSharp.SKBitmap(width, height);
-        using var canvas = new SkiaSharp.SKCanvas(skBitmap);
-        
-        // Fill with white background
-        canvas.Clear(SkiaSharp.SKColors.White);
-        
-        // Draw a simple grid pattern for visual reference
-        using var paint = new SkiaSharp.SKPaint
+        // Create a WriteableBitmap using Avalonia's API (avoids direct SkiaSharp usage)
+        var bitmap = new WriteableBitmap(
+            new PixelSize(width, height),
+            new Vector(96, 96),
+            Avalonia.Platform.PixelFormat.Bgra8888,
+            AlphaFormat.Premul);
+
+        // Fill with a simple pattern using the frame buffer
+        using (var frameBuffer = bitmap.Lock())
         {
-            Color = SkiaSharp.SKColors.LightGray,
-            StrokeWidth = 1,
-            IsAntialias = true
-        };
-        
-        for (int x = 0; x < width; x += 20)
-        {
-            canvas.DrawLine(x, 0, x, height, paint);
+            var ptr = frameBuffer.Address;
+            var stride = frameBuffer.RowBytes;
+            var pixelData = new byte[stride * height];
+            
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int offset = y * stride + x * 4; // 4 bytes per pixel (BGRA)
+                    
+                    // Create a simple grid pattern: white background with light gray grid lines
+                    bool isGridLine = (x % 20 == 0) || (y % 20 == 0);
+                    byte grayValue = isGridLine ? (byte)0xD3 : (byte)0xFF;
+                    
+                    // BGRA format
+                    pixelData[offset + 0] = grayValue; // Blue
+                    pixelData[offset + 1] = grayValue; // Green
+                    pixelData[offset + 2] = grayValue; // Red
+                    pixelData[offset + 3] = 0xFF;      // Alpha
+                }
+            }
+            
+            System.Runtime.InteropServices.Marshal.Copy(pixelData, 0, ptr, pixelData.Length);
         }
-        for (int y = 0; y < height; y += 20)
-        {
-            canvas.DrawLine(0, y, width, y, paint);
-        }
-        
-        // Convert to Avalonia bitmap
-        using var image = SkiaSharp.SKImage.FromBitmap(skBitmap);
-        using var data = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
-        using var stream = new MemoryStream();
-        data.SaveTo(stream);
-        stream.Seek(0, SeekOrigin.Begin);
-        
-        return new Bitmap(stream);
+
+        return bitmap;
     }
 
     [TestMethod]
@@ -224,9 +231,9 @@ public class InkCanvasControlTests : TestBase
         var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
 
         // Act - These methods should not throw
-        inkCanvas.SetPenColor(Avalonia.Media.Brushes.Red);
-        inkCanvas.SetPenColor(Avalonia.Media.Brushes.Blue);
-        inkCanvas.SetPenColor(Avalonia.Media.Brushes.Black);
+        inkCanvas.SetPenColor(Brushes.Red);
+        inkCanvas.SetPenColor(Brushes.Blue);
+        inkCanvas.SetPenColor(Brushes.Black);
 
         // Assert - No exception means success
         Assert.IsTrue(true);
