@@ -568,12 +568,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         {
             _currentPdfMetaData.LastPageNo = CurrentPageNumber;
             _currentPdfMetaData.IsDirty = true;
-            _ = PdfMetaDataCore.SaveToJsonAsync(_currentPdfMetaData);
+            PdfMetaDataCore.SaveToJson(_currentPdfMetaData);
             
             _currentPdfMetaData = null;
             CurrentPageNumber = 0;
         }
-        
+
         _inkCanvas0 = null;
         _inkCanvas1 = null;
         
@@ -1027,7 +1027,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         if (anyChanges)
         {
             _currentPdfMetaData.IsDirty = true;
-            _ = PdfMetaDataCore.SaveToJsonAsync(_currentPdfMetaData);
+            PdfMetaDataCore.SaveToJson(_currentPdfMetaData);
             Trace.WriteLine($"Saved ink strokes for current pages");
         }
     }
