@@ -1212,19 +1212,22 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private void BtnAbout_Click(object? sender, RoutedEventArgs e)
     {
         var aboutMessage = $"{MyAppName}\n\n" +
+                          $"Version: {BuildInfo.Version}\n" +
                           $"Branch: {BuildInfo.GitBranch}\n" +
+                          $"Commit: {BuildInfo.GitCommit}\n" +
                           $"Build Time: {BuildInfo.BuildTime}\n\n" +
                           $"Cross-platform PDF sheet music viewer\n" +
                           $"Built with Avalonia UI and PDFtoImage\n\n" +
                           $".NET Runtime: {Environment.Version}";
         
-        // Simple dialog using a window
+        // Simple dialog using a window with Esc key support
         var dialog = new Window
         {
             Title = "About",
-            Width = 350,
-            Height = 250,
+            Width = 380,
+            Height = 280,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            CanResize = false,
             Content = new TextBlock
             {
                 Text = aboutMessage,
@@ -1232,6 +1235,17 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 TextWrapping = TextWrapping.Wrap
             }
         };
+        
+        // Allow Esc key to close the dialog
+        dialog.KeyDown += (s, args) =>
+        {
+            if (args.Key == Key.Escape)
+            {
+                dialog.Close();
+                args.Handled = true;
+            }
+        };
+        
         dialog.ShowDialog(this);
     }
     
