@@ -149,6 +149,34 @@ public class ChooseMusicWindow : Window
             e.Handled = true;
             Close();
         }
+        
+        // Handle Alt+key combinations for tab navigation (mnemonics)
+        if (e.KeyModifiers == KeyModifiers.Alt)
+        {
+            switch (e.Key)
+            {
+                case Key.A: // Apply filter - focus the filter textbox
+                    _tbxFilter?.Focus();
+                    e.Handled = true;
+                    break;
+                case Key.B: // _Books
+                    _tabControl.SelectedIndex = 0;
+                    e.Handled = true;
+                    break;
+                case Key.V: // Fa_vorites
+                    _tabControl.SelectedIndex = 1;
+                    e.Handled = true;
+                    break;
+                case Key.Q: // _Query
+                    _tabControl.SelectedIndex = 2;
+                    e.Handled = true;
+                    break;
+                case Key.P: // _Playlists
+                    _tabControl.SelectedIndex = 3;
+                    e.Handled = true;
+                    break;
+            }
+        }
     }
 
     private async void OnWindowOpened(object? sender, EventArgs e)
