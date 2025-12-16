@@ -69,11 +69,20 @@
 
   <!-- Generate BuildInfo in obj folder (not source controlled) -->
   <Target Name="GenerateBuildInfo" BeforeTargets="BeforeCompile">
+    <!-- Diagnostic: Show DevEnvDir value -->
+    <Message Text="[BuildInfo Diagnostic] DevEnvDir='$(DevEnvDir)'" Importance="high" />
+    <Message Text="[BuildInfo Diagnostic] VSINSTALLDIR='$(VSINSTALLDIR)'" Importance="high" />
+    <Message Text="[BuildInfo Diagnostic] MSBuildToolsPath='$(MSBuildToolsPath)'" Importance="high" />
+    <Message Text="[BuildInfo Diagnostic] Building from: $(MSBuildProjectDirectory)" Importance="high" />
+    
     <!-- Try git from PATH first for branch name -->
     <Exec Command="git rev-parse --abbrev-ref HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="low" IgnoreStandardErrorWarningFormat="true" StandardOutputImportance="low">
       <Output TaskParameter="ConsoleOutput" PropertyName="GitBranchName" />
       <Output TaskParameter="ExitCode" PropertyName="GitBranchExitCode" />
     </Exec>
+    
+    <!-- Diagnostic: Show git command result -->
+    <Message Text="[BuildInfo Diagnostic] Git branch command exit code: $(GitBranchExitCode), result: '$(GitBranchName)'" Importance="high" />
     
     <!-- Get git commit for version info -->
     <Exec Command="git rev-parse --short HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="low" IgnoreStandardErrorWarningFormat="true" StandardOutputImportance="low">
@@ -88,9 +97,28 @@
     </Exec>
     
     <!-- Fallback: Try Visual Studio's bundled git if PATH git failed -->
-    <Exec Command="&quot;$(DevEnvDir)CommonExtensions\Microsoft\TeamFoundation\Team Explorer\Git\cmd\git.exe&quot; rev-parse --abbrev-ref HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="low" IgnoreStandardErrorWarningFormat="true" Condition="'$(GitBranchExitCode)' != '0'">
+    <Message Text="[BuildInfo Diagnostic] Git from PATH failed, attempting VS Git fallback..." Importance="high" Condition="'$(GitBranchExitCode)' != '0'" />
+    <Message Text="[BuildInfo Diagnostic] DevEnvDir path: '$(DevEnvDir)CommonExtensions\Microsoft\TeamFoundation\Team Explorer\Git\cmd\git.exe'" Importance="high" Condition="'$(GitBranchExitCode)' != '0' AND '$(DevEnvDir)' != ''" />
+    <Message Text="[BuildInfo Diagnostic] DevEnvDir is empty - VS Git fallback will not work from command line builds" Importance="high" Condition="'$(GitBranchExitCode)' != '0' AND '$(DevEnvDir)' == ''" />
+    
+    <!-- Only attempt VS Git if DevEnvDir is available (building from VS IDE) -->
+    <!-- Branch -->
+    <Exec Command="&quot;$(DevEnvDir)CommonExtensions\Microsoft\TeamFoundation\Team Explorer\Git\cmd\git.exe&quot; rev-parse --abbrev-ref HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="low" IgnoreStandardErrorWarningFormat="true" Condition="'$(GitBranchExitCode)' != '0' AND '$(DevEnvDir)' != ''">
       <Output TaskParameter="ConsoleOutput" PropertyName="GitBranchName" />
+      <Output TaskParameter="ExitCode" PropertyName="GitBranchExitCode" />
     </Exec>
+    <!-- Commit -->
+    <Exec Command="&quot;$(DevEnvDir)CommonExtensions\Microsoft\TeamFoundation\Team Explorer\Git\cmd\git.exe&quot; rev-parse --short HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="low" IgnoreStandardErrorWarningFormat="true" Condition="'$(GitCommitExitCode)' != '0' AND '$(DevEnvDir)' != ''">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitCommitShort" />
+      <Output TaskParameter="ExitCode" PropertyName="GitCommitExitCode" />
+    </Exec>
+    <!-- Tag -->
+    <Exec Command="&quot;$(DevEnvDir)CommonExtensions\Microsoft\TeamFoundation\Team Explorer\Git\cmd\git.exe&quot; describe --tags --abbrev=0" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="low" IgnoreStandardErrorWarningFormat="true" Condition="'$(GitTagExitCode)' != '0' AND '$(DevEnvDir)' != ''">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitTag" />
+      <Output TaskParameter="ExitCode" PropertyName="GitTagExitCode" />
+    </Exec>
+    
+    <Message Text="[BuildInfo Diagnostic] After VS Git fallback - Branch exit: $(GitBranchExitCode), Commit exit: $(GitCommitExitCode), Tag exit: $(GitTagExitCode)" Importance="high" Condition="'$(DevEnvDir)' != ''" />
     
     <!-- Calculate Pacific time using inline C# task (works on Windows, Linux, macOS) -->
     <GetPacificTime>
