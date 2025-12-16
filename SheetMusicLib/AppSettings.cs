@@ -209,4 +209,25 @@ public class AppSettings
         MetaDataWindowLeft = defaults.MetaDataWindowLeft;
         MetaDataWindowMaximized = defaults.MetaDataWindowMaximized;
     }
+
+    /// <summary>
+    /// Reset the singleton instance for testing purposes.
+    /// Allows tests to use a custom settings path and fresh instance.
+    /// </summary>
+    /// <param name="testSettingsPath">Optional custom path for test settings file</param>
+    public static void ResetForTesting(string testSettingsPath = null)
+    {
+        lock (_lock)
+        {
+            _instance = null;
+            if (!string.IsNullOrEmpty(testSettingsPath))
+            {
+                _settingsPath = testSettingsPath;
+            }
+            else
+            {
+                _settingsPath = null; // Will use default path
+            }
+        }
+    }
 }
