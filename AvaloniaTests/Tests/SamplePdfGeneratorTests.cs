@@ -509,7 +509,7 @@ public class SamplePdfGeneratorTests : TestBase
             int savedCount = 0;
             foreach (var metadata in metadataList.Where(m => m.IsDirty))
             {
-                var saved = await SheetMusicLib.PdfMetaDataCore.SaveToJsonAsync(metadata, forceSave: true);
+                var saved = SheetMusicLib.PdfMetaDataCore.SaveToJson(metadata, forceSave: true);
                 Assert.IsTrue(saved, $"Should save metadata for {Path.GetFileName(metadata.FullPathFile)}");
                 savedCount++;
             }
