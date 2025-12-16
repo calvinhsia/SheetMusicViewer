@@ -40,6 +40,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private int _maxPageNumberMinus1;
     private bool _disableSliderValueChanged;
     private bool _chkFavoriteEnabled;
+    private bool _isThumbnailLoadingInProgress;
     
     // PDF metadata
     private string _rootMusicFolder = string.Empty;
@@ -325,19 +326,27 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     /// </summary>
     private async Task LoadAllThumbnailsAsync()
     {
-        foreach (var pdfMetaData in _lstPdfMetaFileData)
+        IsThumbnailLoadingInProgress = true;
+        try
         {
-            try
+            foreach (var pdfMetaData in _lstPdfMetaFileData)
             {
-                await pdfMetaData.GetOrCreateThumbnailAsync(async () =>
+                try
                 {
-                    return await GetThumbnailForMetadataAsync(pdfMetaData);
-                });
+                    await pdfMetaData.GetOrCreateThumbnailAsync(async () =>
+                    {
+                        return await GetThumbnailForMetadataAsync(pdfMetaData);
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"Error loading thumbnail for {pdfMetaData.GetBookName(_rootMusicFolder)}: {ex.Message}");
+                }
             }
-            catch (Exception ex)
-            {
-                Trace.WriteLine($"Error loading thumbnail for {pdfMetaData.GetBookName(_rootMusicFolder)}: {ex.Message}");
-            }
+        }
+        finally
+        {
+            IsThumbnailLoadingInProgress = false;
         }
     }
     
@@ -1415,6 +1424,16 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         set
         {
             _description1 = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool IsThumbnailLoadingInProgress
+    {
+        get => _isThumbnailLoadingInProgress;
+        set
+        {
+            _isThumbnailLoadingInProgress = value;
             OnPropertyChanged();
         }
     }
