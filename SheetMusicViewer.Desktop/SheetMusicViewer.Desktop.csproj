@@ -69,13 +69,26 @@
 
   <!-- Generate BuildInfo in obj folder (not source controlled) -->
   <Target Name="GenerateBuildInfo" BeforeTargets="BeforeCompile">
-    <!-- Try git from PATH first -->
-    <Exec Command="git rev-parse --abbrev-ref HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="low" IgnoreStandardErrorWarningFormat="true">
+    <!-- Try git from PATH first for branch name -->
+    <Exec Command="git rev-parse --abbrev-ref HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="low" IgnoreStandardErrorWarningFormat="true" StandardOutputImportance="low">
       <Output TaskParameter="ConsoleOutput" PropertyName="GitBranchName" />
+      <Output TaskParameter="ExitCode" PropertyName="GitBranchExitCode" />
+    </Exec>
+    
+    <!-- Get git commit for version info -->
+    <Exec Command="git rev-parse --short HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="low" IgnoreStandardErrorWarningFormat="true" StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitCommitShort" />
+      <Output TaskParameter="ExitCode" PropertyName="GitCommitExitCode" />
+    </Exec>
+    
+    <!-- Get git tag (version) - uses describe to find most recent tag -->
+    <Exec Command="git describe --tags --abbrev=0" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="low" IgnoreStandardErrorWarningFormat="true" StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitTag" />
+      <Output TaskParameter="ExitCode" PropertyName="GitTagExitCode" />
     </Exec>
     
     <!-- Fallback: Try Visual Studio's bundled git if PATH git failed -->
-    <Exec Command="&quot;$(DevEnvDir)CommonExtensions\Microsoft\TeamFoundation\Team Explorer\Git\cmd\git.exe&quot; rev-parse --abbrev-ref HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="low" IgnoreStandardErrorWarningFormat="true" Condition="'$(GitBranchName)' == '' OR $(GitBranchName.Contains('not recognized')) OR $(GitBranchName.Contains('is not'))">
+    <Exec Command="&quot;$(DevEnvDir)CommonExtensions\Microsoft\TeamFoundation\Team Explorer\Git\cmd\git.exe&quot; rev-parse --abbrev-ref HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="low" IgnoreStandardErrorWarningFormat="true" Condition="'$(GitBranchExitCode)' != '0'">
       <Output TaskParameter="ConsoleOutput" PropertyName="GitBranchName" />
     </Exec>
     
@@ -85,7 +98,8 @@
     </GetPacificTime>
     
     <PropertyGroup>
-      <!-- Reset GitBranchName if it contains error messages (git not available) -->
+      <!-- Reset GitBranchName if git command failed -->
+      <GitBranchName Condition="'$(GitBranchExitCode)' != '0'">unknown</GitBranchName>
       <GitBranchName Condition="$(GitBranchName.Contains('not recognized'))">unknown</GitBranchName>
       <GitBranchName Condition="$(GitBranchName.Contains('is not'))">unknown</GitBranchName>
       <GitBranchName Condition="$(GitBranchName.Contains('fatal:'))">unknown</GitBranchName>
@@ -94,14 +108,28 @@
       <GitBranchName Condition="'$(GitBranchName)' == 'HEAD' AND '$(BUILD_SOURCEBRANCHNAME)' != ''">$(BUILD_SOURCEBRANCHNAME)</GitBranchName>
       <GitBranchName Condition="'$(GitBranchName)' == 'HEAD'">detached-HEAD</GitBranchName>
       <GitBranchName Condition="'$(GitBranchName)' == ''">unknown</GitBranchName>
+      <!-- Reset GitCommitShort if git command failed -->
+      <GitCommitShort Condition="'$(GitCommitExitCode)' != '0'">unknown</GitCommitShort>
+      <GitCommitShort Condition="$(GitCommitShort.Contains('not recognized'))">unknown</GitCommitShort>
+      <GitCommitShort Condition="$(GitCommitShort.Contains('is not'))">unknown</GitCommitShort>
+      <GitCommitShort Condition="$(GitCommitShort.Contains('fatal:'))">unknown</GitCommitShort>
+      <GitCommitShort Condition="'$(GitCommitShort)' == ''">unknown</GitCommitShort>
+      <!-- Reset GitTag if git command failed - strip leading 'v' if present -->
+      <GitTag Condition="'$(GitTagExitCode)' != '0'">0.0.0-dev</GitTag>
+      <GitTag Condition="$(GitTag.Contains('not recognized'))">0.0.0-dev</GitTag>
+      <GitTag Condition="$(GitTag.Contains('is not'))">0.0.0-dev</GitTag>
+      <GitTag Condition="$(GitTag.Contains('fatal:'))">0.0.0-dev</GitTag>
+      <GitTag Condition="'$(GitTag)' == ''">0.0.0-dev</GitTag>
+      <!-- Strip leading 'v' from tag for version -->
+      <GitVersion>$(GitTag.TrimStart('v'))</GitVersion>
       <BuildInfoPath>$(IntermediateOutputPath)BuildInfo.g.cs</BuildInfoPath>
     </PropertyGroup>
-    <WriteLinesToFile File="$(BuildInfoPath)" Overwrite="true" Lines="// &lt;auto-generated/&gt;&#xD;&#xA;namespace SheetMusicViewer.Desktop&#xD;&#xA;{&#xD;&#xA;    public static class BuildInfo&#xD;&#xA;    {&#xD;&#xA;        public const string BuildTime = &quot;$(BuildTimestamp)&quot;%3B&#xD;&#xA;        public const string GitBranch = &quot;$(GitBranchName)&quot;%3B&#xD;&#xA;    }&#xD;&#xA;}" />
+    <WriteLinesToFile File="$(BuildInfoPath)" Overwrite="true" Lines="// &lt;auto-generated/&gt;&#xD;&#xA;namespace SheetMusicViewer.Desktop&#xD;&#xA;{&#xD;&#xA;    public static class BuildInfo&#xD;&#xA;    {&#xD;&#xA;        public const string Version = &quot;$(GitVersion)&quot;%3B&#xD;&#xA;        public const string BuildTime = &quot;$(BuildTimestamp)&quot;%3B&#xD;&#xA;        public const string GitBranch = &quot;$(GitBranchName)&quot;%3B&#xD;&#xA;        public const string GitCommit = &quot;$(GitCommitShort)&quot;%3B&#xD;&#xA;    }&#xD;&#xA;}" />
     <ItemGroup>
       <Compile Include="$(BuildInfoPath)" />
       <FileWrites Include="$(BuildInfoPath)" />
     </ItemGroup>
-    <Message Text="Generated BuildInfo: Branch=$(GitBranchName), Time=$(BuildTimestamp)" Importance="high" />
+    <Message Text="Generated BuildInfo: Version=$(GitVersion), Branch=$(GitBranchName), Commit=$(GitCommitShort), Time=$(BuildTimestamp)" Importance="high" />
   </Target>
   
   <ItemGroup>
