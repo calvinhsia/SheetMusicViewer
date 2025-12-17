@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "lastWrite": "2025-12-16T09:45:00.0000000Z",
+  "lastWrite": "2025-12-17T01:08:03.3612674Z",
   "lastPageNo": 0,
   "pageNumberOffset": 0,
-  "notes": "Sample PDF with comprehensive instructions for using SheetMusicViewer",
+  "notes": "Sample PDF with instructions for using SheetMusicViewer",
   "volumes": [
     { "fileName": "GettingStarted.pdf", "pageCount": 10, "rotation": 0 }
   ],

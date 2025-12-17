@@ -911,14 +911,28 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 _ => PdfRotation.Rotate0
             };
             
-            using var pdfStream = File.OpenRead(pdfPath);
-            using var skBitmap = Conversion.ToImage(pdfStream, page: pageIndexInVolume, 
+            // Read the entire PDF into memory to avoid stream disposal issues with PDFtoImage
+            var pdfBytes = File.ReadAllBytes(pdfPath);
+            
+            // Validate page index against actual PDF page count for better error messages
+            var actualPageCount = Conversion.GetPageCount(pdfBytes);
+            
+            if (pageIndexInVolume < 0 || pageIndexInVolume >= actualPageCount)
+            {
+                var metadataPageCount = _currentPdfMetaData.VolumeInfoList[volNo].NPagesInThisVolume;
+                throw new ArgumentOutOfRangeException(nameof(pageIndexInVolume),
+                    $"Page index {pageIndexInVolume} is invalid for PDF '{Path.GetFileName(pdfPath)}' " +
+                    $"which has {actualPageCount} pages (metadata claims {metadataPageCount}). " +
+                    $"Delete the .json metadata file to regenerate it.");
+            }
+            
+            using var skBitmap = Conversion.ToImage(pdfBytes, page: pageIndexInVolume, 
                 options: new PDFtoImage.RenderOptions(Dpi: 150, Rotation: pdfRotation));
             using var image = SKImage.FromBitmap(skBitmap);
             using var data = image.Encode(SKEncodedImageFormat.Png, 100);
             using var stream = new MemoryStream();
             data.SaveTo(stream);
-           stream.Seek(0, SeekOrigin.Begin);
+            stream.Seek(0, SeekOrigin.Begin);
             
             return new Bitmap(stream);
         });
