@@ -1286,10 +1286,10 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                           $"Built with Avalonia UI and PDFtoImage\n\n" +
                           $".NET Runtime: {Environment.Version}";
         
-        // Simple dialog using a window with Esc key support
+        // Simple dialog using a window with keyboard support
         var dialog = new Window
         {
-            Title = "About",
+            Title = "About (Ctrl+C to copy)",
             Width = 380,
             Height = 280,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
@@ -1302,12 +1302,26 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             }
         };
         
-        // Allow Esc key to close the dialog
-        dialog.KeyDown += (s, args) =>
+        // Handle keyboard shortcuts
+        dialog.KeyDown += async (s, args) =>
         {
             if (args.Key == Key.Escape)
             {
                 dialog.Close();
+                args.Handled = true;
+            }
+            else if (args.Key == Key.C && args.KeyModifiers == KeyModifiers.Control)
+            {
+                // Copy about info to clipboard
+                var clipboard = TopLevel.GetTopLevel(dialog)?.Clipboard;
+                if (clipboard != null)
+                {
+                    await clipboard.SetTextAsync(aboutMessage);
+                    // Brief visual feedback - update title temporarily
+                    dialog.Title = "About - Copied!";
+                    await Task.Delay(1000);
+                    dialog.Title = "About (Ctrl+C to copy)";
+                }
                 args.Handled = true;
             }
         };
