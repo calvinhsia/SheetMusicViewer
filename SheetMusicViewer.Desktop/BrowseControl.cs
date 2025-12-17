@@ -85,7 +85,6 @@ public class BrowseControl : DockPanel
 
 internal class ListBoxListFilter : DockPanel
 {
-    readonly Button _btnApply = new Button() { Content = "Apply" };
     readonly TextBox _txtFilter = new TextBox { Width = 200 };
     readonly TextBlock _txtStatus = new TextBlock();
     ListBoxBrowseView? _browse;
@@ -121,24 +120,19 @@ internal class ListBoxListFilter : DockPanel
         _txtFilter.Text = _LastFilter;
         _txtFilter.Watermark = "Enter filter text...";
         spFilter.Children.Add(_txtFilter);
-        spFilter.Children.Add(_btnApply);
-        _btnApply.Click += (oc, ec) => { On_BtnApply_Click(oc, ec); };
         this.Children.Add(spFilter);
 
-        _txtFilter.KeyDown += (o, e) =>
+        // Apply filter on every text change
+        _txtFilter.TextChanged += (o, e) =>
         {
-            if (e.Key == Key.Enter)
-            {
-                On_BtnApply_Click(o, e);
-            }
+            ApplyFilter();
         };
     }
 
-    void On_BtnApply_Click(object? o, RoutedEventArgs e)
+    void ApplyFilter()
     {
         try
         {
-            e.Handled = true;
             var filtText = _txtFilter.Text?.Trim().ToLower() ?? string.Empty;
             _LastFilter = filtText;
 
