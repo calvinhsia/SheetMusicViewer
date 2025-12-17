@@ -1,24 +1,61 @@
 {
-  "version": 1,
-  "lastWrite": "2025-12-17T04:24:45.6544007Z",
-  "lastPageNo": 0,
-  "pageNumberOffset": 0,
-  "notes": "Sample PDF with instructions for using SheetMusicViewer",
-  "volumes": [
-    { "fileName": "GettingStarted.pdf", "pageCount": 10, "rotation": 0 }
-  ],
-  "tableOfContents": [
-    { "pageNo": 0, "songName": "Welcome", "composer": "Introduction" },
-    { "pageNo": 1, "songName": "Getting Started", "composer": "Setup Guide" },
-    { "pageNo": 2, "songName": "Multi-Volume PDFs", "composer": "Feature Guide" },
-    { "pageNo": 3, "songName": "Singles Folders", "composer": "Feature Guide" },
-    { "pageNo": 4, "songName": "Display & Navigation", "composer": "User Guide" },
-    { "pageNo": 5, "songName": "Instant Page Turns", "composer": "Performance Guide" },
-    { "pageNo": 6, "songName": "Inking & Annotations", "composer": "User Guide" },
-    { "pageNo": 7, "songName": "Performance & Memory", "composer": "Technical Info" },
-    { "pageNo": 8, "songName": "PDF Table of Contents", "composer": "Feature Guide" },
-    { "pageNo": 9, "songName": "About", "composer": "Calvin Hsia" }
-  ],
-  "favorites": [],
-  "inkStrokes": {}
+    "version": 1,
+    "lastWrite": "2025-12-17T14:38:33.6279173-08:00",
+    "lastPageNo": 0,
+    "pageNumberOffset": 1,
+    "volumes": [
+        {
+            "fileName": "GettingStarted.pdf",
+            "pageCount": 11
+        }
+    ],
+    "tableOfContents": [
+        {
+            "pageNo": 0,
+            "songName": "Welcome",
+            "composer": "Introduction"
+        },
+        {
+            "pageNo": 4,
+            "songName": "Getting Started",
+            "composer": "Setup Guide"
+        },
+        {
+            "pageNo": 5,
+            "songName": "Multi-Volume PDFs",
+            "composer": "Feature Guide"
+        },
+        {
+            "pageNo": 6,
+            "songName": "Singles Folders",
+            "composer": "Feature Guide"
+        },
+        {
+            "pageNo": 7,
+            "songName": "Display & Navigation",
+            "composer": "User Guide"
+        },
+        {
+            "pageNo": 8,
+            "songName": "Instant Page Turns",
+            "composer": "Performance Guide"
+        },
+        {
+            "pageNo": 9,
+            "songName": "Inking & Annotations",
+            "composer": "User Guide"
+        },
+        {
+            "pageNo": 10,
+            "songName": "PDF Table of Contents",
+            "composer": "Feature Guide"
+        },
+        {
+            "pageNo": 11,
+            "songName": "About",
+            "composer": "Calvin Hsia"
+        }
+    ],
+    "favorites": [],
+    "inkStrokes": {}
 }
