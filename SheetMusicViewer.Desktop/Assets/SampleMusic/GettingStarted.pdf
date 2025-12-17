@@ -79,7 +79,7 @@ ET
 endstream
 endobj
 14 0 obj
-<< /Length 731 >>
+<< /Length 959 >>
 stream
 BT
 /F2 22 Tf
@@ -107,7 +107,13 @@ BT
 0 -15 Td
 (   All auxiliary data \(TOC, Favorites, Inking,) Tj
 0 -15 Td
-(   LastPageNumberViewed\) is stored in JSON files.) Tj
+(   LastPageNumberViewed\) is stored in JSON files \(automatically created\).) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(You can use the JSON files to store Composer name, Date, Notes, etc.) Tj
+0 -15 Td
+(Click on the Image Icon above to see the JSON for this GettingStarted PDF) Tj
 0 -15 Td
 () Tj
 0 -15 Td
@@ -117,7 +123,7 @@ BT
 0 -15 Td
 () Tj
 0 -15 Td
-(Press Alt+C to open the Music Chooser dialog.) Tj
+(Press Alt+C or use the Menu to open the Music Chooser dialog.) Tj
 0 -15 Td
 ET
 endstream
@@ -169,7 +175,7 @@ ET
 endstream
 endobj
 16 0 obj
-<< /Length 761 >>
+<< /Length 799 >>
 stream
 BT
 /F2 22 Tf
@@ -181,7 +187,7 @@ BT
 0 -15 Td
 (A subfolder ending in 'Singles' \(like) Tj
 0 -15 Td
-('GershwinSingles'\) treats each PDF as a) Tj
+('GershwinSingles'\) treats each PDF as a Volume) Tj
 0 -15 Td
 (single song with possibly multiple pages.) Tj
 0 -15 Td
@@ -191,7 +197,7 @@ BT
 0 -15 Td
 (  - Maintained in alphabetical order) Tj
 0 -15 Td
-(  - First page of first song is the icon) Tj
+(  - First page of first song is the Thumbnail/Icon for the whole volume) Tj
 0 -15 Td
 (  - Dynamically updates as items are) Tj
 0 -15 Td
@@ -215,7 +221,7 @@ ET
 endstream
 endobj
 17 0 obj
-<< /Length 722 >>
+<< /Length 1238 >>
 stream
 BT
 /F2 22 Tf
@@ -256,6 +262,28 @@ BT
 () Tj
 0 -15 Td
 (Top 3/4: Zoom/pan with two fingers) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(From the ChooseMusic dialog you can choose the Query Tab, ) Tj
+0 -15 Td
+(   to query by any string, like composer or song name) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(You can use a Surface Book \(with detachable screen\). On a grand piano, you can just use any laptop.) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(You can rotate the screen and it will auto-rotate) Tj
+0 -15 Td
+(\(you might want to turn off Show2Pages\)) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(I use a 15 inch Surface Book on my Steinway grand) Tj
+0 -15 Td
+() Tj
 0 -15 Td
 ET
 endstream
@@ -451,7 +479,7 @@ ET
 endstream
 endobj
 22 0 obj
-<< /Length 697 >>
+<< /Length 885 >>
 stream
 BT
 /F2 22 Tf
@@ -465,7 +493,15 @@ BT
 0 -15 Td
 (Email: calvin_hsia@alum.mit.edu) Tj
 0 -15 Td
+() Tj
+0 -15 Td
+(Source code: https://github.com/calvinhsia/SheetMusicViewer) Tj
+0 -15 Td
 (Website: http://calvinhsia.com) Tj
+0 -15 Td
+() Tj
+0 -15 Td
+(Licensed under the MIT License - free to use, modify, and distribute.) Tj
 0 -15 Td
 () Tj
 0 -15 Td
@@ -519,18 +555,18 @@ xref
 0000001432 00000 n 
 0000001572 00000 n 
 0000002280 00000 n 
-0000003062 00000 n 
-0000003894 00000 n 
-0000004706 00000 n 
-0000005479 00000 n 
-0000006327 00000 n 
-0000007102 00000 n 
-0000007980 00000 n 
-0000008747 00000 n 
-0000009495 00000 n 
-0000009566 00000 n 
+0000003290 00000 n 
+0000004122 00000 n 
+0000004972 00000 n 
+0000006262 00000 n 
+0000007110 00000 n 
+0000007885 00000 n 
+0000008763 00000 n 
+0000009530 00000 n 
+0000010466 00000 n 
+0000010537 00000 n 
 trailer
 << /Size 25 /Root 1 0 R >>
 startxref
-9642
+10613
 %%EOF
