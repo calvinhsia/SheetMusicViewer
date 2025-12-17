@@ -39,7 +39,7 @@ public class SamplePdfGeneratorTests : TestBase
     {
         var sampleFolder = GetProjectSampleMusicFolder();
         LogMessage($"Sample folder: {sampleFolder}");
-        
+
         if (!Directory.Exists(sampleFolder))
         {
             Assert.Fail("Sample folder does not exist.");
@@ -50,18 +50,18 @@ public class SamplePdfGeneratorTests : TestBase
 
         // Generate PDF and get expected page count
         var expectedPageCount = await CreateGettingStartedPdfAsync(pdfPath);
-        
+
         Assert.IsTrue(File.Exists(pdfPath), $"PDF should exist at {pdfPath}");
         LogMessage($"PDF generated successfully: {new FileInfo(pdfPath).Length:N0} bytes");
-        
+
         // Validate PDF page count matches what we intended
         var pdfBytes = File.ReadAllBytes(pdfPath);
         var actualPageCount = PDFtoImage.Conversion.GetPageCount(pdfBytes);
         LogMessage($"PDF has {actualPageCount} pages (expected {expectedPageCount})");
-        
-        Assert.AreEqual(expectedPageCount, actualPageCount, 
+
+        Assert.AreEqual(expectedPageCount, actualPageCount,
             $"PDF generation bug: expected {expectedPageCount} pages but PDFtoImage reads {actualPageCount}");
-        
+
         // Render each page to verify all are valid
         for (int i = 0; i < actualPageCount; i++)
         {
@@ -69,27 +69,32 @@ public class SamplePdfGeneratorTests : TestBase
             Assert.IsTrue(bitmap.Width > 0 && bitmap.Height > 0, $"Page {i} should render");
             LogMessage($"  Page {i} rendered: {bitmap.Width}x{bitmap.Height}");
         }
-        
+
         // Generate JSON metadata with matching page count
         var jsonPath = Path.ChangeExtension(pdfPath, ".json");
         await CreateSampleMetadataAsync(jsonPath, actualPageCount);
         LogMessage($"Metadata JSON generated at: {jsonPath}");
-        
+
         // Validate JSON matches PDF
         var jsonContent = await File.ReadAllTextAsync(jsonPath);
-        Assert.IsTrue(jsonContent.Contains($"\"pageCount\": {actualPageCount}"), 
+        Assert.IsTrue(jsonContent.Contains($"\"pageCount\": {actualPageCount}"),
             $"JSON should have pageCount: {actualPageCount}");
-        
+
         var tocCount = jsonContent.Split("\"pageNo\":").Length - 1;
-        Assert.AreEqual(actualPageCount, tocCount, 
+        Assert.AreEqual(actualPageCount, tocCount,
             $"JSON should have {actualPageCount} TOC entries");
-        
+
         LogMessage($"Success: {actualPageCount} pages in PDF match JSON metadata");
     }
 
     /// <summary>
     /// Creates a 10-page PDF with proper xref byte offsets.
     /// Returns the number of pages for validation.
+    /// 
+    /// NOTE: When modifying page content text, no manual adjustments are needed because:
+    ///   1. Content stream Length is calculated dynamically via Encoding.ASCII.GetByteCount()
+    ///   2. Xref byte offsets are tracked as we build the PDF via sb.Length
+    /// Just update the text in pageContents[] and the PDF structure adapts automatically.
     /// </summary>
     private static async Task<int> CreateGettingStartedPdfAsync(string path)
     {
@@ -111,9 +116,10 @@ public class SamplePdfGeneratorTests : TestBase
                 "1. Run the program and choose a path to a", "   root folder containing PDF music files.", "",
                 "2. PDFs can contain 1-N pages.", "",
                 "3. The PDFs are never altered by the program.",
-                "   All auxiliary data (TOC, Favorites, Inking,", "   LastPageNumberViewed) is stored in JSON files.", "",
+                "   All auxiliary data (TOC, Favorites, Inking,", "   LastPageNumberViewed) is stored in JSON files (automatically created).", "",
+                "You can use the JSON files to store Composer name, Date, Notes, etc.", "Click on the Image Icon above to see the JSON for this GettingStarted PDF","",
                 "4. The program needs write permission to write", "   the JSON metadata files alongside your PDFs.", "",
-                "Press Alt+C to open the Music Chooser dialog."
+                "Press Alt+C or use the Menu to open the Music Chooser dialog."
             }),
             CreatePageContent("Multi-Volume PDF Support", new[]
             {
@@ -129,9 +135,9 @@ public class SamplePdfGeneratorTests : TestBase
             }),
             CreatePageContent("Singles Folders", new[]
             {
-                "", "A subfolder ending in 'Singles' (like", "'GershwinSingles') treats each PDF as a",
+                "", "A subfolder ending in 'Singles' (like", "'GershwinSingles') treats each PDF as a Volume",
                 "single song with possibly multiple pages.", "", "SINGLES FOLDER FEATURES:",
-                "  - Maintained in alphabetical order", "  - First page of first song is the icon",
+                "  - Maintained in alphabetical order", "  - First page of first song is the Thumbnail/Icon for the whole volume",
                 "  - Dynamically updates as items are", "    added, removed, or renamed",
                 "  - TOC entries auto-adjust", "", "A subfolder called 'Hidden' will not",
                 "be searched.", "",
@@ -146,7 +152,11 @@ public class SamplePdfGeneratorTests : TestBase
                 "  - Arrow keys: Move by 1 screenful", "  - Bottom quarter: Tap to turn pages", "",
                 "IN 2-PAGE MODE:", "  Bottom is divided into 4 quarters.",
                 "  Outer quarters: advance 2 pages", "  Inner quarters: advance 1 page", "",
-                "Top 3/4: Zoom/pan with two fingers"
+                "Top 3/4: Zoom/pan with two fingers","",
+                "From the ChooseMusic dialog you can choose the Query Tab, ", "   to query by any string, like composer or song name","",
+                "You can use a Surface Book (with detachable screen). On a grand piano, you can just use any laptop.","",
+                "You can rotate the screen and it will auto-rotate","(you might want to turn off Show2Pages)","",
+                "I use a 15 inch Surface Book on my Steinway grand",""
             }),
             CreatePageContent("Instant Page Turns", new[]
             {
@@ -189,7 +199,10 @@ public class SamplePdfGeneratorTests : TestBase
             CreatePageContent("About SheetMusicViewer", new[]
             {
                 "", "Created by Calvin Hsia", "Email: calvin_hsia@alum.mit.edu",
-                "Website: http://calvinhsia.com", "", "I have hundreds of piano music books",
+                "","Source code: https://github.com/calvinhsia/SheetMusicViewer",
+                "Website: http://calvinhsia.com", "",
+                "Licensed under the MIT License - free to use, modify, and distribute.", "",
+                "I have hundreds of piano music books",
                 "collected over decades, kept on OneDrive.", "",
                 "I digitized 30,000+ pages of music using", "a Xerox WorkCentre scanner.", "",
                 "I really love Ragtime! There's something", "so binary about it: powers of 2, 16 measures",
@@ -199,48 +212,48 @@ public class SamplePdfGeneratorTests : TestBase
 
         var pageCount = pageContents.Length;
         var fontObjNum = 3 + pageCount * 2;
-        
+
         // Build objects list
         var objects = new List<(int objNum, string content)>
         {
             (1, "<< /Type /Catalog /Pages 2 0 R >>"),
             (2, $"<< /Type /Pages /Kids [{string.Join(" ", Enumerable.Range(3, pageCount).Select(n => $"{n} 0 R"))}] /Count {pageCount} >>")
         };
-        
+
         for (int i = 0; i < pageCount; i++)
         {
             objects.Add((3 + i, $"<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 {fontObjNum} 0 R /F2 {fontObjNum + 1} 0 R >> >> /MediaBox [0 0 612 792] /Contents {3 + pageCount + i} 0 R >>"));
         }
-        
+
         for (int i = 0; i < pageCount; i++)
         {
             var content = pageContents[i];
             objects.Add((3 + pageCount + i, $"<< /Length {Encoding.ASCII.GetByteCount(content)} >>\nstream\n{content}endstream"));
         }
-        
+
         objects.Add((fontObjNum, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"));
         objects.Add((fontObjNum + 1, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>"));
-        
+
         objects = objects.OrderBy(o => o.objNum).ToList();
-        
+
         // Build PDF with correct byte offsets
         var sb = new StringBuilder();
         sb.Append("%PDF-1.4\n%\xe2\xe3\xcf\xd3\n");
-        
+
         var offsets = new List<int>();
         foreach (var (objNum, content) in objects)
         {
             offsets.Add(sb.Length);
             sb.Append($"{objNum} 0 obj\n{content}\nendobj\n");
         }
-        
+
         var xrefOffset = sb.Length;
         sb.Append($"xref\n0 {objects.Count + 1}\n0000000000 65535 f \n");
         foreach (var offset in offsets)
             sb.Append($"{offset:D10} 00000 n \n");
-        
+
         sb.Append($"trailer\n<< /Size {objects.Count + 1} /Root 1 0 R >>\nstartxref\n{xrefOffset}\n%%EOF\n");
-        
+
         await File.WriteAllTextAsync(path, sb.ToString(), Encoding.ASCII);
         return pageCount;
     }
@@ -277,10 +290,10 @@ public class SamplePdfGeneratorTests : TestBase
             ("PDF Table of Contents", "Feature Guide"),
             ("About", "Calvin Hsia")
         };
-        
+
         if (tocEntries.Length != pageCount)
             throw new InvalidOperationException($"TOC entries ({tocEntries.Length}) must match page count ({pageCount})");
-        
+
         var sb = new StringBuilder();
         sb.AppendLine("{");
         sb.AppendLine($"  \"version\": 1,");
@@ -301,7 +314,7 @@ public class SamplePdfGeneratorTests : TestBase
         sb.AppendLine($"  \"favorites\": [],");
         sb.AppendLine($"  \"inkStrokes\": {{}}");
         sb.AppendLine("}");
-        
+
         await File.WriteAllTextAsync(path, sb.ToString());
     }
 
@@ -311,53 +324,53 @@ public class SamplePdfGeneratorTests : TestBase
     {
         var sampleFolder = GetProjectSampleMusicFolder();
         Assert.IsTrue(Directory.Exists(sampleFolder), $"Sample folder should exist at {sampleFolder}");
-        
+
         var tempFolder = Path.Combine(Path.GetTempPath(), $"SheetMusicViewerTest_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempFolder);
         LogMessage($"Created temp folder: {tempFolder}");
-        
+
         try
         {
             var pdfFiles = Directory.GetFiles(sampleFolder, "*.pdf");
             Assert.IsTrue(pdfFiles.Length > 0, "Sample folder should contain at least one PDF");
-            
+
             foreach (var pdfFile in pdfFiles)
             {
                 File.Copy(pdfFile, Path.Combine(tempFolder, Path.GetFileName(pdfFile)));
                 LogMessage($"Copied: {Path.GetFileName(pdfFile)}");
             }
-            
+
             var gettingStartedJson = Path.Combine(sampleFolder, "GettingStarted.json");
             if (File.Exists(gettingStartedJson))
             {
                 File.Copy(gettingStartedJson, Path.Combine(tempFolder, "GettingStarted.json"));
                 LogMessage("Copied: GettingStarted.json");
             }
-            
+
             var jsonFilesBefore = Directory.GetFiles(tempFolder, "*.json");
             Assert.AreEqual(1, jsonFilesBefore.Length, "Should have 1 JSON file before loading");
-            
+
             var provider = new PdfToImageDocumentProvider();
             var (metadataList, _) = await SheetMusicLib.PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
                 tempFolder, provider, exceptionHandler: null, useParallelLoading: true);
-            
+
             LogMessage($"Loaded {metadataList.Count} metadata entries");
             Assert.IsTrue(metadataList.Count > 0, "Should load at least one metadata entry");
-            
+
             foreach (var metadata in metadataList)
             {
                 var fileName = Path.GetFileName(metadata.FullPathFile);
                 var hasPreExistingJson = fileName.Equals("GettingStarted.pdf", StringComparison.OrdinalIgnoreCase);
-                
+
                 if (hasPreExistingJson)
                     Assert.IsFalse(metadata.IsDirty, $"GettingStarted.pdf should NOT be dirty");
                 else
                     Assert.IsTrue(metadata.IsDirty, $"{fileName} should be dirty");
-                
+
                 var totalPages = metadata.VolumeInfoList.Sum(v => v.NPagesInThisVolume);
                 LogMessage($"  {fileName}: {totalPages} pages, IsDirty={metadata.IsDirty}");
             }
-            
+
             int savedCount = 0;
             foreach (var metadata in metadataList.Where(m => m.IsDirty))
             {
@@ -365,10 +378,10 @@ public class SamplePdfGeneratorTests : TestBase
                 savedCount++;
             }
             LogMessage($"Saved {savedCount} new JSON files");
-            
+
             var jsonFilesAfter = Directory.GetFiles(tempFolder, "*.json");
             Assert.AreEqual(metadataList.Count, jsonFilesAfter.Length, "Should have one JSON per PDF");
-            
+
             LogMessage("Integration test passed");
         }
         finally
