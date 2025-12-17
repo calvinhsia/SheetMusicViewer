@@ -101,7 +101,7 @@
                             </MenuItem>
                             <Separator/>
                             <MenuItem Name="mnuAbout" Header="_About" ToolTip.Tip="Show build information"/>
-                            <MenuItem Name="mnuQuit" Header="_Quit" InputGesture="Alt+Q" ToolTip.Tip="Exit application"/>
+                            <MenuItem Name="mnuQuit" Header="_Quit Application" InputGesture="Alt+Q" ToolTip.Tip="Exit application"/>
                         </MenuItem>
                     </Menu>
                     <TextBlock Width="17" Text="{Binding TouchCount}" VerticalAlignment="Center"/>
