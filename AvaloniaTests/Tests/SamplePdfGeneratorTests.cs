@@ -88,6 +88,53 @@ public class SamplePdfGeneratorTests : TestBase
     }
 
     /// <summary>
+    /// Validates an existing GettingStarted.pdf (e.g., authored in Word and printed to PDF).
+    /// Use this when you manually create/update the PDF rather than generating it programmatically.
+    /// 
+    /// WORKFLOW for Word-authored PDF:
+    ///   1. Edit GettingStarted.docx in Word (add screenshots, formatting, etc.)
+    ///   2. File ? Print ? Microsoft Print to PDF ? save as GettingStarted.pdf
+    ///   3. Update GettingStarted.json with correct pageCount and tableOfContents entries
+    ///   4. Run this test to validate everything matches
+    /// </summary>
+    [TestMethod]
+    [TestCategory("Manual")]
+    public async Task ValidateGettingStartedPdf()
+    {
+        var sampleFolder = GetProjectSampleMusicFolder();
+        var pdfPath = Path.Combine(sampleFolder, "GettingStarted.pdf");
+        var jsonPath = Path.Combine(sampleFolder, "GettingStarted.json");
+        
+        Assert.IsTrue(File.Exists(pdfPath), $"GettingStarted.pdf should exist at {pdfPath}");
+        Assert.IsTrue(File.Exists(jsonPath), $"GettingStarted.json should exist at {jsonPath}");
+        
+        // Validate PDF is readable
+        var pdfBytes = File.ReadAllBytes(pdfPath);
+        var pageCount = PDFtoImage.Conversion.GetPageCount(pdfBytes);
+        LogMessage($"PDF: {new FileInfo(pdfPath).Length:N0} bytes, {pageCount} pages");
+        
+        // Render each page to verify all are valid
+        for (int i = 0; i < pageCount; i++)
+        {
+            using var bitmap = PDFtoImage.Conversion.ToImage(pdfBytes, page: i);
+            Assert.IsTrue(bitmap.Width > 0 && bitmap.Height > 0, $"Page {i} should render");
+            LogMessage($"  Page {i}: {bitmap.Width}x{bitmap.Height}");
+        }
+        
+        // Validate JSON matches PDF page count
+        var json = await File.ReadAllTextAsync(jsonPath);
+        Assert.IsTrue(json.Contains($"\"pageCount\": {pageCount}"), 
+            $"JSON pageCount should be {pageCount} to match PDF. Update the JSON file.");
+        
+        // Count TOC entries
+        var tocCount = json.Split("\"pageNo\":").Length - 1;
+        Assert.AreEqual(pageCount, tocCount, 
+            $"JSON should have {pageCount} TOC entries to match PDF pages. Currently has {tocCount}.");
+        
+        LogMessage($"Validation passed: PDF has {pageCount} pages, JSON has {tocCount} TOC entries");
+    }
+
+    /// <summary>
     /// Creates a 10-page PDF with proper xref byte offsets.
     /// Returns the number of pages for validation.
     /// 
@@ -205,7 +252,8 @@ public class SamplePdfGeneratorTests : TestBase
                 "I have hundreds of piano music books",
                 "collected over decades, kept on OneDrive.", "",
                 "I digitized 30,000+ pages of music using", "a Xerox WorkCentre scanner.", "",
-                "I really love Ragtime! There's something", "so binary about it: powers of 2, 16 measures",
+                "I really love Ragtime! There's something",
+                "so binary about it: powers of 2, 16 measures",
                 "per verse, 2/4 time, syncopation.", "", "Enjoy your music!", "- Calvin"
             })
         };
