@@ -104,7 +104,6 @@
                             <MenuItem Name="mnuQuit" Header="_Quit Application" InputGesture="Alt+Q" ToolTip.Tip="Exit application"/>
                         </MenuItem>
                     </Menu>
-                    <TextBlock Width="17" Text="{Binding TouchCount}" VerticalAlignment="Center"/>
                     <CheckBox Name="chkInk1" IsEnabled="{Binding PdfUIEnabled}" ToolTip.Tip="Turn on/off inking with mouse or pen" IsVisible="{Binding Show2Pages}">
                         <TextBlock Text="Ink"/>
                     </CheckBox>

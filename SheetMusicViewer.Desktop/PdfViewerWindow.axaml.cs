@@ -31,7 +31,6 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     public new event PropertyChangedEventHandler? PropertyChanged;
 
     private int _currentPageNumber = 1;
-    private int _touchCount;
     private bool _show2Pages = true;
     private bool _pdfUIEnabled;
     private string _pdfTitle = string.Empty;
@@ -1108,7 +1107,6 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private void NavigateAsync(int delta)
     {
         _lastNavigationDelta = delta; // Track navigation direction
-        TouchCount++;
         var newPage = CurrentPageNumber + delta;
         
         if (_currentPdfMetaData != null)
@@ -1127,7 +1125,6 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     
     private void BtnPrevNext_Click(bool isPrevious)
     {
-        TouchCount++;
         
         if (_currentPdfMetaData != null && _currentPdfMetaData.Favorites.Count > 0)
         {
@@ -1239,14 +1236,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             // Toggle favorite in metadata
             // TODO: Update the favorites list and save using PdfMetaDataCore.SaveToJson()
             
-            TouchCount++;
             Trace.WriteLine($"Favorite toggled: Page {pageNo}, IsFavorite: {isFavorite}");
         }
     }
     
     private async void BtnRotate_Click(object? sender, RoutedEventArgs e)
     {
-        TouchCount++;
         
         // TODO: Rotate the page in metadata and save using PdfMetaDataCore.SaveToJson()
         
@@ -1519,16 +1514,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
     }
 
-    public int TouchCount
-    {
-        get => _touchCount;
-        set
-        {
-            _touchCount = value;
-            OnPropertyChanged();
-        }
-    }
-    
+   
     public int CacheLoadingCount
     {
         get => _cacheLoadingCount;
