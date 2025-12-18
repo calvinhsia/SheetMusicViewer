@@ -282,21 +282,24 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         IsThumbnailLoadingInProgress = true;
         try
         {
-            foreach (var pdfMetaData in _lstPdfMetaFileData)
-            {
-                try
+            await Parallel.ForEachAsync(
+                _lstPdfMetaFileData,
+                new ParallelOptions { MaxDegreeOfParallelism = 4 },
+                async (pdfMetaData, cancellationToken) =>
                 {
-                    await pdfMetaData.GetOrCreateThumbnailAsync(async () =>
+                    try
                     {
-                        return await GetThumbnailForMetadataAsync(pdfMetaData);
-                    });
-                }
-                catch (Exception ex)
-                {
-                    // Log thumbnail errors but don't show to user - this is background work
-                    Logger.LogWarning($"Thumbnail load failed for {pdfMetaData.GetBookName(_rootMusicFolder)}: {ex.Message}");
-                }
-            }
+                        await pdfMetaData.GetOrCreateThumbnailAsync(async () =>
+                        {
+                            return await GetThumbnailForMetadataAsync(pdfMetaData);
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log thumbnail errors but don't show to user - this is background work
+                        Logger.LogWarning($"Thumbnail load failed for {pdfMetaData.GetBookName(_rootMusicFolder)}: {ex.Message}");
+                    }
+                });
         }
         finally
         {
