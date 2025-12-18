@@ -208,6 +208,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             mnuAbout.Click += BtnAbout_Click;
         }
         
+        var mnuShowLogs = this.FindControl<MenuItem>("mnuShowLogs");
+        if (mnuShowLogs != null)
+        {
+            mnuShowLogs.Click += MnuShowLogs_Click;
+        }
+        
         var mnuQuit = this.FindControl<MenuItem>("mnuQuit");
         if (mnuQuit != null)
         {
@@ -317,8 +323,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            Description0 = $"Error loading: {ex.Message}";
-            Trace.WriteLine($"OnWindowLoadedAsync error: {ex}");
+            Description0 = Logger.LogExceptionAndGetUserMessage("Error loading application", ex);
         }
     }
     
@@ -341,7 +346,8 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 }
                 catch (Exception ex)
                 {
-                    Trace.WriteLine($"Error loading thumbnail for {pdfMetaData.GetBookName(_rootMusicFolder)}: {ex.Message}");
+                    // Log thumbnail errors but don't show to user - this is background work
+                    Logger.LogWarning($"Thumbnail load failed for {pdfMetaData.GetBookName(_rootMusicFolder)}: {ex.Message}");
                 }
             }
         }
@@ -446,7 +452,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"ChooseMusicAsync error: {ex}");
+            Logger.LogException("ChooseMusic dialog error", ex);
         }
     }
     
@@ -483,7 +489,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"ShowMetaDataFormAsync error: {ex}");
+            Logger.LogException("MetaData form error", ex);
         }
         finally
         {
@@ -543,7 +549,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                     }
                     catch (Exception ex)
                     {
-                        Trace.WriteLine($"Error loading thumbnail: {ex.Message}");
+                        Logger.LogWarning($"Thumbnail load failed: {ex.Message}");
                     }
                 });
             }
@@ -790,7 +796,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             {
                 Description0 = $"Error showing page {pageNo}: {ex.Message}";
             });
-            Trace.WriteLine($"ShowPageAsync error: {ex}");
+            Logger.LogException($"ShowPageAsync page {pageNo}", ex);
         }
     }
     
@@ -1322,6 +1328,120 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         };
         
         dialog.ShowDialog(this);
+    }
+    
+    private async void MnuShowLogs_Click(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var logContent = Logger.ReadLog();
+            var logPath = Logger.LogFilePath;
+            
+            if (string.IsNullOrEmpty(logContent))
+            {
+                logContent = "(No log entries yet)";
+            }
+            else
+            {
+                // Show last 100 lines max to keep dialog manageable
+                var lines = logContent.Split('\n');
+                if (lines.Length > 100)
+                {
+                    logContent = $"(Showing last 100 of {lines.Length} lines)\n\n" +
+                                 string.Join("\n", lines.TakeLast(100));
+                }
+            }
+            
+            var dialog = new Window
+            {
+                Title = $"Application Logs - {logPath}",
+                Width = 900,
+                Height = 600,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            };
+            
+            var grid = new Grid();
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            
+            var textBox = new TextBox
+            {
+                Text = logContent,
+                IsReadOnly = true,
+                AcceptsReturn = true,
+                TextWrapping = TextWrapping.NoWrap,
+                FontFamily = new FontFamily("Consolas, Courier New, monospace"),
+                FontSize = 11,
+                Margin = new Avalonia.Thickness(10),
+                CaretIndex = logContent.Length // Scroll to end
+            };
+            
+            var scrollViewer = new ScrollViewer
+            {
+                Content = textBox,
+                HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto
+            };
+            Grid.SetRow(scrollViewer, 0);
+            grid.Children.Add(scrollViewer);
+            
+            var buttonPanel = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                Margin = new Avalonia.Thickness(10),
+                Spacing = 10
+            };
+            
+            var btnOpenFolder = new Button { Content = "Open Log Folder" };
+            btnOpenFolder.Click += (s, args) => Logger.OpenLogFolder();
+            buttonPanel.Children.Add(btnOpenFolder);
+            
+            var btnCopy = new Button { Content = "Copy All" };
+            btnCopy.Click += async (s, args) =>
+            {
+                var clipboard = TopLevel.GetTopLevel(dialog)?.Clipboard;
+                if (clipboard != null)
+                {
+                    await clipboard.SetTextAsync(logContent);
+                    btnCopy.Content = "Copied!";
+                    await Task.Delay(1000);
+                    btnCopy.Content = "Copy All";
+                }
+            };
+            buttonPanel.Children.Add(btnCopy);
+            
+            var btnClose = new Button { Content = "Close" };
+            btnClose.Click += (s, args) => dialog.Close();
+            buttonPanel.Children.Add(btnClose);
+            
+            Grid.SetRow(buttonPanel, 1);
+            grid.Children.Add(buttonPanel);
+            
+            dialog.Content = grid;
+            
+            // Handle keyboard shortcuts
+            dialog.KeyDown += (s, args) =>
+            {
+                if (args.Key == Key.Escape)
+                {
+                    dialog.Close();
+                    args.Handled = true;
+                }
+            };
+            
+            // Scroll to end after dialog opens
+            dialog.Opened += (s, args) =>
+            {
+                textBox.CaretIndex = logContent.Length;
+            };
+            
+            await dialog.ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogException("Error showing logs", ex);
+        }
     }
     
     private void Window_KeyDown(object? sender, KeyEventArgs e)
