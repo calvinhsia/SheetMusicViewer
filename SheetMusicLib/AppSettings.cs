@@ -121,7 +121,7 @@ public class AppSettings
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Error loading settings: {ex.Message}");
+            Logger.LogWarning($"Error loading settings: {ex.Message}");
         }
         return new AppSettings();
     }
@@ -145,7 +145,7 @@ public class AppSettings
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Error saving settings: {ex.Message}");
+            Logger.LogWarning($"Error saving settings: {ex.Message}");
         }
     }
 

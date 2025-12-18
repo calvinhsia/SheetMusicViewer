@@ -465,7 +465,7 @@ public class ChooseMusicWindow : Window
         catch (Exception ex)
         {
             _tbxTotals.Text = $"Error: {ex.Message}";
-            Trace.WriteLine($"ChangeRootFolderAsync error: {ex}");
+            Logger.LogException("Failed to load PDF metadata from folder", ex);
         }
     }
     
@@ -810,14 +810,14 @@ public class ChooseMusicWindow : Window
                     }
                     catch (Exception ex)
                     {
-                        Trace.WriteLine($"Failed to get PDF thumbnail for {localBookName}: {ex.Message}");
+                        Logger.LogWarning($"Failed to get PDF thumbnail for {localBookName}: {ex.Message}");
                         return GenerateBookCoverBitmap(ThumbnailWidth, ThumbnailHeight, random, localBookName, localIndex);
                     }
                 });
             }
             catch (Exception ex)
             {
-                Trace.WriteLine($"Failed to get PDF thumbnail for {bookName}: {ex.Message}");
+                Logger.LogWarning($"Failed to get PDF thumbnail for {bookName}: {ex.Message}");
                 pdfMetaData.ThumbnailCache = GenerateBookCoverBitmap(ThumbnailWidth, ThumbnailHeight, random, bookName, index);
             }
             
@@ -1094,7 +1094,7 @@ public class PdfToImageDocumentProvider : IPdfDocumentProvider
             }
             catch (Exception ex)
             {
-                Trace.WriteLine($"PdfToImageDocumentProvider: Error getting page count for {pdfFilePath}: {ex.Message}");
+                Logger.LogWarning($"PdfToImageDocumentProvider: Error getting page count for {Path.GetFileName(pdfFilePath)}: {ex.Message}");
                 return 0;
             }
         });
