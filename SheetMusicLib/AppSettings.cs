@@ -121,7 +121,7 @@ public class AppSettings
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Error loading settings: {ex.Message}");
+            Logger.LogWarning($"Error loading settings: {ex.Message}");
         }
         return new AppSettings();
     }
@@ -145,7 +145,7 @@ public class AppSettings
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Error saving settings: {ex.Message}");
+            Logger.LogWarning($"Error saving settings: {ex.Message}");
         }
     }
 
@@ -208,5 +208,26 @@ public class AppSettings
         MetaDataWindowTop = defaults.MetaDataWindowTop;
         MetaDataWindowLeft = defaults.MetaDataWindowLeft;
         MetaDataWindowMaximized = defaults.MetaDataWindowMaximized;
+    }
+
+    /// <summary>
+    /// Reset the singleton instance for testing purposes.
+    /// Allows tests to use a custom settings path and fresh instance.
+    /// </summary>
+    /// <param name="testSettingsPath">Optional custom path for test settings file</param>
+    public static void ResetForTesting(string testSettingsPath = null)
+    {
+        lock (_lock)
+        {
+            _instance = null;
+            if (!string.IsNullOrEmpty(testSettingsPath))
+            {
+                _settingsPath = testSettingsPath;
+            }
+            else
+            {
+                _settingsPath = null; // Will use default path
+            }
+        }
     }
 }

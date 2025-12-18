@@ -376,12 +376,14 @@ namespace SheetMusicLib
         /// <param name="pdfDocumentProvider">Provider to get PDF page count</param>
         /// <param name="exceptionHandler">Optional exception handler</param>
         /// <param name="useParallelLoading">If true, parse BMK files in parallel for faster loading</param>
+        /// <param name="autoSaveNewMetadata">If true, automatically save JSON metadata for newly discovered PDFs</param>
         /// <returns>List of metadata results and list of folder names</returns>
         public static async Task<(List<PdfMetaDataReadResult>, List<string>)> LoadAllPdfMetaDataFromDiskAsync(
             string rootMusicFolder,
             IPdfDocumentProvider pdfDocumentProvider,
             IExceptionHandler exceptionHandler = null,
-            bool useParallelLoading = true)
+            bool useParallelLoading = true,
+            bool autoSaveNewMetadata = true)
         {
             var lstPdfMetaFileData = new List<PdfMetaDataReadResult>();
             var lstFolders = new List<string>();
@@ -393,7 +395,19 @@ namespace SheetMusicLib
 
             if (useParallelLoading)
             {
-                return await LoadAllPdfMetaDataParallelAsync(rootMusicFolder, pdfDocumentProvider, exceptionHandler);
+                var result = await LoadAllPdfMetaDataParallelAsync(rootMusicFolder, pdfDocumentProvider, exceptionHandler);
+                
+                // Auto-save any new metadata that was created
+                if (autoSaveNewMetadata)
+                {
+                    var savedCount = SaveAllDirtyMetadata(result.Item1);
+                    if (savedCount > 0)
+                    {
+                        Debug.WriteLine($"PdfMetaDataCore: Auto-saved {savedCount} new JSON metadata files");
+                    }
+                }
+                
+                return result;
             }
 
             // Original sequential implementation
@@ -788,7 +802,7 @@ namespace SheetMusicLib
         {
             var bmkJson = JsonSerializer.Deserialize<BmkJsonFormat>(fileContent, JsonReadOptions);
             
-            Debug.WriteLine($"ReadFromBmkJsonFormatAsync: Loaded {bmkJson.InkStrokes.Count} ink stroke entries from JSON");
+            //Debug.WriteLine($"ReadFromBmkJsonFormatAsync: Loaded {bmkJson.InkStrokes.Count} ink stroke entries from JSON");
 
             var result = new PdfMetaDataReadResult
             {
@@ -1041,6 +1055,8 @@ namespace SheetMusicLib
             var metadataFiles = new List<string>();
             var singlesFolders = new List<string>();
             var pdfFilesWithoutMetadata = new List<string>();
+            // Track continuation PDFs: base PDF path -> list of continuation PDF paths (in order)
+            var continuationsByBasePdf = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
             static bool IsInHiddenFolder(string path) =>
                 path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
@@ -1187,6 +1203,7 @@ namespace SheetMusicLib
                     {
                         var sortedPdfs = kvp.Value.OrderBy(f => f.ToLower()).ToList();
                         string currentBaseName = null;
+                        string currentBasePdfPath = null;
 
                         foreach (var pdfFile in sortedPdfs)
                         {
@@ -1203,6 +1220,20 @@ namespace SheetMusicLib
                                 if ("01".Contains(baseName.LastOrDefault()))
                                     baseName = baseName[..^1];
                                 currentBaseName = baseName;
+                                currentBasePdfPath = pdfFile;
+                            }
+                            else
+                            {
+                                // Track this as a continuation of the current base PDF
+                                if (currentBasePdfPath != null)
+                                {
+                                    if (!continuationsByBasePdf.TryGetValue(currentBasePdfPath, out var continuations))
+                                    {
+                                        continuations = new List<string>();
+                                        continuationsByBasePdf[currentBasePdfPath] = continuations;
+                                    }
+                                    continuations.Add(pdfFile);
+                                }
                             }
                         }
                     }
@@ -1213,7 +1244,7 @@ namespace SheetMusicLib
                 }
             });
 
-            Debug.WriteLine($"PdfMetaDataCore Parallel: Found {metadataFiles.Count} JSON metadata files, {singlesFolders.Count} singles folders, {pdfFilesWithoutMetadata.Count} new PDFs");
+            Debug.WriteLine($"PdfMetaDataCore Parallel: Found {metadataFiles.Count} JSON metadata files, {singlesFolders.Count} singles folders, {pdfFilesWithoutMetadata.Count} new PDFs, {continuationsByBasePdf.Count} multi-volume sets");
 
             // Phase 2: Parse metadata files in parallel
             var metadataTasks = metadataFiles.Select(async metadataFile =>
@@ -1273,6 +1304,29 @@ namespace SheetMusicLib
                     var metadata = await CreateNewMetaDataAsync(pdfFile, false, pdfDocumentProvider);
                     if (metadata != null)
                     {
+                        // Add continuation volumes if this PDF has them
+                        if (continuationsByBasePdf.TryGetValue(pdfFile, out var continuations))
+                        {
+                            foreach (var continuationPdf in continuations)
+                            {
+                                try
+                                {
+                                    Debug.WriteLine($"PdfMetaDataCore Parallel: Adding continuation volume: {Path.GetFileName(continuationPdf)}");
+                                    var pageCount = await pdfDocumentProvider.GetPageCountAsync(continuationPdf);
+                                    metadata.VolumeInfoList.Add(new PdfVolumeInfoBase
+                                    {
+                                        FileNameVolume = Path.GetFileName(continuationPdf),
+                                        NPagesInThisVolume = pageCount,
+                                        Rotation = pageCount != 1 ? 2 : 0 // Rotate180 if multi-page
+                                    });
+                                }
+                                catch (Exception ex)
+                                {
+                                    exceptionHandler?.OnException($"Reading continuation PDF {continuationPdf}", ex);
+                                }
+                            }
+                        }
+
                         if (metadata.TocEntries.Count == 0 && metadata.VolumeInfoList.Sum(v => v.NPagesInThisVolume) < 11)
                         {
                             metadata.TocEntries.Add(new TOCEntry { SongName = Path.GetFileNameWithoutExtension(pdfFile) });
@@ -1295,14 +1349,97 @@ namespace SheetMusicLib
         }
 
         /// <summary>
-        /// Save PDF metadata to a JSON file.
+        /// Convert PdfMetaDataReadResult to BmkJsonFormat for serialization.
+        /// This is the single place that builds the JSON structure.
+        /// </summary>
+        private static string ConvertMetadataToJsonString(PdfMetaDataReadResult metadata)
+        {
+            var jsonData = new BmkJsonFormat
+            {
+                Version = 1,
+                LastWrite = DateTime.Now,
+                LastPageNo = metadata.LastPageNo,
+                PageNumberOffset = metadata.PageNumberOffset,
+                Notes = metadata.Notes,
+            };
+
+            // Convert volumes
+            foreach (var vol in metadata.VolumeInfoList)
+            {
+                jsonData.Volumes.Add(new JsonPdfVolumeInfo
+                {
+                    FileName = vol.FileNameVolume,
+                    PageCount = vol.NPagesInThisVolume,
+                    Rotation = vol.Rotation
+                });
+            }
+
+            // Convert TOC entries
+            foreach (var toc in metadata.TocEntries)
+            {
+                jsonData.TableOfContents.Add(new JsonTOCEntry
+                {
+                    PageNo = toc.PageNo,
+                    SongName = toc.SongName,
+                    Composer = toc.Composer,
+                    Date = toc.Date,
+                    Notes = toc.Notes
+                });
+            }
+
+            // Convert favorites
+            foreach (var fav in metadata.Favorites)
+            {
+                jsonData.Favorites.Add(new JsonFavorite
+                {
+                    PageNo = fav.Pageno,
+                    Name = fav.FavoriteName
+                });
+            }
+
+            // Convert ink strokes
+            foreach (var ink in metadata.InkStrokes)
+            {
+                if (ink.StrokeData != null && ink.StrokeData.Length > 0)
+                {
+                    try
+                    {
+                        var jsonStr = System.Text.Encoding.UTF8.GetString(ink.StrokeData);
+                        if (jsonStr.TrimStart().StartsWith("{"))
+                        {
+                            // Already in portable JSON format
+                            var portableCollection = JsonSerializer.Deserialize<PortableInkStrokeCollection>(jsonStr, JsonOptions);
+                            if (portableCollection != null)
+                            {
+                                jsonData.InkStrokes[ink.Pageno] = new JsonInkStrokes
+                                {
+                                    CanvasWidth = portableCollection.CanvasWidth,
+                                    CanvasHeight = portableCollection.CanvasHeight,
+                                    Strokes = portableCollection.Strokes
+                                };
+                            }
+                        }
+                        // Note: Binary ISF format from WPF cannot be converted here - skip those
+                    }
+                    catch
+                    {
+                        // Skip ink strokes that can't be parsed
+                    }
+                }
+            }
+
+            return JsonSerializer.Serialize(jsonData, JsonOptions);
+        }
+
+        /// <summary>
+        /// Save PDF metadata to a JSON file if dirty or forced.
         /// This is the single place where the Desktop/Avalonia app saves metadata.
         /// Similar to WPF's PdfMetaData.SaveIfDirty() but uses JSON format.
         /// </summary>
         /// <param name="metadata">The metadata to save</param>
         /// <param name="forceSave">If true, save even if IsDirty is false</param>
         /// <returns>True if saved successfully</returns>
-        public static async Task<bool> SaveToJsonAsync(PdfMetaDataReadResult metadata, bool forceSave = false)
+        public static bool SaveToJson(PdfMetaDataReadResult metadata, bool forceSave = false)
         {
             if (metadata == null)
                 return false;
@@ -1313,86 +1450,10 @@ namespace SheetMusicLib
             try
             {
                 var jsonPath = metadata.JsonFilePath;
+                var jsonContent = ConvertMetadataToJsonString(metadata);
 
-                // Convert to BmkJsonFormat for saving
-                var jsonData = new BmkJsonFormat
-                {
-                    Version = 1,
-                    LastWrite = DateTime.Now,
-                    LastPageNo = metadata.LastPageNo,
-                    PageNumberOffset = metadata.PageNumberOffset,
-                    Notes = metadata.Notes,
-                };
-
-                // Convert volumes
-                foreach (var vol in metadata.VolumeInfoList)
-                {
-                    jsonData.Volumes.Add(new JsonPdfVolumeInfo
-                    {
-                        FileName = vol.FileNameVolume,
-                        PageCount = vol.NPagesInThisVolume,
-                        Rotation = vol.Rotation
-                    });
-                }
-
-                // Convert TOC entries
-                foreach (var toc in metadata.TocEntries)
-                {
-                    jsonData.TableOfContents.Add(new JsonTOCEntry
-                    {
-                        PageNo = toc.PageNo,
-                        SongName = toc.SongName,
-                        Composer = toc.Composer,
-                        Date = toc.Date,
-                        Notes = toc.Notes
-                    });
-                }
-
-                // Convert favorites
-                foreach (var fav in metadata.Favorites)
-                {
-                    jsonData.Favorites.Add(new JsonFavorite
-                    {
-                        PageNo = fav.Pageno,
-                        Name = fav.FavoriteName
-                    });
-                }
-
-                // Convert ink strokes
-                foreach (var ink in metadata.InkStrokes)
-                {
-                    // Try to deserialize existing portable ink data
-                    if (ink.StrokeData != null && ink.StrokeData.Length > 0)
-                    {
-                        try
-                        {
-                            var jsonStr = System.Text.Encoding.UTF8.GetString(ink.StrokeData);
-                            if (jsonStr.TrimStart().StartsWith("{"))
-                            {
-                                // Already in portable JSON format
-                                var portableCollection = JsonSerializer.Deserialize<PortableInkStrokeCollection>(jsonStr, JsonOptions);
-                                if (portableCollection != null)
-                                {
-                                    jsonData.InkStrokes[ink.Pageno] = new JsonInkStrokes
-                                    {
-                                        CanvasWidth = portableCollection.CanvasWidth,
-                                        CanvasHeight = portableCollection.CanvasHeight,
-                                        Strokes = portableCollection.Strokes
-                                    };
-                                }
-                            }
-                            // Note: Binary ISF format from WPF cannot be converted here - skip those
-                        }
-                        catch
-                        {
-                            // Skip ink strokes that can't be parsed
-                        }
-                    }
-                }
-
-                // Write JSON file
-                var jsonContent = JsonSerializer.Serialize(jsonData, JsonOptions);
-                await File.WriteAllTextAsync(jsonPath, jsonContent);
+                // Write JSON file synchronously - simple and avoids async deadlock issues
+                File.WriteAllText(jsonPath, jsonContent);
 
                 // Update metadata state
                 metadata.IsDirty = false;
@@ -1409,12 +1470,23 @@ namespace SheetMusicLib
         }
 
         /// <summary>
-        /// Save PDF metadata to JSON if dirty or forced.
-        /// Synchronous wrapper for SaveToJsonAsync.
+        /// Save all dirty metadata entries to JSON files
         /// </summary>
-        public static bool SaveToJson(PdfMetaDataReadResult metadata, bool forceSave = false)
+        /// <param name="metadataList">The list of metadata entries</param>
+        /// <returns>The number of metadata entries saved</returns>
+        public static int SaveAllDirtyMetadata(List<PdfMetaDataReadResult> metadataList)
         {
-            return SaveToJsonAsync(metadata, forceSave).GetAwaiter().GetResult();
+            int savedCount = 0;
+            foreach (var metadata in metadataList)
+            {
+                if (metadata.IsDirty)
+                {
+                    var saved = SaveToJson(metadata);
+                    if (saved)
+                        savedCount++;
+                }
+            }
+            return savedCount;
         }
     }
 

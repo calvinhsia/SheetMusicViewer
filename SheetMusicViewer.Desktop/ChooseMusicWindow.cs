@@ -149,6 +149,34 @@ public class ChooseMusicWindow : Window
             e.Handled = true;
             Close();
         }
+        
+        // Handle Alt+key combinations for tab navigation (mnemonics)
+        if (e.KeyModifiers == KeyModifiers.Alt)
+        {
+            switch (e.Key)
+            {
+                case Key.A: // Apply filter - focus the filter textbox
+                    _tbxFilter?.Focus();
+                    e.Handled = true;
+                    break;
+                case Key.B: // _Books
+                    _tabControl.SelectedIndex = 0;
+                    e.Handled = true;
+                    break;
+                case Key.V: // Fa_vorites
+                    _tabControl.SelectedIndex = 1;
+                    e.Handled = true;
+                    break;
+                case Key.Q: // _Query
+                    _tabControl.SelectedIndex = 2;
+                    e.Handled = true;
+                    break;
+                case Key.P: // _Playlists
+                    _tabControl.SelectedIndex = 3;
+                    e.Handled = true;
+                    break;
+            }
+        }
     }
 
     private async void OnWindowOpened(object? sender, EventArgs e)
@@ -437,7 +465,7 @@ public class ChooseMusicWindow : Window
         catch (Exception ex)
         {
             _tbxTotals.Text = $"Error: {ex.Message}";
-            Trace.WriteLine($"ChangeRootFolderAsync error: {ex}");
+            Logger.LogException("Failed to load PDF metadata from folder", ex);
         }
     }
     
@@ -782,14 +810,14 @@ public class ChooseMusicWindow : Window
                     }
                     catch (Exception ex)
                     {
-                        Trace.WriteLine($"Failed to get PDF thumbnail for {localBookName}: {ex.Message}");
+                        Logger.LogWarning($"Failed to get PDF thumbnail for {localBookName}: {ex.Message}");
                         return GenerateBookCoverBitmap(ThumbnailWidth, ThumbnailHeight, random, localBookName, localIndex);
                     }
                 });
             }
             catch (Exception ex)
             {
-                Trace.WriteLine($"Failed to get PDF thumbnail for {bookName}: {ex.Message}");
+                Logger.LogWarning($"Failed to get PDF thumbnail for {bookName}: {ex.Message}");
                 pdfMetaData.ThumbnailCache = GenerateBookCoverBitmap(ThumbnailWidth, ThumbnailHeight, random, bookName, index);
             }
             
@@ -1016,16 +1044,14 @@ public class ChooseMusicWindow : Window
         using var paint = new SKPaint { Shader = shader, IsAntialias = true };
         canvas.DrawRect(0, 0, width, height, paint);
         
+        using var font = new SKFont(SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold), 14);
         using var textPaint = new SKPaint
         {
             Color = SKColors.White,
-            IsAntialias = true,
-            TextSize = 14,
-            Typeface = SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold),
-            TextAlign = SKTextAlign.Center
+            IsAntialias = true
         };
         
-        canvas.DrawText(title, width / 2, height - 30, textPaint);
+        canvas.DrawText(title, width / 2f, height - 30, SKTextAlign.Center, font, textPaint);
         
         using var image = surface.Snapshot();
         using var data = image.Encode(SKEncodedImageFormat.Png, 100);
@@ -1068,7 +1094,7 @@ public class PdfToImageDocumentProvider : IPdfDocumentProvider
             }
             catch (Exception ex)
             {
-                Trace.WriteLine($"PdfToImageDocumentProvider: Error getting page count for {pdfFilePath}: {ex.Message}");
+                Logger.LogWarning($"PdfToImageDocumentProvider: Error getting page count for {Path.GetFileName(pdfFilePath)}: {ex.Message}");
                 return 0;
             }
         });

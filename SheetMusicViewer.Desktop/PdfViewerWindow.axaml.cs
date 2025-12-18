@@ -1,4 +1,4 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
@@ -31,7 +31,6 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     public new event PropertyChangedEventHandler? PropertyChanged;
 
     private int _currentPageNumber = 1;
-    private int _touchCount;
     private bool _show2Pages = true;
     private bool _pdfUIEnabled;
     private string _pdfTitle = string.Empty;
@@ -40,6 +39,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private int _maxPageNumberMinus1;
     private bool _disableSliderValueChanged;
     private bool _chkFavoriteEnabled;
+    private bool _isThumbnailLoadingInProgress;
+    private int _cacheLoadingCount;
+    private string _cacheStatus = string.Empty;
     
     // PDF metadata
     private string _rootMusicFolder = string.Empty;
@@ -206,6 +208,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             mnuAbout.Click += BtnAbout_Click;
         }
         
+        var mnuShowLogs = this.FindControl<MenuItem>("mnuShowLogs");
+        if (mnuShowLogs != null)
+        {
+            mnuShowLogs.Click += MnuShowLogs_Click;
+        }
+        
         var mnuQuit = this.FindControl<MenuItem>("mnuQuit");
         if (mnuQuit != null)
         {
@@ -315,8 +323,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            Description0 = $"Error loading: {ex.Message}";
-            Trace.WriteLine($"OnWindowLoadedAsync error: {ex}");
+            Description0 = Logger.LogExceptionAndGetUserMessage("Error loading application", ex);
         }
     }
     
@@ -325,19 +332,28 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     /// </summary>
     private async Task LoadAllThumbnailsAsync()
     {
-        foreach (var pdfMetaData in _lstPdfMetaFileData)
+        IsThumbnailLoadingInProgress = true;
+        try
         {
-            try
+            foreach (var pdfMetaData in _lstPdfMetaFileData)
             {
-                await pdfMetaData.GetOrCreateThumbnailAsync(async () =>
+                try
                 {
-                    return await GetThumbnailForMetadataAsync(pdfMetaData);
-                });
+                    await pdfMetaData.GetOrCreateThumbnailAsync(async () =>
+                    {
+                        return await GetThumbnailForMetadataAsync(pdfMetaData);
+                    });
+                }
+                catch (Exception ex)
+                {
+                    // Log thumbnail errors but don't show to user - this is background work
+                    Logger.LogWarning($"Thumbnail load failed for {pdfMetaData.GetBookName(_rootMusicFolder)}: {ex.Message}");
+                }
             }
-            catch (Exception ex)
-            {
-                Trace.WriteLine($"Error loading thumbnail for {pdfMetaData.GetBookName(_rootMusicFolder)}: {ex.Message}");
-            }
+        }
+        finally
+        {
+            IsThumbnailLoadingInProgress = false;
         }
     }
     
@@ -436,7 +452,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"ChooseMusicAsync error: {ex}");
+            Logger.LogException("ChooseMusic dialog error", ex);
         }
     }
     
@@ -473,7 +489,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"ShowMetaDataFormAsync error: {ex}");
+            Logger.LogException("MetaData form error", ex);
         }
         finally
         {
@@ -533,7 +549,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                     }
                     catch (Exception ex)
                     {
-                        Trace.WriteLine($"Error loading thumbnail: {ex.Message}");
+                        Logger.LogWarning($"Thumbnail load failed: {ex.Message}");
                     }
                 });
             }
@@ -557,12 +573,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         {
             _currentPdfMetaData.LastPageNo = CurrentPageNumber;
             _currentPdfMetaData.IsDirty = true;
-            _ = PdfMetaDataCore.SaveToJsonAsync(_currentPdfMetaData);
+            PdfMetaDataCore.SaveToJson(_currentPdfMetaData);
             
             _currentPdfMetaData = null;
             CurrentPageNumber = 0;
         }
-        
+
         _inkCanvas0 = null;
         _inkCanvas1 = null;
         
@@ -780,7 +796,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             {
                 Description0 = $"Error showing page {pageNo}: {ex.Message}";
             });
-            Trace.WriteLine($"ShowPageAsync error: {ex}");
+            Logger.LogException($"ShowPageAsync page {pageNo}", ex);
         }
     }
     
@@ -804,12 +820,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             return existing;
         }
         
-        // Create new entry
+        // Create new entry with tracking wrapper
         var entry = new PageCacheEntry
         {
             PageNo = pageNo,
             Age = _currentCacheAge++,
-            Task = RenderPageInternalAsync(pageNo)
+            Task = RenderPageWithTrackingAsync(pageNo)
         };
         
         // Evict old entries if cache is full
@@ -826,6 +842,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
         
         _pageCache[pageNo] = entry;
+        UpdateCacheStatus();
         return entry;
     }
     
@@ -846,6 +863,22 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         foreach (var pageNo in toDelete)
         {
             _pageCache.Remove(pageNo);
+        }
+        UpdateCacheStatus();
+    }
+    
+    private async Task<Bitmap> RenderPageWithTrackingAsync(int pageNo)
+    {
+        Interlocked.Increment(ref _cacheLoadingCount);
+        UpdateCacheStatus();
+        try
+        {
+            return await RenderPageInternalAsync(pageNo);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _cacheLoadingCount);
+            UpdateCacheStatus();
         }
     }
     
@@ -883,8 +916,22 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 _ => PdfRotation.Rotate0
             };
             
-            using var pdfStream = File.OpenRead(pdfPath);
-            using var skBitmap = Conversion.ToImage(pdfStream, page: pageIndexInVolume, 
+            // Read the entire PDF into memory to avoid stream disposal issues with PDFtoImage
+            var pdfBytes = File.ReadAllBytes(pdfPath);
+            
+            // Validate page index against actual PDF page count for better error messages
+            var actualPageCount = Conversion.GetPageCount(pdfBytes);
+            
+            if (pageIndexInVolume < 0 || pageIndexInVolume >= actualPageCount)
+            {
+                var metadataPageCount = _currentPdfMetaData.VolumeInfoList[volNo].NPagesInThisVolume;
+                throw new ArgumentOutOfRangeException(nameof(pageIndexInVolume),
+                    $"Page index {pageIndexInVolume} is invalid for PDF '{Path.GetFileName(pdfPath)}' " +
+                    $"which has {actualPageCount} pages (metadata claims {metadataPageCount}). " +
+                    $"Delete the .json metadata file to regenerate it.");
+            }
+            
+            using var skBitmap = Conversion.ToImage(pdfBytes, page: pageIndexInVolume, 
                 options: new PDFtoImage.RenderOptions(Dpi: 150, Rotation: pdfRotation));
             using var image = SKImage.FromBitmap(skBitmap);
             using var data = image.Encode(SKEncodedImageFormat.Png, 100);
@@ -904,6 +951,30 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
         _pageCache.Clear();
         _currentCacheAge = 0;
+        UpdateCacheStatus();
+    }
+    
+    private void UpdateCacheStatus()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            var pendingCount = _cacheLoadingCount;
+            var cachedCount = _pageCache.Count;
+            
+            // Always show cache count; add loading indicator if busy
+            if (pendingCount > 0)
+            {
+                CacheStatus = $"C:{cachedCount} ⏳{pendingCount}";
+            }
+            else if (cachedCount > 0)
+            {
+                CacheStatus = $"C:{cachedCount}";
+            }
+            else
+            {
+                CacheStatus = string.Empty;
+            }
+        });
     }
     
     private string GetDescription(int pageNo)
@@ -975,7 +1046,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         if (anyChanges)
         {
             _currentPdfMetaData.IsDirty = true;
-            _ = PdfMetaDataCore.SaveToJsonAsync(_currentPdfMetaData);
+            PdfMetaDataCore.SaveToJson(_currentPdfMetaData);
             Trace.WriteLine($"Saved ink strokes for current pages");
         }
     }
@@ -1042,7 +1113,6 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private void NavigateAsync(int delta)
     {
         _lastNavigationDelta = delta; // Track navigation direction
-        TouchCount++;
         var newPage = CurrentPageNumber + delta;
         
         if (_currentPdfMetaData != null)
@@ -1061,7 +1131,6 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     
     private void BtnPrevNext_Click(bool isPrevious)
     {
-        TouchCount++;
         
         if (_currentPdfMetaData != null && _currentPdfMetaData.Favorites.Count > 0)
         {
@@ -1173,14 +1242,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             // Toggle favorite in metadata
             // TODO: Update the favorites list and save using PdfMetaDataCore.SaveToJson()
             
-            TouchCount++;
             Trace.WriteLine($"Favorite toggled: Page {pageNo}, IsFavorite: {isFavorite}");
         }
     }
     
     private async void BtnRotate_Click(object? sender, RoutedEventArgs e)
     {
-        TouchCount++;
         
         // TODO: Rotate the page in metadata and save using PdfMetaDataCore.SaveToJson()
         
@@ -1220,10 +1287,10 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                           $"Built with Avalonia UI and PDFtoImage\n\n" +
                           $".NET Runtime: {Environment.Version}";
         
-        // Simple dialog using a window with Esc key support
+        // Simple dialog using a window with keyboard support
         var dialog = new Window
         {
-            Title = "About",
+            Title = "About (Ctrl+C to copy)",
             Width = 380,
             Height = 280,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
@@ -1236,17 +1303,145 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             }
         };
         
-        // Allow Esc key to close the dialog
-        dialog.KeyDown += (s, args) =>
+        // Handle keyboard shortcuts
+        dialog.KeyDown += async (s, args) =>
         {
             if (args.Key == Key.Escape)
             {
                 dialog.Close();
                 args.Handled = true;
             }
+            else if (args.Key == Key.C && args.KeyModifiers == KeyModifiers.Control)
+            {
+                // Copy about info to clipboard
+                var clipboard = TopLevel.GetTopLevel(dialog)?.Clipboard;
+                if (clipboard != null)
+                {
+                    await clipboard.SetTextAsync(aboutMessage);
+                    // Brief visual feedback - update title temporarily
+                    dialog.Title = "About - Copied!";
+                    await Task.Delay(1000);
+                    dialog.Title = "About (Ctrl+C to copy)";
+                }
+                args.Handled = true;
+            }
         };
         
         dialog.ShowDialog(this);
+    }
+    
+    private async void MnuShowLogs_Click(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var logContent = Logger.ReadLog();
+            var logPath = Logger.LogFilePath;
+            
+            if (string.IsNullOrEmpty(logContent))
+            {
+                logContent = "(No log entries yet)";
+            }
+            else
+            {
+                // Show last 100 lines max to keep dialog manageable
+                var lines = logContent.Split('\n');
+                if (lines.Length > 100)
+                {
+                    logContent = $"(Showing last 100 of {lines.Length} lines)\n\n" +
+                                 string.Join("\n", lines.TakeLast(100));
+                }
+            }
+            
+            var dialog = new Window
+            {
+                Title = $"Application Logs - {logPath}",
+                Width = 900,
+                Height = 600,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            };
+            
+            var grid = new Grid();
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            
+            var textBox = new TextBox
+            {
+                Text = logContent,
+                IsReadOnly = true,
+                AcceptsReturn = true,
+                TextWrapping = TextWrapping.NoWrap,
+                FontFamily = new FontFamily("Consolas, Courier New, monospace"),
+                FontSize = 11,
+                Margin = new Avalonia.Thickness(10),
+                CaretIndex = logContent.Length // Scroll to end
+            };
+            
+            var scrollViewer = new ScrollViewer
+            {
+                Content = textBox,
+                HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto
+            };
+            Grid.SetRow(scrollViewer, 0);
+            grid.Children.Add(scrollViewer);
+            
+            var buttonPanel = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                Margin = new Avalonia.Thickness(10),
+                Spacing = 10
+            };
+            
+            var btnOpenFolder = new Button { Content = "Open Log Folder" };
+            btnOpenFolder.Click += (s, args) => Logger.OpenLogFolder();
+            buttonPanel.Children.Add(btnOpenFolder);
+            
+            var btnCopy = new Button { Content = "Copy All" };
+            btnCopy.Click += async (s, args) =>
+            {
+                var clipboard = TopLevel.GetTopLevel(dialog)?.Clipboard;
+                if (clipboard != null)
+                {
+                    await clipboard.SetTextAsync(logContent);
+                    btnCopy.Content = "Copied!";
+                    await Task.Delay(1000);
+                    btnCopy.Content = "Copy All";
+                }
+            };
+            buttonPanel.Children.Add(btnCopy);
+            
+            var btnClose = new Button { Content = "Close" };
+            btnClose.Click += (s, args) => dialog.Close();
+            buttonPanel.Children.Add(btnClose);
+            
+            Grid.SetRow(buttonPanel, 1);
+            grid.Children.Add(buttonPanel);
+            
+            dialog.Content = grid;
+            
+            // Handle keyboard shortcuts
+            dialog.KeyDown += (s, args) =>
+            {
+                if (args.Key == Key.Escape)
+                {
+                    dialog.Close();
+                    args.Handled = true;
+                }
+            };
+            
+            // Scroll to end after dialog opens
+            dialog.Opened += (s, args) =>
+            {
+                textBox.CaretIndex = logContent.Length;
+            };
+            
+            await dialog.ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogException("Error showing logs", ex);
+        }
     }
     
     private void Window_KeyDown(object? sender, KeyEventArgs e)
@@ -1419,12 +1614,33 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
     }
 
-    public int TouchCount
+    public bool IsThumbnailLoadingInProgress
     {
-        get => _touchCount;
+        get => _isThumbnailLoadingInProgress;
         set
         {
-            _touchCount = value;
+            _isThumbnailLoadingInProgress = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string CacheStatus
+    {
+        get => _cacheStatus;
+        set
+        {
+            _cacheStatus = value;
+            OnPropertyChanged();
+        }
+    }
+
+   
+    public int CacheLoadingCount
+    {
+        get => _cacheLoadingCount;
+        set
+        {
+            _cacheLoadingCount = value;
             OnPropertyChanged();
         }
     }
