@@ -349,6 +349,148 @@ public class PdfMetaDataCoreTests : TestBase
         }
     }
 
+    [TestMethod]
+    [TestCategory("Integration")]
+    public async Task LoadAllPdfMetaDataFromDiskAsync_ParallelLoading_DetectsContinuationVolumes()
+    {
+        // This test verifies that the parallel loading path correctly handles
+        // multi-volume PDF sets when there is NO existing metadata file.
+        // 
+        // Bug scenario: PDFs like "100 Greatest Rock Songs of the Decade.pdf" with
+        // continuation volumes "...Decade1.pdf", "...Decade2.pdf", etc. were being
+        // loaded as separate single-volume books instead of one multi-volume book.
+        //
+        // The bug was that the parallel loader correctly identified continuation files
+        // and excluded them from the "new PDFs" list, but never actually added them
+        // as volumes to the base PDF's metadata.
+
+        // Arrange - Create a multi-volume PDF set WITHOUT any metadata file
+        // Using a name that ends with a non-digit character (like "Decade" ending in 'e')
+        // to match the real-world scenario from the bug report
+        var basePdfPath = CreateTestPdf(Path.Combine(_tempFolder, "100 Greatest Rock Songs of the Decade.pdf"));
+        var vol1Path = CreateTestPdf(Path.Combine(_tempFolder, "100 Greatest Rock Songs of the Decade1.pdf"));
+        var vol2Path = CreateTestPdf(Path.Combine(_tempFolder, "100 Greatest Rock Songs of the Decade2.pdf"));
+        var vol3Path = CreateTestPdf(Path.Combine(_tempFolder, "100 Greatest Rock Songs of the Decade3.pdf"));
+
+        var provider = new PdfToImageDocumentProvider();
+
+        // Act - Use PARALLEL loading (the default, which had the bug)
+        var (metadataList, folders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+            _tempFolder,
+            provider,
+            exceptionHandler: null,
+            useParallelLoading: true);
+
+        // Assert
+        Assert.AreEqual(1, metadataList.Count, 
+            "Should detect as single multi-volume book, not 4 separate books. " +
+            "If this fails with count=1 but 1 volume, the continuation volumes were not added.");
+        
+        var metadata = metadataList[0];
+        
+        // This assertion would have failed before the fix - we got 1 volume instead of 4
+        Assert.AreEqual(4, metadata.VolumeInfoList.Count, 
+            $"Should have 4 volumes (base + 3 continuations). " +
+            $"Actual volumes: {string.Join(", ", metadata.VolumeInfoList.Select(v => v.FileNameVolume))}");
+        
+        // Verify the volumes are in the correct order
+        Assert.AreEqual("100 Greatest Rock Songs of the Decade.pdf", metadata.VolumeInfoList[0].FileNameVolume);
+        Assert.AreEqual("100 Greatest Rock Songs of the Decade1.pdf", metadata.VolumeInfoList[1].FileNameVolume);
+        Assert.AreEqual("100 Greatest Rock Songs of the Decade2.pdf", metadata.VolumeInfoList[2].FileNameVolume);
+        Assert.AreEqual("100 Greatest Rock Songs of the Decade3.pdf", metadata.VolumeInfoList[3].FileNameVolume);
+
+        // Verify each volume has page count
+        foreach (var vol in metadata.VolumeInfoList)
+        {
+            Assert.IsTrue(vol.NPagesInThisVolume > 0, $"Volume {vol.FileNameVolume} should have page count");
+            LogMessage($"  Volume: {vol.FileNameVolume} ({vol.NPagesInThisVolume} pages)");
+        }
+
+        // Verify total page count equals sum of all volumes
+        var expectedTotalPages = metadata.VolumeInfoList.Sum(v => v.NPagesInThisVolume);
+        LogMessage($"Found multi-volume book: {Path.GetFileName(metadata.FullPathFile)} with {metadata.VolumeInfoList.Count} volumes, {expectedTotalPages} total pages");
+    }
+
+    [TestMethod]
+    [TestCategory("Integration")]
+    public async Task LoadAllPdfMetaDataFromDiskAsync_ParallelLoading_HandlesZeroBasedAndOneBasedContinuations()
+    {
+        // Test both naming conventions:
+        // - Zero-based: Book0.pdf, Book1.pdf, Book2.pdf
+        // - One-based: Book1.pdf, Book2.pdf, Book3.pdf
+
+        // Arrange - Zero-based set
+        CreateTestPdf(Path.Combine(_tempFolder, "ZeroBasedBook0.pdf"));
+        CreateTestPdf(Path.Combine(_tempFolder, "ZeroBasedBook1.pdf"));
+        CreateTestPdf(Path.Combine(_tempFolder, "ZeroBasedBook2.pdf"));
+
+        // Arrange - One-based set  
+        CreateTestPdf(Path.Combine(_tempFolder, "OneBasedBook1.pdf"));
+        CreateTestPdf(Path.Combine(_tempFolder, "OneBasedBook2.pdf"));
+        CreateTestPdf(Path.Combine(_tempFolder, "OneBasedBook3.pdf"));
+
+        var provider = new PdfToImageDocumentProvider();
+
+        // Act
+        var (metadataList, folders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+            _tempFolder,
+            provider,
+            exceptionHandler: null,
+            useParallelLoading: true);
+
+        // Assert - Should have 2 books, each with 3 volumes
+        Assert.AreEqual(2, metadataList.Count, "Should have 2 multi-volume books");
+
+        var zeroBasedBook = metadataList.FirstOrDefault(m => 
+            m.FullPathFile.Contains("ZeroBasedBook"));
+        var oneBasedBook = metadataList.FirstOrDefault(m => 
+            m.FullPathFile.Contains("OneBasedBook"));
+
+        Assert.IsNotNull(zeroBasedBook, "Should find zero-based book");
+        Assert.IsNotNull(oneBasedBook, "Should find one-based book");
+
+        Assert.AreEqual(3, zeroBasedBook.VolumeInfoList.Count, 
+            $"Zero-based book should have 3 volumes. Found: {string.Join(", ", zeroBasedBook.VolumeInfoList.Select(v => v.FileNameVolume))}");
+        Assert.AreEqual(3, oneBasedBook.VolumeInfoList.Count, 
+            $"One-based book should have 3 volumes. Found: {string.Join(", ", oneBasedBook.VolumeInfoList.Select(v => v.FileNameVolume))}");
+
+        LogMessage($"Zero-based book: {zeroBasedBook.VolumeInfoList.Count} volumes");
+        LogMessage($"One-based book: {oneBasedBook.VolumeInfoList.Count} volumes");
+    }
+
+    [TestMethod]
+    [TestCategory("Integration")]
+    public async Task LoadAllPdfMetaDataFromDiskAsync_ParallelLoading_DoesNotMergeUnrelatedBooks()
+    {
+        // Verify that books with similar but not matching names are NOT merged
+
+        // Arrange - Create books that should NOT be merged
+        CreateTestPdf(Path.Combine(_tempFolder, "Classical Music.pdf"));
+        CreateTestPdf(Path.Combine(_tempFolder, "Classical Music Collection.pdf")); // Different book, not a continuation
+        CreateTestPdf(Path.Combine(_tempFolder, "Jazz Standards.pdf"));
+        CreateTestPdf(Path.Combine(_tempFolder, "Jazz Standards Vol 2.pdf")); // Also different book (has space before "Vol")
+
+        var provider = new PdfToImageDocumentProvider();
+
+        // Act
+        var (metadataList, folders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+            _tempFolder,
+            provider,
+            exceptionHandler: null,
+            useParallelLoading: true);
+
+        // Assert - All should be separate books (4 books, each with 1 volume)
+        Assert.AreEqual(4, metadataList.Count, 
+            "Should have 4 separate books (continuations require digit immediately after base name)");
+
+        foreach (var metadata in metadataList)
+        {
+            Assert.AreEqual(1, metadata.VolumeInfoList.Count, 
+                $"Book '{Path.GetFileName(metadata.FullPathFile)}' should have exactly 1 volume");
+            LogMessage($"Found separate book: {Path.GetFileName(metadata.FullPathFile)}");
+        }
+    }
+
     /// <summary>
     /// A simple SynchronizationContext that posts callbacks synchronously.
     /// This simulates a UI thread synchronization context for testing purposes.

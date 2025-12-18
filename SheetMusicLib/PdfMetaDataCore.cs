@@ -1041,6 +1041,8 @@ namespace SheetMusicLib
             var metadataFiles = new List<string>();
             var singlesFolders = new List<string>();
             var pdfFilesWithoutMetadata = new List<string>();
+            // Track continuation PDFs: base PDF path -> list of continuation PDF paths (in order)
+            var continuationsByBasePdf = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
             static bool IsInHiddenFolder(string path) =>
                 path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
@@ -1187,6 +1189,7 @@ namespace SheetMusicLib
                     {
                         var sortedPdfs = kvp.Value.OrderBy(f => f.ToLower()).ToList();
                         string currentBaseName = null;
+                        string currentBasePdfPath = null;
 
                         foreach (var pdfFile in sortedPdfs)
                         {
@@ -1203,6 +1206,20 @@ namespace SheetMusicLib
                                 if ("01".Contains(baseName.LastOrDefault()))
                                     baseName = baseName[..^1];
                                 currentBaseName = baseName;
+                                currentBasePdfPath = pdfFile;
+                            }
+                            else
+                            {
+                                // Track this as a continuation of the current base PDF
+                                if (currentBasePdfPath != null)
+                                {
+                                    if (!continuationsByBasePdf.TryGetValue(currentBasePdfPath, out var continuations))
+                                    {
+                                        continuations = new List<string>();
+                                        continuationsByBasePdf[currentBasePdfPath] = continuations;
+                                    }
+                                    continuations.Add(pdfFile);
+                                }
                             }
                         }
                     }
@@ -1213,7 +1230,7 @@ namespace SheetMusicLib
                 }
             });
 
-            Debug.WriteLine($"PdfMetaDataCore Parallel: Found {metadataFiles.Count} JSON metadata files, {singlesFolders.Count} singles folders, {pdfFilesWithoutMetadata.Count} new PDFs");
+            Debug.WriteLine($"PdfMetaDataCore Parallel: Found {metadataFiles.Count} JSON metadata files, {singlesFolders.Count} singles folders, {pdfFilesWithoutMetadata.Count} new PDFs, {continuationsByBasePdf.Count} multi-volume sets");
 
             // Phase 2: Parse metadata files in parallel
             var metadataTasks = metadataFiles.Select(async metadataFile =>
@@ -1273,6 +1290,29 @@ namespace SheetMusicLib
                     var metadata = await CreateNewMetaDataAsync(pdfFile, false, pdfDocumentProvider);
                     if (metadata != null)
                     {
+                        // Add continuation volumes if this PDF has them
+                        if (continuationsByBasePdf.TryGetValue(pdfFile, out var continuations))
+                        {
+                            foreach (var continuationPdf in continuations)
+                            {
+                                try
+                                {
+                                    Debug.WriteLine($"PdfMetaDataCore Parallel: Adding continuation volume: {Path.GetFileName(continuationPdf)}");
+                                    var pageCount = await pdfDocumentProvider.GetPageCountAsync(continuationPdf);
+                                    metadata.VolumeInfoList.Add(new PdfVolumeInfoBase
+                                    {
+                                        FileNameVolume = Path.GetFileName(continuationPdf),
+                                        NPagesInThisVolume = pageCount,
+                                        Rotation = pageCount != 1 ? 2 : 0 // Rotate180 if multi-page
+                                    });
+                                }
+                                catch (Exception ex)
+                                {
+                                    exceptionHandler?.OnException($"Reading continuation PDF {continuationPdf}", ex);
+                                }
+                            }
+                        }
+
                         if (metadata.TocEntries.Count == 0 && metadata.VolumeInfoList.Sum(v => v.NPagesInThisVolume) < 11)
                         {
                             metadata.TocEntries.Add(new TOCEntry { SongName = Path.GetFileNameWithoutExtension(pdfFile) });
