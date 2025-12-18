@@ -641,6 +641,181 @@ public class PdfMetaDataCoreTests : TestBase
         LogMessage("Correctly skipped auto-save when disabled");
     }
 
+    [TestMethod]
+    [TestCategory("Integration")]
+    public async Task LoadAllPdfMetaDataFromDiskAsync_WithExistingJson_OnlyReadsJsonNotPdf()
+    {
+        // This test verifies that when a folder contains PDFs WITH existing JSON metadata,
+        // the loader only reads the JSON files (not the PDFs themselves).
+        // 
+        // When there are NEW PDFs without JSON, those PDFs must be read to get page counts,
+        // and new JSON files are created for them.
+
+        // Arrange - Create PDFs and pre-create JSON metadata files for some of them
+        var existingBookPdf = CreateTestPdf(Path.Combine(_tempFolder, "ExistingBook.pdf"));
+        var newBookPdf = CreateTestPdf(Path.Combine(_tempFolder, "NewBook.pdf"));
+
+        // Create JSON for ExistingBook (simulating it was previously loaded)
+        var existingBookJson = Path.ChangeExtension(existingBookPdf, ".json");
+        var preCreatedMetadata = new PdfMetaDataReadResult
+        {
+            FullPathFile = existingBookPdf,
+            IsDirty = true,
+            LastPageNo = 42, // Distinctive value to verify it was read from JSON
+            PageNumberOffset = 5,
+            Notes = "Pre-existing metadata"
+        };
+        preCreatedMetadata.VolumeInfoList.Add(new PdfVolumeInfoBase
+        {
+            FileNameVolume = "ExistingBook.pdf",
+            NPagesInThisVolume = 99, // Fake page count - different from actual PDF
+            Rotation = 0
+        });
+        preCreatedMetadata.TocEntries.Add(new TOCEntry
+        {
+            PageNo = 5,
+            SongName = "Pre-existing Song"
+        });
+        PdfMetaDataCore.SaveToJson(preCreatedMetadata, forceSave: true);
+
+        // Verify JSON exists for ExistingBook but not for NewBook
+        Assert.IsTrue(File.Exists(existingBookJson), "JSON should exist for ExistingBook");
+        Assert.IsFalse(File.Exists(Path.ChangeExtension(newBookPdf, ".json")), 
+            "JSON should NOT exist for NewBook before loading");
+
+        var provider = new PdfToImageDocumentProvider();
+
+        // Act - Load all metadata
+        var (metadataList, folders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+            _tempFolder,
+            provider,
+            exceptionHandler: null,
+            useParallelLoading: true,
+            autoSaveNewMetadata: true);
+
+        // Assert - Should have found 2 books
+        Assert.AreEqual(2, metadataList.Count, "Should find 2 books");
+
+        // Find the ExistingBook metadata
+        var existingBookMetadata = metadataList.FirstOrDefault(m => 
+            m.FullPathFile.Contains("ExistingBook"));
+        Assert.IsNotNull(existingBookMetadata, "Should find ExistingBook");
+
+        // Verify ExistingBook was loaded from JSON (not by reading the PDF)
+        // The page count should be the fake value (99) from JSON, not the actual PDF page count (1)
+        Assert.AreEqual(99, existingBookMetadata.VolumeInfoList[0].NPagesInThisVolume,
+            "ExistingBook should have page count from JSON (99), not from PDF. " +
+            "If this is 1, the PDF was read instead of the JSON.");
+        Assert.AreEqual(42, existingBookMetadata.LastPageNo,
+            "ExistingBook should have LastPageNo from JSON");
+        Assert.AreEqual(5, existingBookMetadata.PageNumberOffset,
+            "ExistingBook should have PageNumberOffset from JSON");
+        Assert.AreEqual("Pre-existing metadata", existingBookMetadata.Notes,
+            "ExistingBook should have Notes from JSON");
+        Assert.AreEqual(1, existingBookMetadata.TocEntries.Count,
+            "ExistingBook should have TOC entries from JSON");
+        Assert.AreEqual("Pre-existing Song", existingBookMetadata.TocEntries[0].SongName,
+            "ExistingBook should have song name from JSON");
+
+        // Find the NewBook metadata
+        var newBookMetadata = metadataList.FirstOrDefault(m => 
+            m.FullPathFile.Contains("NewBook"));
+        Assert.IsNotNull(newBookMetadata, "Should find NewBook");
+
+        // Verify NewBook was created by reading the PDF (page count should be 1, the actual PDF page count)
+        Assert.AreEqual(1, newBookMetadata.VolumeInfoList[0].NPagesInThisVolume,
+            "NewBook should have page count from PDF (1), since no JSON existed");
+
+        // Verify JSON was created for NewBook
+        Assert.IsTrue(File.Exists(Path.ChangeExtension(newBookPdf, ".json")),
+            "JSON should now exist for NewBook after auto-save");
+
+        // Verify NewBook metadata is no longer dirty (was saved)
+        Assert.IsFalse(newBookMetadata.IsDirty,
+            "NewBook metadata should not be dirty after auto-save");
+
+        LogMessage("Verified: ExistingBook loaded from JSON only, NewBook read from PDF and JSON created");
+        LogMessage($"  ExistingBook: {existingBookMetadata.VolumeInfoList[0].NPagesInThisVolume} pages (from JSON)");
+        LogMessage($"  NewBook: {newBookMetadata.VolumeInfoList[0].NPagesInThisVolume} pages (from PDF)");
+    }
+
+    [TestMethod]
+    [TestCategory("Integration")]
+    public async Task LoadAllPdfMetaDataFromDiskAsync_MixedExistingAndNewMultiVolume_HandlesCorrectly()
+    {
+        // This test verifies behavior when:
+        // 1. A multi-volume set has existing JSON (should load from JSON only)
+        // 2. A new multi-volume set has no JSON (should read all PDFs and create JSON)
+
+        // Arrange - Create an existing multi-volume set WITH JSON
+        CreateTestPdf(Path.Combine(_tempFolder, "OldSonatas.pdf"));
+        CreateTestPdf(Path.Combine(_tempFolder, "OldSonatas1.pdf"));
+        CreateTestPdf(Path.Combine(_tempFolder, "OldSonatas2.pdf"));
+
+        // Create JSON for OldSonatas with fake data
+        var oldSonatasJson = Path.Combine(_tempFolder, "OldSonatas.json");
+        var oldMetadata = new PdfMetaDataReadResult
+        {
+            FullPathFile = Path.Combine(_tempFolder, "OldSonatas.pdf"),
+            IsDirty = true,
+            LastPageNo = 100
+        };
+        oldMetadata.VolumeInfoList.Add(new PdfVolumeInfoBase { FileNameVolume = "OldSonatas.pdf", NPagesInThisVolume = 50 });
+        oldMetadata.VolumeInfoList.Add(new PdfVolumeInfoBase { FileNameVolume = "OldSonatas1.pdf", NPagesInThisVolume = 60 });
+        oldMetadata.VolumeInfoList.Add(new PdfVolumeInfoBase { FileNameVolume = "OldSonatas2.pdf", NPagesInThisVolume = 70 });
+        PdfMetaDataCore.SaveToJson(oldMetadata, forceSave: true);
+
+        // Create a NEW multi-volume set WITHOUT JSON
+        CreateTestPdf(Path.Combine(_tempFolder, "NewConcertos.pdf"));
+        CreateTestPdf(Path.Combine(_tempFolder, "NewConcertos1.pdf"));
+        CreateTestPdf(Path.Combine(_tempFolder, "NewConcertos2.pdf"));
+
+        // Verify initial state
+        Assert.IsTrue(File.Exists(oldSonatasJson), "OldSonatas.json should exist");
+        Assert.IsFalse(File.Exists(Path.Combine(_tempFolder, "NewConcertos.json")), 
+            "NewConcertos.json should NOT exist initially");
+
+        var provider = new PdfToImageDocumentProvider();
+
+        // Act
+        var (metadataList, folders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+            _tempFolder,
+            provider,
+            exceptionHandler: null,
+            useParallelLoading: true,
+            autoSaveNewMetadata: true);
+
+        // Assert
+        Assert.AreEqual(2, metadataList.Count, "Should find 2 multi-volume books");
+
+        // Verify OldSonatas was loaded from JSON
+        var oldSonatas = metadataList.FirstOrDefault(m => m.FullPathFile.Contains("OldSonatas"));
+        Assert.IsNotNull(oldSonatas, "Should find OldSonatas");
+        Assert.AreEqual(3, oldSonatas.VolumeInfoList.Count, "OldSonatas should have 3 volumes from JSON");
+        Assert.AreEqual(50, oldSonatas.VolumeInfoList[0].NPagesInThisVolume, 
+            "OldSonatas vol0 should have fake page count from JSON");
+        Assert.AreEqual(60, oldSonatas.VolumeInfoList[1].NPagesInThisVolume, 
+            "OldSonatas vol1 should have fake page count from JSON");
+        Assert.AreEqual(70, oldSonatas.VolumeInfoList[2].NPagesInThisVolume, 
+            "OldSonatas vol2 should have fake page count from JSON");
+
+        // Verify NewConcertos was created by reading PDFs
+        var newConcertos = metadataList.FirstOrDefault(m => m.FullPathFile.Contains("NewConcertos"));
+        Assert.IsNotNull(newConcertos, "Should find NewConcertos");
+        Assert.AreEqual(3, newConcertos.VolumeInfoList.Count, "NewConcertos should have 3 volumes");
+        // Each test PDF has 1 page
+        Assert.AreEqual(1, newConcertos.VolumeInfoList[0].NPagesInThisVolume, 
+            "NewConcertos vol0 should have actual page count from PDF");
+
+        // Verify JSON was created for NewConcertos
+        Assert.IsTrue(File.Exists(Path.Combine(_tempFolder, "NewConcertos.json")),
+            "NewConcertos.json should now exist after auto-save");
+
+        LogMessage("Verified mixed existing/new multi-volume handling:");
+        LogMessage($"  OldSonatas: 3 volumes with {oldSonatas.VolumeInfoList.Sum(v => v.NPagesInThisVolume)} total pages (from JSON)");
+        LogMessage($"  NewConcertos: 3 volumes with {newConcertos.VolumeInfoList.Sum(v => v.NPagesInThisVolume)} total pages (from PDF)");
+    }
+
     /// <summary>
     /// A simple SynchronizationContext that posts callbacks synchronously.
     /// This simulates a UI thread synchronization context for testing purposes.
