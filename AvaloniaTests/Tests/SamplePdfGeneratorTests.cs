@@ -65,7 +65,7 @@ public class SamplePdfGeneratorTests : TestBase
         // Render each page to verify all are valid
         for (int i = 0; i < actualPageCount; i++)
         {
-            using var bitmap = PDFtoImage.Conversion.ToImage(pdfBytes, page: i);
+            using var bitmap = PDFtoImage.Conversion.ToImage(pdfBytes, page: (Index)i);
             Assert.IsTrue(bitmap.Width > 0 && bitmap.Height > 0, $"Page {i} should render");
             LogMessage($"  Page {i} rendered: {bitmap.Width}x{bitmap.Height}");
         }
@@ -116,7 +116,7 @@ public class SamplePdfGeneratorTests : TestBase
         // Render each page to verify all are valid
         for (int i = 0; i < pageCount; i++)
         {
-            using var bitmap = PDFtoImage.Conversion.ToImage(pdfBytes, page: i);
+            using var bitmap = PDFtoImage.Conversion.ToImage(pdfBytes, page: (Index)i);
             Assert.IsTrue(bitmap.Width > 0 && bitmap.Height > 0, $"Page {i} should render");
             LogMessage($"  Page {i}: {bitmap.Width}x{bitmap.Height}");
         }
