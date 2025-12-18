@@ -491,6 +491,156 @@ public class PdfMetaDataCoreTests : TestBase
         }
     }
 
+    [TestMethod]
+    [TestCategory("Integration")]
+    public async Task LoadAllPdfMetaDataFromDiskAsync_AutoSavesJsonForNewPdfs()
+    {
+        // This test verifies that when loading a folder with multiple PDF sets 
+        // but NO existing JSON metadata files, the auto-save feature creates
+        // JSON files for all of them.
+        //
+        // This test would have FAILED before the autoSaveNewMetadata feature was added,
+        // because JSON files would not be created automatically.
+
+        // Arrange - Create 3 separate PDF "books" with NO metadata files
+        var book1Path = CreateTestPdf(Path.Combine(_tempFolder, "Beethoven Sonatas.pdf"));
+        var book2Path = CreateTestPdf(Path.Combine(_tempFolder, "Mozart Concertos.pdf"));
+        var book3Path = CreateTestPdf(Path.Combine(_tempFolder, "Bach Preludes.pdf"));
+
+        // Verify no JSON files exist before loading
+        var jsonFilesBefore = Directory.GetFiles(_tempFolder, "*.json");
+        Assert.AreEqual(0, jsonFilesBefore.Length, "No JSON files should exist before loading");
+
+        var provider = new PdfToImageDocumentProvider();
+
+        // Act - Load with parallel loading AND auto-save enabled (the default)
+        var (metadataList, folders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+            _tempFolder,
+            provider,
+            exceptionHandler: null,
+            useParallelLoading: true,
+            autoSaveNewMetadata: true); // This is the default, but being explicit
+
+        // Assert - Should have found 3 books
+        Assert.AreEqual(3, metadataList.Count, "Should find 3 PDF books");
+
+        // Assert - JSON files should now exist for all 3 books
+        var jsonFilesAfter = Directory.GetFiles(_tempFolder, "*.json");
+        Assert.AreEqual(3, jsonFilesAfter.Length, 
+            $"Should have created 3 JSON metadata files. Found: {string.Join(", ", jsonFilesAfter.Select(Path.GetFileName))}");
+
+        // Verify each expected JSON file exists
+        Assert.IsTrue(File.Exists(Path.ChangeExtension(book1Path, ".json")), 
+            "JSON file should exist for Beethoven Sonatas");
+        Assert.IsTrue(File.Exists(Path.ChangeExtension(book2Path, ".json")), 
+            "JSON file should exist for Mozart Concertos");
+        Assert.IsTrue(File.Exists(Path.ChangeExtension(book3Path, ".json")), 
+            "JSON file should exist for Bach Preludes");
+
+        // Verify the metadata is no longer dirty (was saved)
+        foreach (var metadata in metadataList)
+        {
+            Assert.IsFalse(metadata.IsDirty, 
+                $"Metadata for '{Path.GetFileName(metadata.FullPathFile)}' should not be dirty after auto-save");
+        }
+
+        LogMessage($"Auto-saved {jsonFilesAfter.Length} JSON metadata files:");
+        foreach (var jsonFile in jsonFilesAfter)
+        {
+            LogMessage($"  - {Path.GetFileName(jsonFile)}");
+        }
+    }
+
+    [TestMethod]
+    [TestCategory("Integration")]
+    public async Task LoadAllPdfMetaDataFromDiskAsync_AutoSavesJsonForMultiVolumeSets()
+    {
+        // This test verifies that multi-volume PDF sets get their JSON saved
+        // with all volumes correctly included.
+        //
+        // This test would have FAILED if:
+        // 1. The continuation volumes weren't detected (fixed earlier)
+        // 2. The auto-save didn't work for multi-volume sets
+
+        // Arrange - Create a multi-volume PDF set with NO metadata file
+        CreateTestPdf(Path.Combine(_tempFolder, "Greatest Hits.pdf"));
+        CreateTestPdf(Path.Combine(_tempFolder, "Greatest Hits1.pdf"));
+        CreateTestPdf(Path.Combine(_tempFolder, "Greatest Hits2.pdf"));
+        CreateTestPdf(Path.Combine(_tempFolder, "Greatest Hits3.pdf"));
+
+        // Verify no JSON files exist before loading
+        Assert.AreEqual(0, Directory.GetFiles(_tempFolder, "*.json").Length, 
+            "No JSON files should exist before loading");
+
+        var provider = new PdfToImageDocumentProvider();
+
+        // Act - Load with auto-save enabled
+        var (metadataList, folders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+            _tempFolder,
+            provider,
+            exceptionHandler: null,
+            useParallelLoading: true,
+            autoSaveNewMetadata: true);
+
+        // Assert - Should have 1 multi-volume book
+        Assert.AreEqual(1, metadataList.Count, "Should find 1 multi-volume book");
+        Assert.AreEqual(4, metadataList[0].VolumeInfoList.Count, "Should have 4 volumes");
+
+        // Assert - JSON file should exist
+        var jsonFiles = Directory.GetFiles(_tempFolder, "*.json");
+        Assert.AreEqual(1, jsonFiles.Length, "Should have created 1 JSON metadata file");
+
+        var jsonPath = Path.Combine(_tempFolder, "Greatest Hits.json");
+        Assert.IsTrue(File.Exists(jsonPath), "JSON file should exist for Greatest Hits");
+
+        // Verify JSON content includes all volumes
+        var jsonContent = await File.ReadAllTextAsync(jsonPath);
+        Assert.IsTrue(jsonContent.Contains("Greatest Hits.pdf"), "JSON should contain base volume");
+        Assert.IsTrue(jsonContent.Contains("Greatest Hits1.pdf"), "JSON should contain volume 1");
+        Assert.IsTrue(jsonContent.Contains("Greatest Hits2.pdf"), "JSON should contain volume 2");
+        Assert.IsTrue(jsonContent.Contains("Greatest Hits3.pdf"), "JSON should contain volume 3");
+
+        // Verify metadata is no longer dirty
+        Assert.IsFalse(metadataList[0].IsDirty, "Metadata should not be dirty after auto-save");
+
+        LogMessage($"Auto-saved multi-volume JSON with {metadataList[0].VolumeInfoList.Count} volumes");
+    }
+
+    [TestMethod]
+    [TestCategory("Integration")]
+    public async Task LoadAllPdfMetaDataFromDiskAsync_WithAutoSaveDisabled_DoesNotCreateJsonFiles()
+    {
+        // This test verifies that when autoSaveNewMetadata is false,
+        // no JSON files are created automatically.
+
+        // Arrange - Create PDFs with NO metadata files
+        CreateTestPdf(Path.Combine(_tempFolder, "NoAutoSaveBook.pdf"));
+
+        var provider = new PdfToImageDocumentProvider();
+
+        // Act - Load with auto-save DISABLED
+        var (metadataList, folders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+            _tempFolder,
+            provider,
+            exceptionHandler: null,
+            useParallelLoading: true,
+            autoSaveNewMetadata: false); // Explicitly disable auto-save
+
+        // Assert - Should find the PDF
+        Assert.AreEqual(1, metadataList.Count, "Should find 1 PDF");
+
+        // Assert - NO JSON files should be created
+        var jsonFiles = Directory.GetFiles(_tempFolder, "*.json");
+        Assert.AreEqual(0, jsonFiles.Length, 
+            "No JSON files should be created when autoSaveNewMetadata is false");
+
+        // Metadata should still be dirty (wasn't saved)
+        Assert.IsTrue(metadataList[0].IsDirty, 
+            "Metadata should remain dirty when auto-save is disabled");
+
+        LogMessage("Correctly skipped auto-save when disabled");
+    }
+
     /// <summary>
     /// A simple SynchronizationContext that posts callbacks synchronously.
     /// This simulates a UI thread synchronization context for testing purposes.
