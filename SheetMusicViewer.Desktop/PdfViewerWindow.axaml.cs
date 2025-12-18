@@ -104,7 +104,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         WireUpEventHandlers();
         
         // Load and display the last opened PDF
-        Loaded += async (s, e) => await OnWindowLoadedAsync();
+        Loaded += (s, e) => _ = OnWindowLoadedAsync();
         
         // Apply maximized state after window opens
         Opened += (s, e) =>
@@ -125,130 +125,80 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private void WireUpEventHandlers()
     {
         // Wire up ink checkbox events
-        var chkInk0 = this.FindControl<CheckBox>("chkInk0");
-        var chkInk1 = this.FindControl<CheckBox>("chkInk1");
+        var chkInk0 = this.GetControl<CheckBox>("chkInk0");
+        var chkInk1 = this.GetControl<CheckBox>("chkInk1");
         
-        if (chkInk0 != null)
-        {
-            chkInk0.IsCheckedChanged += (s, e) => 
-            { 
-                if (_inkCanvas0 != null) 
-                    _inkCanvas0.IsInkingEnabled = chkInk0.IsChecked == true;
-                UpdateGestureHandlerState();
-            };
-        }
+        chkInk0.IsCheckedChanged += (s, e) => 
+        { 
+            if (_inkCanvas0 != null) 
+                _inkCanvas0.IsInkingEnabled = chkInk0.IsChecked == true;
+            UpdateGestureHandlerState();
+        };
         
-        if (chkInk1 != null)
-        {
-            chkInk1.IsCheckedChanged += (s, e) => 
-            { 
-                if (_inkCanvas1 != null) 
-                    _inkCanvas1.IsInkingEnabled = chkInk1.IsChecked == true;
-                UpdateGestureHandlerState();
-            };
-        }
+        chkInk1.IsCheckedChanged += (s, e) => 
+        { 
+            if (_inkCanvas1 != null) 
+                _inkCanvas1.IsInkingEnabled = chkInk1.IsChecked == true;
+            UpdateGestureHandlerState();
+        };
         
         // Wire up favorite checkbox events
-        var chkFav0 = this.FindControl<CheckBox>("chkFav0");
-        var chkFav1 = this.FindControl<CheckBox>("chkFav1");
+        var chkFav0 = this.GetControl<CheckBox>("chkFav0");
+        var chkFav1 = this.GetControl<CheckBox>("chkFav1");
         
-        if (chkFav0 != null)
-        {
-            chkFav0.IsCheckedChanged += ChkFav_Toggled;
-        }
-        
-        if (chkFav1 != null)
-        {
-            chkFav1.IsCheckedChanged += ChkFav_Toggled;
-        }
+        chkFav0.IsCheckedChanged += ChkFav_Toggled;
+        chkFav1.IsCheckedChanged += ChkFav_Toggled;
         
         // Wire up rotate button
-        var btnRotate = this.FindControl<Button>("btnRotate");
-        if (btnRotate != null)
-        {
-            btnRotate.Click += BtnRotate_Click;
-        }
+        var btnRotate = this.GetControl<Button>("btnRotate");
+        btnRotate.Click += BtnRotate_Click;
         
         // Wire up full screen checkbox
-        var chkFullScreen = this.FindControl<CheckBox>("chkFullScreen");
-        if (chkFullScreen != null)
+        var chkFullScreen = this.GetControl<CheckBox>("chkFullScreen");
+        chkFullScreen.IsCheckedChanged += (s, e) =>
         {
-            chkFullScreen.IsCheckedChanged += (s, e) =>
-            {
-                ChkFullScreenToggled(chkFullScreen.IsChecked == true);
-            };
-            
-            // Set full screen based on settings
-            chkFullScreen.IsChecked = AppSettings.Instance.IsFullScreen;
-        }
+            ChkFullScreenToggled(chkFullScreen.IsChecked == true);
+        };
+        
+        // Set full screen based on settings
+        chkFullScreen.IsChecked = AppSettings.Instance.IsFullScreen;
         
         // Wire up menu items
-        var mnuChooser = this.FindControl<MenuItem>("mnuChooser");
-        if (mnuChooser != null)
-        {
-            mnuChooser.Click += async (s, e) => await ChooseMusicAsync();
-        }
+        var mnuChooser = this.GetControl<MenuItem>("mnuChooser");
+        mnuChooser.Click += (s, e) => _ = ChooseMusicAsync();
         
-        var mnuFullScreen = this.FindControl<MenuItem>("mnuFullScreen");
-        if (mnuFullScreen != null)
+        var mnuFullScreen = this.GetControl<MenuItem>("mnuFullScreen");
+        mnuFullScreen.Click += (s, e) =>
         {
-            mnuFullScreen.Click += (s, e) =>
-            {
-                var chk = this.FindControl<CheckBox>("chkFullScreen");
-                if (chk != null)
-                {
-                    chk.IsChecked = !chk.IsChecked;
-                }
-            };
-        }
+            chkFullScreen.IsChecked = !chkFullScreen.IsChecked;
+        };
         
-        var mnuAbout = this.FindControl<MenuItem>("mnuAbout");
-        if (mnuAbout != null)
-        {
-            mnuAbout.Click += BtnAbout_Click;
-        }
+        var mnuAbout = this.GetControl<MenuItem>("mnuAbout");
+        mnuAbout.Click += BtnAbout_Click;
         
-        var mnuShowLogs = this.FindControl<MenuItem>("mnuShowLogs");
-        if (mnuShowLogs != null)
-        {
-            mnuShowLogs.Click += MnuShowLogs_Click;
-        }
+        var mnuShowLogs = this.GetControl<MenuItem>("mnuShowLogs");
+        mnuShowLogs.Click += MnuShowLogs_Click;
         
-        var mnuQuit = this.FindControl<MenuItem>("mnuQuit");
-        if (mnuQuit != null)
-        {
-            mnuQuit.Click += (s, e) => Close();
-        }
+        var mnuQuit = this.GetControl<MenuItem>("mnuQuit");
+        mnuQuit.Click += (s, e) => Close();
         
         // Wire up navigation buttons
-        var btnPrev = this.FindControl<Button>("btnPrev");
-        var btnNext = this.FindControl<Button>("btnNext");
-        if (btnPrev != null)
-        {
-            btnPrev.Click += (s, e) => BtnPrevNext_Click(isPrevious: true);
-        }
-        if (btnNext != null)
-        {
-            btnNext.Click += (s, e) => BtnPrevNext_Click(isPrevious: false);
-        }
+        var btnPrev = this.GetControl<Button>("btnPrev");
+        var btnNext = this.GetControl<Button>("btnNext");
+        btnPrev.Click += (s, e) => BtnPrevNext_Click(isPrevious: true);
+        btnNext.Click += (s, e) => BtnPrevNext_Click(isPrevious: false);
         
         // Wire up thumbnail button for metadata editor (Alt-E)
-        var btnThumb = this.FindControl<Button>("btnThumb");
-        if (btnThumb != null)
-        {
-            btnThumb.Click += async (s, e) => await ShowMetaDataFormAsync();
-        }
+        var btnThumb = this.GetControl<Button>("btnThumb");
+        btnThumb.Click += (s, e) => _ = ShowMetaDataFormAsync();
         
         // Wire up slider events
-        _slider = this.FindControl<Slider>("slider");
-        _sliderPopup = this.FindControl<Popup>("SliderPopup");
-        _tbSliderPopup = this.FindControl<TextBlock>("tbSliderPopup");
+        _slider = this.GetControl<Slider>("slider");
+        _sliderPopup = this.GetControl<Popup>("SliderPopup");
+        _tbSliderPopup = this.GetControl<TextBlock>("tbSliderPopup");
         
-        if (_slider != null)
-        {
-            _slider.TemplateApplied += Slider_TemplateApplied;
-            _slider.AddHandler(RangeBase.ValueChangedEvent, Slider_ValueChanged);
-        }
+        _slider.TemplateApplied += Slider_TemplateApplied;
+        _slider.AddHandler(RangeBase.ValueChangedEvent, Slider_ValueChanged);
         
         // Add keyboard handler
         this.KeyDown += Window_KeyDown;
@@ -262,11 +212,8 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             var settings = AppSettings.Instance;
             
             // Apply full screen setting
-            var chkFullScreen = this.FindControl<CheckBox>("chkFullScreen");
-            if (chkFullScreen != null)
-            {
-                ChkFullScreenToggled(chkFullScreen.IsChecked == true);
-            }
+            var chkFullScreen = this.GetControl<CheckBox>("chkFullScreen");
+            ChkFullScreenToggled(chkFullScreen.IsChecked == true);
             
             if (string.IsNullOrEmpty(_rootMusicFolder) || !Directory.Exists(_rootMusicFolder))
             {
@@ -408,7 +355,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         // Save settings
         var settings = AppSettings.Instance;
         settings.Show2Pages = Show2Pages;
-        settings.IsFullScreen = this.FindControl<CheckBox>("chkFullScreen")?.IsChecked == true;
+        settings.IsFullScreen = this.GetControl<CheckBox>("chkFullScreen").IsChecked == true;
         settings.WindowMaximized = WindowState == WindowState.Maximized;
         
         // Only save position/size if not maximized
@@ -519,40 +466,37 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         PdfTitle = pdfMetaData.GetBookName(_rootMusicFolder);
         
         // Update thumbnail - load it if not cached
-        var imgThumb = this.FindControl<Image>("ImgThumb");
-        if (imgThumb != null)
+        var imgThumb = this.GetControl<Image>("ImgThumb");
+        var thumbnail = pdfMetaData.GetCachedThumbnail<Bitmap>();
+        if (thumbnail != null)
         {
-            var thumbnail = pdfMetaData.GetCachedThumbnail<Bitmap>();
-            if (thumbnail != null)
+            imgThumb.Source = thumbnail;
+        }
+        else
+        {
+            // Load thumbnail in background and update when ready
+            _ = Task.Run(async () =>
             {
-                imgThumb.Source = thumbnail;
-            }
-            else
-            {
-                // Load thumbnail in background and update when ready
-                _ = Task.Run(async () =>
+                try
                 {
-                    try
+                    var newThumb = await pdfMetaData.GetOrCreateThumbnailAsync(async () =>
                     {
-                        var newThumb = await pdfMetaData.GetOrCreateThumbnailAsync(async () =>
-                        {
-                            return await GetThumbnailForMetadataAsync(pdfMetaData);
-                        });
-                        
-                        await Dispatcher.UIThread.InvokeAsync(() =>
-                        {
-                            if (_currentPdfMetaData == pdfMetaData && newThumb is Bitmap bmp)
-                            {
-                                imgThumb.Source = bmp;
-                            }
-                        });
-                    }
-                    catch (Exception ex)
+                        return await GetThumbnailForMetadataAsync(pdfMetaData);
+                    });
+                    
+                    await Dispatcher.UIThread.InvokeAsync(() =>
                     {
-                        Logger.LogWarning($"Thumbnail load failed: {ex.Message}");
-                    }
-                });
-            }
+                        if (_currentPdfMetaData == pdfMetaData && newThumb is Bitmap bmp)
+                        {
+                            imgThumb.Source = bmp;
+                        }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning($"Thumbnail load failed: {ex.Message}");
+                }
+            });
         }
         
         Title = $"{MyAppName} - {PdfTitle}";
@@ -565,8 +509,8 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         // Save any unsaved ink strokes before closing
         SaveInkFromCurrentCanvases();
         
-        _dpPage = this.FindControl<Panel>("dpPage");
-        _dpPage?.Children.Clear();
+        _dpPage = this.GetControl<Panel>("dpPage");
+        _dpPage.Children.Clear();
         ClearCache();
         
         if (_currentPdfMetaData != null)
@@ -596,8 +540,8 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         {
             if (_currentPdfMetaData == null)
             {
-                _dpPage = this.FindControl<Panel>("dpPage");
-                _dpPage?.Children.Clear();
+                _dpPage = this.GetControl<Panel>("dpPage");
+                _dpPage.Children.Clear();
                 return;
             }
             
@@ -695,99 +639,66 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                _dpPage = this.FindControl<Panel>("dpPage");
-                if (_dpPage != null)
-                {
-                    _dpPage.Children.Clear();
-                    _dpPage.Background = Brushes.LightGray;
-                    
-                    _gestureHandler?.ResetTransform();
+                _dpPage = this.GetControl<Panel>("dpPage");
+                _dpPage.Children.Clear();
+                _dpPage.Background = Brushes.LightGray;
+                
+                _gestureHandler?.ResetTransform();
 
-                    var grid = new Grid
+                var grid = new Grid
+                {
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch
+                };
+
+                if (Show2Pages && page1Image != null)
+                {
+                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Pixel) });
+                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                    _inkCanvas0 = new InkCanvasControl(page0Image, pageNo, inkStroke0)
                     {
-                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
+                        IsInkingEnabled = false
+                    };
+                    Grid.SetColumn(_inkCanvas0, 0);
+                    grid.Children.Add(_inkCanvas0);
+
+                    var divider = new Border
+                    {
+                        Background = Brushes.Gray,
+                        Width = 1,
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
                         VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch
                     };
+                    Grid.SetColumn(divider, 1);
+                    grid.Children.Add(divider);
 
-                    if (Show2Pages && page1Image != null)
+                    _inkCanvas1 = new InkCanvasControl(page1Image, pageNo + 1, inkStroke1)
                     {
-                        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Pixel) });
-                        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-                        _inkCanvas0 = new InkCanvasControl(page0Image, pageNo, inkStroke0)
-                        {
-                            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
-                            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
-                            IsInkingEnabled = false
-                        };
-                        Grid.SetColumn(_inkCanvas0, 0);
-                        grid.Children.Add(_inkCanvas0);
-
-                        var divider = new Border
-                        {
-                            Background = Brushes.Gray,
-                            Width = 1,
-                            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-                            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch
-                        };
-                        Grid.SetColumn(divider, 1);
-                        grid.Children.Add(divider);
-
-                        _inkCanvas1 = new InkCanvasControl(page1Image, pageNo + 1, inkStroke1)
-                        {
-                            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
-                            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
-                            IsInkingEnabled = false
-                        };
-                        Grid.SetColumn(_inkCanvas1, 2);
-                        grid.Children.Add(_inkCanvas1);
-                    }
-                    else
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+                        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
+                        IsInkingEnabled = false
+                    };
+                    Grid.SetColumn(_inkCanvas1, 2);
+                    grid.Children.Add(_inkCanvas1);
+                }
+                else
+                {
+                    _inkCanvas0 = new InkCanvasControl(page0Image, pageNo, inkStroke0)
                     {
-                        _inkCanvas0 = new InkCanvasControl(page0Image, pageNo, inkStroke0)
-                        {
-                            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-                            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
-                            IsInkingEnabled = false
-                        };
-                        grid.Children.Add(_inkCanvas0);
-                        _inkCanvas1 = null;
-                    }
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
+                        IsInkingEnabled = false
+                    };
+                    grid.Children.Add(_inkCanvas0);
+                    _inkCanvas1 = null;
+                }
 
-                    _dpPage.Children.Add(grid);
-                    SetupGestureHandler();
-                }
-                
-                // Update descriptions
-                Description0 = GetDescription(pageNo);
-                Description1 = (page1Image != null) ? GetDescription(pageNo + 1) : string.Empty;
-                
-                // Update favorite checkboxes
-                _chkFavoriteEnabled = false;
-                var chkFav0 = this.FindControl<CheckBox>("chkFav0");
-                var chkFav1 = this.FindControl<CheckBox>("chkFav1");
-                if (chkFav0 != null)
-                {
-                    chkFav0.IsChecked = _currentPdfMetaData?.IsFavorite(pageNo) == true;
-                }
-                if (chkFav1 != null && NumPagesPerView > 1)
-                {
-                    chkFav1.IsChecked = _currentPdfMetaData?.IsFavorite(pageNo + 1) == true;
-                }
-                _chkFavoriteEnabled = true;
-                
-                // Update ink checkbox states
-                var chkInk0 = this.FindControl<CheckBox>("chkInk0");
-                var chkInk1 = this.FindControl<CheckBox>("chkInk1");
-                if (chkInk0 != null && _inkCanvas0 != null)
-                {
-                    _inkCanvas0.IsInkingEnabled = chkInk0.IsChecked == true;
-                }
-                if (chkInk1 != null && _inkCanvas1 != null)
-                {
-                    _inkCanvas1.IsInkingEnabled = chkInk1.IsChecked == true;
-                }
+                _dpPage.Children.Add(grid);
+                SetupGestureHandler();
             });
         }
         catch (Exception ex)
@@ -1101,12 +1012,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     {
         if (_gestureHandler != null)
         {
-            var chkInk0 = this.FindControl<CheckBox>("chkInk0");
-            var chkInk1 = this.FindControl<CheckBox>("chkInk1");
+            var chkInk0 = this.GetControl<CheckBox>("chkInk0");
+            var chkInk1 = this.GetControl<CheckBox>("chkInk1");
             
             _gestureHandler.IsDisabled = 
-                (chkInk0?.IsChecked == true) || 
-                (chkInk1?.IsChecked == true);
+                (chkInk0.IsChecked == true) || 
+                (chkInk1.IsChecked == true);
         }
     }
     
@@ -1464,17 +1375,14 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                     e.Handled = true;
                     return;
                 case Key.F:
-                    var chkFullScreen = this.FindControl<CheckBox>("chkFullScreen");
-                    if (chkFullScreen != null)
-                    {
-                        chkFullScreen.IsChecked = !chkFullScreen.IsChecked;
-                    }
+                    var chkFullScreen = this.GetControl<CheckBox>("chkFullScreen");
+                    chkFullScreen.IsChecked = !chkFullScreen.IsChecked;
                     e.Handled = true;
                     return;
                 case Key.M:
                     // Open the menu - find and open the MenuItem
-                    var menu = this.FindControl<Menu>("mainMenu");
-                    if (menu?.Items.Count > 0 && menu.Items[0] is MenuItem menuItem)
+                    var menu = this.GetControl<Menu>("mainMenu");
+                    if (menu.Items.Count > 0 && menu.Items[0] is MenuItem menuItem)
                     {
                         menuItem.Open();
                     }
