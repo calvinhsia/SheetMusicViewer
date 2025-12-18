@@ -41,7 +41,7 @@ public class ChooseMusicWindow : Window
     // Query tab - uses BrowseControl
     private BrowseControl? _queryBrowseControl;
     private Grid _queryTabGrid;
-    
+
     private List<PdfMetaDataReadResult> _pdfMetadata;
     private string _rootFolder;
     
@@ -183,6 +183,15 @@ public class ChooseMusicWindow : Window
             WindowState = WindowState.Maximized;
         }
         
+        // Restore last selected tab
+        var lastTab = AppSettings.Instance.ChooseQueryTab;
+        _tabControl.SelectedIndex = lastTab switch
+        {
+            "_Query" => 1,
+            "Fa_vorites" => 2,
+            _ => 0 // "_Books" or default
+        };
+        
         // If no root folder and only "New..." is in the list, automatically show folder picker
         if (string.IsNullOrEmpty(_rootFolder) || !Directory.Exists(_rootFolder))
         {
@@ -211,6 +220,12 @@ public class ChooseMusicWindow : Window
             settings.ChooseWindowHeight = Height;
             settings.ChooseWindowLeft = Position.X;
             settings.ChooseWindowTop = Position.Y;
+        }
+        
+        // Save selected tab
+        if (_tabControl.SelectedItem is TabItem selectedTab)
+        {
+            settings.ChooseQueryTab = selectedTab.Header?.ToString() ?? "_Books";
         }
         
         settings.Save();
@@ -566,9 +581,14 @@ public class ChooseMusicWindow : Window
             {
                 FillFavoritesTab();
             }
-            else if (header == "_Query" && _queryBrowseControl == null)
+            else if (header == "_Query")
             {
-                FillQueryTab();
+                if (_queryBrowseControl == null)
+                {
+                    FillQueryTab();
+                }
+                // Focus the filter textbox when Query tab is activated
+                _queryBrowseControl?.FocusFilter();
             }
         }
     }
