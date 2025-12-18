@@ -20,6 +20,10 @@
         <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10" Spacing="10">
             <TextBlock Text="PageNumberOffset:" VerticalAlignment="Center"/>
             <TextBox Text="{Binding PageNumberOffset}" Width="50"/>
+            <Button Content="_Add Row" Command="{Binding AddRowCommand}"
+                    ToolTip.Tip="Add a new TOC entry"/>
+            <Button Content="_Delete Row" Command="{Binding DeleteRowCommand}"
+                    ToolTip.Tip="Delete the selected TOC entry"/>
             <Button Content="_Import from Clipboard" Command="{Binding ImportCommand}" 
                     ToolTip.Tip="Import TOC from clipboard tab separated values (PageNo, SongName, Composer, Date, Notes)"/>
             <Button Content="_Export to Clipboard" Command="{Binding ExportCommand}"

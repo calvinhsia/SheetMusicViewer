@@ -12,6 +12,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
+using SheetMusicLib;
 
 namespace SheetMusicViewer.Desktop;
 
@@ -61,12 +62,12 @@ public class BrowseControl : DockPanel
             
             listFilter.SetBrowseList(ListView);
             
-            Trace.WriteLine($"BrowseControl: Created with virtualization and column resizing support");
+            Debug.WriteLine($"BrowseControl: Created with virtualization and column resizing support");
         }
         catch (Exception ex)
         {
             this.Children.Add(new TextBlock { Text = ex.ToString() });
-            Trace.WriteLine($"BrowseControl: Exception: {ex}");
+            Logger.LogException("BrowseControl creation failed", ex);
             throw;
         }
     }
@@ -85,7 +86,6 @@ public class BrowseControl : DockPanel
 
 internal class ListBoxListFilter : DockPanel
 {
-    readonly Button _btnApply = new Button() { Content = "Apply" };
     readonly TextBox _txtFilter = new TextBox { Width = 200 };
     readonly TextBlock _txtStatus = new TextBlock();
     ListBoxBrowseView? _browse;
@@ -121,24 +121,19 @@ internal class ListBoxListFilter : DockPanel
         _txtFilter.Text = _LastFilter;
         _txtFilter.Watermark = "Enter filter text...";
         spFilter.Children.Add(_txtFilter);
-        spFilter.Children.Add(_btnApply);
-        _btnApply.Click += (oc, ec) => { On_BtnApply_Click(oc, ec); };
         this.Children.Add(spFilter);
 
-        _txtFilter.KeyDown += (o, e) =>
+        // Apply filter on every text change
+        _txtFilter.TextChanged += (o, e) =>
         {
-            if (e.Key == Key.Enter)
-            {
-                On_BtnApply_Click(o, e);
-            }
+            ApplyFilter();
         };
     }
 
-    void On_BtnApply_Click(object? o, RoutedEventArgs e)
+    void ApplyFilter()
     {
         try
         {
-            e.Handled = true;
             var filtText = _txtFilter.Text?.Trim().ToLower() ?? string.Empty;
             _LastFilter = filtText;
 
@@ -222,7 +217,7 @@ public class ListBoxBrowseView : UserControl
 
         BuildVisualStructure();
         
-        Trace.WriteLine($"ListBoxBrowseView: Created with {_columns.Count} columns, {_filteredItems.Count} items");
+        Debug.WriteLine($"ListBoxBrowseView: Created with {_columns.Count} columns, {_filteredItems.Count} items");
     }
 
     private void BuildVisualStructure()
@@ -333,7 +328,7 @@ public class ListBoxBrowseView : UserControl
         contextMenu.Items.Add(exportTxtMenuItem);
         
         _listBox.ContextMenu = contextMenu;
-        Trace.WriteLine($"ListBoxBrowseView: Context menu created with {contextMenu.Items.Count} items");
+        Debug.WriteLine($"ListBoxBrowseView: Context menu created with {contextMenu.Items.Count} items");
 
         // Use Loaded event to customize containers after they're created
         _listBox.Loaded += OnListBoxLoaded;
@@ -343,19 +338,19 @@ public class ListBoxBrowseView : UserControl
 
         this.Content = _listBox;
         
-        Trace.WriteLine($"ListBoxBrowseView: Visual structure created with ListBox virtualization and resizable columns");
+        Debug.WriteLine($"ListBoxBrowseView: Visual structure created with ListBox virtualization and resizable columns");
     }
     
     private void OnSplitterDragStarted(object? sender, VectorEventArgs e)
     {
         _isResizing = true;
-        Trace.WriteLine("Column resize started");
+        Debug.WriteLine("Column resize started");
     }
     
     private void OnSplitterDragCompleted(object? sender, VectorEventArgs e)
     {
         _isResizing = false;
-        Trace.WriteLine("Column resize completed - regenerating visible items");
+        Debug.WriteLine("Column resize completed - regenerating visible items");
         
         // Regenerate all visible item grids with new column widths
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -368,14 +363,14 @@ public class ListBoxBrowseView : UserControl
     {
         try
         {
-            Trace.WriteLine("OnListBoxLoaded: ListBox loaded, customizing visible containers");
+            Debug.WriteLine("OnListBoxLoaded: ListBox loaded, customizing visible containers");
             
-            Trace.WriteLine($"  ItemsSource has {_filteredItems.Count} items");
+            Debug.WriteLine($"  ItemsSource has {_filteredItems.Count} items");
             
             var presenter = _listBox.Presenter;
             var panel = presenter?.Panel;
-            Trace.WriteLine($"  Panel type: {panel?.GetType().Name ?? "NULL"}");
-            Trace.WriteLine($"  Panel children count: {panel?.Children.Count ?? 0}");
+            Debug.WriteLine($"  Panel type: {panel?.GetType().Name ?? "NULL"}");
+            Debug.WriteLine($"  Panel children count: {panel?.Children.Count ?? 0}");
             
             int customizedCount = 0;
             for (int i = 0; i < _filteredItems.Count; i++)
@@ -390,16 +385,16 @@ public class ListBoxBrowseView : UserControl
                 }
             }
             
-            Trace.WriteLine($"  ? Customized {customizedCount} visible containers");
+            Debug.WriteLine($"  ? Customized {customizedCount} visible containers");
             
             // Subscribe to EffectiveViewportChanged for scrolling
             _listBox.EffectiveViewportChanged += OnEffectiveViewportChanged;
-            Trace.WriteLine($"  ? Subscribed to EffectiveViewportChanged for dynamic customization");
+            Debug.WriteLine($"  ? Subscribed to EffectiveViewportChanged for dynamic customization");
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"ERROR in OnListBoxLoaded: {ex.Message}");
-            Trace.WriteLine($"  Stack: {ex.StackTrace}");
+            Debug.WriteLine($"ERROR in OnListBoxLoaded: {ex.Message}");
+            Debug.WriteLine($"  Stack: {ex.StackTrace}");
         }
     }
     
@@ -435,7 +430,7 @@ public class ListBoxBrowseView : UserControl
                     if (isToStringBefore)
                     {
                         toStringCount++;
-                        Trace.WriteLine($"  ?? Container {i}: WAS ToString ({contentBeforeType}), fixing now...");
+                        Debug.WriteLine($"  ?? Container {i}: WAS ToString ({contentBeforeType}), fixing now...");
                     }
                     else if (isGridBefore)
                     {
@@ -456,7 +451,7 @@ public class ListBoxBrowseView : UserControl
                     // Detailed logging only for ToString cases
                     if (isToStringBefore)
                     {
-                        Trace.WriteLine($"       AFTER fix: {contentAfterType}, SameRef={isSameReference}");
+                        Debug.WriteLine($"       AFTER fix: {contentAfterType}, SameRef={isSameReference}");
                     }
                 }
             }
@@ -467,14 +462,14 @@ public class ListBoxBrowseView : UserControl
                     ? string.Join(", ", visibleIndices)
                     : $"{visibleIndices[0]}..{visibleIndices[visibleIndices.Count - 1]}";
                     
-                Trace.WriteLine($"OnEffectiveViewportChanged: Visible indices [{indicesStr}], " +
+                Debug.WriteLine($"OnEffectiveViewportChanged: Visible indices [{indicesStr}], " +
                     $"Customized={customizedCount}, ToString={toStringCount}, AlreadyGrid={alreadyGridCount}");
             }
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"ERROR in OnEffectiveViewportChanged: {ex.Message}");
-            Trace.WriteLine($"  Stack: {ex.StackTrace}");
+            Debug.WriteLine($"ERROR in OnEffectiveViewportChanged: {ex.Message}");
+            Debug.WriteLine($"  Stack: {ex.StackTrace}");
         }
     }
 
@@ -508,12 +503,12 @@ public class ListBoxBrowseView : UserControl
             // Remove or comment out this line in production if desired
             // if (fixedCount > 0)
             // {
-            //     Trace.WriteLine($"OnListBoxLayoutUpdated: Fixed {fixedCount} containers");
+            //     Debug.WriteLine($"OnListBoxLayoutUpdated: Fixed {fixedCount} containers");
             // }
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"ERROR in OnListBoxLayoutUpdated: {ex.Message}");
+            Debug.WriteLine($"ERROR in OnListBoxLayoutUpdated: {ex.Message}");
         }
     }
 
@@ -549,7 +544,7 @@ public class ListBoxBrowseView : UserControl
             }
             catch (Exception ex)
             {
-                Trace.WriteLine($"Error getting value for {col.BindingPath}: {ex.Message}");
+                Debug.WriteLine($"Error getting value for {col.BindingPath}: {ex.Message}");
             }
             
             var textBlock = new TextBlock
@@ -610,7 +605,7 @@ public class ListBoxBrowseView : UserControl
             var selectedItems = _listBox.SelectedItems;
             if (selectedItems == null || selectedItems.Count == 0)
             {
-                Trace.WriteLine("OnCopyClick: No items selected");
+                Debug.WriteLine("OnCopyClick: No items selected");
                 return;
             }
 
@@ -631,12 +626,12 @@ public class ListBoxBrowseView : UserControl
             if (clipboard != null)
             {
                 await clipboard.SetTextAsync(sb.ToString());
-                Trace.WriteLine($"OnCopyClick: Copied {selectedItems.Count} items to clipboard");
+                Debug.WriteLine($"OnCopyClick: Copied {selectedItems.Count} items to clipboard");
             }
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"ERROR in OnCopyClick: {ex.Message}");
+            Logger.LogException("Copy to clipboard failed", ex);
         }
     }
 
@@ -679,7 +674,7 @@ public class ListBoxBrowseView : UserControl
             var filename = System.IO.Path.ChangeExtension(tmpFileName, "csv");
             System.IO.File.Move(tmpFileName, filename);
             
-            Trace.WriteLine($"OnExportCsvClick: Exported {itemCount} items to {filename}");
+            Debug.WriteLine($"OnExportCsvClick: Exported {itemCount} items to {filename}");
             
             // Use shell execute to open with default .csv handler (like original)
             try
@@ -691,12 +686,12 @@ public class ListBoxBrowseView : UserControl
             }
             catch (Exception openEx)
             {
-                Trace.WriteLine($"Could not open file: {openEx.Message}");
+                Logger.LogWarning($"Could not open CSV file: {openEx.Message}");
             }
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"ERROR in OnExportCsvClick: {ex.Message}");
+            Logger.LogException("Export to CSV failed", ex);
         }
     }
 
@@ -738,7 +733,7 @@ public class ListBoxBrowseView : UserControl
             var filename = System.IO.Path.ChangeExtension(tmpFileName, "txt");
             System.IO.File.Move(tmpFileName, filename);
             
-            Trace.WriteLine($"OnExportTxtClick: Exported {itemCount} items to {filename}");
+            Debug.WriteLine($"OnExportTxtClick: Exported {itemCount} items to {filename}");
             
             // Use shell execute to open with default .txt handler (like original)
             try
@@ -750,18 +745,18 @@ public class ListBoxBrowseView : UserControl
             }
             catch (Exception openEx)
             {
-                Trace.WriteLine($"Could not open file: {openEx.Message}");
+                Logger.LogWarning($"Could not open TXT file: {openEx.Message}");
             }
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"ERROR in OnExportTxtClick: {ex.Message}");
+            Logger.LogException("Export to Notepad failed", ex);
         }
     }
 
     private void OnHeaderClick(int columnIndex)
     {
-        Trace.WriteLine($"Header clicked: column {columnIndex}");
+        Debug.WriteLine($"Header clicked: column {columnIndex}");
         
         if (columnIndex < 0 || columnIndex >= _columns.Count)
             return;
@@ -791,7 +786,7 @@ public class ListBoxBrowseView : UserControl
                 _filteredItems.Add(item);
             }
             
-            Trace.WriteLine($"Sorted by {col.HeaderText} ({(ascending ? "ascending" : "descending")})");
+            Debug.WriteLine($"Sorted by {col.HeaderText} ({(ascending ? "ascending" : "descending")})");
             
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
@@ -800,7 +795,7 @@ public class ListBoxBrowseView : UserControl
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"Error sorting: {ex.Message}");
+            Logger.LogWarning($"Error sorting by {col.HeaderText}: {ex.Message}");
         }
     }
 
@@ -808,7 +803,7 @@ public class ListBoxBrowseView : UserControl
     {
         try
         {
-            Trace.WriteLine($"RecustomizeVisibleContainers: Re-customizing after collection change");
+            Debug.WriteLine($"RecustomizeVisibleContainers: Re-customizing after collection change");
             
             int customizedCount = 0;
             for (int i = 0; i < _filteredItems.Count; i++)
@@ -823,11 +818,11 @@ public class ListBoxBrowseView : UserControl
                 }
             }
             
-            Trace.WriteLine($"  ? Re-customized {customizedCount} visible containers after sort");
+            Debug.WriteLine($"  ? Re-customized {customizedCount} visible containers after sort");
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"ERROR in RecustomizeVisibleContainers: {ex.Message}");
+            Debug.WriteLine($"ERROR in RecustomizeVisibleContainers: {ex.Message}");
         }
     }
 
@@ -864,7 +859,7 @@ public class ListBoxBrowseView : UserControl
             }
         }
         
-        Trace.WriteLine($"Filter applied: {_filteredItems.Count} items match '{filterText}'");
+        Debug.WriteLine($"Filter applied: {_filteredItems.Count} items match '{filterText}'");
         
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
@@ -889,7 +884,7 @@ public class ListBoxBrowseView : UserControl
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"Error getting property value: {ex.Message}");
+            Debug.WriteLine($"Error getting property value: {ex.Message}");
         }
         return string.Empty;
     }
@@ -926,7 +921,7 @@ public class ListBoxBrowseView : UserControl
     {
         if (_listBox?.ContextMenu == null)
         {
-            Trace.WriteLine($"AddContextMenuItem: ContextMenu is null");
+            Debug.WriteLine($"AddContextMenuItem: ContextMenu is null");
             return;
         }
 
@@ -944,23 +939,23 @@ public class ListBoxBrowseView : UserControl
                 var selectedItems = _listBox.SelectedItems;
                 if (selectedItems == null || selectedItems.Count == 0)
                 {
-                    Trace.WriteLine($"{itemName}: No items selected");
+                    Debug.WriteLine($"{itemName}: No items selected");
                     return;
                 }
 
                 var itemsList = selectedItems.Cast<object>().ToList();
                 action?.Invoke(itemsList);
                 
-                Trace.WriteLine($"{itemName}: Executed on {itemsList.Count} items");
+                Debug.WriteLine($"{itemName}: Executed on {itemsList.Count} items");
             }
             catch (Exception ex)
             {
-                Trace.WriteLine($"ERROR in {itemName}: {ex.Message}");
+                Logger.LogException($"Context menu action '{itemName}' failed", ex);
             }
         };
 
         _listBox.ContextMenu.Items.Add(menuItem);
-        Trace.WriteLine($"AddContextMenuItem: Added '{itemName}' to context menu");
+        Debug.WriteLine($"AddContextMenuItem: Added '{itemName}' to context menu");
     }
 }
 
