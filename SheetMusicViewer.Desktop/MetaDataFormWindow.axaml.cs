@@ -415,7 +415,7 @@ public partial class MetaDataFormViewModel : ObservableObject
         var clipboard = GetClipboardFunc?.Invoke();
         if (clipboard == null) return;
 
-        var clipText = await clipboard.GetTextAsync();
+        var clipText = await clipboard.TryGetTextAsync();
         if (string.IsNullOrEmpty(clipText)) return;
 
         var importedEntries = new List<TocEntryViewModel>();

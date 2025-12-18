@@ -994,7 +994,7 @@ public class ChooseMusicWindow : Window
             };
             
             using var pdfStream = File.OpenRead(pdfPath);
-            using var skBitmap = Conversion.ToImage(pdfStream, page: 0, options: new PDFtoImage.RenderOptions(
+            using var skBitmap = Conversion.ToImage(pdfStream, page: (Index)0, options: new PDFtoImage.RenderOptions(
                 Width: ThumbnailWidth, 
                 Height: ThumbnailHeight,
                 Rotation: pdfRotation));

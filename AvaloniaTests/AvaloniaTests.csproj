@@ -9,6 +9,9 @@
     <IsTestProject>true</IsTestProject>
     <LangVersion>latest</LangVersion>
     <StartupObject>AvaloniaTests.Program</StartupObject>
+
+    <!-- Suppress CA1416: PDFtoImage is platform-specific but tests only run on desktop platforms (Windows, Linux, macOS) -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />

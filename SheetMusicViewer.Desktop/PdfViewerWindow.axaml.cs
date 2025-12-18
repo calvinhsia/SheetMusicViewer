@@ -339,7 +339,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             };
             
             using var pdfStream = File.OpenRead(pdfPath);
-            using var skBitmap = Conversion.ToImage(pdfStream, page: 0, options: new PDFtoImage.RenderOptions(
+            using var skBitmap = Conversion.ToImage(pdfStream, page: (Index)0, options: new PDFtoImage.RenderOptions(
                 Width: 150,
                 Height: 225,
                 Rotation: pdfRotation));
@@ -845,7 +845,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                     $"Delete the .json metadata file to regenerate it.");
             }
             
-            using var skBitmap = Conversion.ToImage(pdfBytes, page: pageIndexInVolume, 
+            using var skBitmap = Conversion.ToImage(pdfBytes, page: (Index)pageIndexInVolume, 
                 options: new PDFtoImage.RenderOptions(Dpi: 150, Rotation: pdfRotation));
             using var image = SKImage.FromBitmap(skBitmap);
             using var data = image.Encode(SKEncodedImageFormat.Png, 100);
