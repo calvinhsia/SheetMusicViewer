@@ -376,12 +376,14 @@ namespace SheetMusicLib
         /// <param name="pdfDocumentProvider">Provider to get PDF page count</param>
         /// <param name="exceptionHandler">Optional exception handler</param>
         /// <param name="useParallelLoading">If true, parse BMK files in parallel for faster loading</param>
+        /// <param name="autoSaveNewMetadata">If true, automatically save JSON metadata for newly discovered PDFs</param>
         /// <returns>List of metadata results and list of folder names</returns>
         public static async Task<(List<PdfMetaDataReadResult>, List<string>)> LoadAllPdfMetaDataFromDiskAsync(
             string rootMusicFolder,
             IPdfDocumentProvider pdfDocumentProvider,
             IExceptionHandler exceptionHandler = null,
-            bool useParallelLoading = true)
+            bool useParallelLoading = true,
+            bool autoSaveNewMetadata = true)
         {
             var lstPdfMetaFileData = new List<PdfMetaDataReadResult>();
             var lstFolders = new List<string>();
@@ -393,7 +395,19 @@ namespace SheetMusicLib
 
             if (useParallelLoading)
             {
-                return await LoadAllPdfMetaDataParallelAsync(rootMusicFolder, pdfDocumentProvider, exceptionHandler);
+                var result = await LoadAllPdfMetaDataParallelAsync(rootMusicFolder, pdfDocumentProvider, exceptionHandler);
+                
+                // Auto-save any new metadata that was created
+                if (autoSaveNewMetadata)
+                {
+                    var savedCount = SaveAllDirtyMetadata(result.Item1);
+                    if (savedCount > 0)
+                    {
+                        Debug.WriteLine($"PdfMetaDataCore: Auto-saved {savedCount} new JSON metadata files");
+                    }
+                }
+                
+                return result;
             }
 
             // Original sequential implementation
@@ -1453,6 +1467,26 @@ namespace SheetMusicLib
                 Debug.WriteLine($"PdfMetaDataCore: Error saving metadata: {ex.Message}");
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Save all dirty metadata entries to JSON files
+        /// </summary>
+        /// <param name="metadataList">The list of metadata entries</param>
+        /// <returns>The number of metadata entries saved</returns>
+        public static int SaveAllDirtyMetadata(List<PdfMetaDataReadResult> metadataList)
+        {
+            int savedCount = 0;
+            foreach (var metadata in metadataList)
+            {
+                if (metadata.IsDirty)
+                {
+                    var saved = SaveToJson(metadata);
+                    if (saved)
+                        savedCount++;
+                }
+            }
+            return savedCount;
         }
     }
 
