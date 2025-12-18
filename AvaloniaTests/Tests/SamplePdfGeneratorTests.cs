@@ -399,38 +399,37 @@ public class SamplePdfGeneratorTests : TestBase
             Assert.AreEqual(1, jsonFilesBefore.Length, "Should have 1 JSON file before loading");
 
             var provider = new PdfToImageDocumentProvider();
+            
+            // Load with autoSaveNewMetadata enabled (the default behavior)
+            // This will automatically create JSON files for any new PDFs
             var (metadataList, _) = await SheetMusicLib.PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
-                tempFolder, provider, exceptionHandler: null, useParallelLoading: true);
+                tempFolder, provider, exceptionHandler: null, useParallelLoading: true, autoSaveNewMetadata: true);
 
             LogMessage($"Loaded {metadataList.Count} metadata entries");
             Assert.IsTrue(metadataList.Count > 0, "Should load at least one metadata entry");
 
+            // With autoSaveNewMetadata=true, all metadata should be NOT dirty after loading
+            // because new PDFs get their JSON files created automatically
             foreach (var metadata in metadataList)
             {
                 var fileName = Path.GetFileName(metadata.FullPathFile);
-                var hasPreExistingJson = fileName.Equals("GettingStarted.pdf", StringComparison.OrdinalIgnoreCase);
-
-                if (hasPreExistingJson)
-                    Assert.IsFalse(metadata.IsDirty, $"GettingStarted.pdf should NOT be dirty");
-                else
-                    Assert.IsTrue(metadata.IsDirty, $"{fileName} should be dirty");
-
                 var totalPages = metadata.VolumeInfoList.Sum(v => v.NPagesInThisVolume);
+                
+                // All metadata should be clean (not dirty) because:
+                // - GettingStarted.pdf had pre-existing JSON
+                // - Any new PDFs had JSON auto-saved during loading
+                Assert.IsFalse(metadata.IsDirty, 
+                    $"{fileName} should NOT be dirty after loading with autoSaveNewMetadata=true");
+                
                 LogMessage($"  {fileName}: {totalPages} pages, IsDirty={metadata.IsDirty}");
             }
 
-            int savedCount = 0;
-            foreach (var metadata in metadataList.Where(m => m.IsDirty))
-            {
-                SheetMusicLib.PdfMetaDataCore.SaveToJson(metadata, forceSave: true);
-                savedCount++;
-            }
-            LogMessage($"Saved {savedCount} new JSON files");
-
+            // JSON files should now exist for all PDFs (auto-saved during loading)
             var jsonFilesAfter = Directory.GetFiles(tempFolder, "*.json");
-            Assert.AreEqual(metadataList.Count, jsonFilesAfter.Length, "Should have one JSON per PDF");
+            Assert.AreEqual(metadataList.Count, jsonFilesAfter.Length, 
+                $"Should have one JSON per PDF. Expected {metadataList.Count}, found {jsonFilesAfter.Length}: {string.Join(", ", jsonFilesAfter.Select(Path.GetFileName))}");
 
-            LogMessage("Integration test passed");
+            LogMessage($"Integration test passed: {jsonFilesAfter.Length} JSON files for {metadataList.Count} PDFs");
         }
         finally
         {
