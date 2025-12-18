@@ -163,16 +163,12 @@ public class ChooseMusicWindow : Window
                     _tabControl.SelectedIndex = 0;
                     e.Handled = true;
                     break;
-                case Key.V: // Fa_vorites
+                case Key.Q: // _Query
                     _tabControl.SelectedIndex = 1;
                     e.Handled = true;
                     break;
-                case Key.Q: // _Query
+                case Key.V: // Fa_vorites
                     _tabControl.SelectedIndex = 2;
-                    e.Handled = true;
-                    break;
-                case Key.P: // _Playlists
-                    _tabControl.SelectedIndex = 3;
                     e.Handled = true;
                     break;
             }
@@ -235,19 +231,15 @@ public class ChooseMusicWindow : Window
         booksTab.Content = BuildBooksTabContent();
         _tabControl.Items.Add(booksTab);
         
-        // Favorites tab
-        var favTab = new TabItem { Header = "Fa_vorites" };
-        favTab.Content = BuildFavoritesTabContent();
-        _tabControl.Items.Add(favTab);
-        
-        // Query tab
+        // Query tab (moved to 2nd position)
         var queryTab = new TabItem { Header = "_Query" };
         queryTab.Content = BuildQueryTabContent();
         _tabControl.Items.Add(queryTab);
         
-        // Playlists tab (placeholder)
-        var playlistsTab = new TabItem { Header = "_Playlists", Content = new TextBlock { Text = "Playlists coming soon", Margin = new Thickness(20) } };
-        _tabControl.Items.Add(playlistsTab);
+        // Favorites tab
+        var favTab = new TabItem { Header = "Fa_vorites" };
+        favTab.Content = BuildFavoritesTabContent();
+        _tabControl.Items.Add(favTab);
         
         _tabControl.SelectionChanged += OnTabSelectionChanged;
         
