@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Input;
@@ -657,7 +657,7 @@ public class ChooseMusicWindow : Window
                         Vol = tup.Item1.GetVolNumFromPageNum(itm.PageNo),
                         itm.Composer,
                         CompositionDate = itm.Date,
-                        Fav = tup.Item1.IsFavorite(itm.PageNo) ? "?" : string.Empty,
+                        Fav = tup.Item1.IsFavorite(itm.PageNo) ? "★" : string.Empty,
                         BookName = tup.Item1.GetBookName(_rootFolder),
                         itm.Notes,
                         LastModified = tup.Item1.LastWriteTime,
