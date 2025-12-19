@@ -579,6 +579,11 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             
             // Start cache entries for current and adjacent pages immediately (parallel prefetch like WPF)
             var cacheEntry0 = TryAddCacheEntry(pageNo);
+            if (cacheEntry0 == null)
+            {
+                return;
+            }
+
             var cacheEntry1 = Show2Pages && pageNo + 1 < maxPageNum ? TryAddCacheEntry(pageNo + 1) : null;
             
             // Start prefetch of adjacent pages (these run in background, in parallel)
@@ -599,11 +604,6 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             }
             
             // Now await the current page(s)
-            if (cacheEntry0 == null)
-            {
-                return;
-            }
-            
             Bitmap page0Image;
             try
             {
@@ -707,7 +707,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                     _inkCanvas1 = null;
                 }
 
-                _dpPage.Children.Add(grid);
+                _dpPage?.Children.Add(grid);
                 SetupGestureHandler();
             });
         }
