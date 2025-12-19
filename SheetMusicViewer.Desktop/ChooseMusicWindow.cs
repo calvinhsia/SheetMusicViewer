@@ -52,8 +52,11 @@ public class ChooseMusicWindow : Window
     // Favorites data source
     private List<FavoriteItem> _allFavoriteItems = new();
     
-    // Flag to prevent recursive selection change handling
+    // Flag to prevent recursive selection change
     private bool _enableCboSelectionChange = true;
+    
+    // Shared double-tap helper for consistent detection across all item types
+    private readonly DoubleTapHelper _doubleTapHelper = new();
 
     private const int ThumbnailWidth = 150;
     private const int ThumbnailHeight = 225;
@@ -521,7 +524,8 @@ public class ChooseMusicWindow : Window
             Orientation = Orientation.Horizontal
         });
         _lbBooks.ItemsPanel = wrapPanelFactory;
-        _lbBooks.DoubleTapped += (s, e) => BtnOk_Click(s, e);
+        // Note: DoubleTapped is now handled on individual items in CreateBookItemControl
+        // to ensure selection is set before processing
         
         var scrollViewer = new ScrollViewer 
         { 
@@ -546,7 +550,8 @@ public class ChooseMusicWindow : Window
         favGrid.Children.Add(_favoritesStatus);
         
         _favoritesListBox = new ListBox();
-        _favoritesListBox.DoubleTapped += (s, e) => BtnOk_Click(s, e);
+        // Note: DoubleTapped is now handled on individual items in RefreshFavoritesDisplay
+        // to ensure selection is set before processing
         
         Grid.SetRow(_favoritesListBox, 1);
         favGrid.Children.Add(_favoritesListBox);
@@ -638,6 +643,22 @@ public class ChooseMusicWindow : Window
             textPanel.Children.Add(new TextBlock { Text = favItem.Description, FontWeight = FontWeight.Bold });
             textPanel.Children.Add(new TextBlock { Text = $"Page {favItem.PageNo} - {favItem.BookName}", Foreground = Brushes.Gray, FontSize = 11 });
             sp.Children.Add(textPanel);
+            
+            // Use shared DoubleTapHelper for more reliable double-tap detection
+            sp.PointerPressed += (sender, e) =>
+            {
+                if (sender is StackPanel panel && panel.Tag is FavoriteItem item)
+                {
+                    if (_doubleTapHelper.IsDoubleTap(panel, e))
+                    {
+                        _favoritesListBox.SelectedItem = panel;
+                        ChosenPdfMetaData = item.Metadata;
+                        ChosenPageNo = item.PageNo;
+                        Close();
+                        e.Handled = true;
+                    }
+                }
+            };
             
             items.Add(sp);
         }
@@ -904,9 +925,25 @@ public class ChooseMusicWindow : Window
             Foreground = Brushes.Gray
         });
         
+        // Use shared DoubleTapHelper for more reliable double-tap detection
+        sp.PointerPressed += (sender, e) =>
+        {
+            if (sender is StackPanel panel && panel.Tag is BookItemCache cache)
+            {
+                if (_doubleTapHelper.IsDoubleTap(panel, e))
+                {
+                    _lbBooks.SelectedItem = panel;
+                    ChosenPdfMetaData = cache.Metadata;
+                    ChosenPageNo = cache.Metadata.LastPageNo;
+                    Close();
+                    e.Handled = true;
+                }
+            }
+        };
+        
         return sp;
     }
-
+    
     private void RefreshBooksDisplay()
     {
         var filterText = _tbxFilter?.Text?.Trim() ?? string.Empty;
@@ -1072,6 +1109,50 @@ public class ChooseMusicWindow : Window
         stream.Seek(0, SeekOrigin.Begin);
         
         return new Bitmap(stream);
+    }
+    
+    // Double-tap detection state for more sensitive handling
+    private DateTime _lastTapTime = DateTime.MinValue;
+    private Point _lastTapPosition;
+    private object? _lastTapTarget;
+    private const int DoubleTapTimeThresholdMs = 500; // More generous than Avalonia's default
+    private const double DoubleTapDistanceThreshold = 50; // More generous distance threshold
+
+    /// <summary>
+    /// Helper method to simulate double-tap detection with customizable thresholds.
+    /// Use this instead of Avalonia's built-in DoubleTapped event for more sensitive scenarios.
+    /// </summary>
+    /// <param name="tapTime">The time of the tap.</param>
+    /// <param name="tapPosition">The position of the tap.</param>
+    /// <param name="tapTarget">The target element of the tap.</param>
+    /// <param name="onDoubleTap">The action to perform on double-tap.</param>
+    /// <param name="timeThresholdMs">The time threshold for double-tap detection (in milliseconds).</param>
+    /// <param name="distanceThreshold">The distance threshold for double-tap detection.</param>
+    public void HandleTap(
+        DateTime tapTime, 
+        Point tapPosition, 
+        object tapTarget,
+        Action onDoubleTap,
+        int timeThresholdMs = DoubleTapTimeThresholdMs,
+        double distanceThreshold = DoubleTapDistanceThreshold)
+    {
+        if (_lastTapTarget == tapTarget && (tapTime - _lastTapTime).TotalMilliseconds <= timeThresholdMs)
+        {
+            // Potential double-tap detected, check distance
+            var distance = Math.Sqrt(Math.Pow(tapPosition.X - _lastTapPosition.X, 2) + 
+                                     Math.Pow(tapPosition.Y - _lastTapPosition.Y, 2));
+            
+            if (distance <= distanceThreshold)
+            {
+                // Confirmed double-tap
+                onDoubleTap();
+            }
+        }
+        
+        // Update last tap info
+        _lastTapTime = tapTime;
+        _lastTapPosition = tapPosition;
+        _lastTapTarget = tapTarget;
     }
 }
 

@@ -21,6 +21,8 @@ public partial class MetaDataFormWindow : Window
 {
     private MetaDataFormViewModel? _viewModel;
     private DataGrid? _tocDataGrid;
+    private DataGrid? _favoritesDataGrid;
+    private readonly DoubleTapHelper _doubleTapHelper = new();
     
     /// <summary>
     /// Page number to navigate to after closing (set when user double-clicks a TOC entry or favorite)
@@ -46,6 +48,18 @@ public partial class MetaDataFormWindow : Window
         _viewModel = viewModel;
         DataContext = viewModel;
         _tocDataGrid = this.FindControl<DataGrid>("TocDataGrid");
+        _favoritesDataGrid = this.FindControl<DataGrid>("FavoritesDataGrid");
+        
+        // Wire up custom double-tap handling for better touch sensitivity
+        if (_tocDataGrid != null)
+        {
+            _tocDataGrid.PointerPressed += TocDataGrid_PointerPressed;
+        }
+        if (_favoritesDataGrid != null)
+        {
+            _favoritesDataGrid.PointerPressed += FavoritesDataGrid_PointerPressed;
+        }
+        
         viewModel.CloseAction = (saved) =>
         {
             WasSaved = saved;
@@ -196,6 +210,35 @@ public partial class MetaDataFormWindow : Window
         AvaloniaXamlLoader.Load(this);
     }
     
+    private void TocDataGrid_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (_doubleTapHelper.IsDoubleTap(sender, e))
+        {
+            if (_viewModel?.SelectedItem != null)
+            {
+                PageNumberResult = _viewModel.SelectedItem.PageNo;
+                WasSaved = true;
+                Close();
+                e.Handled = true;
+            }
+        }
+    }
+    
+    private void FavoritesDataGrid_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (_doubleTapHelper.IsDoubleTap(sender, e))
+        {
+            if (_favoritesDataGrid?.SelectedItem is FavoriteViewModel fav)
+            {
+                PageNumberResult = fav.PageNo;
+                WasSaved = true;
+                Close();
+                e.Handled = true;
+            }
+        }
+    }
+    
+    // Keep the existing DoubleTapped handlers as fallback for mouse double-click
     private void TocDataGrid_DoubleTapped(object? sender, RoutedEventArgs e)
     {
         if (_viewModel?.SelectedItem != null)
