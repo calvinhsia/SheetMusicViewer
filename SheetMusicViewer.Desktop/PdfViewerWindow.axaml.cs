@@ -173,8 +173,8 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         _chkFullScreen.IsChecked = AppSettings.Instance.IsFullScreen;
         
         // Wire up menu items
-        var mnuChooser = this.GetControl<MenuItem>("mnuChooser");
-        mnuChooser.Click += (s, e) => _ = ChooseMusicAsync();
+        var btnChooser = this.GetControl<Button>("btnChooser");
+        btnChooser.Click += (s, e) => _ = ChooseMusicAsync();
         
         var mnuFullScreen = this.GetControl<MenuItem>("mnuFullScreen");
         mnuFullScreen.Click += (s, e) =>
