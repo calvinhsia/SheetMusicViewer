@@ -45,7 +45,7 @@ public class InkCanvasControl : Panel
     private (IBrush Brush, double Thickness)? _currentStrokeMetadata;
 
     public bool IsInkingEnabled { get; set; }
-    
+
     /// <summary>
     /// Returns true if there are strokes that haven't been saved yet
     /// </summary>
@@ -315,8 +315,18 @@ public class InkCanvasControl : Panel
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (!IsInkingEnabled) return;
+        
+        // Only draw with left mouse button (or primary touch/pen)
+        var properties = e.GetCurrentPoint(this).Properties;
+        if (!properties.IsLeftButtonPressed)
+            return;
 
         var point = e.GetPosition(this);
+        
+        // Only start drawing if pointer is within bounds
+        if (point.X < 0 || point.Y < 0 || point.X > Bounds.Width || point.Y > Bounds.Height)
+            return;
+        
         var normalizedPoint = ScreenToNormalized(point);
         
         _currentNormalizedStroke = new List<Point> { normalizedPoint };
