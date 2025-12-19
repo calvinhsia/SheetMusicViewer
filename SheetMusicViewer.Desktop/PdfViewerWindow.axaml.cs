@@ -69,7 +69,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private int _currentCacheAge;
     private int _lastNavigationDelta; // Track navigation direction for prefetch priority
     private bool _isShowingMetaDataForm; // Prevent showing multiple MetaDataForm dialogs
-    
+
     private class PageCacheEntry
     {
         public CancellationTokenSource Cts { get; } = new();
@@ -476,6 +476,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         PdfUIEnabled = true;
         PdfTitle = pdfMetaData.GetBookName(_rootMusicFolder);
         
+        // Pre-load PDF bytes for all volumes in the background
+        _ = pdfMetaData.PreloadAllVolumeBytesAsync();
+        
         // Update thumbnail - load it if not cached
         var thumbnail = pdfMetaData.GetCachedThumbnail<Bitmap>();
         if (thumbnail != null && _imgThumb != null)
@@ -837,8 +840,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 _ => PdfRotation.Rotate0
             };
             
-            // Read the entire PDF into memory to avoid stream disposal issues with PDFtoImage
-            var pdfBytes = File.ReadAllBytes(pdfPath);
+            // Get PDF bytes from metadata cache (loads from disk if not cached)
+            var pdfBytes = _currentPdfMetaData.GetOrLoadVolumeBytes(volNo);
+            if (pdfBytes == null)
+            {
+                throw new FileNotFoundException($"PDF file not found for page {pageNo}: {pdfPath}");
+            }
             
             // Validate page index against actual PDF page count for better error messages
             var actualPageCount = Conversion.GetPageCount(pdfBytes);
@@ -872,6 +879,10 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
         _pageCache.Clear();
         _currentCacheAge = 0;
+        
+        // Clear PDF bytes cache on the current metadata to free memory
+        _currentPdfMetaData?.ClearPdfBytesCache();
+        
         UpdateCacheStatus();
     }
     
