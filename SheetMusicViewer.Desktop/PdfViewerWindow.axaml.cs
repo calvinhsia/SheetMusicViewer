@@ -57,7 +57,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private Slider? _slider;
     private Popup? _sliderPopup;
     private TextBlock? _tbSliderPopup;
-    
+    private CheckBox? _chkFullScreen;
+    private CheckBox? _chkInk0;
+    private CheckBox? _chkInk1;
+    private Image? _imgThumb;
+    private Menu? _mainMenu;
+
     // Page cache for performance - cache Tasks like WPF version for better parallelism
     private readonly Dictionary<int, PageCacheEntry> _pageCache = new();
     private const int MaxCacheSize = 50;
@@ -124,21 +129,26 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     
     private void WireUpEventHandlers()
     {
-        // Wire up ink checkbox events
-        var chkInk0 = this.GetControl<CheckBox>("chkInk0");
-        var chkInk1 = this.GetControl<CheckBox>("chkInk1");
+        // Cache UI controls that are accessed frequently
+        _dpPage = this.GetControl<Panel>("dpPage");
+        _chkFullScreen = this.GetControl<CheckBox>("chkFullScreen");
+        _chkInk0 = this.GetControl<CheckBox>("chkInk0");
+        _chkInk1 = this.GetControl<CheckBox>("chkInk1");
+        _imgThumb = this.GetControl<Image>("ImgThumb");
+        _mainMenu = this.GetControl<Menu>("mainMenu");
         
-        chkInk0.IsCheckedChanged += (s, e) => 
+        // Wire up ink checkbox events
+        _chkInk0.IsCheckedChanged += (s, e) => 
         { 
             if (_inkCanvas0 != null) 
-                _inkCanvas0.IsInkingEnabled = chkInk0.IsChecked == true;
+                _inkCanvas0.IsInkingEnabled = _chkInk0.IsChecked == true;
             UpdateGestureHandlerState();
         };
         
-        chkInk1.IsCheckedChanged += (s, e) => 
+        _chkInk1.IsCheckedChanged += (s, e) => 
         { 
             if (_inkCanvas1 != null) 
-                _inkCanvas1.IsInkingEnabled = chkInk1.IsChecked == true;
+                _inkCanvas1.IsInkingEnabled = _chkInk1.IsChecked == true;
             UpdateGestureHandlerState();
         };
         
@@ -154,14 +164,13 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         btnRotate.Click += BtnRotate_Click;
         
         // Wire up full screen checkbox
-        var chkFullScreen = this.GetControl<CheckBox>("chkFullScreen");
-        chkFullScreen.IsCheckedChanged += (s, e) =>
+        _chkFullScreen.IsCheckedChanged += (s, e) =>
         {
-            ChkFullScreenToggled(chkFullScreen.IsChecked == true);
+            ChkFullScreenToggled(_chkFullScreen.IsChecked == true);
         };
         
         // Set full screen based on settings
-        chkFullScreen.IsChecked = AppSettings.Instance.IsFullScreen;
+        _chkFullScreen.IsChecked = AppSettings.Instance.IsFullScreen;
         
         // Wire up menu items
         var mnuChooser = this.GetControl<MenuItem>("mnuChooser");
@@ -170,7 +179,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         var mnuFullScreen = this.GetControl<MenuItem>("mnuFullScreen");
         mnuFullScreen.Click += (s, e) =>
         {
-            chkFullScreen.IsChecked = !chkFullScreen.IsChecked;
+            _chkFullScreen.IsChecked = !_chkFullScreen.IsChecked;
         };
         
         var mnuAbout = this.GetControl<MenuItem>("mnuAbout");
@@ -212,8 +221,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             var settings = AppSettings.Instance;
             
             // Apply full screen setting
-            var chkFullScreen = this.GetControl<CheckBox>("chkFullScreen");
-            ChkFullScreenToggled(chkFullScreen.IsChecked == true);
+            ChkFullScreenToggled(_chkFullScreen?.IsChecked == true);
             
             if (string.IsNullOrEmpty(_rootMusicFolder) || !Directory.Exists(_rootMusicFolder))
             {
@@ -358,7 +366,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         // Save settings
         var settings = AppSettings.Instance;
         settings.Show2Pages = Show2Pages;
-        settings.IsFullScreen = this.GetControl<CheckBox>("chkFullScreen").IsChecked == true;
+        settings.IsFullScreen = _chkFullScreen?.IsChecked == true;
         settings.WindowMaximized = WindowState == WindowState.Maximized;
         
         // Only save position/size if not maximized
@@ -469,11 +477,10 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         PdfTitle = pdfMetaData.GetBookName(_rootMusicFolder);
         
         // Update thumbnail - load it if not cached
-        var imgThumb = this.GetControl<Image>("ImgThumb");
         var thumbnail = pdfMetaData.GetCachedThumbnail<Bitmap>();
-        if (thumbnail != null)
+        if (thumbnail != null && _imgThumb != null)
         {
-            imgThumb.Source = thumbnail;
+            _imgThumb.Source = thumbnail;
         }
         else
         {
@@ -489,9 +496,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                     
                     await Dispatcher.UIThread.InvokeAsync(() =>
                     {
-                        if (_currentPdfMetaData == pdfMetaData && newThumb is Bitmap bmp)
+                        if (_currentPdfMetaData == pdfMetaData && newThumb is Bitmap bmp && _imgThumb != null)
                         {
-                            imgThumb.Source = bmp;
+                            _imgThumb.Source = bmp;
                         }
                     });
                 }
@@ -512,8 +519,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         // Save any unsaved ink strokes before closing
         SaveInkFromCurrentCanvases();
         
-        _dpPage = this.GetControl<Panel>("dpPage");
-        _dpPage.Children.Clear();
+        _dpPage?.Children.Clear();
         ClearCache();
         
         if (_currentPdfMetaData != null)
@@ -543,8 +549,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         {
             if (_currentPdfMetaData == null)
             {
-                _dpPage = this.GetControl<Panel>("dpPage");
-                _dpPage.Children.Clear();
+                _dpPage?.Children.Clear();
                 return;
             }
             
@@ -642,9 +647,11 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                _dpPage = this.GetControl<Panel>("dpPage");
-                _dpPage.Children.Clear();
-                _dpPage.Background = Brushes.LightGray;
+                _dpPage?.Children.Clear();
+                if (_dpPage != null)
+                {
+                    _dpPage.Background = Brushes.LightGray;
+                }
                 
                 _gestureHandler?.ResetTransform();
 
@@ -1015,12 +1022,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     {
         if (_gestureHandler != null)
         {
-            var chkInk0 = this.GetControl<CheckBox>("chkInk0");
-            var chkInk1 = this.GetControl<CheckBox>("chkInk1");
-            
             _gestureHandler.IsDisabled = 
-                (chkInk0.IsChecked == true) || 
-                (chkInk1.IsChecked == true);
+                (_chkInk0?.IsChecked == true) || 
+                (_chkInk1?.IsChecked == true);
         }
     }
     
@@ -1181,7 +1185,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         else
         {
             this.SystemDecorations = SystemDecorations.Full;
-            // Only reset to Normal if we're coming FROM full screen, not on startup
+            // Only reset to Normal if we're coming_FROM_ full screen, not on startup
             // Check if we should restore maximized state from settings
             if (!AppSettings.Instance.WindowMaximized)
             {
@@ -1378,14 +1382,15 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                     e.Handled = true;
                     return;
                 case Key.F:
-                    var chkFullScreen = this.GetControl<CheckBox>("chkFullScreen");
-                    chkFullScreen.IsChecked = !chkFullScreen.IsChecked;
+                    if (_chkFullScreen != null)
+                    {
+                        _chkFullScreen.IsChecked = !_chkFullScreen.IsChecked;
+                    }
                     e.Handled = true;
                     return;
                 case Key.M:
                     // Open the menu - find and open the MenuItem
-                    var menu = this.GetControl<Menu>("mainMenu");
-                    if (menu.Items.Count > 0 && menu.Items[0] is MenuItem menuItem)
+                    if (_mainMenu?.Items.Count > 0 && _mainMenu.Items[0] is MenuItem menuItem)
                     {
                         menuItem.Open();
                     }
