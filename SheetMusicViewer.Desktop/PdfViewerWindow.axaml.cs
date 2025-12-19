@@ -460,18 +460,18 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         CloseCurrentPdfFile();
         _currentPdfMetaData = pdfMetaData;
         
-        _disableSliderValueChanged = true;
         var pageNumberOffset = pdfMetaData.PageNumberOffset;
         var maxPageNum = pdfMetaData.MaxPageNum;
         
         if (_slider != null)
         {
+            _disableSliderValueChanged = true;
             _slider.Minimum = pageNumberOffset;
             _slider.Maximum = maxPageNum - 1;
             _slider.Value = pageNo;
+            _disableSliderValueChanged = false;
         }
-        _disableSliderValueChanged = false;
-        
+
         MaxPageNumberMinus1 = maxPageNum - 1;
         PdfUIEnabled = true;
         PdfTitle = pdfMetaData.GetBookName(_rootMusicFolder);
@@ -580,7 +580,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             CurrentPageNumber = pageNo;
             _disableSliderValueChanged = false;
             
-            // Start cache entries for current and adjacent pages immediately (parallel prefetch like WPF)
+            // Start cache entries for current and adjacent pages immediately (parallel prefetch)
             var cacheEntry0 = TryAddCacheEntry(pageNo);
             if (cacheEntry0 == null)
             {
