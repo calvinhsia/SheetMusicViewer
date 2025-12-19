@@ -433,7 +433,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             {
                 var targetPage = metaDataForm.PageNumberResult.Value;
                 if (targetPage >= _currentPdfMetaData.PageNumberOffset && 
-                    targetPage < _currentPdfMetaData.VolumeInfoList.Sum(v => v.NPagesInThisVolume) + _currentPdfMetaData.PageNumberOffset)
+                    targetPage < _currentPdfMetaData.MaxPageNum)
                 {
                     await ShowPageAsync(targetPage);
                 }
@@ -462,7 +462,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         
         _disableSliderValueChanged = true;
         var pageNumberOffset = pdfMetaData.PageNumberOffset;
-        var maxPageNum = pdfMetaData.VolumeInfoList.Sum(v => v.NPagesInThisVolume) + pageNumberOffset;
+        var maxPageNum = pdfMetaData.MaxPageNum;
         
         if (_slider != null)
         {
@@ -472,7 +472,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
         _disableSliderValueChanged = false;
         
-        MaxPageNumberMinus1 = (int)maxPageNum - 1;
+        MaxPageNumberMinus1 = maxPageNum - 1;
         PdfUIEnabled = true;
         PdfTitle = pdfMetaData.GetBookName(_rootMusicFolder);
         
@@ -558,7 +558,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             
             // Clamp page number
             var pageNumberOffset = _currentPdfMetaData.PageNumberOffset;
-            var maxPageNum = _currentPdfMetaData.VolumeInfoList.Sum(v => v.NPagesInThisVolume) + pageNumberOffset;
+            var maxPageNum = _currentPdfMetaData.MaxPageNum;
             
             if (pageNo < pageNumberOffset)
             {
@@ -566,7 +566,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             }
             if (pageNo >= maxPageNum)
             {
-                pageNo = (int)maxPageNum - NumPagesPerView;
+                pageNo = maxPageNum - NumPagesPerView;
                 if (pageNo < pageNumberOffset)
                 {
                     pageNo = pageNumberOffset;
@@ -727,7 +727,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             return null;
             
         var pageNumberOffset = _currentPdfMetaData.PageNumberOffset;
-        var maxPageNum = _currentPdfMetaData.VolumeInfoList.Sum(v => v.NPagesInThisVolume) + pageNumberOffset;
+        var maxPageNum = _currentPdfMetaData.MaxPageNum;
         
         if (pageNo < pageNumberOffset || pageNo >= maxPageNum)
             return null;
@@ -1036,8 +1036,8 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         if (_currentPdfMetaData != null)
         {
             var pageNumberOffset = _currentPdfMetaData.PageNumberOffset;
-            var maxPageNum = _currentPdfMetaData.VolumeInfoList.Sum(v => v.NPagesInThisVolume) + pageNumberOffset;
-            newPage = Math.Max(pageNumberOffset, Math.Min(newPage, (int)maxPageNum - 1));
+            var maxPageNum = _currentPdfMetaData.MaxPageNum;
+            newPage = Math.Max(pageNumberOffset, Math.Min(newPage, maxPageNum - 1));
         }
         
         if (newPage != CurrentPageNumber)
@@ -1418,8 +1418,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 case Key.End:
                     if (_currentPdfMetaData != null)
                     {
-                        var maxPageNum = _currentPdfMetaData.VolumeInfoList.Sum(v => v.NPagesInThisVolume) + _currentPdfMetaData.PageNumberOffset;
-                        CurrentPageNumber = (int)maxPageNum - 1;
+                        CurrentPageNumber = _currentPdfMetaData.MaxPageNum - 1;
                         _ = ShowPageAsync(CurrentPageNumber);
                     }
                     e.Handled = true;
