@@ -191,6 +191,16 @@ namespace SheetMusicLib
         }
 
         /// <summary>
+        /// Total number of pages in all volumes
+        /// </summary>
+        public int NumPagesInSet => VolumeInfoList.Sum(v => v.NPagesInThisVolume);
+
+        /// <summary>
+        /// Maximum page number (PageNumberOffset + total pages in all volumes)
+        /// </summary>
+        public int MaxPageNum => PageNumberOffset + NumPagesInSet;
+
+        /// <summary>
         /// Path to the JSON metadata file (used by Avalonia/Desktop app)
         /// </summary>
         public string JsonFilePath => System.IO.Path.ChangeExtension(FullPathFile, ".json");

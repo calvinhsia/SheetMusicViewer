@@ -25,6 +25,7 @@ public class BrowseControl : DockPanel
     public ListBoxBrowseView ListView { get; private set; } = null!;
     internal int[]? _colWidths;
     public IEnumerable _query = null!;
+    private ListBoxListFilter _listFilter = null!;
 
     public BrowseControl(IEnumerable query, int[]? colWidths = null)
     {
@@ -37,9 +38,9 @@ public class BrowseControl : DockPanel
             this.HorizontalAlignment = HorizontalAlignment.Stretch;
             this.VerticalAlignment = VerticalAlignment.Stretch;
             
-            var listFilter = new ListBoxListFilter(null!);
-            this.Children.Add(listFilter);
-            DockPanel.SetDock(listFilter, Dock.Top);
+            _listFilter = new ListBoxListFilter(null!);
+            this.Children.Add(_listFilter);
+            DockPanel.SetDock(_listFilter, Dock.Top);
 
             ListView = new ListBoxBrowseView(query, this);
             
@@ -60,7 +61,7 @@ public class BrowseControl : DockPanel
             
             this.Children.Add(listContainer);
             
-            listFilter.SetBrowseList(ListView);
+            _listFilter.SetBrowseList(ListView);
             
             Debug.WriteLine($"BrowseControl: Created with virtualization and column resizing support");
         }
@@ -70,6 +71,14 @@ public class BrowseControl : DockPanel
             Logger.LogException("BrowseControl creation failed", ex);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Focus the filter textbox
+    /// </summary>
+    public void FocusFilter()
+    {
+        _listFilter?.FocusFilter();
     }
 
     /// <summary>
@@ -101,6 +110,14 @@ internal class ListBoxListFilter : DockPanel
     {
         _browse = browse;
         RefreshFilterStat();
+    }
+
+    /// <summary>
+    /// Focus the filter textbox
+    /// </summary>
+    internal void FocusFilter()
+    {
+        _txtFilter.Focus();
     }
 
     private void BuildUI()

@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Input;
@@ -41,7 +41,7 @@ public class ChooseMusicWindow : Window
     // Query tab - uses BrowseControl
     private BrowseControl? _queryBrowseControl;
     private Grid _queryTabGrid;
-    
+
     private List<PdfMetaDataReadResult> _pdfMetadata;
     private string _rootFolder;
     
@@ -163,16 +163,12 @@ public class ChooseMusicWindow : Window
                     _tabControl.SelectedIndex = 0;
                     e.Handled = true;
                     break;
-                case Key.V: // Fa_vorites
+                case Key.Q: // _Query
                     _tabControl.SelectedIndex = 1;
                     e.Handled = true;
                     break;
-                case Key.Q: // _Query
+                case Key.V: // Fa_vorites
                     _tabControl.SelectedIndex = 2;
-                    e.Handled = true;
-                    break;
-                case Key.P: // _Playlists
-                    _tabControl.SelectedIndex = 3;
                     e.Handled = true;
                     break;
             }
@@ -186,6 +182,15 @@ public class ChooseMusicWindow : Window
         {
             WindowState = WindowState.Maximized;
         }
+        
+        // Restore last selected tab
+        var lastTab = AppSettings.Instance.ChooseQueryTab;
+        _tabControl.SelectedIndex = lastTab switch
+        {
+            "_Query" => 1,
+            "Fa_vorites" => 2,
+            _ => 0 // "_Books" or default
+        };
         
         // If no root folder and only "New..." is in the list, automatically show folder picker
         if (string.IsNullOrEmpty(_rootFolder) || !Directory.Exists(_rootFolder))
@@ -217,6 +222,12 @@ public class ChooseMusicWindow : Window
             settings.ChooseWindowTop = Position.Y;
         }
         
+        // Save selected tab
+        if (_tabControl.SelectedItem is TabItem selectedTab)
+        {
+            settings.ChooseQueryTab = selectedTab.Header?.ToString() ?? "_Books";
+        }
+        
         settings.Save();
     }
     
@@ -235,19 +246,15 @@ public class ChooseMusicWindow : Window
         booksTab.Content = BuildBooksTabContent();
         _tabControl.Items.Add(booksTab);
         
-        // Favorites tab
-        var favTab = new TabItem { Header = "Fa_vorites" };
-        favTab.Content = BuildFavoritesTabContent();
-        _tabControl.Items.Add(favTab);
-        
-        // Query tab
+        // Query tab (moved to 2nd position)
         var queryTab = new TabItem { Header = "_Query" };
         queryTab.Content = BuildQueryTabContent();
         _tabControl.Items.Add(queryTab);
         
-        // Playlists tab (placeholder)
-        var playlistsTab = new TabItem { Header = "_Playlists", Content = new TextBlock { Text = "Playlists coming soon", Margin = new Thickness(20) } };
-        _tabControl.Items.Add(playlistsTab);
+        // Favorites tab
+        var favTab = new TabItem { Header = "Fa_vorites" };
+        favTab.Content = BuildFavoritesTabContent();
+        _tabControl.Items.Add(favTab);
         
         _tabControl.SelectionChanged += OnTabSelectionChanged;
         
@@ -574,9 +581,14 @@ public class ChooseMusicWindow : Window
             {
                 FillFavoritesTab();
             }
-            else if (header == "_Query" && _queryBrowseControl == null)
+            else if (header == "_Query")
             {
-                FillQueryTab();
+                if (_queryBrowseControl == null)
+                {
+                    FillQueryTab();
+                }
+                // Focus the filter textbox when Query tab is activated
+                _queryBrowseControl?.FocusFilter();
             }
         }
     }
@@ -657,7 +669,7 @@ public class ChooseMusicWindow : Window
                         Vol = tup.Item1.GetVolNumFromPageNum(itm.PageNo),
                         itm.Composer,
                         CompositionDate = itm.Date,
-                        Fav = tup.Item1.IsFavorite(itm.PageNo) ? "?" : string.Empty,
+                        Fav = tup.Item1.IsFavorite(itm.PageNo) ? "★" : string.Empty,
                         BookName = tup.Item1.GetBookName(_rootFolder),
                         itm.Notes,
                         LastModified = tup.Item1.LastWriteTime,
@@ -982,7 +994,7 @@ public class ChooseMusicWindow : Window
             };
             
             using var pdfStream = File.OpenRead(pdfPath);
-            using var skBitmap = Conversion.ToImage(pdfStream, page: 0, options: new PDFtoImage.RenderOptions(
+            using var skBitmap = Conversion.ToImage(pdfStream, page: (Index)0, options: new PDFtoImage.RenderOptions(
                 Width: ThumbnailWidth, 
                 Height: ThumbnailHeight,
                 Rotation: pdfRotation));

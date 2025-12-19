@@ -123,7 +123,7 @@ public partial class MainWindow : Window
             {
                 // Render page to bitmap using PDFtoImage
                 using var pdfStream = File.OpenRead(_pdfFileName);
-                using var skBitmap = PDFtoImage.Conversion.ToImage(pdfStream, page: _pageNo, options: new(Dpi: 96));
+                using var skBitmap = PDFtoImage.Conversion.ToImage(pdfStream, page: (Index)_pageNo, options: new(Dpi: 96));
                 
                 var width = skBitmap.Width;
                 var height = skBitmap.Height;

@@ -78,15 +78,13 @@ public class VirtualizationTests : TestBase
                 
                 await Task.Delay(1000);
                 
-                var generator = itemsControl.ItemContainerGenerator;
-                Trace.WriteLine($"? Generator exists: {generator != null}");
                 Trace.WriteLine($"? Items count: {items.Length}");
                 Trace.WriteLine("");
                 
                 Trace.WriteLine("Attempting to retrieve containers from generator:");
                 for (int i = 0; i < items.Length; i++)
                 {
-                    var container = generator.ContainerFromIndex(i);
+                    var container = itemsControl.ContainerFromIndex(i);
                     Trace.WriteLine($"  Index {i}: Container={container?.GetType().Name ?? "NULL"}");
                 }
                 Trace.WriteLine("");
@@ -126,13 +124,12 @@ public class VirtualizationTests : TestBase
                 window.Content = listBox;
                 await Task.Delay(1000);
                 
-                var generator3 = listBox.ItemContainerGenerator;
-                Trace.WriteLine($"? Generator exists: {generator3 != null}");
+                Trace.WriteLine($"? Generator exists: {listBox.ItemContainerGenerator != null}");
                 
                 Trace.WriteLine("Attempting to retrieve ListBoxItem containers:");
                 for (int i = 0; i < items.Length; i++)
                 {
-                    var container = generator3.ContainerFromIndex(i);
+                    var container = listBox.ContainerFromIndex(i);
                     Trace.WriteLine($"  Index {i}: Container={container?.GetType().Name ?? "NULL"}");
                     
                     if (container is ListBoxItem listBoxItem)
