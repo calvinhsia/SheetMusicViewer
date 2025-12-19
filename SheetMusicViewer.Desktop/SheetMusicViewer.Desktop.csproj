@@ -28,6 +28,9 @@
     <SelfContained>true</SelfContained>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    
+    <!-- Suppress CA1416: PDFtoImage is platform-specific but we only target desktop platforms (Windows, Linux, macOS) -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
   
   <!-- Inline task to calculate Pacific time (cross-platform) -->

@@ -30,6 +30,7 @@ public class InkCanvasControl : Panel
     private readonly List<Polyline> _renderedPolylines = new();
     private Polyline? _currentPolyline;
     private bool _isDrawing;
+    private IPointer? _drawingPointer; // Track which pointer is drawing
     private IBrush _currentBrush = Brushes.Black;
     private double _strokeThickness = 2.0;
     private readonly Bitmap _backgroundImage;
@@ -45,7 +46,7 @@ public class InkCanvasControl : Panel
     private (IBrush Brush, double Thickness)? _currentStrokeMetadata;
 
     public bool IsInkingEnabled { get; set; }
-    
+
     /// <summary>
     /// Returns true if there are strokes that haven't been saved yet
     /// </summary>
@@ -305,7 +306,7 @@ public class InkCanvasControl : Panel
         highlighterItem.Click += (s, e) => SetHighlighter();
         contextMenu.Items.Add(highlighterItem);
         
-        var clearItem = new MenuItem { Header = "Clear All" };
+        var clearItem = new MenuItem { Header = "Clear All on this page" };
         clearItem.Click += (s, e) => ClearStrokes();
         contextMenu.Items.Add(clearItem);
         
@@ -315,8 +316,18 @@ public class InkCanvasControl : Panel
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (!IsInkingEnabled) return;
+        
+        // Only draw with left mouse button (or primary touch/pen)
+        var properties = e.GetCurrentPoint(this).Properties;
+        if (!properties.IsLeftButtonPressed)
+            return;
 
         var point = e.GetPosition(this);
+        
+        // Only start drawing if pointer is within bounds
+        if (point.X < 0 || point.Y < 0 || point.X > Bounds.Width || point.Y > Bounds.Height)
+            return;
+        
         var normalizedPoint = ScreenToNormalized(point);
         
         _currentNormalizedStroke = new List<Point> { normalizedPoint };
@@ -332,12 +343,21 @@ public class InkCanvasControl : Panel
         
         Children.Add(_currentPolyline);
         _isDrawing = true;
+        _drawingPointer = e.Pointer; // Track the pointer that started drawing
         e.Pointer.Capture(this);
     }
 
     private void OnPointerMoved(object? sender, PointerEventArgs e)
     {
         if (!IsInkingEnabled || !_isDrawing || _currentPolyline == null || _currentNormalizedStroke == null) return;
+        
+        // Only process moves from the pointer that started the drawing
+        if (_drawingPointer == null || e.Pointer.Id != _drawingPointer.Id) return;
+        
+        // For pen/stylus, check if it's actually in contact (not just hovering)
+        var properties = e.GetCurrentPoint(this).Properties;
+        if (e.Pointer.Type == PointerType.Pen && !properties.IsLeftButtonPressed)
+            return;
 
         var point = e.GetPosition(this);
         var normalizedPoint = ScreenToNormalized(point);
@@ -349,6 +369,9 @@ public class InkCanvasControl : Panel
     private void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         if (!IsInkingEnabled || !_isDrawing) return;
+        
+        // Only handle release from the pointer that was drawing
+        if (_drawingPointer == null || e.Pointer.Id != _drawingPointer.Id) return;
 
         if (_currentNormalizedStroke != null && _currentNormalizedStroke.Count > 0)
         {
@@ -369,6 +392,7 @@ public class InkCanvasControl : Panel
         _currentStrokeMetadata = null;
         _currentPolyline = null;
         _isDrawing = false;
+        _drawingPointer = null;
         e.Pointer.Capture(null);
     }
 
