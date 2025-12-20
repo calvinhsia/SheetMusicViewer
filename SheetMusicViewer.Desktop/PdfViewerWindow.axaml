@@ -99,6 +99,7 @@
                                     <CheckBox IsChecked="{Binding #chkFullScreen.IsChecked}" BorderThickness="0"/>
                                 </MenuItem.Icon>
                             </MenuItem>
+                            <MenuItem Name="mnuOptions" Header="_Options..." InputGesture="Alt+O" ToolTip.Tip="Configure application settings"/>
                             <Separator/>
                             <MenuItem Name="mnuShowLogs" Header="Show _Logs" ToolTip.Tip="Show application log file"/>
                             <MenuItem Name="mnuAbout" Header="_About" ToolTip.Tip="Show build information"/>
