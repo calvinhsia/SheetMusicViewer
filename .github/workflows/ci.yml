@@ -2,11 +2,11 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, tests, develop, extractToLib ]
+    branches: [ '**' ]  # Trigger on push to any branch
     tags:
       - 'v*'
   pull_request:
-    branches: [ main, tests ]
+    branches: [ '**' ]  # Trigger on PR to any branch
   workflow_dispatch:
 
 env:
