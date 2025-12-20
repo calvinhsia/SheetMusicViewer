@@ -32,6 +32,8 @@ Download the latest release for your platform from the [Releases page](https://g
 1. Download and extract the ZIP file
 2. Run `SheetMusicViewer.exe`
 
+> **Note:** Windows may show a "Windows protected your PC" SmartScreen warning because the app is not code-signed. Click **"More info"** then **"Run anyway"** to proceed. This is normal for open-source applications distributed outside the Microsoft Store.
+
 ### Linux
 ```bash
 tar -xzf SheetMusicViewer-linux-x64.tar.gz
