@@ -101,6 +101,13 @@ public class AppSettings
     public double MetaDataWindowLeft { get; set; } = -1;
     public bool MetaDataWindowMaximized { get; set; } = true;
 
+    // Cloud/Performance settings
+    /// <summary>
+    /// If true, skip cloud-only files (OneDrive/cloud storage) instead of triggering download.
+    /// This improves performance when loading thumbnails but shows placeholder images for cloud-only files.
+    /// </summary>
+    public bool SkipCloudOnlyFiles { get; set; } = false;
+
     /// <summary>
     /// Load settings from disk, or create new settings if file doesn't exist.
     /// </summary>

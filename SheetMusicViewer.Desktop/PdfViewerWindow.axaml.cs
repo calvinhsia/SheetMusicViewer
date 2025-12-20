@@ -201,6 +201,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         var mnuQuit = this.GetControl<MenuItem>("mnuQuit");
         mnuQuit.Click += (s, e) => Close();
         
+        var mnuOptions = this.GetControl<MenuItem>("mnuOptions");
+        mnuOptions.Click += (s, e) => _ = ShowOptionsDialogAsync();
+        
         // Wire up navigation buttons
         var btnPrev = this.GetControl<Button>("btnPrev");
         var btnNext = this.GetControl<Button>("btnNext");
@@ -462,6 +465,19 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         finally
         {
             _isShowingMetaDataForm = false;
+        }
+    }
+    
+    private async Task ShowOptionsDialogAsync()
+    {
+        try
+        {
+            var optionsWindow = new OptionsWindow();
+            await optionsWindow.ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogException("Options dialog error", ex);
         }
     }
     
@@ -1413,6 +1429,10 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                     return;
                 case Key.E:
                     _ = ShowMetaDataFormAsync();
+                    e.Handled = true;
+                    return;
+                case Key.O:
+                    _ = ShowOptionsDialogAsync();
                     e.Handled = true;
                     return;
                 case Key.F:

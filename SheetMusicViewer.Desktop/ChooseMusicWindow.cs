@@ -65,7 +65,7 @@ public class ChooseMusicWindow : Window
     /// <summary>
     /// If true, skip cloud-only files instead of triggering download.
     /// </summary>
-    public bool SkipCloudOnlyFiles { get; set; } = true;
+    public bool SkipCloudOnlyFiles { get; set; } = false;
     
     /// <summary>
     /// The selected PDF metadata (set when user clicks OK)
@@ -115,6 +115,9 @@ public class ChooseMusicWindow : Window
     {
         _pdfMetadata = pdfMetadata ?? new List<PdfMetaDataReadResult>();
         _rootFolder = rootFolder ?? string.Empty;
+        
+        // Load setting from AppSettings
+        SkipCloudOnlyFiles = AppSettings.Instance.SkipCloudOnlyFiles;
         
         Title = "Choose Music";
         ShowInTaskbar = false; // Don't show separate taskbar icon
