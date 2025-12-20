@@ -2,35 +2,47 @@
 
 PDF Sheet Music Viewer by Calvin Hsia 2019
 
-Allows users to view downloaded or scanned Sheet Music in PDF format to play on a musical instrument, such as a piano
+Allows users to view downloaded or scanned Sheet Music in PDF format to play on a musical instrument, such as a piano.
 
-Runs on Windows 10, 11, Mac, Linux
-Updated 2025 to move from WPF to Avalonia UI to support cross platform.
+**Runs on:** Windows 10/11, macOS, and Linux  
+**Updated 2025:** Migrated from WPF to Avalonia UI for cross-platform support.
 
-To view on a piano, a tablet like Windows 10 device, like Microsoft Surface Pro and SurfaceBook are very good.
-Keep in mind the page size will be roughly the screen size.
+![Some of my music books](img/ChooseMusic.png)
 
-* Display 1 or 2 pages at a time
-* Mark any page as a Favorite, and scan through favorites
-* Use ink (a stylus, mouse, or your finger) to add any writing/corrections to the view. The original PDFs are not altered in any way
-* Optionally persists views by Date, to see which music viewed recently
-* The SheetMusic/Ragtime folder has sample PDFs which you can use if as samples if you need to.
+## Features
+
+* Display 1 or 2 pages at a time (side by side)
+* Mark any page as a Favorite and quickly navigate between favorites
+* Add ink annotations (stylus, mouse, or finger) - original PDFs are never modified
+* Instant page turns with intelligent caching - no waiting during performances
+* Multi-volume book support (large books split across multiple PDFs)
+* Table of Contents with search by composer, title, etc.
+* Remembers your last viewed page for each book
+
+---
+
+# 🎹 For Musicians
+
+*This section is for musicians who want to install and use SheetMusicViewer to view their sheet music.*
+
+## Quick Start
+
+1. **Download** the app from the [Releases page](https://github.com/calvinhsia/SheetMusicViewer/releases)
+2. **Extract** and run it
+3. **Select** your folder containing PDF sheet music
+4. **Play!**
 
 ## Installation
 
 ### Download
-Download the latest release for your platform from the [Releases page](https://github.com/calvinhsia/SheetMusicViewer/releases).
 
 | Platform | File |
 |----------|------|
 | Windows (64-bit) | `SheetMusicViewer-win-x64.zip` |
 | Linux (64-bit) | `SheetMusicViewer-linux-x64.tar.gz` |
-| macOS Intel | `SheetMusicViewer-osx-x64.tar.gz` |
-| macOS Apple Silicon | `SheetMusicViewer-osx-arm64.tar.gz` |
+| macOS Apple Silicon (M1/M2/M3) | `SheetMusicViewer-osx-arm64.tar.gz` |
 
-### Windows
-
-#### Step-by-Step Installation
+### Windows Step-by-Step
 
 1. **Download the ZIP file**
    - Go to the [Releases page](https://github.com/calvinhsia/SheetMusicViewer/releases)
@@ -63,23 +75,93 @@ Download the latest release for your platform from the [Releases page](https://g
 > **Tip:** Create a desktop shortcut for easy access: Right-click `SheetMusicViewer.exe` → **"Create shortcut"** → drag the shortcut to your Desktop.
 
 ### Linux
+
 ```bash
+# Extract the archive
 tar -xzf SheetMusicViewer-linux-x64.tar.gz
+
+# Make it executable
 chmod +x SheetMusicViewer
+
+# Run the application
 ./SheetMusicViewer
 ```
 
 ### macOS
+
 ```bash
+# Extract the archive
 tar -xzf SheetMusicViewer-osx-arm64.tar.gz
-xattr -cr SheetMusicViewer  # Remove quarantine for unsigned app
+
+# Remove quarantine (required for unsigned apps)
+xattr -cr SheetMusicViewer
+
+# Make it executable
 chmod +x SheetMusicViewer
+
+# Run the application
 ./SheetMusicViewer
 ```
 
-## Development
+> **Note:** If you see "app is damaged" or "can't be opened" messages, run the `xattr -cr` command above. This is Apple's Gatekeeper blocking unsigned applications.
 
-### Building from Source
+## Using the App
+
+### Display Modes
+- **Single page mode**: Shows one page at a time (best for portrait orientation)
+- **Two page mode**: Shows two pages side by side (like an open book)
+
+### Navigation
+- **Arrow keys**: Navigate forward/backward by one screenful
+- **Page Up/Down**: Navigate by one screenful
+- **Home/End**: Jump to first/last page
+- **Slider**: Drag to quickly navigate through the entire book
+- **Touch/Click**: Tap the bottom quarter of the screen to turn pages
+
+### Favorites
+- Click the **Fav** checkbox to mark a page as a favorite
+- Use the **< >** buttons to jump between favorites
+- Great for marking the start of each piece in a songbook
+
+### Inking (Annotations)
+1. Click the **Ink** checkbox to enable inking mode
+2. Draw with your mouse, stylus, or finger
+3. Right-click to change ink color (red, black, or highlight)
+4. Click the **Ink** checkbox again to save and exit ink mode
+
+> **Tip:** Zoom in before inking to make precise corrections easier.
+
+### Organizing Your Music
+
+**Multi-volume books**: Name files `Book0.pdf`, `Book1.pdf`, `Book2.pdf`, etc. They'll be treated as one book.
+
+**Singles folders**: Create a folder ending in "Singles" (e.g., `JazzSingles`) and each PDF inside is treated as a separate song.
+
+**Hidden folders**: Any subfolder named "Hidden" will be ignored.
+
+## Why Instant Page Turns Matter
+
+When playing piano, **page turns must be instantaneous**. You can't pause mid-performance to wait for a page to load.
+
+SheetMusicViewer uses intelligent caching to pre-render upcoming pages while you're playing. When you turn the page, it appears instantly - just like turning a physical page.
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| App won't start | Make sure you extracted the ZIP file first (don't run from inside the ZIP) |
+| SmartScreen warning | Click "More info" → "Run anyway" (this is normal for unsigned apps) |
+| Pages load slowly | Your PDF may be very high resolution. Print it to "Microsoft Print to PDF" to reduce size |
+| Can't find my music | Use the Chooser (Alt+C) to select a different music folder |
+
+---
+
+# 👩‍💻 For Developers
+
+*This section is for developers who want to build, modify, or contribute to SheetMusicViewer.*
+
+## Building from Source
+
 ```bash
 # Clone the repository
 git clone https://github.com/calvinhsia/SheetMusicViewer.git
@@ -92,7 +174,17 @@ dotnet build SheetMusicViewer.sln
 dotnet run --project SheetMusicViewer.Desktop
 ```
 
-### Creating a Release
+## Project Structure
+
+| Project | Description |
+|---------|-------------|
+| `SheetMusicViewer.Desktop` | Cross-platform Avalonia UI application |
+| `SheetMusicLib` | Shared library with core business logic |
+| `SheetMusicViewer` | Original WPF application (Windows only) |
+| `Tests` | Unit and integration tests for WPF version |
+| `AvaloniaTests` | Tests for Avalonia version |
+
+## Creating a Release
 
 The project uses GitHub Actions for CI/CD. To create a new release:
 
@@ -113,7 +205,7 @@ The project uses GitHub Actions for CI/CD. To create a new release:
    - Run all tests on each platform
    - Create self-contained, single-file executables
    - Create a GitHub Release with downloadable binaries
-   - Embed the version number in the application (visible in **Menu ? About**)
+   - Embed the version number in the application (visible in **Menu → About**)
 
 4. **Version format**: Use semantic versioning (e.g., `v1.0.0`, `v1.2.3`, `v2.0.0-beta`)
 
@@ -130,12 +222,9 @@ git tag -l "v*" --sort=-version:refname
 
 # Show details of a specific release
 git show v1.0.0
-
-# View releases on GitHub
-# https://github.com/calvinhsia/SheetMusicViewer/releases
 ```
 
-### CI/CD Pipeline
+## CI/CD Pipeline
 
 Every push and pull request triggers the CI pipeline which:
 - Builds the entire solution on Windows, macOS, and Linux
@@ -146,202 +235,90 @@ See `.github/workflows/ci.yml` for the full workflow configuration.
 
 ## Testing Strategy
 
-This project includes comprehensive automated testing to ensure quality and reliability:
-
 ### Test Suite Overview
-- ? **70 Unit Tests** - Fast, isolated tests for core business logic and data structures
-- ? **37 Integration Tests** - Tests for file I/O, Windows PDF APIs, and component interactions
-  - 22 automated tests that run in CI/CD pipeline
-  - 15 manual/interactive tests for full UI scenarios (marked `[Ignore]`)
-- ? **100% Pass Rate** - All executable tests passing consistently
+- ✅ **70 Unit Tests** - Fast, isolated tests for core business logic
+- ✅ **37 Integration Tests** - Tests for file I/O, PDF APIs, and component interactions
+- ✅ **100% Pass Rate** - All executable tests passing consistently
 
 ### Test Categories
-Tests are organized by category for efficient CI/CD execution:
 
 **Unit Tests** (`TestCategory="Unit"`):
 - PDF metadata management and serialization
 - Multi-volume PDF handling logic
 - Favorites and bookmark management
 - Table of Contents parsing and maintenance
-- Extension methods and utility functions
-- Property change notifications (INotifyPropertyChanged)
 
 **Integration Tests** (`TestCategory="Integration"`):
 - Windows.Data.Pdf API integration
 - File system operations (save/load metadata)
 - PDF document loading and page rendering
-- Metadata persistence across sessions
-- Singles folder dynamic management
 - Error handling with corrupted files
 
 ### Why No Code Coverage Metrics?
 
-?? **Code coverage metrics are not available for this project** due to a technical limitation with .NET code coverage tools and Windows desktop applications.
+Code coverage tools like `coverlet` cannot instrument WinExe projects. This is a [known limitation](https://github.com/coverlet-coverage/coverlet/issues/1158) affecting Windows desktop applications.
 
-The standard `coverlet` tool used by `dotnet test --collect:"XPlat Code Coverage"` **cannot instrument WinExe (executable) projects**. This is a [known limitation](https://github.com/coverlet-coverage/coverlet/issues/1158) that affects all Windows Forms and WPF applications that compile to `.exe` files.
-
-**Our approach:** We prioritize **test comprehensiveness and quality** over coverage percentages. The test suite thoroughly exercises:
-- All critical business logic paths
-- Edge cases and error conditions  
-- Integration points with Windows APIs
-- Data persistence and migration scenarios
-- Concurrent operations and caching
-
-**Alternative solutions** (not implemented):
-- Refactoring all business logic into a separate Class Library project (significant architectural change)
-- Using commercial code coverage tools like JetBrains dotCover
-- Manual code review and inspection
-
-The existing test suite provides confidence in code quality and catches regressions effectively, even without automated coverage metrics.
+We prioritize test comprehensiveness over coverage percentages.
 
 ---
 
-I have a few hundred piano music books, singles, etc. that I've collected over the last several decades. I keep them on my OneDrive, so that I can access them from any machine
-I love to play piano, especially ragtime.
-Most of the books were "perfect bound" which means they didn't stay open on the piano music stand.
-Many decades ago I chopped off the bindings of the books and rebound them using plastic comb binding. This made playing the music much easier on the piano.
-Since then I bought my own book binding cutter (HFS New Heavy Duty Guillotine Paper Cutter) and comb binding machine (Marigold 19-Hole Letter Size Comb Ring Binding Machine) 
-to rebind more books.
+# 📖 Technical Details
 
-About 3 months ago, I obtained a Microsoft Surface Book 2, which had a display large enough to trigger me digitizing my music collection.
-I used a few Xerox WorkCentre 7855i or similar models available at work.
-The doc sheetfeeder allowed me to scan up to 100 pages at a time. However, because of the age and wear and tear of the books (putting on the piano, turning pages), some of the pages were pretty worn.
-The binding edges of the pages were much less uniformly smooth (some had residual adhesive) than the non-binding edge because of the binding, so I fed them smooth edge first (upside down) through the document feeder.
-Luckily it's pretty simple to have software rotate the page.
+## How PDF Books Are Organized
 
-I tried various software sheet music viewers available, but wasn't at all satisfied, so I wrote my own to view my 30,000 pages of music.
+Your PDFs are never modified. All metadata (favorites, ink, TOC, last page viewed) is stored in `.json` files alongside your PDFs.
 
-Run the program. Choose a path to a root folder which contains PDF music files. PDF files can contain 1-N pages. 
-The PDFs are never altered by the program. All auxiliary data, such as Table Of Contents, Favorites, Inking, LastPageNumberViewed) is stored in the BMKs. However, the program needs write permission to write the BMK files.
-Some books scan to multiple PDFs. e.g. I have several books > 100 pages and scan them in smaller chunks to PDF. 
-Some of the bindings of these books are well-worn, so scanning works best in smaller chunks. 
-If you have multiple named files e.g. Book1.pdf, Book2.pdf, etc., then they will be treated as one entire book. The root name is the 1st one without any trailing 0 or 1.
-The first one of a series:
-	1. does not end in a digit "book.pdf" root name = "book"
-	2. does end in a digit  "book0.pdf" root name = "book"
+### Multi-Volume Books
 
-Subsequent ones must have the same root name as the 1st and must have a digit after the rootname e.g. "book1.pdf", "book1a.pdf", "book2.pdf". As long as they sort in order, the digits don't matter.
-Thus, book1, book1a, book2 are all treated together as one
-but not SonatenI, SonatenI1, SonatenII: this is 2 books: "SonatenI" and "SonatenI1" are the 1st Sonaten, and "SonatenII" is the second.
-This allows rescan of missing pages without needing to renumber subsequent volumes.
+Large books can be split across multiple PDF files:
+- First file: `book.pdf` or `book0.pdf`
+- Subsequent files: `book1.pdf`, `book2.pdf`, etc.
 
-Also, the document sheet feeder works best with the non-bound edge leading, so you can mark them with a Rotation settings, which will be persisted.
-Name these book0.pdf, book1.pdf, etc. and they will be treated as a single book with multiple volumes
-Each 'book' has a .BMK file written alongside. This contains the LastPageno opened, Rotation, TOC, Favorites, inking, and multi-volume info.
-You can import/export TOC to the clipboard and add info like composer, date, etc.
-The BMK file is read upon program start, or upon setting a new 'Music Folder Path' (you can set the path to be the same to force a re-read of all BMKs)
-The 1st page of A PDF file (or a set of PDF with consecutive numbered names) is used as the 'icon' to represent the music in the Choose dialog, the Table Of Contents Dialog, etc.
-So if the PDF has a cover page it will be the icon. For a singles folder, you can create a custom PDF title page.
-You can use any program that can print, and print to the "Microsoft Print to PDF" printer. That will create a PDF document.
-Make sure it's named earlier in alphabetical order than any other single in the folder
+All files with the same root name are treated as one book.
 
+### Singles Folders
 
-A subfolder called 'Hidden' will not be searched.
-A subfolder with name ending in 'Singles', like 'GershwinSingles' will treat each contained PDF as a single song (with possibly 1-N pages).
-A singles folder is maintained alphabetically, with the 1st page of the 1st song being the icon. As items are added/removed/renamed within the singles folder, they are dynamically
-added to the TOC, with associated favorites/inking following.
+Folders ending in "Singles" (e.g., `GershwinSingles`) treat each PDF as a separate song. The folder maintains an alphabetical TOC automatically.
 
-There are 2 display modes: single page at a time and 2 pages (side by side) per screen.
-The thumb left and right arrows at the top move a screenful at a time. (if there are favorites in the currently open book, they jump to the next favorite left or right, if any)
-The left-right arrows move the page by 1 screenful.
-The bottom quarter of the display is used to do page turning by click or touch. In 1 page per screen mode, the right half will move right 1 page, and the left half will move left 1 page.
-In 2 page per screen mode, the bottom quarter is logically divided into 4 quarters, from left to right. The outer 2 quarters will advance 1 screenful (2 pages), and the inner quarters will advance 1 page.
-E.g. from showing page 3 on the left and 4 on the right, to page 4 on the left to page 5 on the right. This allows right hand pages to be shown on the left, and repeats, etc. to be seen more easily.
-The top 3/4 of the page is used for moving zooming, rotating the display. You can use 2 fingers to zoom into a particular point. Similarly with ctrl mouse-wheel
+### Page Number Offset
 
-Inking is off by default. To ink, click the Ink checkbox for the page (in 2 page mode, there is a checkbox for each page). 
-A mouse or pen or your finger can draw in red, black, or highlight. To save the ink on that page, click the Ink checkbox again.
-For e.g. correcting typos on the musical staff, zoom in before inking to make it easier to draw accurately.
-All ink is stored in the BMK file.
+Scanned books often have printed page numbers that don't match PDF page numbers (due to cover pages, introductions, etc.). The `PageNumberOffset` setting maps between them so your TOC matches the printed page numbers.
 
-Rendering a PDF page takes time. When advancing to the next page, instantaneous response is desirable.
-In single page mode, as e.g. page 5 is shown, Page 6 is prefetched and prerendered in a cache. So is page 7, and page 4. The cache does nothing if the page is already contained. 
-In double page mode, for page 5, 6 being shown, 7,8 are added, as well as 4,3.
-So these pages are prefetched and rendered while viewing page 5. 
-For the boundary between volumes (e.g. a book contains 1000 pages, volume 1 is pages 1-100, etc.) the volumes are asynchronously read as needed.
-The thumb of the slider at the top can be used to navigate the entire 1000 pages. 
-The controls at the top are transparent so that the music can use more vertical screen space.
-
-## Page Turning for Musicians: Why Instant Response Matters
-
-When playing a musical instrument, especially piano, **page turns must be instantaneous**. A musician cannot pause mid-performance to wait for a page to render - the music must continue flowing. Even a half-second delay breaks concentration and disrupts the performance.
-
-### The Challenge
-PDF rendering is computationally expensive. A high-resolution scanned page might take 100-500ms to render, depending on:
-- Page complexity and resolution
-- Device CPU/GPU capabilities
-- Available memory
-
-### The Solution: Intelligent Page Caching
-
-SheetMusicViewer uses predictive caching to ensure pages are ready *before* you need them:
+## Performance: Intelligent Page Caching
 
 **Single Page Mode** (showing page 5):
 - Cache contains: pages 4, 5, 6, 7
-- When you turn to page 6, page 8 is immediately queued for rendering
-- Backward navigation is also instant (page 4 is already cached)
+- When you turn to page 6, page 8 is immediately queued
 
 **Two Page Mode** (showing pages 5-6):
 - Cache contains: pages 3, 4, 5, 6, 7, 8
 - Forward/backward turns are instant
-- Inner page turns (5-6 ? 6-7) are also cached
 
 **Multi-Volume Books**:
-- Volumes are loaded asynchronously as you approach volume boundaries
-- The last pages of volume N and first pages of volume N+1 are both cached
-
-### Memory Management
-- Cache size is automatically managed based on available memory
-- Least-recently-used pages are evicted when memory is constrained
-- High-resolution PDFs may need optimization (print to "Microsoft Print to PDF" to reduce size)
-
-### Result
-Page turns feel **instant** - tap or swipe, and the next page appears immediately, just like turning a physical page. This allows musicians to focus entirely on their performance.
+- Volumes are loaded asynchronously as you approach boundaries
+- Last pages of volume N and first pages of volume N+1 are both cached
 
 ---
 
-(Note: some PDF files consume a lot of memory per page, perhaps because they were captured at very high resolution. 
-The size can be reduced If you print the PDF to "Microsoft Print To PDF" printer driver or use an online PDFResizer tool)
+# 📝 About the Author
 
-Each page has a description which is calculated from the TOC. If a song is many pages, the description is 
-calculated from the closest TOC entry. If there are multiple songs on a a page, the description includes all songs on that page.
+I have a few hundred piano music books that I've collected over several decades. I keep them on OneDrive so I can access them from any machine.
 
-The Table of Contents of a songbook shows the physical page numbers, which may not match the actual PDF page numbers (there could be a cover page scanned or could be a multivolume set, or 30 pages of intro, and then page 1 has the 1st song)
-Also, each scanned page might have the physical page # printed on it.
-We want to keep the scanned OCR TOC true and minimize required editing. This means the page no displayed in the UI is the same as the page # on the scanned page
-PageNumberOffset will map between each so that the imported scanned TOC saved as XML will not need to be adjusted.
-For 1st, 2nd, 3rd volumes, the offset from the actual scanned page number (as visible on the page) to the PDF page number
-e.g. the very 1st volume might have a cover page, which is page 0 and 44 pages of intro. Viewing song "The Crush Collision March" might show page 4 on the scanned page, but it's really PdfPage=49,
-so we set PageNumberOffset to -45
-Another way to think about it: find a page with a printed page no on it, e.g. page 3. Count back to the 1st PDF page (probably the book cover) PageNumberOffset is the resulting count
-You can edit/display the TOC via clicking or tapping the thumbnail to the right of the slider. Or Alt-E. From there you can export/import to/from the clipboard in Excel format.
-You can take a screenshot of the TOC of a book, then run Optical Character Recognition (OCR) on it to convert it to text for Excel=>clipboard=>TOC.
+I love to play piano, especially ragtime. Most of my books were "perfect bound" which means they didn't stay open on the piano music stand. I rebound them using plastic comb binding to make playing easier.
 
-How I got started on the Piano:
-I've neer had a piano lesson: Our Junior High School had a PDP-8 computer, which would emit radio interference on the AM dial. Making the computer flash the blinking lights (yes computers had blinking lights back then) with a pattern,
-it could actually make music. I remember hearing Maple Leaf Rag from the computer on an AM radio. In college, there was a piano in my fraternity. I started on the piano with the music to Maple Leaf Rag, and I 
-started trying to pick my way through the notes. 
-I really love Ragtime. I suspect most people who like computer software like Ragtime. There's something so binary about it: powers of 2. 16 measures per verse, 2/4 time, syncopation.
+When I got a Microsoft Surface Book 2 with a large enough display, I decided to digitize my 30,000+ pages of music. I tried various sheet music viewers but wasn't satisfied, so I wrote my own.
 
-To download and run the app on a Windows machine: clicking on the Releases: Download and copy files from SheetMusicViewer*.zip to a local folder.
-Start SheetMusicViewer.exe. It will ask for a folder with PDF files
+**How I got started on piano:** I've never had a piano lesson! In Junior High, our PDP-8 computer could emit radio interference on the AM dial - making music through the radio. I remember hearing Maple Leaf Rag. In college, there was a piano in my fraternity, and I started picking through the notes of Maple Leaf Rag.
 
-
-Here's a view of my ChooseMusic screen. This is the more modern way to access my bookcase of hundreds of books. Note, I can choose the Query tab to query any music by composer, title, etc.
-
-![Some of my music books](img/ChooseMusic.png)
-
-Here, the music is displayed in 2 page/screen mode. The left page happens to be artwork. Notice the controls at the top are see through, to maximize the image size on the screen.
-Ophelia is a rag from 1910, by James Scott. This image is from a copy machine of very old sheet music.
-For maximum music  size, switch to 1 page/screen mode and rotate the device to be portrait.
+I really love Ragtime. There's something so binary about it: powers of 2, 16 measures per verse, 2/4 time, syncopation.
 
 ![Ophelia Rag](img/Ophelia.png)
+*Ophelia Rag by James Scott, 1910*
 
+---
 
-
-mailto://calvin_hsia@alum.mit.edu
-
-My Web Site: http://calvinhsia.com
+📧 **Contact:** calvin_hsia@alum.mit.edu  
+🌐 **Website:** [calvinhsia.com](http://calvinhsia.com)
 
 
 
