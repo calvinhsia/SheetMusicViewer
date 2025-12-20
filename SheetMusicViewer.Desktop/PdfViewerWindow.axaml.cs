@@ -182,6 +182,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             _chkFullScreen.IsChecked = !_chkFullScreen.IsChecked;
         };
         
+        var mnuShow2Pages = this.GetControl<MenuItem>("mnuShow2Pages");
+        mnuShow2Pages.Click += (s, e) =>
+        {
+            Show2Pages = !Show2Pages;
+        };
+        
         var mnuAbout = this.GetControl<MenuItem>("mnuAbout");
         mnuAbout.Click += BtnAbout_Click;
         
