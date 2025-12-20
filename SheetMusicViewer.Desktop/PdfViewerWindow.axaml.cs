@@ -60,6 +60,8 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private CheckBox? _chkFullScreen;
     private CheckBox? _chkInk0;
     private CheckBox? _chkInk1;
+    private CheckBox? _chkFav0;
+    private CheckBox? _chkFav1;
     private Image? _imgThumb;
     private Menu? _mainMenu;
 
@@ -134,6 +136,8 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         _chkFullScreen = this.GetControl<CheckBox>("chkFullScreen");
         _chkInk0 = this.GetControl<CheckBox>("chkInk0");
         _chkInk1 = this.GetControl<CheckBox>("chkInk1");
+        _chkFav0 = this.GetControl<CheckBox>("chkFav0");
+        _chkFav1 = this.GetControl<CheckBox>("chkFav1");
         _imgThumb = this.GetControl<Image>("ImgThumb");
         _mainMenu = this.GetControl<Menu>("mainMenu");
         
@@ -153,11 +157,11 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         };
         
         // Wire up favorite checkbox events
-        var chkFav0 = this.GetControl<CheckBox>("chkFav0");
-        var chkFav1 = this.GetControl<CheckBox>("chkFav1");
+        _chkFav0 = this.GetControl<CheckBox>("chkFav0");
+        _chkFav1 = this.GetControl<CheckBox>("chkFav1");
         
-        chkFav0.IsCheckedChanged += ChkFav_Toggled;
-        chkFav1.IsCheckedChanged += ChkFav_Toggled;
+        _chkFav0.IsCheckedChanged += ChkFav_Toggled;
+        _chkFav1.IsCheckedChanged += ChkFav_Toggled;
         
         // Wire up rotate button
         var btnRotate = this.GetControl<Button>("btnRotate");
@@ -718,6 +722,18 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
 
                 _dpPage?.Children.Add(grid);
                 SetupGestureHandler();
+                
+                // Initialize favorite checkboxes from metadata
+                _chkFavoriteEnabled = false;
+                if (_chkFav0 != null)
+                {
+                    _chkFav0.IsChecked = _currentPdfMetaData.IsFavorite(pageNo);
+                }
+                if (_chkFav1 != null && NumPagesPerView > 1)
+                {
+                    _chkFav1.IsChecked = _currentPdfMetaData.IsFavorite(pageNo + 1);
+                }
+                _chkFavoriteEnabled = true;
             });
         }
         catch (Exception ex)
@@ -1174,8 +1190,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             var pageNo = CurrentPageNumber + (isPage0 ? 0 : 1);
             var isFavorite = chk.IsChecked == true;
             
-            // Toggle favorite in metadata
-            // TODO: Update the favorites list and save using PdfMetaDataCore.SaveToJson()
+            // Toggle favorite in metadata and save
+            _currentPdfMetaData.ToggleFavorite(pageNo, isFavorite);
+            PdfMetaDataCore.SaveToJson(_currentPdfMetaData);
             
             Trace.WriteLine($"Favorite toggled: Page {pageNo}, IsFavorite: {isFavorite}");
         }
