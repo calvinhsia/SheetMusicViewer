@@ -1,4 +1,4 @@
-# SheetMusicViewer
+﻿# SheetMusicViewer
 
 PDF Sheet Music Viewer by Calvin Hsia 2019
 
@@ -29,10 +29,38 @@ Download the latest release for your platform from the [Releases page](https://g
 | macOS Apple Silicon | `SheetMusicViewer-osx-arm64.tar.gz` |
 
 ### Windows
-1. Download and extract the ZIP file
-2. Run `SheetMusicViewer.exe`
 
-> **Note:** Windows may show a "Windows protected your PC" SmartScreen warning because the app is not code-signed. Click **"More info"** then **"Run anyway"** to proceed. This is normal for open-source applications distributed outside the Microsoft Store.
+#### Step-by-Step Installation
+
+1. **Download the ZIP file**
+   - Go to the [Releases page](https://github.com/calvinhsia/SheetMusicViewer/releases)
+   - Click on `SheetMusicViewer-win-x64.zip` to download
+   - The file will save to your Downloads folder (usually `C:\Users\YourName\Downloads`)
+
+2. **Extract the ZIP file**
+   - Open File Explorer and navigate to your Downloads folder
+   - Find `SheetMusicViewer-win-x64.zip`
+   - Right-click on the file and select **"Extract All..."**
+   - Choose where to extract (e.g., `C:\SheetMusicViewer` or your Desktop)
+   - Click **"Extract"**
+
+3. **Run the application**
+   - Open the folder where you extracted the files
+   - Double-click on **`SheetMusicViewer.exe`**
+
+4. **Handle the Windows SmartScreen warning** (first run only)
+   - Windows may show a blue **"Windows protected your PC"** warning
+   - This appears because the app is not from the Microsoft Store
+   - Click **"More info"**
+   - Click **"Run anyway"**
+   - This is normal for open-source software and only appears once
+
+5. **Select your music folder**
+   - On first run, you'll be asked to choose a folder containing your PDF music files
+   - Navigate to where your sheet music PDFs are stored
+   - Click **"Select Folder"**
+
+> **Tip:** Create a desktop shortcut for easy access: Right-click `SheetMusicViewer.exe` → **"Create shortcut"** → drag the shortcut to your Desktop.
 
 ### Linux
 ```bash
@@ -314,5 +342,7 @@ For maximum music  size, switch to 1 page/screen mode and rotate the device to b
 mailto://calvin_hsia@alum.mit.edu
 
 My Web Site: http://calvinhsia.com
+
+
 
 
