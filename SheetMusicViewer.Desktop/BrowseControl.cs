@@ -284,7 +284,8 @@ public class ListBoxBrowseView : UserControl
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 VerticalAlignment = VerticalAlignment.Stretch,
                 HorizontalContentAlignment = HorizontalAlignment.Left,
-                Padding = new Thickness(5, 2, 5, 2)
+                Padding = new Thickness(5, 2, 5, 2),
+                [ToolTip.TipProperty] = col.HeaderText
             };
             
             var columnIndex = i;
