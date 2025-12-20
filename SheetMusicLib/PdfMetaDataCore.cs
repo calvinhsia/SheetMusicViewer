@@ -72,6 +72,14 @@ namespace SheetMusicLib
         public List<InkStrokeClass> InkStrokes { get; set; } = new();
 
         /// <summary>
+        /// Cached PDF bytes per volume. Key is volume number, value is the byte array.
+        /// Use GetOrLoadVolumeBytesAsync to access with automatic caching.
+        /// </summary>
+        private readonly Dictionary<int, byte[]> _pdfBytesCache = new();
+        private readonly Dictionary<int, object> _volumeLoadLocks = new();
+        private readonly object _pdfBytesCacheLock = new();
+
+        /// <summary>
         /// Cached thumbnail bitmap (platform-specific type stored as object).
         /// Use GetOrCreateThumbnailAsync to access with automatic caching.
         /// </summary>
@@ -99,6 +107,112 @@ namespace SheetMusicLib
             ThumbnailCache = thumbnail;
             
             return thumbnail;
+        }
+
+        /// <summary>
+        /// Gets the cached PDF bytes for a volume, or loads them from disk if not cached.
+        /// Thread-safe - ensures each volume is read from disk at most once even under concurrent access.
+        /// </summary>
+        /// <param name="volNo">Volume number</param>
+        /// <returns>PDF file bytes, or null if the file doesn't exist</returns>
+        public byte[]? GetOrLoadVolumeBytes(int volNo)
+        {
+            // Fast path: already cached
+            lock (_pdfBytesCacheLock)
+            {
+                if (_pdfBytesCache.TryGetValue(volNo, out var cached))
+                {
+                    return cached;
+                }
+            }
+
+            // Get or create a lock object for this specific volume
+            object volumeLock;
+            lock (_pdfBytesCacheLock)
+            {
+                if (!_volumeLoadLocks.TryGetValue(volNo, out volumeLock))
+                {
+                    volumeLock = new object();
+                    _volumeLoadLocks[volNo] = volumeLock;
+                }
+            }
+
+            // Only one thread will load this volume
+            lock (volumeLock)
+            {
+                // Double-check after acquiring volume lock
+                lock (_pdfBytesCacheLock)
+                {
+                    if (_pdfBytesCache.TryGetValue(volNo, out var cached))
+                    {
+                        return cached;
+                    }
+                }
+
+                var pdfPath = GetFullPathFileFromVolno(volNo);
+                if (string.IsNullOrEmpty(pdfPath) || !File.Exists(pdfPath))
+                {
+                    return null;
+                }
+
+                var bytes = File.ReadAllBytes(pdfPath);
+
+                lock (_pdfBytesCacheLock)
+                {
+                    _pdfBytesCache[volNo] = bytes;
+                }
+
+                return bytes;
+            }
+        }
+
+        /// <summary>
+        /// Gets the cached PDF bytes for a volume if already loaded, without loading from disk.
+        /// Thread-safe.
+        /// </summary>
+        /// <param name="volNo">Volume number</param>
+        /// <returns>Cached PDF bytes, or null if not cached</returns>
+        public byte[]? GetCachedVolumeBytes(int volNo)
+        {
+            lock (_pdfBytesCacheLock)
+            {
+                return _pdfBytesCache.TryGetValue(volNo, out var cached) ? cached : null;
+            }
+        }
+
+        /// <summary>
+        /// Pre-loads PDF bytes for all volumes in the background.
+        /// Call this after opening a PDF to improve page navigation performance.
+        /// </summary>
+        /// <returns>Task that completes when all volumes are loaded</returns>
+        public Task PreloadAllVolumeBytesAsync()
+        {
+            return Task.Run(() =>
+            {
+                for (int volNo = 0; volNo < VolumeInfoList.Count; volNo++)
+                {
+                    GetOrLoadVolumeBytes(volNo);
+                }
+            });
+        }
+
+        /// <summary>
+        /// Clears the cached PDF bytes to free memory.
+        /// Call this when closing a PDF file.
+        /// Thread-safe, but callers should ensure no concurrent GetOrLoadVolumeBytes calls.
+        /// </summary>
+        public void ClearPdfBytesCache()
+        {
+            lock (_pdfBytesCacheLock)
+            {
+                _pdfBytesCache.Clear();
+                // Note: We intentionally do NOT clear _volumeLoadLocks here.
+                // The lock objects are small and keeping them prevents a race condition
+                // where a concurrent GetOrLoadVolumeBytes could create a duplicate lock
+                // and potentially read the same file twice.
+                // The locks will be naturally garbage collected when this PdfMetaDataReadResult
+                // is no longer referenced.
+            }
         }
 
         /// <summary>

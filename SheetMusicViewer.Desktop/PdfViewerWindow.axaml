@@ -86,12 +86,12 @@
                                Margin="0,0,3,0"
                                IsVisible="{Binding IsThumbnailLoadingInProgress}"
                                ToolTip.Tip="Loading thumbnails in background for faster browsing"/>
+                    <Button Name="btnChooser" Content="_Chooser" ToolTip.Tip="Open another document, query songs, etc (Alt+C)" VerticalAlignment="Center" Margin="0,0,3,0"/>
                     <Menu Name="mainMenu" Background="Transparent" VerticalAlignment="Center">
                         <MenuItem Header="_Menu">
-                            <MenuItem Name="mnuChooser" Header="_Chooser" InputGesture="Alt+C" ToolTip.Tip="Open another document, query songs, etc"/>
-                            <MenuItem Header="Show _2 Pages" IsEnabled="{Binding PdfUIEnabled}" ToolTip.Tip="Show 1 or 2 pages at a time">
+                            <MenuItem Name="mnuShow2Pages" Header="Show _2 Pages" IsEnabled="{Binding PdfUIEnabled}" ToolTip.Tip="Show 1 or 2 pages at a time">
                                 <MenuItem.Icon>
-                                    <CheckBox IsChecked="{Binding Show2Pages}" BorderThickness="0"/>
+                                    <CheckBox IsChecked="{Binding Show2Pages}" BorderThickness="0" IsHitTestVisible="False"/>
                                 </MenuItem.Icon>
                             </MenuItem>
                             <MenuItem Name="mnuFullScreen" Header="_Full Screen" InputGesture="Alt+F" ToolTip.Tip="Toggle Full Screen mode">
