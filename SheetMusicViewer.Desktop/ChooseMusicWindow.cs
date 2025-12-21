@@ -117,7 +117,7 @@ public class ChooseMusicWindow : Window
         _rootFolder = rootFolder ?? string.Empty;
         
         // Load setting from AppSettings
-        SkipCloudOnlyFiles = AppSettings.Instance.SkipCloudOnlyFiles;
+        SkipCloudOnlyFiles = AppSettings.Instance.UserOptions.SkipCloudOnlyFiles;
         
         Title = "Choose Music";
         ShowInTaskbar = false; // Don't show separate taskbar icon
