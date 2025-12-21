@@ -247,6 +247,23 @@ public class ChooseMusicWindow : Window
         Grid.SetRow(_tabControl, 0);
         Grid.SetRowSpan(_tabControl, 2);
         
+        // Style for tab headers - make them look like traditional tabs
+        var tabItemStyle = new Style(x => x.OfType<TabItem>());
+        tabItemStyle.Setters.Add(new Setter(TabItem.FontSizeProperty, 12.0));
+        tabItemStyle.Setters.Add(new Setter(TabItem.PaddingProperty, new Thickness(12, 6)));
+        tabItemStyle.Setters.Add(new Setter(TabItem.MarginProperty, new Thickness(2, 0, 0, 0)));
+        tabItemStyle.Setters.Add(new Setter(TabItem.BackgroundProperty, Brushes.LightGray));
+        tabItemStyle.Setters.Add(new Setter(TabItem.BorderBrushProperty, Brushes.Gray));
+        tabItemStyle.Setters.Add(new Setter(TabItem.BorderThicknessProperty, new Thickness(1, 1, 1, 0)));
+        tabItemStyle.Setters.Add(new Setter(TabItem.CornerRadiusProperty, new CornerRadius(4, 4, 0, 0)));
+        _tabControl.Styles.Add(tabItemStyle);
+        
+        // Style for selected tab - make it stand out
+        var selectedTabStyle = new Style(x => x.OfType<TabItem>().Class(":selected"));
+        selectedTabStyle.Setters.Add(new Setter(TabItem.BackgroundProperty, Brushes.White));
+        selectedTabStyle.Setters.Add(new Setter(TabItem.FontWeightProperty, FontWeight.SemiBold));
+        _tabControl.Styles.Add(selectedTabStyle);
+        
         // Books tab
         var booksTab = new TabItem { Header = "_Books" };
         booksTab.Content = BuildBooksTabContent();
@@ -271,6 +288,7 @@ public class ChooseMusicWindow : Window
         { 
             Orientation = Orientation.Horizontal, 
             HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 5, 10, 5)
         };
         Grid.SetRow(topBar, 0);
@@ -278,18 +296,40 @@ public class ChooseMusicWindow : Window
         _tbxTotals = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0) };
         topBar.Children.Add(_tbxTotals);
         
-        topBar.Children.Add(new Label { Content = "Music Folder:", Margin = new Thickness(20, 0, 0, 0) });
-        _cboRootFolder = new ComboBox { Width = 300, Margin = new Thickness(10, 0, 10, 0) };
+        topBar.Children.Add(new Label 
+        { 
+            Content = "Music Folder:", 
+            VerticalAlignment = VerticalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(20, 0, 0, 0) 
+        });
+        _cboRootFolder = new ComboBox 
+        { 
+            Width = 300, 
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(10, 0, 10, 0) 
+        };
         PopulateRootFolderComboBox();
         _cboRootFolder.SelectionChanged += OnRootFolderSelectionChanged;
         _cboRootFolder.DropDownOpened += OnRootFolderDropDownOpened;
         topBar.Children.Add(_cboRootFolder);
         
-        var btnCancel = new Button { Content = "Cancel", Margin = new Thickness(10, 0, 0, 0) };
+        var btnCancel = new Button 
+        { 
+            Content = "Cancel", 
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(10, 0, 0, 0) 
+        };
         btnCancel.Click += (s, e) => Close();
         topBar.Children.Add(btnCancel);
         
-        var btnOk = new Button { Content = "_OK", Width = 50, Margin = new Thickness(10, 0, 10, 0) };
+        var btnOk = new Button 
+        { 
+            Content = "_OK", 
+            Width = 50, 
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(10, 0, 10, 0) 
+        };
         btnOk.Click += BtnOk_Click;
         topBar.Children.Add(btnOk);
         
