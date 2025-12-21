@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -126,17 +126,23 @@ internal class ListBoxListFilter : DockPanel
         { 
             Orientation = Orientation.Horizontal, 
             HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
             Spacing = 5,
-            Height = 40
+            Height = 30
         };
+        _txtStatus.VerticalAlignment = VerticalAlignment.Center;
         spFilter.Children.Add(_txtStatus);
         spFilter.Children.Add(new Label 
         { 
             Content = "StringFilter",
+            VerticalAlignment = VerticalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
             [ToolTip.TipProperty] = "Case insensitive search (ListBox with virtualization)"
         });
         _txtFilter.Text = _LastFilter;
         _txtFilter.Watermark = "Enter filter text...";
+        _txtFilter.VerticalAlignment = VerticalAlignment.Center;
+        _txtFilter.VerticalContentAlignment = VerticalAlignment.Center;
         spFilter.Children.Add(_txtFilter);
         this.Children.Add(spFilter);
 
@@ -243,7 +249,7 @@ public class ListBoxBrowseView : UserControl
         _headerGrid = new Grid
         {
             Background = Brushes.LightGray,
-            Height = 25,
+            Height = 28,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             Margin = new Thickness(0, 8, 0, 0)
         };
@@ -284,7 +290,10 @@ public class ListBoxBrowseView : UserControl
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 VerticalAlignment = VerticalAlignment.Stretch,
                 HorizontalContentAlignment = HorizontalAlignment.Left,
+                VerticalContentAlignment = VerticalAlignment.Center,
                 Padding = new Thickness(5, 2, 5, 2),
+                FontSize = 12,
+                FontWeight = FontWeight.Normal,
                 [ToolTip.TipProperty] = col.HeaderText
             };
             
@@ -326,8 +335,9 @@ public class ListBoxBrowseView : UserControl
         var itemStyle = new Style(x => x.OfType<ListBoxItem>());
         itemStyle.Setters.Add(new Setter(ListBoxItem.PaddingProperty, new Thickness(0)));
         itemStyle.Setters.Add(new Setter(ListBoxItem.MarginProperty, new Thickness(0)));
-        itemStyle.Setters.Add(new Setter(ListBoxItem.MinHeightProperty, 18.0));
+        itemStyle.Setters.Add(new Setter(ListBoxItem.MinHeightProperty, 20.0));
         itemStyle.Setters.Add(new Setter(ListBoxItem.ForegroundProperty, Brushes.Blue));
+        itemStyle.Setters.Add(new Setter(ListBoxItem.FontSizeProperty, 12.0));
         _listBox.Styles.Add(itemStyle);
 
         // Create and attach context menu
@@ -535,7 +545,7 @@ public class ListBoxBrowseView : UserControl
         var grid = new Grid
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            Height = 18,
+            Height = 20,
             Background = Brushes.Transparent,
             Margin = new Thickness(0)
         };
@@ -571,7 +581,8 @@ public class ListBoxBrowseView : UserControl
                 Padding = new Thickness(5, 0, 5, 0),
                 Margin = new Thickness(0),
                 VerticalAlignment = VerticalAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                FontSize = 12
             };
 
             Grid.SetColumn(textBlock, i);
@@ -918,7 +929,7 @@ public class ListBoxBrowseView : UserControl
                 var col = _columns[buttonIndex];
                 if (buttonIndex == sortedColumnIndex)
                 {
-                    btn.Content = $"{col.HeaderText} {(ascending ? "?" : "?")}";
+                    btn.Content = $"{col.HeaderText} {(ascending ? "▲" : "▼")}";
                 }
                 else
                 {
