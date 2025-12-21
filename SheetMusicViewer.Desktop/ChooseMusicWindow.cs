@@ -41,6 +41,14 @@ public class ChooseMusicWindow : Window
     // Query tab - uses BrowseControl
     private BrowseControl? _queryBrowseControl;
     private Grid _queryTabGrid;
+    
+    // Playlist tab
+    private ComboBox _playlistComboBox;
+    private ListBox _playlistEntriesListBox;
+    private BrowseControl? _playlistSongsBrowseControl;
+    private TextBlock _playlistStatus;
+    private Grid _playlistTabGrid;
+    private Playlist? _currentPlaylist;
 
     private List<PdfMetaDataReadResult> _pdfMetadata;
     private string _rootFolder;
@@ -177,6 +185,10 @@ public class ChooseMusicWindow : Window
                     _tabControl.SelectedIndex = 2;
                     e.Handled = true;
                     break;
+                case Key.P: // _Playlist
+                    _tabControl.SelectedIndex = 3;
+                    e.Handled = true;
+                    break;
             }
         }
     }
@@ -195,6 +207,7 @@ public class ChooseMusicWindow : Window
         {
             "_Query" => 1,
             "Fa_vorites" => 2,
+            "_Playlists" => 3,
             _ => 0 // "_Books" or default
         };
         
@@ -278,6 +291,11 @@ public class ChooseMusicWindow : Window
         var favTab = new TabItem { Header = "Fa_vorites" };
         favTab.Content = BuildFavoritesTabContent();
         _tabControl.Items.Add(favTab);
+        
+        // Playlist tab
+        var playlistTab = new TabItem { Header = "_Playlists" };
+        playlistTab.Content = BuildPlaylistTabContent();
+        _tabControl.Items.Add(playlistTab);
         
         _tabControl.SelectionChanged += OnTabSelectionChanged;
         
@@ -500,6 +518,7 @@ public class ChooseMusicWindow : Window
         _bookItemCache.Clear();
         _allFavoriteItems.Clear();
         _queryBrowseControl = null;
+        _playlistSongsBrowseControl = null;
         _lbBooks.ItemsSource = null;
         _favoritesListBox.ItemsSource = null;
         
@@ -619,6 +638,141 @@ public class ChooseMusicWindow : Window
         return _queryTabGrid;
     }
     
+    private Control BuildPlaylistTabContent()
+    {
+        _playlistTabGrid = new Grid();
+        _playlistTabGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto)); // Toolbar
+        _playlistTabGrid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star))); // Content
+        
+        // Toolbar with playlist selector and buttons
+        var toolbar = new StackPanel 
+        { 
+            Orientation = Orientation.Horizontal, 
+            Margin = new Thickness(5),
+            Spacing = 10
+        };
+        Grid.SetRow(toolbar, 0);
+        
+        toolbar.Children.Add(new Label { Content = "Playlist:", VerticalAlignment = VerticalAlignment.Center });
+        
+        _playlistComboBox = new ComboBox { Width = 200, VerticalAlignment = VerticalAlignment.Center };
+        _playlistComboBox.SelectionChanged += OnPlaylistSelectionChanged;
+        toolbar.Children.Add(_playlistComboBox);
+        
+        var btnNew = new Button { Content = "New", Margin = new Thickness(5, 0, 0, 0) };
+        btnNew.Click += OnNewPlaylistClick;
+        toolbar.Children.Add(btnNew);
+        
+        var btnRename = new Button { Content = "Rename", Margin = new Thickness(5, 0, 0, 0) };
+        btnRename.Click += OnRenamePlaylistClick;
+        toolbar.Children.Add(btnRename);
+        
+        var btnDelete = new Button { Content = "Delete", Margin = new Thickness(5, 0, 0, 0) };
+        btnDelete.Click += OnDeletePlaylistClick;
+        toolbar.Children.Add(btnDelete);
+        
+        _playlistStatus = new TextBlock 
+        { 
+            VerticalAlignment = VerticalAlignment.Center, 
+            Margin = new Thickness(20, 0, 0, 0) 
+        };
+        toolbar.Children.Add(_playlistStatus);
+        
+        _playlistTabGrid.Children.Add(toolbar);
+        
+        // Split view: songs browser on left, playlist entries on right
+        var splitGrid = new Grid();
+        splitGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star))); // Song browser
+        splitGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto)); // Buttons
+        splitGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star))); // Playlist entries
+        Grid.SetRow(splitGrid, 1);
+        
+        // Left side: All songs browser (placeholder until loaded)
+        var songsBrowserPlaceholder = new TextBlock 
+        { 
+            Text = "Loading songs...", 
+            Margin = new Thickness(20),
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center
+        };
+        Grid.SetColumn(songsBrowserPlaceholder, 0);
+        splitGrid.Children.Add(songsBrowserPlaceholder);
+        
+        // Middle: Add/Remove buttons
+        var buttonPanel = new StackPanel 
+        { 
+            Orientation = Orientation.Vertical, 
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(5)
+        };
+        Grid.SetColumn(buttonPanel, 1);
+        
+        var btnAddToPlaylist = new Button 
+        { 
+            Content = "Add →", 
+            Width = 80, 
+            Margin = new Thickness(0, 5, 0, 5),
+            HorizontalContentAlignment = HorizontalAlignment.Center
+        };
+        btnAddToPlaylist.Click += OnAddToPlaylistClick;
+        buttonPanel.Children.Add(btnAddToPlaylist);
+        
+        var btnRemoveFromPlaylist = new Button 
+        { 
+            Content = "← Remove", 
+            Width = 80, 
+            Margin = new Thickness(0, 5, 0, 5),
+            HorizontalContentAlignment = HorizontalAlignment.Center
+        };
+        btnRemoveFromPlaylist.Click += OnRemoveFromPlaylistClick;
+        buttonPanel.Children.Add(btnRemoveFromPlaylist);
+        
+        var btnMoveUp = new Button 
+        { 
+            Content = "↑ Up", 
+            Width = 80, 
+            Margin = new Thickness(0, 15, 0, 5),
+            HorizontalContentAlignment = HorizontalAlignment.Center
+        };
+        btnMoveUp.Click += OnMoveUpClick;
+        buttonPanel.Children.Add(btnMoveUp);
+        
+        var btnMoveDown = new Button 
+        { 
+            Content = "↓ Down", 
+            Width = 80, 
+            Margin = new Thickness(0, 5, 0, 5),
+            HorizontalContentAlignment = HorizontalAlignment.Center
+        };
+        btnMoveDown.Click += OnMoveDownClick;
+        buttonPanel.Children.Add(btnMoveDown);
+        
+        splitGrid.Children.Add(buttonPanel);
+        
+        // Right side: Playlist entries
+        var playlistPanel = new DockPanel { Margin = new Thickness(5) };
+        Grid.SetColumn(playlistPanel, 2);
+        
+        var playlistHeader = new TextBlock 
+        { 
+            Text = "Playlist Songs:", 
+            FontWeight = FontWeight.Bold,
+            Margin = new Thickness(0, 0, 0, 5)
+        };
+        DockPanel.SetDock(playlistHeader, Dock.Top);
+        playlistPanel.Children.Add(playlistHeader);
+        
+        _playlistEntriesListBox = new ListBox { SelectionMode = SelectionMode.Multiple };
+        _playlistEntriesListBox.DoubleTapped += OnPlaylistEntryDoubleTapped;
+        playlistPanel.Children.Add(_playlistEntriesListBox);
+        
+        splitGrid.Children.Add(playlistPanel);
+        
+        _playlistTabGrid.Children.Add(splitGrid);
+        
+        return _playlistTabGrid;
+    }
+    
     private void OnTabSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (_tabControl.SelectedItem is TabItem selectedTab)
@@ -637,6 +791,15 @@ public class ChooseMusicWindow : Window
                 }
                 // Focus the filter textbox when Query tab is activated
                 _queryBrowseControl?.FocusFilter();
+            }
+            else if (header == "_Playlists")
+            {
+                if (_playlistSongsBrowseControl == null)
+                {
+                    FillPlaylistTab();
+                }
+                // Focus the filter textbox when Playlist tab is activated
+                _playlistSongsBrowseControl?.FocusFilter();
             }
         }
     }
@@ -748,6 +911,420 @@ public class ChooseMusicWindow : Window
         _queryTabGrid.Children.Add(_queryBrowseControl);
     }
     
+    private void FillPlaylistTab()
+    {
+        if (_pdfMetadata.Count == 0) return;
+        
+        // Build the songs browser (same data as Query tab)
+        var uberToc = new List<Tuple<PdfMetaDataReadResult, TOCEntry>>();
+        foreach (var pdfMetaDataItem in _pdfMetadata)
+        {
+            foreach (var tentry in pdfMetaDataItem.TocEntries)
+            {
+                uberToc.Add(Tuple.Create(pdfMetaDataItem, tentry));
+            }
+        }
+
+        var query = from tup in uberToc
+                    let itm = tup.Item2
+                    orderby itm.SongName
+                    select new
+                    {
+                        itm.SongName,
+                        Page = itm.PageNo,
+                        itm.Composer,
+                        CompositionDate = itm.Date,
+                        Fav = tup.Item1.IsFavorite(itm.PageNo) ? "★" : string.Empty,
+                        BookName = tup.Item1.GetBookName(_rootFolder),
+                        itm.Notes,
+                        _Tup = tup
+                    };
+
+        _playlistSongsBrowseControl = new BrowseControl(query, colWidths: new[] { 250, 50, 150, 80, 40, 300, 200 });
+        
+        // Replace placeholder with the browse control
+        var splitGrid = (Grid)_playlistTabGrid.Children[1];
+        
+        // Remove the placeholder
+        var placeholder = splitGrid.Children.FirstOrDefault(c => Grid.GetColumn(c) == 0);
+        if (placeholder != null)
+        {
+            splitGrid.Children.Remove(placeholder);
+        }
+        
+        // Add the browse control
+        Grid.SetColumn(_playlistSongsBrowseControl, 0);
+        splitGrid.Children.Add(_playlistSongsBrowseControl);
+        
+        // Load playlists into combo box
+        RefreshPlaylistComboBox();
+        
+        // Select last used playlist or first one
+        var settings = AppSettings.Instance;
+        var lastPlaylist = settings.LastSelectedPlaylist;
+        if (!string.IsNullOrEmpty(lastPlaylist) && settings.Playlists.Any(p => p.Name == lastPlaylist))
+        {
+            _currentPlaylist = settings.Playlists.First(p => p.Name == lastPlaylist);
+            for (int i = 0; i < _playlistComboBox.Items.Count; i++)
+            {
+                if (_playlistComboBox.Items[i] is ComboBoxItem item && item.Content?.ToString() == lastPlaylist)
+                {
+                    _playlistComboBox.SelectedIndex = i;
+                    break;
+                }
+            }
+        }
+        else if (settings.Playlists.Count > 0)
+        {
+            _currentPlaylist = settings.Playlists[0];
+            _playlistComboBox.SelectedIndex = 0;
+        }
+        
+        RefreshPlaylistEntries();
+    }
+    
+    private void RefreshPlaylistComboBox()
+    {
+        _playlistComboBox.Items.Clear();
+        foreach (var playlist in AppSettings.Instance.Playlists)
+        {
+            _playlistComboBox.Items.Add(new ComboBoxItem { Content = playlist.Name, Tag = playlist });
+        }
+    }
+    
+    private void RefreshPlaylistEntries()
+    {
+        _playlistEntriesListBox.Items.Clear();
+        
+        if (_currentPlaylist == null)
+        {
+            _playlistStatus.Text = "No playlist selected";
+            return;
+        }
+        
+        foreach (var entry in _currentPlaylist.Entries)
+        {
+            var sp = new StackPanel { Orientation = Orientation.Horizontal, Tag = entry, Margin = new Thickness(2) };
+            
+            var textPanel = new StackPanel { Orientation = Orientation.Vertical };
+            textPanel.Children.Add(new TextBlock { Text = entry.SongName, FontWeight = FontWeight.SemiBold });
+            
+            var details = new List<string>();
+            if (!string.IsNullOrEmpty(entry.Composer)) details.Add(entry.Composer);
+            details.Add($"p.{entry.PageNo}");
+            details.Add(entry.BookName);
+            
+            textPanel.Children.Add(new TextBlock 
+            { 
+                Text = string.Join(" | ", details), 
+                Foreground = Brushes.Gray, 
+                FontSize = 11 
+            });
+            
+            sp.Children.Add(textPanel);
+            _playlistEntriesListBox.Items.Add(sp);
+        }
+        
+        _playlistStatus.Text = $"{_currentPlaylist.Entries.Count} song(s)";
+    }
+    
+    private void OnPlaylistSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_playlistComboBox.SelectedItem is ComboBoxItem item && item.Tag is Playlist playlist)
+        {
+            _currentPlaylist = playlist;
+            AppSettings.Instance.LastSelectedPlaylist = playlist.Name;
+            RefreshPlaylistEntries();
+        }
+    }
+    
+    private async void OnNewPlaylistClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        var name = await ShowInputDialogAsync("New Playlist", "Enter playlist name:", "New Playlist");
+        if (string.IsNullOrWhiteSpace(name)) return;
+        
+        // Ensure unique name
+        var baseName = name;
+        var counter = 1;
+        while (AppSettings.Instance.Playlists.Any(p => p.Name == name))
+        {
+            name = $"{baseName} ({counter++})";
+        }
+        
+        var newPlaylist = new Playlist { Name = name };
+        AppSettings.Instance.Playlists.Add(newPlaylist);
+        AppSettings.Instance.Save();
+        
+        RefreshPlaylistComboBox();
+        
+        // Select the new playlist
+        for (int i = 0; i < _playlistComboBox.Items.Count; i++)
+        {
+            if (_playlistComboBox.Items[i] is ComboBoxItem item && item.Content?.ToString() == name)
+            {
+                _playlistComboBox.SelectedIndex = i;
+                break;
+            }
+        }
+    }
+    
+    private async void OnRenamePlaylistClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_currentPlaylist == null) return;
+        
+        var newName = await ShowInputDialogAsync("Rename Playlist", "Enter new name:", _currentPlaylist.Name);
+        if (string.IsNullOrWhiteSpace(newName) || newName == _currentPlaylist.Name) return;
+        
+        // Ensure unique name
+        var baseName = newName;
+        var counter = 1;
+        while (AppSettings.Instance.Playlists.Any(p => p.Name == newName && p != _currentPlaylist))
+        {
+            newName = $"{baseName} ({counter++})";
+        }
+        
+        _currentPlaylist.Name = newName;
+        _currentPlaylist.ModifiedDate = DateTime.Now;
+        AppSettings.Instance.LastSelectedPlaylist = newName;
+        AppSettings.Instance.Save();
+        
+        RefreshPlaylistComboBox();
+        
+        // Re-select the renamed playlist
+        for (int i = 0; i < _playlistComboBox.Items.Count; i++)
+        {
+            if (_playlistComboBox.Items[i] is ComboBoxItem item && item.Content?.ToString() == newName)
+            {
+                _playlistComboBox.SelectedIndex = i;
+                break;
+            }
+        }
+    }
+    
+    private async void OnDeletePlaylistClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_currentPlaylist == null) return;
+        
+        var confirm = await ShowConfirmDialogAsync("Delete Playlist", $"Delete playlist '{_currentPlaylist.Name}'?");
+        if (!confirm) return;
+        
+        AppSettings.Instance.Playlists.Remove(_currentPlaylist);
+        AppSettings.Instance.Save();
+        
+        _currentPlaylist = AppSettings.Instance.Playlists.FirstOrDefault();
+        RefreshPlaylistComboBox();
+        
+        if (_playlistComboBox.Items.Count > 0)
+        {
+            _playlistComboBox.SelectedIndex = 0;
+        }
+        else
+        {
+            RefreshPlaylistEntries();
+        }
+    }
+    
+    private void OnAddToPlaylistClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_currentPlaylist == null || _playlistSongsBrowseControl == null) return;
+        
+        var selectedItems = _playlistSongsBrowseControl.ListView.SelectedItems?.Cast<object>().ToList();
+        if (selectedItems == null || selectedItems.Count == 0) return;
+        
+        foreach (var selectedItem in selectedItems)
+        {
+            var tupProp = selectedItem.GetType().GetProperty("_Tup");
+            if (tupProp != null)
+            {
+                var tup = tupProp.GetValue(selectedItem) as Tuple<PdfMetaDataReadResult, TOCEntry>;
+                if (tup != null)
+                {
+                    var entry = new PlaylistEntry
+                    {
+                        SongName = tup.Item2.SongName ?? string.Empty,
+                        Composer = tup.Item2.Composer ?? string.Empty,
+                        PageNo = tup.Item2.PageNo,
+                        BookName = tup.Item1.GetBookName(_rootFolder),
+                        Notes = tup.Item2.Notes ?? string.Empty
+                    };
+                    _currentPlaylist.Entries.Add(entry);
+                }
+            }
+        }
+        
+        _currentPlaylist.ModifiedDate = DateTime.Now;
+        AppSettings.Instance.Save();
+        RefreshPlaylistEntries();
+    }
+    
+    private void OnRemoveFromPlaylistClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_currentPlaylist == null) return;
+        
+        var selectedItems = _playlistEntriesListBox.SelectedItems?.Cast<object>().ToList();
+        if (selectedItems == null || selectedItems.Count == 0) return;
+        
+        foreach (var item in selectedItems)
+        {
+            if (item is StackPanel sp && sp.Tag is PlaylistEntry entry)
+            {
+                _currentPlaylist.Entries.Remove(entry);
+            }
+        }
+        
+        _currentPlaylist.ModifiedDate = DateTime.Now;
+        AppSettings.Instance.Save();
+        RefreshPlaylistEntries();
+    }
+    
+    private void OnMoveUpClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_currentPlaylist == null) return;
+        
+        var selectedIndex = _playlistEntriesListBox.SelectedIndex;
+        if (selectedIndex <= 0) return;
+        
+        var entry = _currentPlaylist.Entries[selectedIndex];
+        _currentPlaylist.Entries.RemoveAt(selectedIndex);
+        _currentPlaylist.Entries.Insert(selectedIndex - 1, entry);
+        
+        _currentPlaylist.ModifiedDate = DateTime.Now;
+        AppSettings.Instance.Save();
+        RefreshPlaylistEntries();
+        
+        _playlistEntriesListBox.SelectedIndex = selectedIndex - 1;
+    }
+    
+    private void OnMoveDownClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_currentPlaylist == null) return;
+        
+        var selectedIndex = _playlistEntriesListBox.SelectedIndex;
+        if (selectedIndex < 0 || selectedIndex >= _currentPlaylist.Entries.Count - 1) return;
+        
+        var entry = _currentPlaylist.Entries[selectedIndex];
+        _currentPlaylist.Entries.RemoveAt(selectedIndex);
+        _currentPlaylist.Entries.Insert(selectedIndex + 1, entry);
+        
+        _currentPlaylist.ModifiedDate = DateTime.Now;
+        AppSettings.Instance.Save();
+        RefreshPlaylistEntries();
+        
+        _playlistEntriesListBox.SelectedIndex = selectedIndex + 1;
+    }
+    
+    private void OnPlaylistEntryDoubleTapped(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_playlistEntriesListBox.SelectedItem is StackPanel sp && sp.Tag is PlaylistEntry entry)
+        {
+            // Find the matching PDF metadata
+            var metadata = _pdfMetadata.FirstOrDefault(p => p.GetBookName(_rootFolder) == entry.BookName);
+            if (metadata != null)
+            {
+                ChosenPdfMetaData = metadata;
+                ChosenPageNo = entry.PageNo;
+                Close();
+            }
+        }
+    }
+    
+    private async Task<string?> ShowInputDialogAsync(string title, string prompt, string defaultValue = "")
+    {
+        var dialog = new Window
+        {
+            Title = title,
+            Width = 400,
+            Height = 150,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            CanResize = false,
+            ShowInTaskbar = false
+        };
+        
+        var result = defaultValue;
+        
+        var grid = new Grid { Margin = new Thickness(15) };
+        grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        
+        var label = new TextBlock { Text = prompt };
+        Grid.SetRow(label, 0);
+        grid.Children.Add(label);
+        
+        var textBox = new TextBox { Text = defaultValue, Margin = new Thickness(0, 10, 0, 10) };
+        Grid.SetRow(textBox, 1);
+        grid.Children.Add(textBox);
+        
+        var buttonPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        Grid.SetRow(buttonPanel, 2);
+        
+        var okButton = new Button { Content = "OK", Width = 75, Margin = new Thickness(0, 0, 10, 0) };
+        okButton.Click += (s, e) => 
+        {
+            result = textBox.Text;
+            dialog.Close();
+        };
+        buttonPanel.Children.Add(okButton);
+        
+        var cancelButton = new Button { Content = "Cancel", Width = 75 };
+        cancelButton.Click += (s, e) => 
+        {
+            result = null;
+            dialog.Close();
+        };
+        buttonPanel.Children.Add(cancelButton);
+        
+        grid.Children.Add(buttonPanel);
+        dialog.Content = grid;
+        
+        await dialog.ShowDialog(this);
+        return result;
+    }
+    
+    private async Task<bool> ShowConfirmDialogAsync(string title, string message)
+    {
+        var dialog = new Window
+        {
+            Title = title,
+            Width = 350,
+            Height = 130,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            CanResize = false,
+            ShowInTaskbar = false
+        };
+        
+        var confirmed = false;
+        
+        var grid = new Grid { Margin = new Thickness(15) };
+        grid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star)));
+        grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        
+        var label = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap };
+        Grid.SetRow(label, 0);
+        grid.Children.Add(label);
+        
+        var buttonPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        Grid.SetRow(buttonPanel, 1);
+        
+        var yesButton = new Button { Content = "Yes", Width = 75, Margin = new Thickness(0, 10, 10, 0) };
+        yesButton.Click += (s, e) => 
+        {
+            confirmed = true;
+            dialog.Close();
+        };
+        buttonPanel.Children.Add(yesButton);
+        
+        var noButton = new Button { Content = "No", Width = 75, Margin = new Thickness(0, 10, 0, 0) };
+        noButton.Click += (s, e) => dialog.Close();
+        buttonPanel.Children.Add(noButton);
+        
+        grid.Children.Add(buttonPanel);
+        dialog.Content = grid;
+        
+        await dialog.ShowDialog(this);
+        return confirmed;
+    }
+    
     private string GetDescription(PdfMetaDataReadResult metadata, int pageNo)
     {
         var tocEntry = metadata.TocEntries.FirstOrDefault(t => t.PageNo == pageNo);
@@ -770,52 +1347,6 @@ public class ChooseMusicWindow : Window
         }
         
         return metadata.GetBookName(_rootFolder);
-    }
-    
-    private void BtnOk_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_tabControl.SelectedItem is TabItem selectedTab)
-        {
-            var header = selectedTab.Header?.ToString() ?? "";
-            
-            switch (header)
-            {
-                case "_Books":
-                    if (_lbBooks.SelectedItem is StackPanel sp && sp.Tag is BookItemCache cache)
-                    {
-                        ChosenPdfMetaData = cache.Metadata;
-                        ChosenPageNo = cache.Metadata.LastPageNo;
-                    }
-                    break;
-                    
-                case "Fa_vorites":
-                    if (_favoritesListBox.SelectedItem is StackPanel favSp && favSp.Tag is FavoriteItem favItem)
-                    {
-                        ChosenPdfMetaData = favItem.Metadata;
-                        ChosenPageNo = favItem.PageNo;
-                    }
-                    break;
-                    
-                case "_Query":
-                    if (_queryBrowseControl?.ListView?.SelectedItem != null)
-                    {
-                        var selectedItem = _queryBrowseControl.ListView.SelectedItem;
-                        var tupProp = selectedItem.GetType().GetProperty("_Tup");
-                        if (tupProp != null)
-                        {
-                            var tup = tupProp.GetValue(selectedItem) as Tuple<PdfMetaDataReadResult, TOCEntry>;
-                            if (tup != null)
-                            {
-                                ChosenPdfMetaData = tup.Item1;
-                                ChosenPageNo = tup.Item2.PageNo;
-                            }
-                        }
-                    }
-                    break;
-            }
-        }
-        
-        Close();
     }
 
     private void OnSortChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -1154,51 +1685,65 @@ public class ChooseMusicWindow : Window
         return new Bitmap(stream);
     }
     
-    // Double-tap detection state for more sensitive handling
-    private DateTime _lastTapTime = DateTime.MinValue;
-    private Point _lastTapPosition;
-    private object? _lastTapTarget;
-    private const int DoubleTapTimeThresholdMs = 500; // More generous than Avalonia's default
-    private const double DoubleTapDistanceThreshold = 50; // More generous distance threshold
-
-    /// <summary>
-    /// Helper method to simulate double-tap detection with customizable thresholds.
-    /// Use this instead of Avalonia's built-in DoubleTapped event for more sensitive scenarios.
-    /// </summary>
-    /// <param name="tapTime">The time of the tap.</param>
-    /// <param name="tapPosition">The position of the tap.</param>
-    /// <param name="tapTarget">The target element of the tap.</param>
-    /// <param name="onDoubleTap">The action to perform on double-tap.</param>
-    /// <param name="timeThresholdMs">The time threshold for double-tap detection (in milliseconds).</param>
-    /// <param name="distanceThreshold">The distance threshold for double-tap detection.</param>
-    public void HandleTap(
-        DateTime tapTime, 
-        Point tapPosition, 
-        object tapTarget,
-        Action onDoubleTap,
-        int timeThresholdMs = DoubleTapTimeThresholdMs,
-        double distanceThreshold = DoubleTapDistanceThreshold)
+    private void BtnOk_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (_lastTapTarget == tapTarget && (tapTime - _lastTapTime).TotalMilliseconds <= timeThresholdMs)
+        if (_tabControl.SelectedItem is TabItem selectedTab)
         {
-            // Potential double-tap detected, check distance
-            var distance = Math.Sqrt(Math.Pow(tapPosition.X - _lastTapPosition.X, 2) + 
-                                     Math.Pow(tapPosition.Y - _lastTapPosition.Y, 2));
+            var header = selectedTab.Header?.ToString() ?? "";
             
-            if (distance <= distanceThreshold)
+            switch (header)
             {
-                // Confirmed double-tap
-                onDoubleTap();
+                case "_Books":
+                    if (_lbBooks.SelectedItem is StackPanel sp && sp.Tag is BookItemCache cache)
+                    {
+                        ChosenPdfMetaData = cache.Metadata;
+                        ChosenPageNo = cache.Metadata.LastPageNo;
+                    }
+                    break;
+                    
+                case "Fa_vorites":
+                    if (_favoritesListBox.SelectedItem is StackPanel favSp && favSp.Tag is FavoriteItem favItem)
+                    {
+                        ChosenPdfMetaData = favItem.Metadata;
+                        ChosenPageNo = favItem.PageNo;
+                    }
+                    break;
+                    
+                case "_Query":
+                    if (_queryBrowseControl?.ListView?.SelectedItem != null)
+                    {
+                        var selectedItem = _queryBrowseControl.ListView.SelectedItem;
+                        var tupProp = selectedItem.GetType().GetProperty("_Tup");
+                        if (tupProp != null)
+                        {
+                            var tup = tupProp.GetValue(selectedItem) as Tuple<PdfMetaDataReadResult, TOCEntry>;
+                            if (tup != null)
+                            {
+                                ChosenPdfMetaData = tup.Item1;
+                                ChosenPageNo = tup.Item2.PageNo;
+                            }
+                        }
+                    }
+                    break;
+                    
+                case "_Playlists":
+                    if (_playlistEntriesListBox.SelectedItem is StackPanel playlistSp && playlistSp.Tag is PlaylistEntry entry)
+                    {
+                        // Find the matching PDF metadata
+                        var metadata = _pdfMetadata.FirstOrDefault(p => p.GetBookName(_rootFolder) == entry.BookName);
+                        if (metadata != null)
+                        {
+                            ChosenPdfMetaData = metadata;
+                            ChosenPageNo = entry.PageNo;
+                        }
+                    }
+                    break;
             }
         }
         
-        // Update last tap info
-        _lastTapTime = tapTime;
-        _lastTapPosition = tapPosition;
-        _lastTapTarget = tapTarget;
+        Close();
     }
 }
-
 /// <summary>
 /// PDF document provider using PDFtoImage for cross-platform support
 /// </summary>

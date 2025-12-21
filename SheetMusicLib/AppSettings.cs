@@ -183,6 +183,17 @@ public class AppSettings
     public double MetaDataWindowLeft { get; set; } = -1;
     public bool MetaDataWindowMaximized { get; set; } = true;
 
+    // Playlist data
+    /// <summary>
+    /// User-created playlists containing song references
+    /// </summary>
+    public List<Playlist> Playlists { get; set; } = new();
+    
+    /// <summary>
+    /// Name of the last selected playlist
+    /// </summary>
+    public string? LastSelectedPlaylist { get; set; }
+
     #endregion
 
     /// <summary>

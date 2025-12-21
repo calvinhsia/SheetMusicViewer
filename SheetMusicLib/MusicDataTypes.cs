@@ -139,4 +139,77 @@ namespace SheetMusicLib
             return string.Compare(x.FileNameVolume, y.FileNameVolume);
         }
     }
+
+    /// <summary>
+    /// Entry in a playlist, referencing a song from a PDF book
+    /// </summary>
+    [Serializable]
+    public class PlaylistEntry
+    {
+        /// <summary>
+        /// The song name from TOC
+        /// </summary>
+        public string SongName { get; set; } = string.Empty;
+        
+        /// <summary>
+        /// The composer from TOC
+        /// </summary>
+        public string Composer { get; set; } = string.Empty;
+        
+        /// <summary>
+        /// The page number in the book
+        /// </summary>
+        public int PageNo { get; set; }
+        
+        /// <summary>
+        /// The book name (relative path from root folder)
+        /// </summary>
+        public string BookName { get; set; } = string.Empty;
+        
+        /// <summary>
+        /// Optional notes
+        /// </summary>
+        public string Notes { get; set; } = string.Empty;
+
+        public override string ToString()
+        {
+            var parts = new List<string>();
+            if (!string.IsNullOrEmpty(SongName)) parts.Add(SongName);
+            if (!string.IsNullOrEmpty(Composer)) parts.Add(Composer);
+            parts.Add($"p.{PageNo}");
+            return string.Join(" - ", parts);
+        }
+    }
+
+    /// <summary>
+    /// A named playlist containing multiple song entries
+    /// </summary>
+    [Serializable]
+    public class Playlist
+    {
+        /// <summary>
+        /// Name of the playlist
+        /// </summary>
+        public string Name { get; set; } = "New Playlist";
+        
+        /// <summary>
+        /// When the playlist was created
+        /// </summary>
+        public DateTime CreatedDate { get; set; } = DateTime.Now;
+        
+        /// <summary>
+        /// When the playlist was last modified
+        /// </summary>
+        public DateTime ModifiedDate { get; set; } = DateTime.Now;
+        
+        /// <summary>
+        /// The songs in this playlist
+        /// </summary>
+        public List<PlaylistEntry> Entries { get; set; } = new();
+
+        public override string ToString()
+        {
+            return $"{Name} ({Entries.Count} songs)";
+        }
+    }
 }
