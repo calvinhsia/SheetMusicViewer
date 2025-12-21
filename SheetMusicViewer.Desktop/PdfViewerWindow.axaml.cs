@@ -899,14 +899,84 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             
             using var skBitmap = Conversion.ToImage(pdfBytes, page: (Index)pageIndexInVolume, 
                 options: new PDFtoImage.RenderOptions(Dpi: 150, Rotation: pdfRotation));
-            using var image = SKImage.FromBitmap(skBitmap);
-            using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-            using var stream = new MemoryStream();
-            data.SaveTo(stream);
-            stream.Seek(0, SeekOrigin.Begin);
             
-            return new Bitmap(stream);
+            // Convert SKBitmap directly to Avalonia Bitmap without PNG encoding
+            // This is significantly faster than encoding to PNG and decoding
+            return ConvertSkBitmapToAvaloniaBitmap(skBitmap);
         });
+    }
+
+    /// <summary>
+    /// Converts an SKBitmap directly to an Avalonia Bitmap by copying pixel data.
+    /// This is much faster than encoding to PNG and then decoding.
+    /// </summary>
+    internal static Bitmap ConvertSkBitmapToAvaloniaBitmap(SKBitmap skBitmap)
+    {
+        // Ensure the SKBitmap is in a compatible format (BGRA8888)
+        SKBitmap sourceBitmap = skBitmap;
+        bool needsDispose = false;
+        
+        if (skBitmap.ColorType != SKColorType.Bgra8888)
+        {
+            sourceBitmap = new SKBitmap(skBitmap.Width, skBitmap.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+            using var canvas = new SKCanvas(sourceBitmap);
+            canvas.DrawBitmap(skBitmap, 0, 0);
+            needsDispose = true;
+        }
+        
+        try
+        {
+            var info = sourceBitmap.Info;
+            var pixels = sourceBitmap.GetPixels();
+            var rowBytes = info.RowBytes;
+            
+            // Create a WriteableBitmap and copy the pixel data directly
+            var writeableBitmap = new WriteableBitmap(
+                new Avalonia.PixelSize(info.Width, info.Height),
+                new Avalonia.Vector(96, 96),
+                Avalonia.Platform.PixelFormat.Bgra8888,
+                Avalonia.Platform.AlphaFormat.Premul);
+            
+            using (var frameBuffer = writeableBitmap.Lock())
+            {
+                unsafe
+                {
+                    // Copy pixels row by row to handle potential stride differences
+                    var srcPtr = (byte*)pixels.ToPointer();
+                    var dstPtr = (byte*)frameBuffer.Address.ToPointer();
+                    var srcStride = rowBytes;
+                    var dstStride = frameBuffer.RowBytes;
+                    
+                    if (srcStride == dstStride)
+                    {
+                        // Fast path: strides match, copy all at once
+                        Buffer.MemoryCopy(srcPtr, dstPtr, (long)dstStride * info.Height, (long)srcStride * info.Height);
+                    }
+                    else
+                    {
+                        // Slow path: copy row by row
+                        var bytesPerRow = Math.Min(srcStride, dstStride);
+                        for (int y = 0; y < info.Height; y++)
+                        {
+                            Buffer.MemoryCopy(
+                                srcPtr + (y * srcStride),
+                                dstPtr + (y * dstStride),
+                                bytesPerRow,
+                                bytesPerRow);
+                        }
+                    }
+                }
+            }
+            
+            return writeableBitmap;
+        }
+        finally
+        {
+            if (needsDispose)
+            {
+                sourceBitmap.Dispose();
+            }
+        }
     }
     
     private void ClearCache()
