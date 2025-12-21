@@ -17,8 +17,8 @@ public class AppSettings
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    private static string _settingsPath;
-    private static AppSettings _instance;
+    private static string _settingsPath = null!;
+    private static AppSettings? _instance;
     private static readonly object _lock = new();
 
     /// <summary>
@@ -68,19 +68,95 @@ public class AppSettings
         }
     }
 
-    // Window position and size
+    #region User-Configurable Options (shown in Options dialog)
+
+    /// <summary>
+    /// User-configurable options that appear in the Options dialog.
+    /// These are settings the user explicitly chooses to change.
+    /// Access via: AppSettings.Instance.UserOptions.PropertyName
+    /// </summary>
+    public UserOptionsSettings UserOptions { get; set; } = new();
+
+    /// <summary>
+    /// Settings that appear in the Options dialog.
+    /// </summary>
+    public class UserOptionsSettings
+    {
+        // Cloud/Performance settings
+        /// <summary>
+        /// If true, skip cloud-only files (OneDrive/cloud storage) instead of triggering download.
+        /// This improves performance when loading thumbnails but shows placeholder images for cloud-only files.
+        /// </summary>
+        public bool SkipCloudOnlyFiles { get; set; } = false;
+
+        // Double-tap detection settings
+        /// <summary>
+        /// Time threshold in milliseconds for double-tap detection.
+        /// Two taps within this time window are considered a double-tap.
+        /// </summary>
+        public int DoubleTapTimeThresholdMs { get; set; } = 500;
+
+        /// <summary>
+        /// Distance threshold in pixels for double-tap detection.
+        /// Two taps within this distance are considered at the same location.
+        /// </summary>
+        public double DoubleTapDistanceThreshold { get; set; } = 50;
+
+        // Cache settings
+        /// <summary>
+        /// Maximum number of rendered pages to keep in the page cache.
+        /// Higher values use more memory but improve navigation speed.
+        /// </summary>
+        public int PageCacheMaxSize { get; set; } = 50;
+
+        /// <summary>
+        /// Maximum number of PDF file byte arrays to keep in memory per document.
+        /// Each volume's bytes are cached for faster page rendering.
+        /// </summary>
+        public int PdfBytesCacheMaxVolumes { get; set; } = 5;
+
+        /// <summary>
+        /// Maximum degree of parallelism for background thumbnail loading.
+        /// Higher values load faster but use more CPU.
+        /// </summary>
+        public int ThumbnailLoadingParallelism { get; set; } = 4;
+
+        /// <summary>
+        /// DPI to use when rendering PDF pages. Higher values are sharper but slower.
+        /// </summary>
+        public int RenderDpi { get; set; } = 150;
+
+        /// <summary>
+        /// Width in pixels for thumbnail images.
+        /// </summary>
+        public int ThumbnailWidth { get; set; } = 150;
+
+        /// <summary>
+        /// Height in pixels for thumbnail images.
+        /// </summary>
+        public int ThumbnailHeight { get; set; } = 225;
+    }
+
+    #endregion
+
+    #region Internal Persistence (window state, MRU, last opened files)
+
+    // These settings are automatically saved/restored but not shown in Options dialog.
+    // They represent application state rather than user preferences.
+
+    // Main window position and size
     public double WindowWidth { get; set; } = 1200;
     public double WindowHeight { get; set; } = 800;
     public double WindowTop { get; set; } = 100;
     public double WindowLeft { get; set; } = 100;
     public bool WindowMaximized { get; set; } = true;
 
-    // View settings
+    // View settings (toggled via menu, not Options dialog)
     public bool Show2Pages { get; set; } = true;
     public bool IsFullScreen { get; set; } = false;
 
     // Last opened PDF
-    public string LastPDFOpen { get; set; }
+    public string? LastPDFOpen { get; set; }
 
     // Most Recently Used root folders
     public List<string> RootFolderMRU { get; set; } = new();
@@ -101,12 +177,7 @@ public class AppSettings
     public double MetaDataWindowLeft { get; set; } = -1;
     public bool MetaDataWindowMaximized { get; set; } = true;
 
-    // Cloud/Performance settings
-    /// <summary>
-    /// If true, skip cloud-only files (OneDrive/cloud storage) instead of triggering download.
-    /// This improves performance when loading thumbnails but shows placeholder images for cloud-only files.
-    /// </summary>
-    public bool SkipCloudOnlyFiles { get; set; } = false;
+    #endregion
 
     /// <summary>
     /// Load settings from disk, or create new settings if file doesn't exist.
@@ -182,18 +253,30 @@ public class AppSettings
     /// <summary>
     /// Get the most recently used root folder, or null if none.
     /// </summary>
-    public string GetMostRecentFolder()
+    public string? GetMostRecentFolder()
     {
         return RootFolderMRU.FirstOrDefault();
     }
 
     /// <summary>
-    /// Reset all settings to defaults.
+    /// Reset user options to defaults (does not reset window positions/MRU).
     /// </summary>
-    public void Reset()
+    public void ResetUserOptions()
+    {
+        UserOptions = new UserOptionsSettings();
+    }
+
+    /// <summary>
+    /// Reset all settings to defaults including window positions.
+    /// </summary>
+    public void ResetAll()
     {
         var defaults = new AppSettings();
         
+        // Reset user options
+        UserOptions = new UserOptionsSettings();
+        
+        // Reset window state
         WindowWidth = defaults.WindowWidth;
         WindowHeight = defaults.WindowHeight;
         WindowTop = defaults.WindowTop;
@@ -222,7 +305,7 @@ public class AppSettings
     /// Allows tests to use a custom settings path and fresh instance.
     /// </summary>
     /// <param name="testSettingsPath">Optional custom path for test settings file</param>
-    public static void ResetForTesting(string testSettingsPath = null)
+    public static void ResetForTesting(string? testSettingsPath = null)
     {
         lock (_lock)
         {
@@ -233,7 +316,7 @@ public class AppSettings
             }
             else
             {
-                _settingsPath = null; // Will use default path
+                _settingsPath = null!; // Will use default path
             }
         }
     }
