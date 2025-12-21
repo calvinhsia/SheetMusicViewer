@@ -773,6 +773,20 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         if (pageNo < pageNumberOffset || pageNo >= maxPageNum)
             return null;
         
+        // Check if caching is disabled (for performance testing)
+        var cacheDisabled = AppSettings.Instance.UserOptions.DisablePageCache;
+        
+        // If cache is disabled, just create a new render task without caching
+        if (cacheDisabled)
+        {
+            return new PageCacheEntry
+            {
+                PageNo = pageNo,
+                Age = _currentCacheAge++,
+                Task = RenderPageWithTrackingAsync(pageNo)
+            };
+        }
+        
         // Check if we already have a valid entry
         if (_pageCache.TryGetValue(pageNo, out var existing) && 
             !existing.Cts.IsCancellationRequested && 
@@ -791,11 +805,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         };
         
         // Evict old entries if cache is full
-        if (_pageCache.Count >= MaxCacheSize)
+        var maxCacheSize = AppSettings.Instance.UserOptions.PageCacheMaxSize;
+        if (_pageCache.Count >= maxCacheSize)
         {
             var toRemove = _pageCache.Values
                 .OrderBy(e => e.Age)
-                .Take(_pageCache.Count - MaxCacheSize + 1)
+                .Take(_pageCache.Count - maxCacheSize + 1)
                 .ToList();
             foreach (var old in toRemove)
             {
@@ -998,11 +1013,23 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     {
         Dispatcher.UIThread.Post(() =>
         {
+            var cacheDisabled = AppSettings.Instance.UserOptions.DisablePageCache;
             var pendingCount = _cacheLoadingCount;
             var cachedCount = _pageCache.Count;
             
-            // Always show cache count; add loading indicator if busy
-            if (pendingCount > 0)
+            if (cacheDisabled)
+            {
+                // Show that cache is disabled
+                if (pendingCount > 0)
+                {
+                    CacheStatus = $"⚠ No cache ⏳{pendingCount}";
+                }
+                else
+                {
+                    CacheStatus = "⚠ No cache";
+                }
+            }
+            else if (pendingCount > 0)
             {
                 CacheStatus = $"C:{cachedCount} ⏳{pendingCount}";
             }

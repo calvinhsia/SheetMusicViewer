@@ -14,6 +14,7 @@ namespace SheetMusicViewer.Desktop;
 public class OptionsWindow : Window
 {
     private CheckBox _chkSkipCloudOnlyFiles = null!;
+    private CheckBox _chkDisablePageCache = null!;
     private NumericUpDown _nudDoubleTapTime = null!;
     private NumericUpDown _nudDoubleTapDistance = null!;
     private NumericUpDown _nudPageCacheSize = null!;
@@ -116,11 +117,21 @@ public class OptionsWindow : Window
         // === Cache Settings Section ===
         optionsPanel.Children.Add(CreateSectionHeader("Cache Settings"));
         
+        _chkDisablePageCache = new CheckBox
+        {
+            IsChecked = settings.DisablePageCache
+        };
+        var chkCacheContent = new StackPanel { Spacing = 2 };
+        chkCacheContent.Children.Add(new TextBlock { Text = "Disable page cache (for performance testing)" });
+        chkCacheContent.Children.Add(CreateHelpText("Forces re-rendering of each page on navigation. Use this to measure raw rendering performance."));
+        _chkDisablePageCache.Content = chkCacheContent;
+        optionsPanel.Children.Add(_chkDisablePageCache);
+        
         optionsPanel.Children.Add(CreateNumericOption(
             "Page cache size:",
             settings.PageCacheMaxSize,
             10, 200, 10,
-            "Number of rendered pages to keep in memory",
+            "Number of rendered pages to keep in memory (when cache is enabled)",
             out _nudPageCacheSize));
         
         optionsPanel.Children.Add(CreateNumericOption(
@@ -264,6 +275,7 @@ public class OptionsWindow : Window
         var defaults = new AppSettings.UserOptionsSettings();
         
         _chkSkipCloudOnlyFiles.IsChecked = defaults.SkipCloudOnlyFiles;
+        _chkDisablePageCache.IsChecked = defaults.DisablePageCache;
         _nudDoubleTapTime.Value = defaults.DoubleTapTimeThresholdMs;
         _nudDoubleTapDistance.Value = (decimal)defaults.DoubleTapDistanceThreshold;
         _nudPageCacheSize.Value = defaults.PageCacheMaxSize;
@@ -279,6 +291,7 @@ public class OptionsWindow : Window
         var defaults = new AppSettings.UserOptionsSettings();
         
         settings.SkipCloudOnlyFiles = _chkSkipCloudOnlyFiles.IsChecked == true;
+        settings.DisablePageCache = _chkDisablePageCache.IsChecked == true;
         settings.DoubleTapTimeThresholdMs = (int)(_nudDoubleTapTime.Value ?? defaults.DoubleTapTimeThresholdMs);
         settings.DoubleTapDistanceThreshold = (double)(_nudDoubleTapDistance.Value ?? (decimal)defaults.DoubleTapDistanceThreshold);
         settings.PageCacheMaxSize = (int)(_nudPageCacheSize.Value ?? defaults.PageCacheMaxSize);
