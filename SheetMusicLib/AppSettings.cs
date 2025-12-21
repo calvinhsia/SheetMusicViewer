@@ -110,6 +110,12 @@ public class AppSettings
         public int PageCacheMaxSize { get; set; } = 50;
 
         /// <summary>
+        /// If true, disables the page cache entirely. Useful for performance testing.
+        /// Each page navigation will re-render the page from the PDF.
+        /// </summary>
+        public bool DisablePageCache { get; set; } = false;
+
+        /// <summary>
         /// Maximum number of PDF file byte arrays to keep in memory per document.
         /// Each volume's bytes are cached for faster page rendering.
         /// </summary>
