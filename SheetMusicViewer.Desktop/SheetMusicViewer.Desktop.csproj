@@ -7,6 +7,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     
     <!-- Output assembly name matches the WPF version for users -->
     <AssemblyName>SheetMusicViewer</AssemblyName>
@@ -32,6 +33,11 @@
     <!-- Suppress CA1416: PDFtoImage is platform-specific but we only target desktop platforms (Windows, Linux, macOS) -->
     <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
+  
+  <!-- Expose internal members to test project -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="AvaloniaTests" />
+  </ItemGroup>
   
   <!-- Inline task to calculate Pacific time (cross-platform) -->
   <UsingTask TaskName="GetPacificTime" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
