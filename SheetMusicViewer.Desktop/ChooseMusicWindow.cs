@@ -63,6 +63,9 @@ public class ChooseMusicWindow : Window
     // Flag to prevent recursive selection change
     private bool _enableCboSelectionChange = true;
     
+    // Flag to prevent re-entrancy in tab selection
+    private bool _isHandlingTabChange = false;
+    
     // Shared double-tap helper for consistent detection across all item types
     private readonly DoubleTapHelper _doubleTapHelper = new();
 
@@ -716,20 +719,22 @@ public class ChooseMusicWindow : Window
         
         var btnAddToPlaylist = new Button 
         { 
-            Content = "Add →", 
+            Content = "Copy →", 
             Width = 80, 
             Margin = new Thickness(0, 5, 0, 5),
-            HorizontalContentAlignment = HorizontalAlignment.Center
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            [ToolTip.TipProperty] = "Copy selected song(s) to playlist"
         };
         btnAddToPlaylist.Click += OnAddToPlaylistClick;
         buttonPanel.Children.Add(btnAddToPlaylist);
         
         var btnRemoveFromPlaylist = new Button 
         { 
-            Content = "← Remove", 
+            Content = "Delete", 
             Width = 80, 
             Margin = new Thickness(0, 5, 0, 5),
-            HorizontalContentAlignment = HorizontalAlignment.Center
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            [ToolTip.TipProperty] = "Remove selected song(s) from playlist"
         };
         btnRemoveFromPlaylist.Click += OnRemoveFromPlaylistClick;
         buttonPanel.Children.Add(btnRemoveFromPlaylist);
@@ -782,32 +787,79 @@ public class ChooseMusicWindow : Window
     
     private void OnTabSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (_tabControl.SelectedItem is TabItem selectedTab)
+        // Prevent re-entrancy - setting combo box selection can trigger this again
+        if (_isHandlingTabChange) return;
+        _isHandlingTabChange = true;
+        
+        try
         {
-            var header = selectedTab.Header?.ToString() ?? "";
-            
-            if (header == "Fa_vorites" && _allFavoriteItems.Count == 0)
+            if (_tabControl.SelectedItem is TabItem selectedTab)
             {
-                FillFavoritesTab();
-            }
-            else if (header == "_Query")
-            {
-                if (_queryBrowseControl == null)
+                var header = selectedTab.Header?.ToString() ?? "";
+                
+                if (header == "Fa_vorites" && _allFavoriteItems.Count == 0)
                 {
-                    FillQueryTab();
+                    FillFavoritesTab();
                 }
-                // Focus the filter textbox when Query tab is activated
-                _queryBrowseControl?.FocusFilter();
-            }
-            else if (header == "_Playlists")
-            {
-                if (_playlistSongsBrowseControl == null)
+                else if (header == "_Query")
                 {
-                    FillPlaylistTab();
+                    if (_queryBrowseControl == null)
+                    {
+                        FillQueryTab();
+                    }
+                    // Focus the filter textbox when Query tab is activated
+                    _queryBrowseControl?.FocusFilter();
                 }
-                // Focus the filter textbox when Playlist tab is activated
-                _playlistSongsBrowseControl?.FocusFilter();
+                else if (header == "_Playlists")
+                {
+                    // Reload playlists from disk in case OneDrive synced changes
+                    AppSettings.Instance.ReloadRoaming();
+                    
+                    if (_playlistSongsBrowseControl == null)
+                    {
+                        FillPlaylistTab();
+                    }
+                    else
+                    {
+                        // Refresh the playlist combo and entries with reloaded data
+                        var previousPlaylistName = _currentPlaylist?.Name;
+                        RefreshPlaylistComboBox();
+                        
+                        // Try to re-select the same playlist
+                        var settings = AppSettings.Instance;
+                        if (!string.IsNullOrEmpty(previousPlaylistName) && settings.Playlists.Any(p => p.Name == previousPlaylistName))
+                        {
+                            _currentPlaylist = settings.Playlists.First(p => p.Name == previousPlaylistName);
+                            for (int i = 0; i < _playlistComboBox.Items.Count; i++)
+                            {
+                                if (_playlistComboBox.Items[i] is ComboBoxItem item && item.Content?.ToString() == previousPlaylistName)
+                                {
+                                    _playlistComboBox.SelectedIndex = i;
+                                    break;
+                                }
+                            }
+                        }
+                        else if (settings.Playlists.Count > 0)
+                        {
+                            _currentPlaylist = settings.Playlists[0];
+                            _playlistComboBox.SelectedIndex = 0;
+                        }
+                        else
+                        {
+                            _currentPlaylist = null;
+                        }
+                        
+                        RefreshPlaylistEntries();
+                    }
+                    
+                    // Focus the filter textbox when Playlist tab is activated
+                    _playlistSongsBrowseControl?.FocusFilter();
+                }
             }
+        }
+        finally
+        {
+            _isHandlingTabChange = false;
         }
     }
     

@@ -70,12 +70,18 @@ public class AppSettings
         lock (_lock)
         {
             var previousFolder = _musicRootFolder;
+            Logger.LogInfo($"SetMusicRootFolder: previous={previousFolder}, new={musicRootFolder}");
             _musicRootFolder = musicRootFolder;
             
             // Reload roaming settings if instance exists and music folder changed
             if (_instance != null && musicRootFolder != previousFolder && !string.IsNullOrEmpty(musicRootFolder))
             {
+                Logger.LogInfo($"SetMusicRootFolder: Reloading roaming settings");
                 _instance.LoadRoamingFromMusicFolder();
+            }
+            else
+            {
+                Logger.LogInfo($"SetMusicRootFolder: Not reloading. _instance={_instance != null}, changed={musicRootFolder != previousFolder}, hasFolder={!string.IsNullOrEmpty(musicRootFolder)}");
             }
         }
     }
@@ -310,29 +316,49 @@ public class AppSettings
     private void LoadRoamingFromMusicFolder()
     {
         var roamingPath = RoamingSettingsPath;
-        if (string.IsNullOrEmpty(roamingPath)) return;
+        Logger.LogInfo($"LoadRoamingFromMusicFolder: roamingPath={roamingPath}");
+        if (string.IsNullOrEmpty(roamingPath))
+        {
+            Logger.LogWarning("LoadRoamingFromMusicFolder: roamingPath is null/empty, _musicRootFolder not set");
+            return;
+        }
         
         try
         {
             if (File.Exists(roamingPath))
             {
                 var json = File.ReadAllText(roamingPath);
+                Logger.LogInfo($"LoadRoamingFromMusicFolder: Read {json.Length} chars from {roamingPath}");
                 var roamingSettings = JsonSerializer.Deserialize<RoamingSettings>(json, JsonOptions);
                 if (roamingSettings != null)
                 {
                     Playlists = roamingSettings.Playlists ?? new List<Playlist>();
                     LastSelectedPlaylist = roamingSettings.LastSelectedPlaylist;
+                    Logger.LogInfo($"LoadRoamingFromMusicFolder: Loaded {Playlists.Count} playlists, LastSelected={LastSelectedPlaylist}");
                     if (roamingSettings.UserOptions != null)
                     {
                         UserOptions = roamingSettings.UserOptions;
                     }
                 }
             }
+            else
+            {
+                Logger.LogWarning($"LoadRoamingFromMusicFolder: File does not exist: {roamingPath}");
+            }
         }
         catch (Exception ex)
         {
             Logger.LogWarning($"Error loading roaming settings: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Reload roaming settings from the music folder.
+    /// Call this to pick up changes made by OneDrive sync or other processes.
+    /// </summary>
+    public void ReloadRoaming()
+    {
+        LoadRoamingFromMusicFolder();
     }
 
     /// <summary>
