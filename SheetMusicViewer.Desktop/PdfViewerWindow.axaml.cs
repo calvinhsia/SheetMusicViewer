@@ -241,6 +241,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 // First time user - create and use sample data
                 _rootMusicFolder = await SampleDataHelper.EnsureSampleDataExistsAsync();
                 settings.AddToMRU(_rootMusicFolder);
+                AppSettings.SetMusicRootFolder(_rootMusicFolder); // Set for roaming settings
                 settings.Save();
                 
                 // Load the sample PDF metadata
@@ -264,6 +265,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             }
             else
             {
+                // Set the music root folder for roaming settings
+                AppSettings.SetMusicRootFolder(_rootMusicFolder);
+                
                 // Load all PDF metadata
                 var provider = new PdfToImageDocumentProvider();
                 (_lstPdfMetaFileData, _lstFolders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(

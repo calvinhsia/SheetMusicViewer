@@ -90,6 +90,18 @@ SheetMusicViewer/PdfViewerWindow.xaml.cs
 
 ---
 
+## Testing Guidelines
+
+### Running Tests
+When running tests, **exclude manual tests** by using the filter:
+```
+dotnet test --filter "TestCategory!=Manual"
+```
+
+Manual tests are tagged with `[TestCategory("Manual")]` and require specific environment setup or user interaction.
+
+---
+
 ## Project-Specific Guidance
 
 ### Technology Stack
@@ -106,6 +118,12 @@ SheetMusicViewer/PdfViewerWindow.xaml.cs
 - **STA Threading**: UI tests must run on STA threads using `RunInSTAExecutionContextAsync` helper method
 - **PDF Metadata**: The `PdfMetaData` class manages bookmarks, favorites, ink annotations, and multi-volume PDF sets
 - **Dependency Injection**: Use service pattern for UI dialogs (MessageBox, FileDialog) to enable mocking in tests
+
+### Settings Storage Strategy
+- **Local settings** (window positions, MRU paths): Stored in `LocalApplicationData`
+- **Roaming settings** (playlists, user preferences): Stored in the music root folder alongside PDF files
+  - This keeps user data with the music collection (which is typically already in OneDrive)
+  - File: `{MusicRootFolder}/.sheetmusicviewer/userdata.json`
 
 ### Code Style
 - Follow existing conventions in the codebase

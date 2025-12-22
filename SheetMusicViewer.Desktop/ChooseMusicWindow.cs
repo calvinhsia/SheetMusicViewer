@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Input;
@@ -216,13 +216,19 @@ public class ChooseMusicWindow : Window
         {
             await ShowFolderPickerAsync();
         }
-        else if (_pdfMetadata.Count > 0)
+        else
+        {
+            // Ensure music root folder is set for roaming settings (playlists)
+            AppSettings.SetMusicRootFolder(_rootFolder);
+            
+            if (_pdfMetadata.Count > 0)
         {
             await LoadBooksAsync();
         }
         else
-        {
-            await FillBooksTabAsync();
+            {
+                await FillBooksTabAsync();
+            }
         }
     }
 
@@ -509,9 +515,10 @@ public class ChooseMusicWindow : Window
         
         _rootFolder = newRootFolder;
         
-        // Update settings
+        // Update settings - this also sets the music root folder for roaming settings
         var settings = AppSettings.Instance;
         settings.AddToMRU(newRootFolder);
+        AppSettings.SetMusicRootFolder(newRootFolder); // Load playlists from this folder
         settings.Save();
         
         // Clear cached data

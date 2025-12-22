@@ -14,26 +14,25 @@ namespace Tests
     public class PlaylistTests : TestBase
     {
         private string _testSettingsPath = null!;
+        private string _testMusicFolder = null!;
 
         [TestInitialize]
         public void PlaylistTestInitialize()
         {
-            // Create a unique test settings path for each test
-            _testSettingsPath = Path.Combine(Path.GetTempPath(), $"PlaylistTests_{Guid.NewGuid()}.json");
+            // Create a unique test folder for each test
+            _testMusicFolder = Path.Combine(Path.GetTempPath(), $"PlaylistTests_{Guid.NewGuid()}");
+            Directory.CreateDirectory(_testMusicFolder);
+            _testSettingsPath = Path.Combine(_testMusicFolder, "settings.json");
             AppSettings.ResetForTesting(_testSettingsPath);
         }
 
         [TestCleanup]
         public void PlaylistTestCleanup()
         {
-            // Clean up test settings file
-            if (File.Exists(_testSettingsPath))
+            // Clean up test folder
+            if (Directory.Exists(_testMusicFolder))
             {
-                try
-                {
-                    File.Delete(_testSettingsPath);
-                }
-                catch { }
+                try { Directory.Delete(_testMusicFolder, recursive: true); } catch { }
             }
             
             // Reset AppSettings for other tests
@@ -482,6 +481,74 @@ namespace Tests
             // Assert
             Assert.IsNull(settings.LastSelectedPlaylist);
             AddLogEntry("LastSelectedPlaylist default is null");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void AppSettings_RoamingSettingsPath_IsInMusicFolder()
+        {
+            // Arrange & Act
+            var roamingPath = AppSettings.RoamingSettingsPath;
+
+            // Assert - Should be in the music folder (which is _testMusicFolder for tests)
+            Assert.IsNotNull(roamingPath);
+            Assert.IsTrue(roamingPath!.StartsWith(_testMusicFolder), $"Roaming path should be in music folder. Path: {roamingPath}");
+            Assert.IsTrue(roamingPath.Contains(".sheetmusicviewer"), "Roaming path should contain .sheetmusicviewer folder");
+            AddLogEntry($"Roaming path: {roamingPath}");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void AppSettings_PlaylistsSavedToMusicFolder()
+        {
+            // Arrange
+            var settings = AppSettings.Instance;
+            var playlist = new Playlist { Name = "Music Folder Test" };
+            playlist.Entries.Add(new PlaylistEntry { SongName = "Test Song", PageNo = 1 });
+            settings.Playlists.Add(playlist);
+            
+            // Act
+            settings.Save();
+            
+            // Assert - Roaming file should exist in music folder
+            var roamingPath = AppSettings.RoamingSettingsPath;
+            Assert.IsNotNull(roamingPath);
+            Assert.IsTrue(File.Exists(roamingPath), $"Roaming file should exist at {roamingPath}");
+            
+            var roamingContent = File.ReadAllText(roamingPath);
+            Assert.IsTrue(roamingContent.Contains("Music Folder Test"), "Roaming file should contain playlist");
+            Assert.IsTrue(roamingContent.Contains("Test Song"), "Roaming file should contain playlist entry");
+            AddLogEntry("Playlists saved to music folder correctly");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void AppSettings_WindowSettingsSavedToLocalFile()
+        {
+            // Arrange
+            var settings = AppSettings.Instance;
+            settings.WindowWidth = 1234;
+            settings.WindowHeight = 5678;
+            
+            // Act
+            settings.Save();
+            
+            // Assert - Local file should exist and contain window settings
+            var localPath = AppSettings.LocalSettingsPath;
+            Assert.IsTrue(File.Exists(localPath), $"Local file should exist at {localPath}");
+            
+            var localContent = File.ReadAllText(localPath);
+            Assert.IsTrue(localContent.Contains("1234"), "Local file should contain WindowWidth");
+            Assert.IsTrue(localContent.Contains("5678"), "Local file should contain WindowHeight");
+            
+            // Roaming file should NOT contain window settings
+            var roamingPath = AppSettings.RoamingSettingsPath;
+            if (roamingPath != null && File.Exists(roamingPath))
+            {
+                var roamingContent = File.ReadAllText(roamingPath);
+                Assert.IsFalse(roamingContent.Contains("WindowWidth"), "Roaming file should not contain WindowWidth");
+            }
+            AddLogEntry("Window settings saved to local file only");
         }
 
         #endregion
