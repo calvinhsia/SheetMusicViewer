@@ -1162,49 +1162,143 @@ namespace Tests
 
         #endregion
         
-        #region Stale Object Reference Tests
+        #region SelectionChanged Event Bubbling Tests
 
         [TestMethod]
         [TestCategory("Unit")]
-        public void PlaylistSelection_StaleObjectReference_FixedByNameLookup()
+        public void SelectionChanged_EventBubbling_FilterByAddedItemType()
         {
-            // This test demonstrates the bug and fix for stale playlist object references
-            // When settings are reloaded (e.g., from OneDrive sync), the Playlist objects
-            // in AppSettings.Instance.Playlists are replaced with new instances.
-            // If we hold a reference to the old object, accessing its Entries will fail.
+            // This test demonstrates the bug fix for SelectionChanged events bubbling
+            // from child controls (ComboBox) to parent controls.
+            // 
+            // Bug: When user changes playlist selection in ComboBox, the SelectionChanged
+            // event bubbles up to the TabControl's SelectionChanged handler. That handler
+            // would call ReloadRoaming(), which replaces the Playlists collection while
+            // Avalonia is still processing the ComboBox's selection change, causing
+            // ArgumentOutOfRangeException.
+            //
+            // Fix: Check if e.AddedItems[0] is a TabItem before processing.
+            // If it's not a TabItem, it's a bubbled event from a child control.
             
-            // Arrange - Simulate having a ComboBoxItem with Tag pointing to a Playlist
-            var originalPlaylist = new Playlist { Name = "TestPlaylist" };
-            originalPlaylist.Entries.Add(new PlaylistEntry { SongName = "Song1" });
+            // Arrange
+            object? tabControlHandler_AddedItem = null;
+            int tabControlHandler_CallCount = 0;
+            bool reloadRoamingCalled = false;
             
-            // Simulate what happens in combo box - Tag holds reference to original object
-            var tagReference = originalPlaylist;
+            void OnTabSelectionChanged(object? addedItem)
+            {
+                tabControlHandler_AddedItem = addedItem;
+                tabControlHandler_CallCount++;
+                
+                // CORRECT approach (the fix):
+                // Only handle tab changes, not child control changes
+                // In real code this checks "is TabItem", here we simulate with SimulatedTabItem
+                if (addedItem is SimulatedTabItem)
+                {
+                    reloadRoamingCalled = true;
+                }
+            }
             
-            // Simulate settings reload - creates NEW Playlist objects with same data
-            var reloadedPlaylist = new Playlist { Name = "TestPlaylist" };
-            reloadedPlaylist.Entries.Add(new PlaylistEntry { SongName = "Song1" });
+            // Simulate TabControl receiving actual tab change
+            OnTabSelectionChanged(new SimulatedTabItem { Header = "_Playlists" });
+            Assert.IsTrue(reloadRoamingCalled, "Should call ReloadRoaming for actual tab change");
+            Assert.AreEqual(1, tabControlHandler_CallCount);
             
-            var currentPlaylists = new List<Playlist> { reloadedPlaylist };
+            // Reset
+            reloadRoamingCalled = false;
+            tabControlHandler_CallCount = 0;
             
-            // BUG PATTERN: Using the stale reference
-            Playlist? currentPlaylist = tagReference; // This is the OLD object
+            // Simulate TabControl receiving bubbled event from ComboBox (string item)
+            OnTabSelectionChanged("Playlist Name");
+            Assert.IsFalse(reloadRoamingCalled, "Should NOT call ReloadRoaming for ComboBox selection bubbling");
+            Assert.AreEqual(1, tabControlHandler_CallCount);
             
-            // At this point, tagReference and currentPlaylist point to originalPlaylist,
-            // but currentPlaylists contains a DIFFERENT Playlist object with the same name
+            // Reset
+            reloadRoamingCalled = false;
+            tabControlHandler_CallCount = 0;
             
-            Assert.IsFalse(ReferenceEquals(currentPlaylist, reloadedPlaylist), 
-                "Stale reference should NOT be the same as reloaded playlist");
+            // Simulate TabControl receiving bubbled event from ComboBox (ComboBoxItem)
+            OnTabSelectionChanged(new SimulatedComboBoxItem { Content = "Playlist Name" });
+            Assert.IsFalse(reloadRoamingCalled, "Should NOT call ReloadRoaming for ComboBoxItem selection bubbling");
             
-            // FIX PATTERN: Look up by name after potential reload
-            var playlistName = tagReference.Name;
-            currentPlaylist = currentPlaylists.FirstOrDefault(p => p.Name == playlistName);
+            // Reset
+            reloadRoamingCalled = false;
+            tabControlHandler_CallCount = 0;
             
-            Assert.IsNotNull(currentPlaylist, "Should find playlist by name");
-            Assert.IsTrue(ReferenceEquals(currentPlaylist, reloadedPlaylist), 
-                "Fresh reference should be the same as reloaded playlist");
-            Assert.AreEqual(1, currentPlaylist.Entries.Count, "Should be able to access entries");
+            // Simulate TabControl receiving null (edge case)
+            OnTabSelectionChanged(null);
+            Assert.IsFalse(reloadRoamingCalled, "Should NOT call ReloadRoaming for null AddedItem");
             
-            AddLogEntry("Stale object reference fixed by looking up playlist by name");
+            AddLogEntry("SelectionChanged event bubbling correctly filtered by checking AddedItem type");
+        }
+        
+        // Helper classes to simulate Avalonia control types
+        private class SimulatedTabItem
+        {
+            public string Header { get; set; } = "";
+        }
+        
+        private class SimulatedComboBoxItem
+        {
+            public object? Content { get; set; }
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void PlaylistComboBox_SelectionChange_DoesNotTriggerTabHandler()
+        {
+            // This test simulates the exact bug scenario:
+            // 1. User is on Playlists tab
+            // 2. User changes playlist in ComboBox
+            // 3. ComboBox SelectionChanged event bubbles to TabControl
+            // 4. TabControl handler should ignore this event
+            
+            // Arrange
+            bool isHandlingTabChange = false;
+            bool reloadRoamingCalled = false;
+            var playlists = new List<Playlist>
+            {
+                new Playlist { Name = "Playlist1" },
+                new Playlist { Name = "Playlist2" }
+            };
+            
+            // This is the corrected handler
+            void OnTabSelectionChanged_Corrected(object? addedItem)
+            {
+                if (isHandlingTabChange) return;
+                
+                // KEY FIX: Only process if the added item is actually a TabItem
+                if (addedItem is not SimulatedTabItem)
+                {
+                    return;  // Ignore bubbled events from ComboBox
+                }
+                
+                isHandlingTabChange = true;
+                try
+                {
+                    // This would reload playlists from disk
+                    reloadRoamingCalled = true;
+                }
+                finally
+                {
+                    isHandlingTabChange = false;
+                }
+            }
+            
+            // Simulate: User is already on Playlists tab, changes playlist in ComboBox
+            // The ComboBox SelectionChanged event bubbles up with a string or ComboBoxItem
+            OnTabSelectionChanged_Corrected("Playlist2"); // Bubbled from ComboBox
+            
+            Assert.IsFalse(reloadRoamingCalled, 
+                "ReloadRoaming should NOT be called when ComboBox selection changes");
+            
+            // But actual tab changes should still work
+            OnTabSelectionChanged_Corrected(new SimulatedTabItem { Header = "_Playlists" });
+            
+            Assert.IsTrue(reloadRoamingCalled, 
+                "ReloadRoaming SHOULD be called when actually switching to Playlists tab");
+            
+            AddLogEntry("PlaylistComboBox selection change does not incorrectly trigger TabControl handler");
         }
 
         #endregion

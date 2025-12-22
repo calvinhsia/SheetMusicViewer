@@ -1008,8 +1008,6 @@ public class ChooseMusicWindow : Window
     {
         if (_pdfMetadata.Count == 0) return;
         
-        Logger.LogInfo($"FillPlaylistTab: Starting, Playlists.Count={AppSettings.Instance.Playlists.Count}");
-        
         // Build the songs browser (same data as Query tab)
         var uberToc = new List<Tuple<PdfMetaDataReadResult, TOCEntry>>();
         foreach (var pdfMetaDataItem in _pdfMetadata)
@@ -1056,7 +1054,6 @@ public class ChooseMusicWindow : Window
         
         // Load playlists and select - all under protection to prevent selection change events
         _isRefreshingPlaylistCombo = true;
-        Logger.LogInfo($"FillPlaylistTab: Setting _isRefreshingPlaylistCombo=true");
         try
         {
             _playlistComboBox.Items.Clear();
@@ -1064,40 +1061,27 @@ public class ChooseMusicWindow : Window
             {
                 _playlistComboBox.Items.Add(new ComboBoxItem { Content = playlist.Name, Tag = playlist });
             }
-            Logger.LogInfo($"FillPlaylistTab: Added {_playlistComboBox.Items.Count} items to combo");
             
             var settings = AppSettings.Instance;
             var lastPlaylist = settings.LastSelectedPlaylist;
-            Logger.LogInfo($"FillPlaylistTab: LastSelectedPlaylist='{lastPlaylist}'");
             
             if (!string.IsNullOrEmpty(lastPlaylist) && settings.Playlists.Any(p => p.Name == lastPlaylist))
             {
                 _currentPlaylist = settings.Playlists.First(p => p.Name == lastPlaylist);
-                for (int i = 0; i < _playlistComboBox.Items.Count; i++)
-                {
-                    if (_playlistComboBox.Items[i] is ComboBoxItem item && item.Content?.ToString() == lastPlaylist)
-                    {
-                        Logger.LogInfo($"FillPlaylistTab: Setting SelectedIndex={i} for '{lastPlaylist}'");
-                        _playlistComboBox.SelectedIndex = i;
-                        break;
-                    }
-                }
+                _playlistComboBox.SelectedItem = _playlistComboBox.Items.OfType<ComboBoxItem>().FirstOrDefault(i => i.Content?.ToString() == lastPlaylist);
             }
             else if (settings.Playlists.Count > 0 && _playlistComboBox.Items.Count > 0)
             {
                 _currentPlaylist = settings.Playlists[0];
-                Logger.LogInfo($"FillPlaylistTab: Setting SelectedIndex=0 for first playlist");
                 _playlistComboBox.SelectedIndex = 0;
             }
             else
             {
-                Logger.LogInfo($"FillPlaylistTab: No playlists, setting _currentPlaylist=null");
                 _currentPlaylist = null;
             }
         }
         finally
         {
-            Logger.LogInfo($"FillPlaylistTab: Setting _isRefreshingPlaylistCombo=false");
             _isRefreshingPlaylistCombo = false;
         }
         
@@ -1106,7 +1090,6 @@ public class ChooseMusicWindow : Window
     
     private void RefreshPlaylistComboBox()
     {
-        Logger.LogInfo($"RefreshPlaylistComboBox: _isRefreshingPlaylistCombo={_isRefreshingPlaylistCombo}");
         if (_isRefreshingPlaylistCombo) return;
         _isRefreshingPlaylistCombo = true;
         
@@ -1117,7 +1100,6 @@ public class ChooseMusicWindow : Window
             {
                 _playlistComboBox.Items.Add(new ComboBoxItem { Content = playlist.Name, Tag = playlist });
             }
-            Logger.LogInfo($"RefreshPlaylistComboBox: Added {_playlistComboBox.Items.Count} items");
         }
         finally
         {
@@ -1166,7 +1148,6 @@ public class ChooseMusicWindow : Window
         // Ignore selection changes during refresh
         if (_isRefreshingPlaylistCombo)
         {
-            Logger.LogInfo($"OnPlaylistSelectionChanged: Ignoring due to _isRefreshingPlaylistCombo=true");
             return;
         }
         
@@ -1175,11 +1156,9 @@ public class ChooseMusicWindow : Window
             // Validate selected index is in range
             var selectedIndex = _playlistComboBox.SelectedIndex;
             var itemsCount = _playlistComboBox.Items.Count;
-            Logger.LogInfo($"OnPlaylistSelectionChanged: SelectedIndex={selectedIndex}, Items.Count={itemsCount}");
             
             if (selectedIndex < 0 || selectedIndex >= itemsCount)
             {
-                Logger.LogWarning($"OnPlaylistSelectionChanged: Index out of range, skipping");
                 return;
             }
             
@@ -1187,21 +1166,13 @@ public class ChooseMusicWindow : Window
             {
                 // Use the playlist object directly from the Tag - don't look it up from AppSettings
                 // because that can trigger a reload which causes Avalonia timing issues
-                var playlistName = playlist.Name;
-                Logger.LogInfo($"OnPlaylistSelectionChanged: Selected playlist '{playlistName}'");
-                
-                // Use the playlist from the Tag directly, not from AppSettings.Instance.Playlists
-                // This avoids any potential reload issues during combo box selection
                 _currentPlaylist = playlist;
-                
-                Logger.LogInfo($"OnPlaylistSelectionChanged: Using playlist from Tag, refreshing entries");
                 RefreshPlaylistEntries();
             }
         }
-        catch (ArgumentOutOfRangeException ex)
+        catch (ArgumentOutOfRangeException)
         {
-            // Avalonia ComboBox can throw during rapid selection changes
-            Logger.LogWarning($"OnPlaylistSelectionChanged: ArgumentOutOfRangeException: {ex.Message}");
+            // Avalonia ComboBox can throw during rapid selection changes - ignore
         }
         catch (Exception ex)
         {
