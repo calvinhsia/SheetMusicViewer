@@ -27,7 +27,7 @@ public class BrowseControl : DockPanel
     public IEnumerable _query = null!;
     private ListBoxListFilter _listFilter = null!;
 
-    public BrowseControl(IEnumerable query, int[]? colWidths = null)
+    public BrowseControl(IEnumerable query, int[]? colWidths = null, bool filterOnLeft = true)
     {
         try
         {
@@ -38,7 +38,7 @@ public class BrowseControl : DockPanel
             this.HorizontalAlignment = HorizontalAlignment.Stretch;
             this.VerticalAlignment = VerticalAlignment.Stretch;
             
-            _listFilter = new ListBoxListFilter(null!);
+            _listFilter = new ListBoxListFilter(null!, filterOnLeft);
             this.Children.Add(_listFilter);
             DockPanel.SetDock(_listFilter, Dock.Top);
 
@@ -99,10 +99,12 @@ internal class ListBoxListFilter : DockPanel
     readonly TextBlock _txtStatus = new TextBlock();
     ListBoxBrowseView? _browse;
     private static string? _LastFilter;
+    private readonly bool _filterOnLeft;
 
-    internal ListBoxListFilter(ListBoxBrowseView? browse)
+    internal ListBoxListFilter(ListBoxBrowseView? browse, bool filterOnLeft = true)
     {
         _browse = browse;
+        _filterOnLeft = filterOnLeft;
         BuildUI();
     }
 
@@ -125,7 +127,7 @@ internal class ListBoxListFilter : DockPanel
         var spFilter = new StackPanel 
         { 
             Orientation = Orientation.Horizontal, 
-            HorizontalAlignment = HorizontalAlignment.Right,
+            HorizontalAlignment = _filterOnLeft ? HorizontalAlignment.Left : HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center,
             Spacing = 5,
             Height = 30
