@@ -656,5 +656,263 @@ namespace Tests
         }
 
         #endregion
+
+        #region ReloadRoaming Tests
+
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void AppSettings_ReloadRoaming_PicksUpExternalChanges()
+        {
+            // Arrange - Create initial playlist and save
+            var settings = AppSettings.Instance;
+            var playlist = new Playlist { Name = "Original Playlist" };
+            playlist.Entries.Add(new PlaylistEntry { SongName = "Original Song", PageNo = 1 });
+            settings.Playlists.Add(playlist);
+            settings.Save();
+            
+            // Simulate external change (like OneDrive sync) by directly modifying the file
+            var roamingPath = AppSettings.RoamingSettingsPath;
+            Assert.IsNotNull(roamingPath);
+            
+            // Create JSON that mimics external sync
+            var externalJson = """
+            {
+                "Playlists": [
+                    {
+                        "Name": "Synced Playlist",
+                        "Entries": [
+                            { "SongName": "Synced Song 1", "PageNo": 10, "Composer": "", "BookName": "", "Notes": "" },
+                            { "SongName": "Synced Song 2", "PageNo": 20, "Composer": "", "BookName": "", "Notes": "" }
+                        ]
+                    }
+                ],
+                "LastSelectedPlaylist": "Synced Playlist"
+            }
+            """;
+            File.WriteAllText(roamingPath!, externalJson);
+            
+            // Act - Reload roaming settings
+            settings.ReloadRoaming();
+            
+            // Assert - Should have picked up the external changes
+            Assert.AreEqual(1, settings.Playlists.Count);
+            Assert.AreEqual("Synced Playlist", settings.Playlists[0].Name);
+            Assert.AreEqual(2, settings.Playlists[0].Entries.Count);
+            Assert.AreEqual("Synced Song 1", settings.Playlists[0].Entries[0].SongName);
+            Assert.AreEqual("Synced Song 2", settings.Playlists[0].Entries[1].SongName);
+            Assert.AreEqual("Synced Playlist", settings.LastSelectedPlaylist);
+            AddLogEntry("ReloadRoaming picked up external changes correctly");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void AppSettings_ReloadRoaming_PreservesLocalSettings()
+        {
+            // Arrange - Set both local and roaming settings
+            var settings = AppSettings.Instance;
+            settings.WindowWidth = 1920;
+            settings.WindowHeight = 1080;
+            settings.Playlists.Add(new Playlist { Name = "Initial" });
+            settings.Save();
+            
+            // Simulate external change to playlists
+            var roamingPath = AppSettings.RoamingSettingsPath;
+            Assert.IsNotNull(roamingPath);
+            
+            var externalJson = """
+            {
+                "Playlists": [
+                    { "Name": "NewPlaylist", "Entries": [] }
+                ]
+            }
+            """;
+            File.WriteAllText(roamingPath!, externalJson);
+            
+            // Act
+            settings.ReloadRoaming();
+            
+            // Assert - Roaming settings updated, local settings preserved
+            Assert.AreEqual("NewPlaylist", settings.Playlists[0].Name);
+            Assert.AreEqual(1920, settings.WindowWidth); // Local setting preserved
+            Assert.AreEqual(1080, settings.WindowHeight); // Local setting preserved
+            AddLogEntry("ReloadRoaming preserves local settings");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void AppSettings_ReloadRoaming_HandlesCorruptFile()
+        {
+            // Arrange
+            var settings = AppSettings.Instance;
+            settings.Playlists.Add(new Playlist { Name = "Original" });
+            settings.Save();
+            
+            // Corrupt the roaming file
+            var roamingPath = AppSettings.RoamingSettingsPath;
+            Assert.IsNotNull(roamingPath);
+            File.WriteAllText(roamingPath!, "{ invalid json content ]]]");
+            
+            // Act - Should not throw
+            settings.ReloadRoaming();
+            
+            // Assert - Original settings should be preserved (reload failed gracefully)
+            // The in-memory settings should still have the original playlist
+            // (The corrupt file doesn't overwrite the in-memory state)
+            Assert.AreEqual(1, settings.Playlists.Count);
+            Assert.AreEqual("Original", settings.Playlists[0].Name);
+            AddLogEntry("ReloadRoaming handles corrupt file gracefully");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void AppSettings_ReloadRoaming_HandlesMissingFile()
+        {
+            // Arrange
+            var settings = AppSettings.Instance;
+            settings.Playlists.Add(new Playlist { Name = "Existing" });
+            
+            // Delete the roaming file if it exists
+            var roamingPath = AppSettings.RoamingSettingsPath;
+            if (roamingPath != null && File.Exists(roamingPath))
+            {
+                File.Delete(roamingPath);
+            }
+            
+            // Act - Should not throw
+            settings.ReloadRoaming();
+            
+            // Assert - Settings should be unchanged
+            Assert.AreEqual(1, settings.Playlists.Count);
+            Assert.AreEqual("Existing", settings.Playlists[0].Name);
+            AddLogEntry("ReloadRoaming handles missing file gracefully");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void AppSettings_ReloadRoaming_MultipleCallsAreIdempotent()
+        {
+            // Arrange
+            var settings = AppSettings.Instance;
+            var playlist = new Playlist { Name = "Test" };
+            playlist.Entries.Add(new PlaylistEntry { SongName = "Song 1", PageNo = 1 });
+            settings.Playlists.Add(playlist);
+            settings.Save();
+            
+            // Act - Call ReloadRoaming multiple times
+            settings.ReloadRoaming();
+            settings.ReloadRoaming();
+            settings.ReloadRoaming();
+            
+            // Assert - Should still have the same data
+            Assert.AreEqual(1, settings.Playlists.Count);
+            Assert.AreEqual("Test", settings.Playlists[0].Name);
+            Assert.AreEqual(1, settings.Playlists[0].Entries.Count);
+            AddLogEntry("Multiple ReloadRoaming calls are idempotent");
+        }
+
+        #endregion
+
+        #region Re-entrancy Guard Pattern Tests
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void ReentrancyGuard_ProtectsWithTryFinally()
+        {
+            // Arrange - Simulate a re-entrancy guard pattern
+            bool isHandling = false;
+            int callCount = 0;
+            Exception? caughtException = null;
+            
+            void HandlerWithGuard(bool shouldThrow)
+            {
+                if (isHandling) return;
+                isHandling = true;
+                
+                try
+                {
+                    callCount++;
+                    if (shouldThrow)
+                    {
+                        throw new InvalidOperationException("Test exception");
+                    }
+                    // Simulate re-entrant call
+                    HandlerWithGuard(false);
+                }
+                finally
+                {
+                    isHandling = false;
+                }
+            }
+            
+            // Act - Call normally
+            HandlerWithGuard(false);
+            Assert.AreEqual(1, callCount, "Re-entrant call should be blocked");
+            Assert.IsFalse(isHandling, "Flag should be reset after normal execution");
+            
+            // Act - Call with exception
+            callCount = 0;
+            try
+            {
+                HandlerWithGuard(true);
+            }
+            catch (Exception ex)
+            {
+                caughtException = ex;
+            }
+            
+            // Assert - Flag should still be reset even after exception
+            Assert.IsNotNull(caughtException, "Exception should have been thrown");
+            Assert.IsFalse(isHandling, "Flag should be reset even after exception (try/finally pattern)");
+            Assert.AreEqual(1, callCount, "Should have been called once before exception");
+            
+            // Act - Call again after exception - should work
+            callCount = 0;
+            HandlerWithGuard(false);
+            Assert.AreEqual(1, callCount, "Should be able to call again after exception was handled");
+            AddLogEntry("Re-entrancy guard with try/finally works correctly");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void ReentrancyGuard_WithoutTryFinally_LeavesDeadlock()
+        {
+            // This test demonstrates why try/finally is important
+            // Arrange
+            bool isHandling = false;
+            int callCount = 0;
+            
+            void HandlerWithoutGuard(bool shouldThrow)
+            {
+                if (isHandling) return;
+                isHandling = true;
+                
+                // BUG: No try/finally!
+                callCount++;
+                if (shouldThrow)
+                {
+                    // isHandling is never reset!
+                    throw new InvalidOperationException("Test exception");
+                }
+                isHandling = false;
+            }
+            
+            // Act - Call with exception
+            try
+            {
+                HandlerWithoutGuard(true);
+            }
+            catch { }
+            
+            // Assert - Flag is stuck!
+            Assert.IsTrue(isHandling, "Without try/finally, flag stays true after exception (BAD)");
+            
+            // Try to call again - will be blocked forever
+            callCount = 0;
+            HandlerWithoutGuard(false);
+            Assert.AreEqual(0, callCount, "Subsequent calls are blocked because flag is stuck (deadlock)");
+            AddLogEntry("Demonstrated why try/finally is required for re-entrancy guards");
+        }
+
+        #endregion
     }
 }
