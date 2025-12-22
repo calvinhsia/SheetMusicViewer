@@ -949,6 +949,9 @@ public class ChooseMusicWindow : Window
 
         _playlistSongsBrowseControl = new BrowseControl(query, colWidths: new[] { 250, 50, 150, 80, 40, 300, 200 });
         
+        // Double-click on left side adds to playlist
+        _playlistSongsBrowseControl.ListView.DoubleTapped += (s, e) => OnAddToPlaylistClick(s, e);
+        
         // Replace placeholder with the browse control
         var splitGrid = (Grid)_playlistTabGrid.Children[1];
         
