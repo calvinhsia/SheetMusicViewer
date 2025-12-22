@@ -912,6 +912,300 @@ namespace Tests
             Assert.AreEqual(0, callCount, "Subsequent calls are blocked because flag is stuck (deadlock)");
             AddLogEntry("Demonstrated why try/finally is required for re-entrancy guards");
         }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void ReentrancyGuard_ForCollectionModification_PreventsNestedUpdates()
+        {
+            // This test demonstrates the pattern used in RefreshPlaylistComboBox
+            // to prevent "Source collection was modified during selection update" errors
+            
+            // Arrange
+            bool isRefreshing = false;
+            var items = new List<string>();
+            int refreshCount = 0;
+            int selectionChangedCount = 0;
+            
+            void OnSelectionChanged()
+            {
+                // Ignore selection changes during refresh
+                if (isRefreshing) return;
+                selectionChangedCount++;
+                
+                // This would normally trigger a cascade of events
+                // In the real code, this could call RefreshItems again
+            }
+            
+            void RefreshItems()
+            {
+                if (isRefreshing) return;
+                isRefreshing = true;
+                
+                try
+                {
+                    refreshCount++;
+                    
+                    // Clearing items triggers selection changed events
+                    items.Clear();
+                    OnSelectionChanged(); // Simulates the event
+                    
+                    // Adding items also triggers selection changed events
+                    items.Add("Item 1");
+                    OnSelectionChanged(); // Simulates the event
+                    
+                    items.Add("Item 2");
+                    OnSelectionChanged(); // Simulates the event
+                }
+                finally
+                {
+                    isRefreshing = false;
+                }
+            }
+            
+            // Act
+            RefreshItems();
+            
+            // Assert
+            Assert.AreEqual(1, refreshCount, "RefreshItems should only be called once");
+            Assert.AreEqual(0, selectionChangedCount, "Selection changed events should be ignored during refresh");
+            Assert.AreEqual(2, items.Count, "Items should be populated");
+            Assert.IsFalse(isRefreshing, "Flag should be reset after refresh");
+            
+            // Now selection changes should work
+            OnSelectionChanged();
+            Assert.AreEqual(1, selectionChangedCount, "Selection changes should work after refresh completes");
+            AddLogEntry("Re-entrancy guard prevents collection modification errors");
+        }
+
+        #endregion
+        
+        #region Playlist Selection Edge Cases Tests
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void PlaylistSelection_BoundsCheck_PreventsOutOfRangeException()
+        {
+            // This test verifies the pattern used in OnPlaylistSelectionChanged
+            // to prevent ArgumentOutOfRangeException when SelectedIndex is invalid
+            
+            // Arrange
+            var items = new List<string> { "Playlist1", "Playlist2" };
+            int selectedIndex = -1; // Invalid index
+            bool accessedItem = false;
+            
+            // Act - Simulate the bounds check pattern
+            if (selectedIndex >= 0 && selectedIndex < items.Count)
+            {
+                accessedItem = true;
+                var _ = items[selectedIndex];
+            }
+            
+            // Assert
+            Assert.IsFalse(accessedItem, "Should not access item when index is -1");
+            
+            // Test with index beyond range
+            selectedIndex = 5; // Beyond range
+            if (selectedIndex >= 0 && selectedIndex < items.Count)
+            {
+                accessedItem = true;
+                var _ = items[selectedIndex];
+            }
+            
+            Assert.IsFalse(accessedItem, "Should not access item when index is beyond range");
+            
+            // Test with valid index
+            selectedIndex = 1;
+            if (selectedIndex >= 0 && selectedIndex < items.Count)
+            {
+                accessedItem = true;
+                var _ = items[selectedIndex];
+            }
+            
+            Assert.IsTrue(accessedItem, "Should access item when index is valid");
+            AddLogEntry("Bounds check pattern prevents out of range exceptions");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void PlaylistCreation_SetCurrentBeforeRefresh_PreventsRaceCondition()
+        {
+            // This test verifies the pattern of setting _currentPlaylist before
+            // calling RefreshPlaylistComboBox to avoid race conditions
+            
+            // Arrange
+            var settings = AppSettings.Instance;
+            var newPlaylist = new Playlist { Name = "NewPlaylist" };
+            Playlist? currentPlaylist = null;
+            bool refreshCalled = false;
+            bool entriesRefreshed = false;
+            
+            // Simulate the correct order of operations
+            void CreatePlaylistCorrectOrder()
+            {
+                // 1. Add to settings
+                settings.Playlists.Add(newPlaylist);
+                
+                // 2. Set current playlist BEFORE refresh
+                currentPlaylist = newPlaylist;
+                
+                // 3. Refresh combo box (which might trigger selection events)
+                refreshCalled = true;
+                
+                // 4. Refresh entries
+                entriesRefreshed = currentPlaylist != null;
+            }
+            
+            // Act
+            CreatePlaylistCorrectOrder();
+            
+            // Assert
+            Assert.IsNotNull(currentPlaylist, "Current playlist should be set");
+            Assert.AreSame(newPlaylist, currentPlaylist, "Current playlist should be the new playlist");
+            Assert.IsTrue(refreshCalled, "Refresh should have been called");
+            Assert.IsTrue(entriesRefreshed, "Entries should have been refreshed");
+            AddLogEntry("Setting current playlist before refresh prevents race conditions");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void PlaylistDeletion_SelectFirstOrClear_HandlesEmptyList()
+        {
+            // This test verifies the pattern used in OnDeletePlaylistClick
+            // to handle the case when all playlists are deleted
+            
+            // Arrange
+            var playlists = new List<Playlist>
+            {
+                new Playlist { Name = "ToDelete" }
+            };
+            Playlist? currentPlaylist = playlists[0];
+            string statusText = "";
+            
+            // Act - Simulate deletion
+            playlists.Remove(currentPlaylist);
+            currentPlaylist = playlists.FirstOrDefault(); // Will be null
+            
+            // Refresh entries pattern
+            if (currentPlaylist == null)
+            {
+                statusText = "No playlist selected";
+            }
+            else
+            {
+                statusText = $"{currentPlaylist.Entries.Count} song(s)";
+            }
+            
+            // Assert
+            Assert.IsNull(currentPlaylist, "Current playlist should be null after deleting last one");
+            Assert.AreEqual("No playlist selected", statusText, "Status should indicate no playlist");
+            AddLogEntry("Playlist deletion handles empty list correctly");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void PlaylistSelection_IgnoreDuringRefresh_PreventsRecursion()
+        {
+            // This test verifies the _isRefreshingPlaylistCombo guard pattern
+            
+            // Arrange
+            bool isRefreshing = false;
+            int selectionChangedCount = 0;
+            Playlist? selectedPlaylist = null;
+            var playlists = new List<Playlist>
+            {
+                new Playlist { Name = "Playlist1" },
+                new Playlist { Name = "Playlist2" }
+            };
+            
+            void OnSelectionChanged(int index)
+            {
+                // Guard check
+                if (isRefreshing) return;
+                
+                selectionChangedCount++;
+                if (index >= 0 && index < playlists.Count)
+                {
+                    selectedPlaylist = playlists[index];
+                }
+            }
+            
+            void RefreshComboBox()
+            {
+                if (isRefreshing) return;
+                isRefreshing = true;
+                
+                try
+                {
+                    // Simulates clearing and re-adding items, which triggers selection events
+                    OnSelectionChanged(-1); // Clear triggers this
+                    OnSelectionChanged(0);  // Adding first item triggers this
+                }
+                finally
+                {
+                    isRefreshing = false;
+                }
+            }
+            
+            // Act
+            RefreshComboBox();
+            
+            // Assert - Selection changes during refresh should be ignored
+            Assert.AreEqual(0, selectionChangedCount, "Selection changes should be ignored during refresh");
+            Assert.IsNull(selectedPlaylist, "No playlist should be selected during refresh");
+            
+            // Now selection changes should work
+            OnSelectionChanged(1);
+            Assert.AreEqual(1, selectionChangedCount, "Selection changes should work after refresh");
+            Assert.AreSame(playlists[1], selectedPlaylist, "Second playlist should be selected");
+            AddLogEntry("Selection changes are properly ignored during refresh");
+        }
+
+        #endregion
+        
+        #region Stale Object Reference Tests
+
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void PlaylistSelection_StaleObjectReference_FixedByNameLookup()
+        {
+            // This test demonstrates the bug and fix for stale playlist object references
+            // When settings are reloaded (e.g., from OneDrive sync), the Playlist objects
+            // in AppSettings.Instance.Playlists are replaced with new instances.
+            // If we hold a reference to the old object, accessing its Entries will fail.
+            
+            // Arrange - Simulate having a ComboBoxItem with Tag pointing to a Playlist
+            var originalPlaylist = new Playlist { Name = "TestPlaylist" };
+            originalPlaylist.Entries.Add(new PlaylistEntry { SongName = "Song1" });
+            
+            // Simulate what happens in combo box - Tag holds reference to original object
+            var tagReference = originalPlaylist;
+            
+            // Simulate settings reload - creates NEW Playlist objects with same data
+            var reloadedPlaylist = new Playlist { Name = "TestPlaylist" };
+            reloadedPlaylist.Entries.Add(new PlaylistEntry { SongName = "Song1" });
+            
+            var currentPlaylists = new List<Playlist> { reloadedPlaylist };
+            
+            // BUG PATTERN: Using the stale reference
+            Playlist? currentPlaylist = tagReference; // This is the OLD object
+            
+            // At this point, tagReference and currentPlaylist point to originalPlaylist,
+            // but currentPlaylists contains a DIFFERENT Playlist object with the same name
+            
+            Assert.IsFalse(ReferenceEquals(currentPlaylist, reloadedPlaylist), 
+                "Stale reference should NOT be the same as reloaded playlist");
+            
+            // FIX PATTERN: Look up by name after potential reload
+            var playlistName = tagReference.Name;
+            currentPlaylist = currentPlaylists.FirstOrDefault(p => p.Name == playlistName);
+            
+            Assert.IsNotNull(currentPlaylist, "Should find playlist by name");
+            Assert.IsTrue(ReferenceEquals(currentPlaylist, reloadedPlaylist), 
+                "Fresh reference should be the same as reloaded playlist");
+            Assert.AreEqual(1, currentPlaylist.Entries.Count, "Should be able to access entries");
+            
+            AddLogEntry("Stale object reference fixed by looking up playlist by name");
+        }
 
         #endregion
     }

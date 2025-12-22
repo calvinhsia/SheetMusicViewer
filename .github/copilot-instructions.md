@@ -90,15 +90,49 @@ SheetMusicViewer/PdfViewerWindow.xaml.cs
 
 ---
 
-## Testing Guidelines
+## Bug Fixes and Unit Tests
 
-### Running Tests
-When running tests, **exclude manual tests** by using the filter:
-```
-dotnet test --filter "TestCategory!=Manual"
+### Always Add Unit Tests for Bug Fixes
+When fixing bugs, especially:
+- **Re-entrancy issues** - Add tests that verify the guard pattern works correctly, including exception scenarios
+- **Collection modification errors** - Add tests that simulate the cascading event pattern
+- **UI event handling** - Add tests for keyboard shortcuts (Enter/Escape) and event handlers
+
+### Re-entrancy Guard Pattern
+When using boolean flags to prevent re-entrancy, **always use try/finally**:
+
+```csharp
+// CORRECT - Flag is always reset
+private void OnSomeEvent()
+{
+    if (_isHandling) return;
+    _isHandling = true;
+    
+    try
+    {
+        // ... code that might trigger re-entrant calls or throw ...
+    }
+    finally
+    {
+        _isHandling = false;
+    }
+}
+
+// WRONG - Flag stays stuck if exception occurs
+private void OnSomeEvent()
+{
+    if (_isHandling) return;
+    _isHandling = true;
+    
+    // ... code ...
+    
+    _isHandling = false; // Never reached if exception thrown!
+}
 ```
 
-Manual tests are tagged with `[TestCategory("Manual")]` and require specific environment setup or user interaction.
+### Test Categories
+- Use `[TestCategory("Unit")]` for unit tests
+- Use `[TestCategory("Manual")]` for tests requiring user interaction or special setup
 
 ---
 
