@@ -999,6 +999,29 @@ public class ChooseMusicWindow : Window
         _queryBrowseControl = new BrowseControl(query, colWidths: new[] { 250, 50, 40, 150, 80, 40, 300, 200, 150 }, rowHeight: BrowseControl.TouchRowHeight);
         _queryBrowseControl.ListView.DoubleTapped += (s, e) => BtnOk_Click(s, e);
         
+        // Add context menu option to view the selected song
+        _queryBrowseControl.AddContextMenuItem(
+            "View Song",
+            "View this song's sheet music",
+            (selectedItems) =>
+            {
+                if (selectedItems.Count > 0)
+                {
+                    var selectedItem = selectedItems[0];
+                    var tupProp = selectedItem.GetType().GetProperty("_Tup");
+                    if (tupProp != null)
+                    {
+                        var tup = tupProp.GetValue(selectedItem) as Tuple<PdfMetaDataReadResult, TOCEntry>;
+                        if (tup != null)
+                        {
+                            ChosenPdfMetaData = tup.Item1;
+                            ChosenPageNo = tup.Item2.PageNo;
+                            Close();
+                        }
+                    }
+                }
+            });
+        
         _queryTabGrid.Children.Clear();
         Grid.SetRow(_queryBrowseControl, 0);
         _queryTabGrid.Children.Add(_queryBrowseControl);
@@ -1037,6 +1060,29 @@ public class ChooseMusicWindow : Window
         
         // Double-click on left side adds to playlist
         _playlistSongsBrowseControl.ListView.DoubleTapped += (s, e) => OnAddToPlaylistClick(s, e);
+        
+        // Add context menu option to view the selected song
+        _playlistSongsBrowseControl.AddContextMenuItem(
+            "View Song",
+            "View this song's sheet music",
+            (selectedItems) =>
+            {
+                if (selectedItems.Count > 0)
+                {
+                    var selectedItem = selectedItems[0];
+                    var tupProp = selectedItem.GetType().GetProperty("_Tup");
+                    if (tupProp != null)
+                    {
+                        var tup = tupProp.GetValue(selectedItem) as Tuple<PdfMetaDataReadResult, TOCEntry>;
+                        if (tup != null)
+                        {
+                            ChosenPdfMetaData = tup.Item1;
+                            ChosenPageNo = tup.Item2.PageNo;
+                            Close();
+                        }
+                    }
+                }
+            });
         
         // Replace placeholder with the browse control
         var splitGrid = (Grid)_playlistTabGrid.Children[1];
