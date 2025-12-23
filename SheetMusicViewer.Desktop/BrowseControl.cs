@@ -222,6 +222,17 @@ public class ListBoxBrowseView : UserControl
     public int SelectedIndex => _listBox?.SelectedIndex ?? -1;
     public object? SelectedItem => _listBox?.SelectedItem;
 
+    /// <summary>
+    /// Sets the selected index of the underlying ListBox
+    /// </summary>
+    public void SetSelectedIndex(int index)
+    {
+        if (_listBox != null && index >= 0 && index < _filteredItems.Count)
+        {
+            _listBox.SelectedIndex = index;
+        }
+    }
+    
     public ListBoxBrowseView(IEnumerable query, BrowseControl browseControl)
     {
         this._colWidths = browseControl._colWidths;
