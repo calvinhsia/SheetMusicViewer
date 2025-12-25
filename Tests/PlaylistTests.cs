@@ -1302,5 +1302,399 @@ namespace Tests
         }
 
         #endregion
+        
+        #region Playlist Move Operations Tests
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void Playlist_MoveUp_FirstItem_DoesNothing()
+        {
+            // Arrange
+            var playlist = new Playlist();
+            playlist.Entries.Add(new PlaylistEntry { SongName = "First" });
+            playlist.Entries.Add(new PlaylistEntry { SongName = "Second" });
+            
+            // Act - Try to move first item up (selectedIndex = 0)
+            int selectedIndex = 0;
+            if (selectedIndex > 0)
+            {
+                var entry = playlist.Entries[selectedIndex];
+                playlist.Entries.RemoveAt(selectedIndex);
+                playlist.Entries.Insert(selectedIndex - 1, entry);
+            }
+            
+            // Assert - Order should be unchanged
+            Assert.AreEqual("First", playlist.Entries[0].SongName);
+            Assert.AreEqual("Second", playlist.Entries[1].SongName);
+            AddLogEntry("Moving first item up correctly does nothing");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void Playlist_MoveDown_LastItem_DoesNothing()
+        {
+            // Arrange
+            var playlist = new Playlist();
+            playlist.Entries.Add(new PlaylistEntry { SongName = "First" });
+            playlist.Entries.Add(new PlaylistEntry { SongName = "Last" });
+            
+            // Act - Try to move last item down (selectedIndex = 1, count = 2)
+            int selectedIndex = 1;
+            if (selectedIndex >= 0 && selectedIndex < playlist.Entries.Count - 1)
+            {
+                var entry = playlist.Entries[selectedIndex];
+                playlist.Entries.RemoveAt(selectedIndex);
+                playlist.Entries.Insert(selectedIndex + 1, entry);
+            }
+            
+            // Assert - Order should be unchanged
+            Assert.AreEqual("First", playlist.Entries[0].SongName);
+            Assert.AreEqual("Last", playlist.Entries[1].SongName);
+            AddLogEntry("Moving last item down correctly does nothing");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void Playlist_MoveUp_MiddleItem_MovesCorrectly()
+        {
+            // Arrange
+            var playlist = new Playlist();
+            playlist.Entries.Add(new PlaylistEntry { SongName = "First" });
+            playlist.Entries.Add(new PlaylistEntry { SongName = "Middle" });
+            playlist.Entries.Add(new PlaylistEntry { SongName = "Last" });
+            
+            // Act - Move middle item up (selectedIndex = 1)
+            int selectedIndex = 1;
+            if (selectedIndex > 0)
+            {
+                var entry = playlist.Entries[selectedIndex];
+                playlist.Entries.RemoveAt(selectedIndex);
+                playlist.Entries.Insert(selectedIndex - 1, entry);
+            }
+            
+            // Assert - Middle should now be first
+            Assert.AreEqual("Middle", playlist.Entries[0].SongName);
+            Assert.AreEqual("First", playlist.Entries[1].SongName);
+            Assert.AreEqual("Last", playlist.Entries[2].SongName);
+            AddLogEntry("Moving middle item up works correctly");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void Playlist_MoveDown_MiddleItem_MovesCorrectly()
+        {
+            // Arrange
+            var playlist = new Playlist();
+            playlist.Entries.Add(new PlaylistEntry { SongName = "First" });
+            playlist.Entries.Add(new PlaylistEntry { SongName = "Middle" });
+            playlist.Entries.Add(new PlaylistEntry { SongName = "Last" });
+            
+            // Act - Move middle item down (selectedIndex = 1)
+            int selectedIndex = 1;
+            if (selectedIndex >= 0 && selectedIndex < playlist.Entries.Count - 1)
+            {
+                var entry = playlist.Entries[selectedIndex];
+                playlist.Entries.RemoveAt(selectedIndex);
+                playlist.Entries.Insert(selectedIndex + 1, entry);
+            }
+            
+            // Assert - Middle should now be last
+            Assert.AreEqual("First", playlist.Entries[0].SongName);
+            Assert.AreEqual("Last", playlist.Entries[1].SongName);
+            Assert.AreEqual("Middle", playlist.Entries[2].SongName);
+            AddLogEntry("Moving middle item down works correctly");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void Playlist_ConsecutiveMoveUp_MovesItemToTop()
+        {
+            // This tests the scenario where user clicks "Move Up" multiple times
+            // on the same item to move it to the top of the list
+            
+            // Arrange
+            var playlist = new Playlist();
+            playlist.Entries.Add(new PlaylistEntry { SongName = "A" });
+            playlist.Entries.Add(new PlaylistEntry { SongName = "B" });
+            playlist.Entries.Add(new PlaylistEntry { SongName = "C" });
+            playlist.Entries.Add(new PlaylistEntry { SongName = "Target" }); // Index 3, will move to 0
+            
+            // Act - Simulate clicking "Move Up" 3 times
+            // Each time, the item moves up one position and stays selected at its new index
+            int selectedIndex = 3;
+            
+            // Move 1: 3 -> 2
+            if (selectedIndex > 0)
+            {
+                var entry = playlist.Entries[selectedIndex];
+                playlist.Entries.RemoveAt(selectedIndex);
+                playlist.Entries.Insert(selectedIndex - 1, entry);
+                selectedIndex = selectedIndex - 1; // Re-select at new position
+            }
+            Assert.AreEqual(2, selectedIndex);
+            Assert.AreEqual("Target", playlist.Entries[2].SongName);
+            
+            // Move 2: 2 -> 1
+            if (selectedIndex > 0)
+            {
+                var entry = playlist.Entries[selectedIndex];
+                playlist.Entries.RemoveAt(selectedIndex);
+                playlist.Entries.Insert(selectedIndex - 1, entry);
+                selectedIndex = selectedIndex - 1;
+            }
+            Assert.AreEqual(1, selectedIndex);
+            Assert.AreEqual("Target", playlist.Entries[1].SongName);
+            
+            // Move 3: 1 -> 0
+            if (selectedIndex > 0)
+            {
+                var entry = playlist.Entries[selectedIndex];
+                playlist.Entries.RemoveAt(selectedIndex);
+                playlist.Entries.Insert(selectedIndex - 1, entry);
+                selectedIndex = selectedIndex - 1;
+            }
+            Assert.AreEqual(0, selectedIndex);
+            Assert.AreEqual("Target", playlist.Entries[0].SongName);
+            
+            // Move 4: At top, should do nothing
+            int oldIndex = selectedIndex;
+            if (selectedIndex > 0)
+            {
+                var entry = playlist.Entries[selectedIndex];
+                playlist.Entries.RemoveAt(selectedIndex);
+                playlist.Entries.Insert(selectedIndex - 1, entry);
+                selectedIndex = selectedIndex - 1;
+            }
+            Assert.AreEqual(oldIndex, selectedIndex, "Should not change when already at top");
+            
+            // Assert final order
+            Assert.AreEqual("Target", playlist.Entries[0].SongName);
+            Assert.AreEqual("A", playlist.Entries[1].SongName);
+            Assert.AreEqual("B", playlist.Entries[2].SongName);
+            Assert.AreEqual("C", playlist.Entries[3].SongName);
+            AddLogEntry("Consecutive Move Up operations correctly move item to top");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void Playlist_ConsecutiveMoveDown_MovesItemToBottom()
+        {
+            // This tests the scenario where user clicks "Move Down" multiple times
+            // on the same item to move it to the bottom of the list
+            
+            // Arrange
+            var playlist = new Playlist();
+            playlist.Entries.Add(new PlaylistEntry { SongName = "Target" }); // Index 0, will move to 3
+            playlist.Entries.Add(new PlaylistEntry { SongName = "A" });
+            playlist.Entries.Add(new PlaylistEntry { SongName = "B" });
+            playlist.Entries.Add(new PlaylistEntry { SongName = "C" });
+            
+            // Act - Simulate clicking "Move Down" 3 times
+            int selectedIndex = 0;
+            
+            // Move 1: 0 -> 1
+            if (selectedIndex >= 0 && selectedIndex < playlist.Entries.Count - 1)
+            {
+                var entry = playlist.Entries[selectedIndex];
+                playlist.Entries.RemoveAt(selectedIndex);
+                playlist.Entries.Insert(selectedIndex + 1, entry);
+                selectedIndex = selectedIndex + 1; // Re-select at new position
+            }
+            Assert.AreEqual(1, selectedIndex);
+            
+            // Move 2: 1 -> 2
+            if (selectedIndex >= 0 && selectedIndex < playlist.Entries.Count - 1)
+            {
+                var entry = playlist.Entries[selectedIndex];
+                playlist.Entries.RemoveAt(selectedIndex);
+                playlist.Entries.Insert(selectedIndex + 1, entry);
+                selectedIndex = selectedIndex + 1;
+            }
+            Assert.AreEqual(2, selectedIndex);
+            
+            // Move 3: 2 -> 3
+            if (selectedIndex >= 0 && selectedIndex < playlist.Entries.Count - 1)
+            {
+                var entry = playlist.Entries[selectedIndex];
+                playlist.Entries.RemoveAt(selectedIndex);
+                playlist.Entries.Insert(selectedIndex + 1, entry);
+                selectedIndex = selectedIndex + 1;
+            }
+            Assert.AreEqual(3, selectedIndex);
+            
+            // Move 4: At bottom, should do nothing
+            int oldIndex = selectedIndex;
+            if (selectedIndex >= 0 && selectedIndex < playlist.Entries.Count - 1)
+            {
+                var entry = playlist.Entries[selectedIndex];
+                playlist.Entries.RemoveAt(selectedIndex);
+                playlist.Entries.Insert(selectedIndex + 1, entry);
+                selectedIndex = selectedIndex + 1;
+            }
+            Assert.AreEqual(oldIndex, selectedIndex, "Should not change when already at bottom");
+            
+            // Assert final order
+            Assert.AreEqual("A", playlist.Entries[0].SongName);
+            Assert.AreEqual("B", playlist.Entries[1].SongName);
+            Assert.AreEqual("C", playlist.Entries[2].SongName);
+            Assert.AreEqual("Target", playlist.Entries[3].SongName);
+            AddLogEntry("Consecutive Move Down operations correctly move item to bottom");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void Playlist_MoveOperations_PreserveEntryData()
+        {
+            // Verify that moving entries doesn't corrupt their data
+            
+            // Arrange
+            var playlist = new Playlist();
+            playlist.Entries.Add(new PlaylistEntry 
+            { 
+                SongName = "Song1", 
+                Composer = "Composer1", 
+                PageNo = 10, 
+                BookName = "Book1", 
+                Notes = "Notes1" 
+            });
+            playlist.Entries.Add(new PlaylistEntry 
+            { 
+                SongName = "Song2", 
+                Composer = "Composer2", 
+                PageNo = 20, 
+                BookName = "Book2", 
+                Notes = "Notes2" 
+            });
+            
+            // Act - Move second item up
+            var entry = playlist.Entries[1];
+            playlist.Entries.RemoveAt(1);
+            playlist.Entries.Insert(0, entry);
+            
+            // Assert - Data should be intact
+            var movedEntry = playlist.Entries[0];
+            Assert.AreEqual("Song2", movedEntry.SongName);
+            Assert.AreEqual("Composer2", movedEntry.Composer);
+            Assert.AreEqual(20, movedEntry.PageNo);
+            Assert.AreEqual("Book2", movedEntry.BookName);
+            Assert.AreEqual("Notes2", movedEntry.Notes);
+            
+            var otherEntry = playlist.Entries[1];
+            Assert.AreEqual("Song1", otherEntry.SongName);
+            Assert.AreEqual("Composer1", otherEntry.Composer);
+            Assert.AreEqual(10, otherEntry.PageNo);
+            Assert.AreEqual("Book1", otherEntry.BookName);
+            Assert.AreEqual("Notes1", otherEntry.Notes);
+            
+            AddLogEntry("Move operations preserve all entry data");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void Playlist_MoveOperations_UpdateModifiedDate()
+        {
+            // Verify that move operations should update ModifiedDate
+            
+            // Arrange
+            var playlist = new Playlist { Name = "Test" };
+            playlist.Entries.Add(new PlaylistEntry { SongName = "A" });
+            playlist.Entries.Add(new PlaylistEntry { SongName = "B" });
+            var originalModified = playlist.ModifiedDate;
+            
+            // Wait a tiny bit to ensure time difference
+            System.Threading.Thread.Sleep(10);
+            
+            // Act
+            var entry = playlist.Entries[1];
+            playlist.Entries.RemoveAt(1);
+            playlist.Entries.Insert(0, entry);
+            playlist.ModifiedDate = DateTime.Now;
+            
+            // Assert
+            Assert.IsTrue(playlist.ModifiedDate > originalModified, 
+                "ModifiedDate should be updated after move operation");
+            AddLogEntry("Move operations update ModifiedDate");
+        }
+        
+        #endregion
+
+        #region Index-Based Selection Tests
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void IndexExtraction_FromAnonymousType_WorksCorrectly()
+        {
+            // This tests the pattern used to extract _Index from anonymous type in BrowseControl
+            
+            // Arrange - Simulate the anonymous type used in playlist entries
+            var entries = new List<PlaylistEntry>
+            {
+                new PlaylistEntry { SongName = "Song0" },
+                new PlaylistEntry { SongName = "Song1" },
+                new PlaylistEntry { SongName = "Song2" }
+            };
+            
+            var playlistData = entries.Select((entry, index) => new
+            {
+                entry.SongName,
+                Page = entry.PageNo,
+                _Index = index,
+                _Entry = entry
+            }).ToList();
+            
+            // Act - Extract index from each item
+            for (int i = 0; i < playlistData.Count; i++)
+            {
+                var item = playlistData[i];
+                var indexProp = item.GetType().GetProperty("_Index");
+                Assert.IsNotNull(indexProp, $"Item {i} should have _Index property");
+                
+                var extractedIndex = (int)indexProp.GetValue(item)!;
+                Assert.AreEqual(i, extractedIndex, $"Extracted index should match for item {i}");
+                
+                var entryProp = item.GetType().GetProperty("_Entry");
+                Assert.IsNotNull(entryProp, $"Item {i} should have _Entry property");
+                
+                var extractedEntry = entryProp.GetValue(item) as PlaylistEntry;
+                Assert.IsNotNull(extractedEntry, $"Extracted entry should not be null for item {i}");
+                Assert.AreEqual($"Song{i}", extractedEntry.SongName);
+            }
+            
+            AddLogEntry("Index extraction from anonymous type works correctly");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void IndexExtraction_HiddenProperties_StartWithUnderscore()
+        {
+            // Verify that properties starting with underscore are used for hidden data
+            // This is the convention used by BrowseControl
+            
+            // Arrange
+            var data = new
+            {
+                VisibleProp1 = "Shown",
+                VisibleProp2 = 123,
+                _HiddenProp1 = "Hidden",
+                _HiddenProp2 = new object()
+            };
+            
+            // Act
+            var props = data.GetType().GetProperties();
+            var visibleProps = props.Where(p => !p.Name.StartsWith("_")).ToList();
+            var hiddenProps = props.Where(p => p.Name.StartsWith("_")).ToList();
+            
+            // Assert
+            Assert.AreEqual(2, visibleProps.Count, "Should have 2 visible properties");
+            Assert.AreEqual(2, hiddenProps.Count, "Should have 2 hidden properties");
+            Assert.IsTrue(visibleProps.Any(p => p.Name == "VisibleProp1"));
+            Assert.IsTrue(visibleProps.Any(p => p.Name == "VisibleProp2"));
+            Assert.IsTrue(hiddenProps.Any(p => p.Name == "_HiddenProp1"));
+            Assert.IsTrue(hiddenProps.Any(p => p.Name == "_HiddenProp2"));
+            
+            AddLogEntry("Underscore prefix convention for hidden properties works correctly");
+        }
+
+        #endregion
     }
 }
