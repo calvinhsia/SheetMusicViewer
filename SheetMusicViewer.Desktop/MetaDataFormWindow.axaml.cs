@@ -1,4 +1,4 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
@@ -391,11 +391,14 @@ public partial class MetaDataFormViewModel : ObservableObject
         DocNotes = data.Notes;
         SongNameIsEnabled = !data.IsSinglesFolder;
 
+        // Create a HashSet of favorite page numbers for quick lookup
+        var favoritePages = new HashSet<int>(data.Favorites.Select(f => f.Pageno));
+
         // Load TOC entries
         TocEntries.Clear();
         foreach (var toc in data.TocEntries.OrderBy(t => t.PageNo))
         {
-            TocEntries.Add(new TocEntryViewModel(toc));
+            TocEntries.Add(new TocEntryViewModel(toc, favoritePages.Contains(toc.PageNo)));
         }
 
         // Load volume info display
@@ -604,18 +607,27 @@ public partial class TocEntryViewModel : ObservableObject
 
     [ObservableProperty]
     private string? _notes;
+    
+    [ObservableProperty]
+    private bool _isFavorite;
+    
+    /// <summary>
+    /// Display string for favorite column - shows star if favorite
+    /// </summary>
+    public string FavDisplay => _isFavorite ? "★" : "";
 
     public TocEntryViewModel()
     {
     }
 
-    public TocEntryViewModel(TOCEntry entry)
+    public TocEntryViewModel(TOCEntry entry, bool isFavorite = false)
     {
         _pageNo = entry.PageNo;
         _songName = entry.SongName;
         _composer = entry.Composer;
         _date = entry.Date;
         _notes = entry.Notes;
+        _isFavorite = isFavorite;
     }
 }
 

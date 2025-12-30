@@ -114,7 +114,8 @@
                       SelectionMode="Single"
                       DoubleTapped="TocDataGrid_DoubleTapped">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="PageNo" Binding="{Binding PageNo}" Width="70" x:DataType="local:TocEntryViewModel"/>
+                    <DataGridTextColumn Header="Page" Binding="{Binding PageNo}" Width="60" x:DataType="local:TocEntryViewModel"/>
+                    <DataGridTextColumn Header="Fav" Binding="{Binding FavDisplay}" Width="65" IsReadOnly="True" x:DataType="local:TocEntryViewModel"/>
                     <DataGridTemplateColumn Header="SongName" Width="250" x:DataType="local:TocEntryViewModel">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate x:DataType="local:TocEntryViewModel">
