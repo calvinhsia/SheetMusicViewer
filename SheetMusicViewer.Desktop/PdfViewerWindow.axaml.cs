@@ -60,6 +60,8 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private CheckBox? _chkFullScreen;
     private CheckBox? _chkInk0;
     private CheckBox? _chkInk1;
+    private CheckBox? _chkFav0;
+    private CheckBox? _chkFav1;
     private Image? _imgThumb;
     private Menu? _mainMenu;
 
@@ -134,6 +136,8 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         _chkFullScreen = this.GetControl<CheckBox>("chkFullScreen");
         _chkInk0 = this.GetControl<CheckBox>("chkInk0");
         _chkInk1 = this.GetControl<CheckBox>("chkInk1");
+        _chkFav0 = this.GetControl<CheckBox>("chkFav0");
+        _chkFav1 = this.GetControl<CheckBox>("chkFav1");
         _imgThumb = this.GetControl<Image>("ImgThumb");
         _mainMenu = this.GetControl<Menu>("mainMenu");
         
@@ -153,11 +157,11 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         };
         
         // Wire up favorite checkbox events
-        var chkFav0 = this.GetControl<CheckBox>("chkFav0");
-        var chkFav1 = this.GetControl<CheckBox>("chkFav1");
+        _chkFav0 = this.GetControl<CheckBox>("chkFav0");
+        _chkFav1 = this.GetControl<CheckBox>("chkFav1");
         
-        chkFav0.IsCheckedChanged += ChkFav_Toggled;
-        chkFav1.IsCheckedChanged += ChkFav_Toggled;
+        _chkFav0.IsCheckedChanged += ChkFav_Toggled;
+        _chkFav1.IsCheckedChanged += ChkFav_Toggled;
         
         // Wire up rotate button
         var btnRotate = this.GetControl<Button>("btnRotate");
@@ -197,6 +201,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         var mnuQuit = this.GetControl<MenuItem>("mnuQuit");
         mnuQuit.Click += (s, e) => Close();
         
+        var mnuOptions = this.GetControl<MenuItem>("mnuOptions");
+        mnuOptions.Click += (s, e) => _ = ShowOptionsDialogAsync();
+        
         // Wire up navigation buttons
         var btnPrev = this.GetControl<Button>("btnPrev");
         var btnNext = this.GetControl<Button>("btnNext");
@@ -234,6 +241,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 // First time user - create and use sample data
                 _rootMusicFolder = await SampleDataHelper.EnsureSampleDataExistsAsync();
                 settings.AddToMRU(_rootMusicFolder);
+                AppSettings.SetMusicRootFolder(_rootMusicFolder); // Set for roaming settings
                 settings.Save();
                 
                 // Load the sample PDF metadata
@@ -257,6 +265,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             }
             else
             {
+                // Set the music root folder for roaming settings
+                AppSettings.SetMusicRootFolder(_rootMusicFolder);
+                
                 // Load all PDF metadata
                 var provider = new PdfToImageDocumentProvider();
                 (_lstPdfMetaFileData, _lstFolders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
@@ -458,6 +469,19 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         finally
         {
             _isShowingMetaDataForm = false;
+        }
+    }
+    
+    private async Task ShowOptionsDialogAsync()
+    {
+        try
+        {
+            var optionsWindow = new OptionsWindow();
+            await optionsWindow.ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogException("Options dialog error", ex);
         }
     }
     
@@ -718,6 +742,18 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
 
                 _dpPage?.Children.Add(grid);
                 SetupGestureHandler();
+                
+                // Initialize favorite checkboxes from metadata
+                _chkFavoriteEnabled = false;
+                if (_chkFav0 != null)
+                {
+                    _chkFav0.IsChecked = _currentPdfMetaData.IsFavorite(pageNo);
+                }
+                if (_chkFav1 != null && NumPagesPerView > 1)
+                {
+                    _chkFav1.IsChecked = _currentPdfMetaData.IsFavorite(pageNo + 1);
+                }
+                _chkFavoriteEnabled = true;
             });
         }
         catch (Exception ex)
@@ -741,6 +777,20 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         if (pageNo < pageNumberOffset || pageNo >= maxPageNum)
             return null;
         
+        // Check if caching is disabled (for performance testing)
+        var cacheDisabled = AppSettings.Instance.UserOptions.DisablePageCache;
+        
+        // If cache is disabled, just create a new render task without caching
+        if (cacheDisabled)
+        {
+            return new PageCacheEntry
+            {
+                PageNo = pageNo,
+                Age = _currentCacheAge++,
+                Task = RenderPageWithTrackingAsync(pageNo)
+            };
+        }
+        
         // Check if we already have a valid entry
         if (_pageCache.TryGetValue(pageNo, out var existing) && 
             !existing.Cts.IsCancellationRequested && 
@@ -759,11 +809,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         };
         
         // Evict old entries if cache is full
-        if (_pageCache.Count >= MaxCacheSize)
+        var maxCacheSize = AppSettings.Instance.UserOptions.PageCacheMaxSize;
+        if (_pageCache.Count >= maxCacheSize)
         {
             var toRemove = _pageCache.Values
                 .OrderBy(e => e.Age)
-                .Take(_pageCache.Count - MaxCacheSize + 1)
+                .Take(_pageCache.Count - maxCacheSize + 1)
                 .ToList();
             foreach (var old in toRemove)
             {
@@ -867,14 +918,84 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             
             using var skBitmap = Conversion.ToImage(pdfBytes, page: (Index)pageIndexInVolume, 
                 options: new PDFtoImage.RenderOptions(Dpi: 150, Rotation: pdfRotation));
-            using var image = SKImage.FromBitmap(skBitmap);
-            using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-            using var stream = new MemoryStream();
-            data.SaveTo(stream);
-            stream.Seek(0, SeekOrigin.Begin);
             
-            return new Bitmap(stream);
+            // Convert SKBitmap directly to Avalonia Bitmap without PNG encoding
+            // This is significantly faster than encoding to PNG and decoding
+            return ConvertSkBitmapToAvaloniaBitmap(skBitmap);
         });
+    }
+
+    /// <summary>
+    /// Converts an SKBitmap directly to an Avalonia Bitmap by copying pixel data.
+    /// This is much faster than encoding to PNG and then decoding.
+    /// </summary>
+    internal static Bitmap ConvertSkBitmapToAvaloniaBitmap(SKBitmap skBitmap)
+    {
+        // Ensure the SKBitmap is in a compatible format (BGRA8888)
+        SKBitmap sourceBitmap = skBitmap;
+        bool needsDispose = false;
+        
+        if (skBitmap.ColorType != SKColorType.Bgra8888)
+        {
+            sourceBitmap = new SKBitmap(skBitmap.Width, skBitmap.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+            using var canvas = new SKCanvas(sourceBitmap);
+            canvas.DrawBitmap(skBitmap, 0, 0);
+            needsDispose = true;
+        }
+        
+        try
+        {
+            var info = sourceBitmap.Info;
+            var pixels = sourceBitmap.GetPixels();
+            var rowBytes = info.RowBytes;
+            
+            // Create a WriteableBitmap and copy the pixel data directly
+            var writeableBitmap = new WriteableBitmap(
+                new Avalonia.PixelSize(info.Width, info.Height),
+                new Avalonia.Vector(96, 96),
+                Avalonia.Platform.PixelFormat.Bgra8888,
+                Avalonia.Platform.AlphaFormat.Premul);
+            
+            using (var frameBuffer = writeableBitmap.Lock())
+            {
+                unsafe
+                {
+                    // Copy pixels row by row to handle potential stride differences
+                    var srcPtr = (byte*)pixels.ToPointer();
+                    var dstPtr = (byte*)frameBuffer.Address.ToPointer();
+                    var srcStride = rowBytes;
+                    var dstStride = frameBuffer.RowBytes;
+                    
+                    if (srcStride == dstStride)
+                    {
+                        // Fast path: strides match, copy all at once
+                        Buffer.MemoryCopy(srcPtr, dstPtr, (long)dstStride * info.Height, (long)srcStride * info.Height);
+                    }
+                    else
+                    {
+                        // Slow path: copy row by row
+                        var bytesPerRow = Math.Min(srcStride, dstStride);
+                        for (int y = 0; y < info.Height; y++)
+                        {
+                            Buffer.MemoryCopy(
+                                srcPtr + (y * srcStride),
+                                dstPtr + (y * dstStride),
+                                bytesPerRow,
+                                bytesPerRow);
+                        }
+                    }
+                }
+            }
+            
+            return writeableBitmap;
+        }
+        finally
+        {
+            if (needsDispose)
+            {
+                sourceBitmap.Dispose();
+            }
+        }
     }
     
     private void ClearCache()
@@ -896,11 +1017,23 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     {
         Dispatcher.UIThread.Post(() =>
         {
+            var cacheDisabled = AppSettings.Instance.UserOptions.DisablePageCache;
             var pendingCount = _cacheLoadingCount;
             var cachedCount = _pageCache.Count;
             
-            // Always show cache count; add loading indicator if busy
-            if (pendingCount > 0)
+            if (cacheDisabled)
+            {
+                // Show that cache is disabled
+                if (pendingCount > 0)
+                {
+                    CacheStatus = $"⚠ No cache ⏳{pendingCount}";
+                }
+                else
+                {
+                    CacheStatus = "⚠ No cache";
+                }
+            }
+            else if (pendingCount > 0)
             {
                 CacheStatus = $"C:{cachedCount} ⏳{pendingCount}";
             }
@@ -1174,8 +1307,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             var pageNo = CurrentPageNumber + (isPage0 ? 0 : 1);
             var isFavorite = chk.IsChecked == true;
             
-            // Toggle favorite in metadata
-            // TODO: Update the favorites list and save using PdfMetaDataCore.SaveToJson()
+            // Toggle favorite in metadata and save
+            _currentPdfMetaData.ToggleFavorite(pageNo, isFavorite);
+            PdfMetaDataCore.SaveToJson(_currentPdfMetaData);
             
             Trace.WriteLine($"Favorite toggled: Page {pageNo}, IsFavorite: {isFavorite}");
         }
@@ -1396,6 +1530,10 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                     return;
                 case Key.E:
                     _ = ShowMetaDataFormAsync();
+                    e.Handled = true;
+                    return;
+                case Key.O:
+                    _ = ShowOptionsDialogAsync();
                     e.Handled = true;
                     return;
                 case Key.F:

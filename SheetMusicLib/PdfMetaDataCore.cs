@@ -296,6 +296,39 @@ namespace SheetMusicLib
         }
 
         /// <summary>
+        /// Toggle a page as favorite or not
+        /// </summary>
+        /// <param name="pageNo">Page number to toggle</param>
+        /// <param name="isFavorite">True to add as favorite, false to remove</param>
+        /// <param name="favoriteName">Optional name for the favorite</param>
+        public void ToggleFavorite(int pageNo, bool isFavorite, string? favoriteName = null)
+        {
+            var existing = Favorites.FirstOrDefault(f => f.Pageno == pageNo);
+            
+            if (isFavorite)
+            {
+                if (existing == null)
+                {
+                    var fav = new Favorite { Pageno = pageNo };
+                    if (!string.IsNullOrEmpty(favoriteName))
+                    {
+                        fav.FavoriteName = favoriteName;
+                    }
+                    Favorites.Add(fav);
+                    IsDirty = true;
+                }
+            }
+            else
+            {
+                if (existing != null)
+                {
+                    Favorites.Remove(existing);
+                    IsDirty = true;
+                }
+            }
+        }
+
+        /// <summary>
         /// Get the book name (relative path without extension)
         /// </summary>
         public string GetBookName(string rootFolder = null)
