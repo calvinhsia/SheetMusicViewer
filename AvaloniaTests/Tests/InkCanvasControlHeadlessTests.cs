@@ -4,6 +4,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Themes.Fluent;
+using Avalonia.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SheetMusicLib;
 using SheetMusicViewer.Desktop;
@@ -32,30 +33,16 @@ public class InkCanvasControlTests : TestBase
     private static bool _initializationFailed = false;
     private static string _initializationError = null;
     private static readonly object _initLock = new();
-    private static int _initThreadId = -1;
 
     /// <summary>
-    /// Initialize Avalonia on the test thread if not already done.
-    /// Must be called at the start of each test to ensure thread affinity.
+    /// Initialize Avalonia once for all tests.
     /// </summary>
-    private void EnsureAvaloniaInitialized()
+    private static void EnsureAvaloniaInitialized()
     {
         lock (_initLock)
         {
-            // If already initialized on this thread, we're good
-            if (_avaloniaInitialized && _initThreadId == Environment.CurrentManagedThreadId)
+            if (_avaloniaInitialized || _initializationFailed)
                 return;
-            
-            // If initialization failed previously, skip
-            if (_initializationFailed)
-                return;
-
-            // If initialized on a different thread, that's a problem - but try to continue
-            if (_avaloniaInitialized && _initThreadId != Environment.CurrentManagedThreadId)
-            {
-                LogMessage($"WARNING: Avalonia was initialized on thread {_initThreadId}, but test is running on thread {Environment.CurrentManagedThreadId}");
-                return;
-            }
 
             try
             {
@@ -65,21 +52,16 @@ public class InkCanvasControlTests : TestBase
                     .SetupWithoutStarting();
 
                 _avaloniaInitialized = true;
-                _initThreadId = Environment.CurrentManagedThreadId;
-                LogMessage($"Avalonia headless platform initialized on thread {_initThreadId}");
             }
             catch (InvalidOperationException ex) when (ex.Message.Contains("already") || ex.Message.Contains("initialized"))
             {
                 // Avalonia already initialized - that's fine
                 _avaloniaInitialized = true;
-                _initThreadId = Environment.CurrentManagedThreadId;
-                LogMessage("Avalonia already initialized");
             }
             catch (Exception ex)
             {
                 _initializationFailed = true;
                 _initializationError = ex.Message;
-                LogMessage($"WARNING: Avalonia headless initialization failed: {ex.Message}");
             }
         }
     }
@@ -104,6 +86,37 @@ public class InkCanvasControlTests : TestBase
         if (!_avaloniaInitialized)
         {
             Assert.Inconclusive("Avalonia headless not initialized - skipping test");
+        }
+    }
+
+    /// <summary>
+    /// Execute an action on the Avalonia dispatcher thread.
+    /// This ensures thread affinity for Avalonia UI objects.
+    /// </summary>
+    private void RunOnDispatcher(Action action)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            action();
+        }
+        else
+        {
+            Dispatcher.UIThread.Invoke(action);
+        }
+    }
+
+    /// <summary>
+    /// Execute an async function on the Avalonia dispatcher thread.
+    /// </summary>
+    private T RunOnDispatcher<T>(Func<T> func)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            return func();
+        }
+        else
+        {
+            return Dispatcher.UIThread.Invoke(func);
         }
     }
 
@@ -169,15 +182,18 @@ public class InkCanvasControlTests : TestBase
     {
         SkipIfNotSupportedPlatform();
         
-        // Arrange & Act
-        using var bitmap = CreateTestBitmap();
-        var inkCanvas = new InkCanvasControl(bitmap, pageNo: 5);
+        RunOnDispatcher(() =>
+        {
+            // Arrange & Act
+            using var bitmap = CreateTestBitmap();
+            var inkCanvas = new InkCanvasControl(bitmap, pageNo: 5);
 
-        // Assert
-        Assert.IsNotNull(inkCanvas);
-        Assert.AreEqual(5, inkCanvas.PageNo);
-        Assert.IsFalse(inkCanvas.IsInkingEnabled, "Inking should be disabled by default");
-        Assert.IsFalse(inkCanvas.HasUnsavedStrokes, "Should have no unsaved strokes initially");
+            // Assert
+            Assert.IsNotNull(inkCanvas);
+            Assert.AreEqual(5, inkCanvas.PageNo);
+            Assert.IsFalse(inkCanvas.IsInkingEnabled, "Inking should be disabled by default");
+            Assert.IsFalse(inkCanvas.HasUnsavedStrokes, "Should have no unsaved strokes initially");
+        });
         
         LogMessage("InkCanvasControl created successfully");
     }
@@ -189,18 +205,21 @@ public class InkCanvasControlTests : TestBase
     {
         SkipIfNotSupportedPlatform();
         
-        // Arrange
-        using var bitmap = CreateTestBitmap();
-        var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
+        RunOnDispatcher(() =>
+        {
+            // Arrange
+            using var bitmap = CreateTestBitmap();
+            var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
 
-        // Act & Assert
-        Assert.IsFalse(inkCanvas.IsInkingEnabled, "Should start disabled");
-        
-        inkCanvas.IsInkingEnabled = true;
-        Assert.IsTrue(inkCanvas.IsInkingEnabled, "Should be enabled after setting true");
-        
-        inkCanvas.IsInkingEnabled = false;
-        Assert.IsFalse(inkCanvas.IsInkingEnabled, "Should be disabled after setting false");
+            // Act & Assert
+            Assert.IsFalse(inkCanvas.IsInkingEnabled, "Should start disabled");
+            
+            inkCanvas.IsInkingEnabled = true;
+            Assert.IsTrue(inkCanvas.IsInkingEnabled, "Should be enabled after setting true");
+            
+            inkCanvas.IsInkingEnabled = false;
+            Assert.IsFalse(inkCanvas.IsInkingEnabled, "Should be disabled after setting false");
+        });
         
         LogMessage("IsInkingEnabled toggle verified");
     }
@@ -212,16 +231,19 @@ public class InkCanvasControlTests : TestBase
     {
         SkipIfNotSupportedPlatform();
         
-        // Arrange
-        using var bitmap = CreateTestBitmap();
-        var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
+        RunOnDispatcher(() =>
+        {
+            // Arrange
+            using var bitmap = CreateTestBitmap();
+            var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
 
-        // Act
-        var strokes = inkCanvas.GetPortableStrokes();
+            // Act
+            var strokes = inkCanvas.GetPortableStrokes();
 
-        // Assert
-        Assert.IsNotNull(strokes);
-        Assert.AreEqual(0, strokes.Strokes.Count, "Should have no strokes initially");
+            // Assert
+            Assert.IsNotNull(strokes);
+            Assert.AreEqual(0, strokes.Strokes.Count, "Should have no strokes initially");
+        });
         
         LogMessage("Empty stroke collection verified");
     }
@@ -233,14 +255,17 @@ public class InkCanvasControlTests : TestBase
     {
         SkipIfNotSupportedPlatform();
         
-        // Arrange
-        using var bitmap = CreateTestBitmap();
-        var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
+        RunOnDispatcher(() =>
+        {
+            // Arrange
+            using var bitmap = CreateTestBitmap();
+            var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
 
-        // Act - These methods should not throw
-        inkCanvas.SetPenColor(Brushes.Red);
-        inkCanvas.SetPenColor(Brushes.Blue);
-        inkCanvas.SetPenColor(Brushes.Black);
+            // Act - These methods should not throw
+            inkCanvas.SetPenColor(Brushes.Red);
+            inkCanvas.SetPenColor(Brushes.Blue);
+            inkCanvas.SetPenColor(Brushes.Black);
+        });
 
         // Assert - No exception means success
         Assert.IsTrue(true);
@@ -254,14 +279,17 @@ public class InkCanvasControlTests : TestBase
     {
         SkipIfNotSupportedPlatform();
         
-        // Arrange
-        using var bitmap = CreateTestBitmap();
-        var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
+        RunOnDispatcher(() =>
+        {
+            // Arrange
+            using var bitmap = CreateTestBitmap();
+            var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
 
-        // Act
-        inkCanvas.SetPenThickness(1.0);
-        inkCanvas.SetPenThickness(5.0);
-        inkCanvas.SetPenThickness(15.0);
+            // Act
+            inkCanvas.SetPenThickness(1.0);
+            inkCanvas.SetPenThickness(5.0);
+            inkCanvas.SetPenThickness(15.0);
+        });
 
         // Assert - No exception means success
         Assert.IsTrue(true);
@@ -275,12 +303,15 @@ public class InkCanvasControlTests : TestBase
     {
         SkipIfNotSupportedPlatform();
         
-        // Arrange
-        using var bitmap = CreateTestBitmap();
-        var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
+        RunOnDispatcher(() =>
+        {
+            // Arrange
+            using var bitmap = CreateTestBitmap();
+            var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
 
-        // Act
-        inkCanvas.SetHighlighter();
+            // Act
+            inkCanvas.SetHighlighter();
+        });
 
         // Assert - No exception means success
         Assert.IsTrue(true);
@@ -294,17 +325,20 @@ public class InkCanvasControlTests : TestBase
     {
         SkipIfNotSupportedPlatform();
         
-        // Arrange
-        using var bitmap = CreateTestBitmap();
-        var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
-        
-        Assert.IsFalse(inkCanvas.HasUnsavedStrokes, "Should start with no unsaved strokes");
+        RunOnDispatcher(() =>
+        {
+            // Arrange
+            using var bitmap = CreateTestBitmap();
+            var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
+            
+            Assert.IsFalse(inkCanvas.HasUnsavedStrokes, "Should start with no unsaved strokes");
 
-        // Act
-        inkCanvas.ClearStrokes();
+            // Act
+            inkCanvas.ClearStrokes();
 
-        // Assert
-        Assert.IsTrue(inkCanvas.HasUnsavedStrokes, "Clearing should mark as having unsaved changes");
+            // Assert
+            Assert.IsTrue(inkCanvas.HasUnsavedStrokes, "Clearing should mark as having unsaved changes");
+        });
         
         LogMessage("ClearStrokes sets HasUnsavedStrokes");
     }
@@ -316,19 +350,22 @@ public class InkCanvasControlTests : TestBase
     {
         SkipIfNotSupportedPlatform();
         
-        // Arrange
-        using var bitmap = CreateTestBitmap();
-        var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
-        
-        // Set the unsaved flag by clearing
-        inkCanvas.ClearStrokes();
-        Assert.IsTrue(inkCanvas.HasUnsavedStrokes);
+        RunOnDispatcher(() =>
+        {
+            // Arrange
+            using var bitmap = CreateTestBitmap();
+            var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
+            
+            // Set the unsaved flag by clearing
+            inkCanvas.ClearStrokes();
+            Assert.IsTrue(inkCanvas.HasUnsavedStrokes);
 
-        // Act
-        inkCanvas.MarkAsSaved();
+            // Act
+            inkCanvas.MarkAsSaved();
 
-        // Assert
-        Assert.IsFalse(inkCanvas.HasUnsavedStrokes, "Should clear unsaved flag after marking as saved");
+            // Assert
+            Assert.IsFalse(inkCanvas.HasUnsavedStrokes, "Should clear unsaved flag after marking as saved");
+        });
         
         LogMessage("MarkAsSaved clears HasUnsavedStrokes");
     }
@@ -340,17 +377,20 @@ public class InkCanvasControlTests : TestBase
     {
         SkipIfNotSupportedPlatform();
         
-        // Arrange & Act
-        using var bitmap = CreateTestBitmap();
-        
-        var canvas1 = new InkCanvasControl(bitmap, pageNo: 0);
-        var canvas2 = new InkCanvasControl(bitmap, pageNo: 42);
-        var canvas3 = new InkCanvasControl(bitmap, pageNo: 999);
+        RunOnDispatcher(() =>
+        {
+            // Arrange & Act
+            using var bitmap = CreateTestBitmap();
+            
+            var canvas1 = new InkCanvasControl(bitmap, pageNo: 0);
+            var canvas2 = new InkCanvasControl(bitmap, pageNo: 42);
+            var canvas3 = new InkCanvasControl(bitmap, pageNo: 999);
 
-        // Assert
-        Assert.AreEqual(0, canvas1.PageNo);
-        Assert.AreEqual(42, canvas2.PageNo);
-        Assert.AreEqual(999, canvas3.PageNo);
+            // Assert
+            Assert.AreEqual(0, canvas1.PageNo);
+            Assert.AreEqual(42, canvas2.PageNo);
+            Assert.AreEqual(999, canvas3.PageNo);
+        });
         
         LogMessage("PageNo is correctly preserved");
     }
@@ -362,16 +402,19 @@ public class InkCanvasControlTests : TestBase
     {
         SkipIfNotSupportedPlatform();
         
-        // Arrange & Act
-        using var bitmap = CreateTestBitmap();
-        var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0, inkStrokeClass: null);
+        RunOnDispatcher(() =>
+        {
+            // Arrange & Act
+            using var bitmap = CreateTestBitmap();
+            var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0, inkStrokeClass: null);
 
-        // Assert
-        Assert.IsNotNull(inkCanvas);
-        Assert.IsFalse(inkCanvas.HasUnsavedStrokes);
-        
-        var strokes = inkCanvas.GetPortableStrokes();
-        Assert.AreEqual(0, strokes.Strokes.Count);
+            // Assert
+            Assert.IsNotNull(inkCanvas);
+            Assert.IsFalse(inkCanvas.HasUnsavedStrokes);
+            
+            var strokes = inkCanvas.GetPortableStrokes();
+            Assert.AreEqual(0, strokes.Strokes.Count);
+        });
         
         LogMessage("InkCanvasControl with null ink data created successfully");
     }
@@ -383,21 +426,24 @@ public class InkCanvasControlTests : TestBase
     {
         SkipIfNotSupportedPlatform();
         
-        // Arrange
-        var inkStrokeClass = new InkStrokeClass
+        RunOnDispatcher(() =>
         {
-            Pageno = 0,
-            InkStrokeDimension = new PortablePoint(200, 300),
-            StrokeData = Array.Empty<byte>()
-        };
-        
-        using var bitmap = CreateTestBitmap();
+            // Arrange
+            var inkStrokeClass = new InkStrokeClass
+            {
+                Pageno = 0,
+                InkStrokeDimension = new PortablePoint(200, 300),
+                StrokeData = Array.Empty<byte>()
+            };
+            
+            using var bitmap = CreateTestBitmap();
 
-        // Act
-        var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0, inkStrokeClass: inkStrokeClass);
+            // Act
+            var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0, inkStrokeClass: inkStrokeClass);
 
-        // Assert
-        Assert.IsNotNull(inkCanvas);
+            // Assert
+            Assert.IsNotNull(inkCanvas);
+        });
         
         LogMessage("InkCanvasControl with empty stroke data created successfully");
     }
@@ -409,19 +455,22 @@ public class InkCanvasControlTests : TestBase
     {
         SkipIfNotSupportedPlatform();
         
-        // Arrange
-        using var bitmap = CreateTestBitmap(400, 600);
-        var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
+        RunOnDispatcher(() =>
+        {
+            // Arrange
+            using var bitmap = CreateTestBitmap(400, 600);
+            var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
 
-        // Act
-        var strokes = inkCanvas.GetPortableStrokes();
+            // Act
+            var strokes = inkCanvas.GetPortableStrokes();
 
-        // Assert
-        Assert.IsNotNull(strokes);
-        Assert.IsNotNull(strokes.Strokes);
-        // CanvasWidth/Height are 0 until the control is laid out
-        Assert.AreEqual(0, strokes.CanvasWidth, "CanvasWidth is 0 before layout");
-        Assert.AreEqual(0, strokes.CanvasHeight, "CanvasHeight is 0 before layout");
+            // Assert
+            Assert.IsNotNull(strokes);
+            Assert.IsNotNull(strokes.Strokes);
+            // CanvasWidth/Height are 0 until the control is laid out
+            Assert.AreEqual(0, strokes.CanvasWidth, "CanvasWidth is 0 before layout");
+            Assert.AreEqual(0, strokes.CanvasHeight, "CanvasHeight is 0 before layout");
+        });
         
         LogMessage("GetPortableStrokes returns valid structure");
     }
@@ -433,18 +482,21 @@ public class InkCanvasControlTests : TestBase
     {
         SkipIfNotSupportedPlatform();
         
-        // Arrange & Act - Test various bitmap sizes
-        var sizes = new[] { (100, 100), (200, 300), (800, 600), (1920, 1080) };
-        
-        foreach (var (width, height) in sizes)
+        RunOnDispatcher(() =>
         {
-            using var bitmap = CreateTestBitmap(width, height);
-            var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
+            // Arrange & Act - Test various bitmap sizes
+            var sizes = new[] { (100, 100), (200, 300), (800, 600), (1920, 1080) };
             
-            // Assert
-            Assert.IsNotNull(inkCanvas, $"Failed for size {width}x{height}");
-        }
+            foreach (var (width, height) in sizes)
+            {
+                using var bitmap = CreateTestBitmap(width, height);
+                var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
+                
+                // Assert
+                Assert.IsNotNull(inkCanvas, $"Failed for size {width}x{height}");
+            }
+        });
         
-        LogMessage($"Tested {sizes.Length} different bitmap sizes");
+        LogMessage($"Tested different bitmap sizes successfully");
     }
 }
