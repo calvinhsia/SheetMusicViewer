@@ -355,7 +355,10 @@ namespace SheetMusicViewer
                         int curVolNo = 0; // 
                         try
                         {
-                            if (curPath.EndsWith("singles", StringComparison.InvariantCultureIgnoreCase))
+                            // Check if this folder name ends with "singles" (case-insensitive)
+                            // This matches folders like "singles", "PopSingles", "JazzLibrarySingles"
+                            var folderName = Path.GetFileName(curPath);
+                            if (folderName.EndsWith("singles", StringComparison.OrdinalIgnoreCase))
                             {// we treat Singles as a book with multiple songs.
                                 lstPdfMetaFileData.Add(await LoadSinglesFolderAsync(curPath));
                             }

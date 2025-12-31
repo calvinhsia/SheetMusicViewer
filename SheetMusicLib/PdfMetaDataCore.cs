@@ -628,7 +628,10 @@ namespace SheetMusicLib
 
                     try
                     {
-                        if (curPath.EndsWith("singles", StringComparison.InvariantCultureIgnoreCase))
+                        // Check if this folder name ends with "singles" (case-insensitive)
+                        // This matches folders like "singles", "PopSingles", "JazzLibrarySingles"
+                        var folderName = Path.GetFileName(curPath);
+                        if (folderName.EndsWith("singles", StringComparison.OrdinalIgnoreCase))
                         {
                             // Singles folder - load as a single metadata entry
                             var singlesMetadata = await LoadSinglesFolderAsync(curPath, pdfDocumentProvider, exceptionHandler);
@@ -772,6 +775,50 @@ namespace SheetMusicLib
                         else
                         {
                             sortedListSingles.Add(vol.FileNameVolume.ToLower());
+                        }
+                    }
+                    
+                    // Fix any volumes that have pageCount=0 (e.g., files were cloud-only during initial load)
+                    bool needsRebuildToc = false;
+                    for (int i = 0; i < curmetadata.VolumeInfoList.Count; i++)
+                    {
+                        if (curmetadata.VolumeInfoList[i].NPagesInThisVolume == 0)
+                        {
+                            var pdfPath = Path.Combine(curPath, curmetadata.VolumeInfoList[i].FileNameVolume);
+                            if (File.Exists(pdfPath))
+                            {
+                                try
+                                {
+                                    Debug.WriteLine($"PdfMetaDataCore: Singles volume {i} has pageCount=0, re-reading PDF: {curmetadata.VolumeInfoList[i].FileNameVolume}");
+                                    var pageCount = await pdfDocumentProvider.GetPageCountAsync(pdfPath);
+                                    if (pageCount > 0)
+                                    {
+                                        curmetadata.VolumeInfoList[i].NPagesInThisVolume = pageCount;
+                                        curmetadata.IsDirty = true;
+                                        needsRebuildToc = true;
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    exceptionHandler?.OnException($"Re-reading PDF page count for {pdfPath}", ex);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Rebuild TOC if we fixed any page counts
+                    if (needsRebuildToc)
+                    {
+                        curmetadata.TocEntries.Clear();
+                        int singlesPageNo = 0;
+                        foreach (var vol in curmetadata.VolumeInfoList)
+                        {
+                            curmetadata.TocEntries.Add(new TOCEntry
+                            {
+                                SongName = Path.GetFileNameWithoutExtension(vol.FileNameVolume),
+                                PageNo = singlesPageNo
+                            });
+                            singlesPageNo += vol.NPagesInThisVolume;
                         }
                     }
                 }
@@ -1055,6 +1102,7 @@ namespace SheetMusicLib
             }
 
             // Fix volumes with pageCount=0 (e.g., if PDF was cloud-only during initial load)
+            bool needsRebuildToc = false;
             for (int i = 0; i < result.VolumeInfoList.Count; i++)
             {
                 if (result.VolumeInfoList[i].NPagesInThisVolume == 0)
@@ -1068,8 +1116,25 @@ namespace SheetMusicLib
                         {
                             result.VolumeInfoList[i].NPagesInThisVolume = pageCount;
                             result.IsDirty = true;
+                            needsRebuildToc = true;
                         }
                     }
+                }
+            }
+            
+            // Rebuild TOC if we fixed any page counts for Singles folders
+            if (needsRebuildToc && isSingles)
+            {
+                result.TocEntries.Clear();
+                int singlesPageNo = 0;
+                foreach (var vol in result.VolumeInfoList)
+                {
+                    result.TocEntries.Add(new TOCEntry
+                    {
+                        SongName = Path.GetFileNameWithoutExtension(vol.FileNameVolume),
+                        PageNo = singlesPageNo
+                    });
+                    singlesPageNo += vol.NPagesInThisVolume;
                 }
             }
 
@@ -1219,6 +1284,8 @@ namespace SheetMusicLib
                 path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
                     .Any(segment => segment.Equals("hidden", StringComparison.OrdinalIgnoreCase));
 
+            // Match folders whose names end with "singles" (case-insensitive)
+            // This matches folders like "singles", "PopSingles", "JazzLibrarySingles"
             static bool IsInSinglesFolder(string path) =>
                 path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
                     .Any(segment => segment.EndsWith("singles", StringComparison.OrdinalIgnoreCase));
@@ -1237,16 +1304,36 @@ namespace SheetMusicLib
                         metadataByBasePath[basePath] = jsonFile;
                     }
 
-                    // Identify Singles folders
+                    // Identify Singles folders - both from existing metadata AND by scanning directories
                     var allSinglesFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    
+                    // First, find singles folders from existing metadata files
                     foreach (var kvp in metadataByBasePath)
                     {
                         var metadataFile = kvp.Value;
                         var singlesDir = Path.Combine(Path.GetDirectoryName(metadataFile) ?? "", Path.GetFileNameWithoutExtension(metadataFile));
-                        if (Directory.Exists(singlesDir) && singlesDir.EndsWith("singles", StringComparison.OrdinalIgnoreCase))
+                        var folderName = Path.GetFileName(singlesDir);
+                        if (Directory.Exists(singlesDir) && folderName.EndsWith("singles", StringComparison.OrdinalIgnoreCase))
                         {
                             allSinglesFolders.Add(singlesDir);
                             singlesFolders.Add(singlesDir);
+                        }
+                    }
+                    
+                    // Also scan for Singles folders that don't have metadata files yet
+                    foreach (var dir in Directory.EnumerateDirectories(rootMusicFolder, "*", SearchOption.AllDirectories))
+                    {
+                        if (IsInHiddenFolder(dir)) continue;
+                        var folderName = Path.GetFileName(dir);
+                        if (folderName.EndsWith("singles", StringComparison.OrdinalIgnoreCase) && !allSinglesFolders.Contains(dir))
+                        {
+                            // Check if this folder contains any PDFs
+                            if (Directory.EnumerateFiles(dir, "*.pdf").Any())
+                            {
+                                allSinglesFolders.Add(dir);
+                                singlesFolders.Add(dir);
+                                Debug.WriteLine($"PdfMetaDataCore Parallel: Found new Singles folder without metadata: {folderName}");
+                            }
                         }
                     }
 

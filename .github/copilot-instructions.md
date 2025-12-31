@@ -19,6 +19,41 @@ When completing work:
 
 ---
 
+## Running Tests
+
+### Exclude Manual Tests
+When running tests, **always exclude Manual tests** unless explicitly asked to run them. Manual tests may:
+- Modify source files (e.g., regenerating `GettingStarted.pdf` and `GettingStarted.json`)
+- Require user interaction or special setup
+- Take a long time to complete
+- Have side effects on the repository
+
+**Correct way to run tests:**
+```powershell
+# Run only Unit tests (recommended for quick verification)
+dotnet test --filter "TestCategory=Unit"
+
+# Run Unit and Integration tests (excludes Manual)
+dotnet test --filter "TestCategory!=Manual"
+
+# Run specific test by name
+dotnet test --filter "FullyQualifiedName~TestMethodName"
+```
+
+**Do NOT run without a filter** - this will include Manual tests that may modify files.
+
+### Test Categories
+- `[TestCategory("Unit")]` - Fast, isolated unit tests. Safe to run anytime.
+- `[TestCategory("Integration")]` - Tests that use file system or multiple components. Safe to run.
+- `[TestCategory("Manual")]` - Tests that modify source files, require user interaction, or have special setup. **Only run when explicitly requested.**
+
+### Examples of Manual Tests
+- `GenerateGettingStartedPdf` - Regenerates the sample PDF and JSON files
+- Tests marked `[Ignore]` - Disabled tests that may have issues
+- Stress tests or performance tests
+
+---
+
 ## CRITICAL: Avoid Reading Diff/Temp Files Instead of Real Files
 
 ### Problem Description
@@ -133,35 +168,3 @@ private void OnSomeEvent()
 ### Test Categories
 - Use `[TestCategory("Unit")]` for unit tests
 - Use `[TestCategory("Manual")]` for tests requiring user interaction or special setup
-
----
-
-## Project-Specific Guidance
-
-### Technology Stack
-- **Framework**: WPF targeting .NET 8, C# 14.0
-- **PDF Rendering**: Windows.Data.Pdf (Windows Runtime API)
-- **Testing**: MSTest with custom STA thread execution context
-- **Version Control**: Git with Visual Studio TFS integration
-
-### Known Issues
-- **Windows.Data.Pdf Non-Determinism**: The `PdfPage.RenderToStreamAsync()` method has inherent non-deterministic behavior. Each render of the same page may produce slightly different pixel-level results due to font rendering heuristics, anti-aliasing decisions, and internal optimization state. This is a known API limitation, not a code bug.
-
-### Important Patterns
-- **Stream Position Management**: Always call `strm.Seek(0)` after write operations and before read operations when working with `InMemoryRandomAccessStream`
-- **STA Threading**: UI tests must run on STA threads using `RunInSTAExecutionContextAsync` helper method
-- **PDF Metadata**: The `PdfMetaData` class manages bookmarks, favorites, ink annotations, and multi-volume PDF sets
-- **Dependency Injection**: Use service pattern for UI dialogs (MessageBox, FileDialog) to enable mocking in tests
-
-### Settings Storage Strategy
-- **Local settings** (window positions, MRU paths): Stored in `LocalApplicationData`
-- **Roaming settings** (playlists, user preferences): Stored in the music root folder alongside PDF files
-  - This keeps user data with the music collection (which is typically already in OneDrive)
-  - File: `{MusicRootFolder}/.sheetmusicviewer/userdata.json`
-
-### Code Style
-- Follow existing conventions in the codebase
-- Use existing libraries; only add new dependencies if absolutely necessary
-- Avoid adding comments unless they match existing style or explain complex logic
-- Make minimal modifications to achieve the goal
-- **Use `required` modifier** for properties that must be set during object initialization (C# 11+), rather than default initializers, to get compile-time enforcement
