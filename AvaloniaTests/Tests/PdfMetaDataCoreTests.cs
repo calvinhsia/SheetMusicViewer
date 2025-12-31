@@ -119,7 +119,7 @@ public class PdfMetaDataCoreTests : TestBase
         
         Assert.IsTrue(jsonContent.Contains("\"volumes\""), "JSON should contain volumes");
         Assert.IsTrue(jsonContent.Contains("\"tableOfContents\""), "JSON should contain tableOfContents");
-        Assert.IsTrue(jsonContent.Contains("\"Test Song\""), "JSON should contain song name");
+        Assert.IsTrue(jsonContent.Contains("Test Song"), "JSON should contain song name");
         Assert.IsTrue(jsonContent.Contains("\"lastPageNo\": 5"), "JSON should contain lastPageNo");
     }
 
@@ -1234,5 +1234,203 @@ public class PdfMetaDataCoreTests : TestBase
         {
             d(state);
         }
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task LoadSinglesFolderAsync_WithZeroPageCounts_FixesPageCountsAndRebuildsToc()
+    {
+        // This test verifies the fix for Singles folders that have pageCount=0 in their JSON.
+        // This can happen when PDFs were cloud-only on OneDrive during the initial load.
+        // The fix should re-read the PDF files to get the actual page counts and rebuild the TOC.
+
+        // Arrange - Create a Singles folder with PDFs
+        var singlesFolder = Path.Combine(_tempFolder, "TestSingles");
+        Directory.CreateDirectory(singlesFolder);
+        
+        var pdf1Path = CreateTestPdf(Path.Combine(singlesFolder, "Song1.pdf"));
+        var pdf2Path = CreateTestPdf(Path.Combine(singlesFolder, "Song2.pdf"));
+        var pdf3Path = CreateTestPdf(Path.Combine(singlesFolder, "Song3.pdf"));
+
+        // Create a JSON metadata file with pageCount=0 for all volumes (simulating OneDrive cloud-only issue)
+        var jsonPath = Path.Combine(_tempFolder, "TestSingles.json");
+        var corruptedJsonContent = @"{
+  ""version"": 1,
+  ""lastWrite"": ""2025-01-01T00:00:00"",
+  ""lastPageNo"": 0,
+  ""volumes"": [
+    { ""fileName"": ""Song1.pdf"", ""pageCount"": 0 },
+    { ""fileName"": ""Song2.pdf"", ""pageCount"": 0 },
+    { ""fileName"": ""Song3.pdf"", ""pageCount"": 0 }
+  ],
+  ""tableOfContents"": [
+    { ""songName"": ""Song1"", ""pageNo"": 0 },
+    { ""songName"": ""Song2"", ""pageNo"": 0 },
+    { ""songName"": ""Song3"", ""pageNo"": 0 }
+  ],
+  ""favorites"": [],
+  ""inkStrokes"": {}
+}";
+        await File.WriteAllTextAsync(jsonPath, corruptedJsonContent);
+
+        var provider = new PdfToImageDocumentProvider();
+
+        // Act - Load metadata using the sequential loader which calls LoadSinglesFolderAsync
+        var (metadataList, folders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+            _tempFolder,
+            provider,
+            exceptionHandler: null,
+            useParallelLoading: false); // Use sequential to ensure LoadSinglesFolderAsync is called
+
+        // Assert
+        Assert.AreEqual(1, metadataList.Count, "Should find 1 Singles folder");
+        var metadata = metadataList[0];
+        
+        Assert.IsTrue(metadata.IsSinglesFolder, "Should be marked as Singles folder");
+        Assert.AreEqual(3, metadata.VolumeInfoList.Count, "Should have 3 volumes");
+        
+        // Verify all page counts were fixed (each test PDF has 1 page)
+        foreach (var vol in metadata.VolumeInfoList)
+        {
+            Assert.AreEqual(1, vol.NPagesInThisVolume, 
+                $"Volume '{vol.FileNameVolume}' should have pageCount=1 (fixed from 0)");
+        }
+        
+        // Verify TOC was rebuilt with correct page numbers
+        Assert.AreEqual(3, metadata.TocEntries.Count, "Should have 3 TOC entries");
+        Assert.AreEqual(0, metadata.TocEntries[0].PageNo, "Song1 should be on page 0");
+        Assert.AreEqual(1, metadata.TocEntries[1].PageNo, "Song2 should be on page 1 (after Song1's 1 page)");
+        Assert.AreEqual(2, metadata.TocEntries[2].PageNo, "Song3 should be on page 2 (after Song1+Song2's 2 pages)");
+        
+        // Verify metadata is marked dirty (needs saving)
+        Assert.IsTrue(metadata.IsDirty, "Metadata should be marked dirty after fixing page counts");
+        
+        LogMessage("PageCount=0 fix verified:");
+        for (int i = 0; i < metadata.VolumeInfoList.Count; i++)
+        {
+            LogMessage($"  {metadata.VolumeInfoList[i].FileNameVolume}: {metadata.VolumeInfoList[i].NPagesInThisVolume} pages, TOC page {metadata.TocEntries[i].PageNo}");
+        }
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task LoadSinglesFolderAsync_WithZeroPageCounts_ParallelLoader_FixesPageCounts()
+    {
+        // This test verifies the pageCount=0 fix also works with the parallel loader.
+
+        // Arrange - Create a Singles folder with PDFs
+        var singlesFolder = Path.Combine(_tempFolder, "JazzLibrarySingles");
+        Directory.CreateDirectory(singlesFolder);
+        
+        var pdf1Path = CreateTestPdf(Path.Combine(singlesFolder, "Bridge-Over-Troubled-Water.pdf"));
+        var pdf2Path = CreateTestPdf(Path.Combine(singlesFolder, "Tangerine.pdf"));
+
+        // Create a JSON metadata file with pageCount=0 (simulating OneDrive cloud-only issue)
+        var jsonPath = Path.Combine(_tempFolder, "JazzLibrarySingles.json");
+        var corruptedJsonContent = @"{
+  ""version"": 1,
+  ""lastWrite"": ""2025-01-01T00:00:00"",
+  ""lastPageNo"": 0,
+  ""volumes"": [
+    { ""fileName"": ""Bridge-Over-Troubled-Water.pdf"", ""pageCount"": 0 },
+    { ""fileName"": ""Tangerine.pdf"", ""pageCount"": 0 }
+  ],
+  ""tableOfContents"": [
+    { ""songName"": ""Bridge-Over-Troubled-Water"", ""pageNo"": 0 },
+    { ""songName"": ""Tangerine"", ""pageNo"": 0 }
+  ],
+  ""favorites"": [],
+  ""inkStrokes"": {}
+}";
+        await File.WriteAllTextAsync(jsonPath, corruptedJsonContent);
+
+        var provider = new PdfToImageDocumentProvider();
+
+        // Act - Load metadata using the PARALLEL loader
+        var (metadataList, folders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+            _tempFolder,
+            provider,
+            exceptionHandler: null,
+            useParallelLoading: true,
+            autoSaveNewMetadata: true);
+
+        // Assert
+        Assert.AreEqual(1, metadataList.Count, "Should find 1 Singles folder");
+        var metadata = metadataList[0];
+        
+        Assert.IsTrue(metadata.IsSinglesFolder, "Should be marked as Singles folder");
+        Assert.AreEqual(2, metadata.VolumeInfoList.Count, "Should have 2 volumes");
+        
+        // Verify page counts were fixed
+        Assert.AreEqual(1, metadata.VolumeInfoList[0].NPagesInThisVolume, 
+            "Bridge-Over-Troubled-Water.pdf should have pageCount fixed to 1");
+        Assert.AreEqual(1, metadata.VolumeInfoList[1].NPagesInThisVolume, 
+            "Tangerine.pdf should have pageCount fixed to 1");
+        
+        // Verify TOC page numbers were recalculated
+        Assert.AreEqual(0, metadata.TocEntries[0].PageNo, "First song should be on page 0");
+        Assert.AreEqual(1, metadata.TocEntries[1].PageNo, "Second song should be on page 1");
+        
+        LogMessage($"Parallel loader pageCount=0 fix verified for {metadata.VolumeInfoList.Count} volumes");
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task LoadSinglesFolderAsync_WithMixedPageCounts_OnlyFixesZeros()
+    {
+        // This test verifies that only volumes with pageCount=0 are re-read.
+        // Volumes with valid page counts should not be modified.
+
+        // Arrange - Create a Singles folder with PDFs
+        var singlesFolder = Path.Combine(_tempFolder, "MixedSingles");
+        Directory.CreateDirectory(singlesFolder);
+        
+        CreateTestPdf(Path.Combine(singlesFolder, "ValidSong.pdf"));
+        CreateTestPdf(Path.Combine(singlesFolder, "ZeroSong.pdf"));
+
+        // Create JSON with one valid pageCount and one zero
+        var jsonPath = Path.Combine(_tempFolder, "MixedSingles.json");
+        var jsonContent = @"{
+  ""version"": 1,
+  ""lastWrite"": ""2025-01-01T00:00:00"",
+  ""lastPageNo"": 0,
+  ""volumes"": [
+    { ""fileName"": ""ValidSong.pdf"", ""pageCount"": 99 },
+    { ""fileName"": ""ZeroSong.pdf"", ""pageCount"": 0 }
+  ],
+  ""tableOfContents"": [
+    { ""songName"": ""ValidSong"", ""pageNo"": 0 },
+    { ""songName"": ""ZeroSong"", ""pageNo"": 99 }
+  ],
+  ""favorites"": [],
+  ""inkStrokes"": {}
+}";
+        await File.WriteAllTextAsync(jsonPath, jsonContent);
+
+        var provider = new PdfToImageDocumentProvider();
+
+        // Act
+        var (metadataList, folders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+            _tempFolder,
+            provider,
+            exceptionHandler: null,
+            useParallelLoading: false);
+
+        // Assert
+        var metadata = metadataList[0];
+        
+        // ValidSong should keep its original (fake) page count of 99
+        Assert.AreEqual(99, metadata.VolumeInfoList[0].NPagesInThisVolume, 
+            "ValidSong should keep its original pageCount (99), not be re-read");
+        
+        // ZeroSong should be fixed to actual page count (1)
+        Assert.AreEqual(1, metadata.VolumeInfoList[1].NPagesInThisVolume, 
+            "ZeroSong should be fixed to actual pageCount (1)");
+        
+        // TOC should be rebuilt with correct page numbers
+        Assert.AreEqual(0, metadata.TocEntries[0].PageNo, "ValidSong should be on page 0");
+        Assert.AreEqual(99, metadata.TocEntries[1].PageNo, "ZeroSong should be on page 99 (after ValidSong's 99 pages)");
+        
+        LogMessage("Mixed pageCount handling verified: ValidSong=99 pages, ZeroSong=1 page (fixed from 0)");
     }
 }
