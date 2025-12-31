@@ -628,7 +628,10 @@ namespace SheetMusicLib
 
                     try
                     {
-                        if (curPath.EndsWith("singles", StringComparison.InvariantCultureIgnoreCase))
+                        // Check if this folder name ends with "singles" (case-insensitive)
+                        // This matches folders like "singles", "PopSingles", "JazzLibrarySingles"
+                        var folderName = Path.GetFileName(curPath);
+                        if (folderName.EndsWith("singles", StringComparison.OrdinalIgnoreCase))
                         {
                             // Singles folder - load as a single metadata entry
                             var singlesMetadata = await LoadSinglesFolderAsync(curPath, pdfDocumentProvider, exceptionHandler);
@@ -1219,6 +1222,8 @@ namespace SheetMusicLib
                 path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
                     .Any(segment => segment.Equals("hidden", StringComparison.OrdinalIgnoreCase));
 
+            // Match folders whose names end with "singles" (case-insensitive)
+            // This matches folders like "singles", "PopSingles", "JazzLibrarySingles"
             static bool IsInSinglesFolder(string path) =>
                 path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
                     .Any(segment => segment.EndsWith("singles", StringComparison.OrdinalIgnoreCase));
@@ -1237,16 +1242,36 @@ namespace SheetMusicLib
                         metadataByBasePath[basePath] = jsonFile;
                     }
 
-                    // Identify Singles folders
+                    // Identify Singles folders - both from existing metadata AND by scanning directories
                     var allSinglesFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    
+                    // First, find singles folders from existing metadata files
                     foreach (var kvp in metadataByBasePath)
                     {
                         var metadataFile = kvp.Value;
                         var singlesDir = Path.Combine(Path.GetDirectoryName(metadataFile) ?? "", Path.GetFileNameWithoutExtension(metadataFile));
-                        if (Directory.Exists(singlesDir) && singlesDir.EndsWith("singles", StringComparison.OrdinalIgnoreCase))
+                        var folderName = Path.GetFileName(singlesDir);
+                        if (Directory.Exists(singlesDir) && folderName.EndsWith("singles", StringComparison.OrdinalIgnoreCase))
                         {
                             allSinglesFolders.Add(singlesDir);
                             singlesFolders.Add(singlesDir);
+                        }
+                    }
+                    
+                    // Also scan for Singles folders that don't have metadata files yet
+                    foreach (var dir in Directory.EnumerateDirectories(rootMusicFolder, "*", SearchOption.AllDirectories))
+                    {
+                        if (IsInHiddenFolder(dir)) continue;
+                        var folderName = Path.GetFileName(dir);
+                        if (folderName.EndsWith("singles", StringComparison.OrdinalIgnoreCase) && !allSinglesFolders.Contains(dir))
+                        {
+                            // Check if this folder contains any PDFs
+                            if (Directory.EnumerateFiles(dir, "*.pdf").Any())
+                            {
+                                allSinglesFolders.Add(dir);
+                                singlesFolders.Add(dir);
+                                Debug.WriteLine($"PdfMetaDataCore Parallel: Found new Singles folder without metadata: {folderName}");
+                            }
                         }
                     }
 
