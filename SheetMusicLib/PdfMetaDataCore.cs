@@ -777,6 +777,50 @@ namespace SheetMusicLib
                             sortedListSingles.Add(vol.FileNameVolume.ToLower());
                         }
                     }
+                    
+                    // Fix any volumes that have pageCount=0 (e.g., files were cloud-only during initial load)
+                    bool needsRebuildToc = false;
+                    for (int i = 0; i < curmetadata.VolumeInfoList.Count; i++)
+                    {
+                        if (curmetadata.VolumeInfoList[i].NPagesInThisVolume == 0)
+                        {
+                            var pdfPath = Path.Combine(curPath, curmetadata.VolumeInfoList[i].FileNameVolume);
+                            if (File.Exists(pdfPath))
+                            {
+                                try
+                                {
+                                    Debug.WriteLine($"PdfMetaDataCore: Singles volume {i} has pageCount=0, re-reading PDF: {curmetadata.VolumeInfoList[i].FileNameVolume}");
+                                    var pageCount = await pdfDocumentProvider.GetPageCountAsync(pdfPath);
+                                    if (pageCount > 0)
+                                    {
+                                        curmetadata.VolumeInfoList[i].NPagesInThisVolume = pageCount;
+                                        curmetadata.IsDirty = true;
+                                        needsRebuildToc = true;
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    exceptionHandler?.OnException($"Re-reading PDF page count for {pdfPath}", ex);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Rebuild TOC if we fixed any page counts
+                    if (needsRebuildToc)
+                    {
+                        curmetadata.TocEntries.Clear();
+                        int singlesPageNo = 0;
+                        foreach (var vol in curmetadata.VolumeInfoList)
+                        {
+                            curmetadata.TocEntries.Add(new TOCEntry
+                            {
+                                SongName = Path.GetFileNameWithoutExtension(vol.FileNameVolume),
+                                PageNo = singlesPageNo
+                            });
+                            singlesPageNo += vol.NPagesInThisVolume;
+                        }
+                    }
                 }
             }
             else
