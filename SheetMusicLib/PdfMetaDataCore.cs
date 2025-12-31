@@ -1102,6 +1102,7 @@ namespace SheetMusicLib
             }
 
             // Fix volumes with pageCount=0 (e.g., if PDF was cloud-only during initial load)
+            bool needsRebuildToc = false;
             for (int i = 0; i < result.VolumeInfoList.Count; i++)
             {
                 if (result.VolumeInfoList[i].NPagesInThisVolume == 0)
@@ -1115,8 +1116,25 @@ namespace SheetMusicLib
                         {
                             result.VolumeInfoList[i].NPagesInThisVolume = pageCount;
                             result.IsDirty = true;
+                            needsRebuildToc = true;
                         }
                     }
+                }
+            }
+            
+            // Rebuild TOC if we fixed any page counts for Singles folders
+            if (needsRebuildToc && isSingles)
+            {
+                result.TocEntries.Clear();
+                int singlesPageNo = 0;
+                foreach (var vol in result.VolumeInfoList)
+                {
+                    result.TocEntries.Add(new TOCEntry
+                    {
+                        SongName = Path.GetFileNameWithoutExtension(vol.FileNameVolume),
+                        PageNo = singlesPageNo
+                    });
+                    singlesPageNo += vol.NPagesInThisVolume;
                 }
             }
 
