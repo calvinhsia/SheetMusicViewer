@@ -279,10 +279,9 @@ public class ListBoxBrowseView : UserControl
 
     private void BuildVisualStructure()
     {
-        // Create header grid
+        // Create header grid - use theme-aware colors
         _headerGrid = new Grid
         {
-            Background = Brushes.LightGray,
             Height = 28,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             Margin = new Thickness(0, 8, 0, 0)
@@ -318,8 +317,6 @@ public class ListBoxBrowseView : UserControl
             var headerButton = new Button
             {
                 Content = col.HeaderText,
-                Background = Brushes.LightGray,
-                BorderBrush = Brushes.Gray,
                 BorderThickness = new Thickness(0, 0, 1, 1),
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 VerticalAlignment = VerticalAlignment.Stretch,
@@ -365,12 +362,11 @@ public class ListBoxBrowseView : UserControl
             ItemsSource = _filteredItems
         };
         
-        // Reduce ListBoxItem padding/margin to minimize vertical spacing
+        // Reduce ListBoxItem padding/margin to minimize vertical spacing - use theme-aware colors
         var itemStyle = new Style(x => x.OfType<ListBoxItem>());
         itemStyle.Setters.Add(new Setter(ListBoxItem.PaddingProperty, new Thickness(0)));
         itemStyle.Setters.Add(new Setter(ListBoxItem.MarginProperty, new Thickness(0)));
         itemStyle.Setters.Add(new Setter(ListBoxItem.MinHeightProperty, (double)_rowHeight));
-        itemStyle.Setters.Add(new Setter(ListBoxItem.ForegroundProperty, Brushes.Blue));
         itemStyle.Setters.Add(new Setter(ListBoxItem.FontSizeProperty, 12.0));
         _listBox.Styles.Add(itemStyle);
 

@@ -278,20 +278,17 @@ public class ChooseMusicWindow : Window
         Grid.SetRow(_tabControl, 0);
         Grid.SetRowSpan(_tabControl, 2);
         
-        // Style for tab headers - make them look like traditional tabs
+        // Style for tab headers - use theme-aware colors
         var tabItemStyle = new Style(x => x.OfType<TabItem>());
         tabItemStyle.Setters.Add(new Setter(TabItem.FontSizeProperty, 12.0));
         tabItemStyle.Setters.Add(new Setter(TabItem.PaddingProperty, new Thickness(12, 6)));
         tabItemStyle.Setters.Add(new Setter(TabItem.MarginProperty, new Thickness(2, 0, 0, 0)));
-        tabItemStyle.Setters.Add(new Setter(TabItem.BackgroundProperty, Brushes.LightGray));
-        tabItemStyle.Setters.Add(new Setter(TabItem.BorderBrushProperty, Brushes.Gray));
         tabItemStyle.Setters.Add(new Setter(TabItem.BorderThicknessProperty, new Thickness(1, 1, 1, 0)));
         tabItemStyle.Setters.Add(new Setter(TabItem.CornerRadiusProperty, new CornerRadius(4, 4, 0, 0)));
         _tabControl.Styles.Add(tabItemStyle);
         
         // Style for selected tab - make it stand out
         var selectedTabStyle = new Style(x => x.OfType<TabItem>().Class(":selected"));
-        selectedTabStyle.Setters.Add(new Setter(TabItem.BackgroundProperty, Brushes.White));
         selectedTabStyle.Setters.Add(new Setter(TabItem.FontWeightProperty, FontWeight.SemiBold));
         _tabControl.Styles.Add(selectedTabStyle);
         
