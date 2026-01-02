@@ -6,6 +6,13 @@
         Title="Sheet Music Viewer"
         WindowState="Maximized">
     
+    <Window.Styles>
+        <!-- Reduce gap between checkbox box and label -->
+        <Style Selector="CheckBox">
+            <Setter Property="Padding" Value="4,0,0,0"/>
+        </Style>
+    </Window.Styles>
+    
     <Grid Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
         <!-- Main page display area -->
         <Panel Name="dpPage" Background="{DynamicResource SystemControlBackgroundBaseLowBrush}" />
@@ -25,16 +32,10 @@
             <!-- Left side controls -->
             <StackPanel Orientation="Vertical" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}" Opacity="0.5" Grid.RowSpan="2" VerticalAlignment="Top">
                 <StackPanel Orientation="Horizontal" Spacing="3">
-                    <CheckBox Name="chkFav0" Foreground="Lime" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center">
-                        <TextBlock Text="Fav"/>
-                    </CheckBox>
-                    <CheckBox Name="chkInk0" ToolTip.Tip="Turn on/off inking with mouse or pen" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center">
-                        <TextBlock Text="Ink"/>
-                    </CheckBox>
+                    <CheckBox Name="chkFav0" Content="Fav" Foreground="Lime" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <CheckBox Name="chkInk0" Content="Ink" ToolTip.Tip="Turn on/off inking with mouse or pen" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                     <Button Name="btnRotate" Content="_Rotate" Margin="3,0,0,0" ToolTip.Tip="Rotate the document 90 degrees right" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center"/>
-                    <CheckBox Name="chkFullScreen" IsVisible="False" ToolTip.Tip="Full Screen" Margin="3,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="_Full Screen"/>
-                    </CheckBox>
+                    <CheckBox Name="chkFullScreen" Content="_Full Screen" IsVisible="False" ToolTip.Tip="Full Screen" Margin="3,0,0,0" VerticalAlignment="Center"/>
                     <TextBlock Name="txtBoxTitle" Text="{Binding PdfTitle}" Foreground="{DynamicResource SystemControlForegroundAccentBrush}" FontSize="14" VerticalAlignment="Center" Margin="5,0,0,0"/>
                     
                     <Button Name="btnPrev" Content="&lt;" Width="25" Margin="8,0,0,0" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center"
@@ -106,12 +107,8 @@
                             <MenuItem Name="mnuQuit" Header="_Quit Application" InputGesture="Alt+Q" ToolTip.Tip="Exit application"/>
                         </MenuItem>
                     </Menu>
-                    <CheckBox Name="chkInk1" IsEnabled="{Binding PdfUIEnabled}" ToolTip.Tip="Turn on/off inking with mouse or pen" IsVisible="{Binding Show2Pages}">
-                        <TextBlock Text="Ink"/>
-                    </CheckBox>
-                    <CheckBox Name="chkFav1" Foreground="Lime" IsEnabled="{Binding PdfUIEnabled}" Margin="0,0,3,0" IsVisible="{Binding Show2Pages}">
-                        <TextBlock Text="Fav"/>
-                    </CheckBox>
+                    <CheckBox Name="chkInk1" Content="Ink" IsEnabled="{Binding PdfUIEnabled}" ToolTip.Tip="Turn on/off inking with mouse or pen" IsVisible="{Binding Show2Pages}" Margin="0,0,4,0"/>
+                    <CheckBox Name="chkFav1" Content="Fav" Foreground="Lime" IsEnabled="{Binding PdfUIEnabled}" Margin="0,0,3,0" IsVisible="{Binding Show2Pages}"/>
                 </StackPanel>
                 <TextBlock Name="txtDesc1" Text="{Binding Description1}" HorizontalAlignment="Right" Margin="0,0,3,0" IsVisible="{Binding Show2Pages}" Opacity="0.5"/>
             </StackPanel>
