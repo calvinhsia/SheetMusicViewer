@@ -274,7 +274,10 @@ public class ChooseMusicWindow : Window
         grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
         grid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star)));
         
-        _tabControl = new TabControl();
+        _tabControl = new TabControl
+        {
+            Background = Brushes.Transparent // Let window background show through
+        };
         Grid.SetRow(_tabControl, 0);
         Grid.SetRowSpan(_tabControl, 2);
         
@@ -559,7 +562,10 @@ public class ChooseMusicWindow : Window
     
     private Control BuildBooksTabContent()
     {
-        var booksGrid = new Grid();
+        var booksGrid = new Grid
+        {
+            Background = Brushes.Transparent // Let theme background show through
+        };
         booksGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
         booksGrid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star)));
         
@@ -585,21 +591,23 @@ public class ChooseMusicWindow : Window
         Grid.SetRow(filterPanel, 0);
         booksGrid.Children.Add(filterPanel);
         
-        _lbBooks = new ListBox();
-        
-        _lbBooks.ItemContainerTheme = new ControlTheme(typeof(ListBoxItem))
+        _lbBooks = new ListBox
         {
-            Setters =
-            {
-                new Setter(ListBoxItem.PaddingProperty, new Thickness(0)),
-                new Setter(ListBoxItem.MarginProperty, new Thickness(0)),
-                new Setter(ListBoxItem.MinHeightProperty, 0.0),
-            }
+            Background = Brushes.Transparent // Let theme background show through
         };
+        
+        // Style ListBoxItem to have transparent background (for dark mode support)
+        var listBoxItemStyle = new Style(x => x.OfType<ListBoxItem>());
+        listBoxItemStyle.Setters.Add(new Setter(ListBoxItem.PaddingProperty, new Thickness(0)));
+        listBoxItemStyle.Setters.Add(new Setter(ListBoxItem.MarginProperty, new Thickness(0)));
+        listBoxItemStyle.Setters.Add(new Setter(ListBoxItem.MinHeightProperty, 0.0));
+        listBoxItemStyle.Setters.Add(new Setter(ListBoxItem.BackgroundProperty, Brushes.Transparent));
+        _lbBooks.Styles.Add(listBoxItemStyle);
         
         var wrapPanelFactory = new FuncTemplate<Panel?>(() => new WrapPanel
         {
-            Orientation = Orientation.Horizontal
+            Orientation = Orientation.Horizontal,
+            Background = Brushes.Transparent // Let theme background show through
         });
         _lbBooks.ItemsPanel = wrapPanelFactory;
         // Note: DoubleTapped is now handled on individual items in CreateBookItemControl
@@ -608,6 +616,7 @@ public class ChooseMusicWindow : Window
         var scrollViewer = new ScrollViewer 
         { 
             HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            Background = Brushes.Transparent, // Let theme background show through
             Content = _lbBooks
         };
         
