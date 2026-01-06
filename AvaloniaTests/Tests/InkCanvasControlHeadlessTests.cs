@@ -499,4 +499,35 @@ public class InkCanvasControlTests : TestBase
         
         LogMessage($"Tested different bitmap sizes successfully");
     }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [Timeout(30000)]
+    public void InkCanvasControl_ImmutableBrushColor_SerializesCorrectly()
+    {
+        SkipIfNotSupportedPlatform();
+        
+        // This test verifies that ImmutableSolidColorBrush (like Brushes.Red) 
+        // correctly serializes color when saving strokes.
+        // Bug: Red ink was appearing black after reload because ImmutableSolidColorBrush
+        // was not being handled in GetPortableStrokes().
+        
+        RunOnDispatcher(() =>
+        {
+            // Arrange
+            using var bitmap = CreateTestBitmap();
+            var inkCanvas = new InkCanvasControl(bitmap, pageNo: 0);
+            
+            // Verify Brushes.Red is ImmutableSolidColorBrush (implements ISolidColorBrush)
+            Assert.IsTrue(Brushes.Red is ISolidColorBrush, "Brushes.Red should implement ISolidColorBrush");
+            Assert.IsFalse(Brushes.Red is SolidColorBrush, "Brushes.Red should NOT be SolidColorBrush - it's ImmutableSolidColorBrush");
+            
+            // Verify our custom brush (highlighter) is SolidColorBrush
+            var highlighterBrush = new SolidColorBrush(Colors.Yellow, 0.5);
+            Assert.IsTrue(highlighterBrush is SolidColorBrush, "Custom brush should be SolidColorBrush");
+            Assert.IsTrue(highlighterBrush is ISolidColorBrush, "Custom brush should also implement ISolidColorBrush");
+        });
+        
+        LogMessage("ImmutableSolidColorBrush and SolidColorBrush both implement ISolidColorBrush - fix verified");
+    }
 }

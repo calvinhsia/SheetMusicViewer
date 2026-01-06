@@ -490,7 +490,8 @@ public class InkCanvasControl : Panel
                 var (brush, thickness) = _strokeMetadata[i];
                 stroke.Thickness = thickness;
                 
-                if (brush is SolidColorBrush solidBrush)
+                // Use ISolidColorBrush interface to handle both SolidColorBrush and ImmutableSolidColorBrush
+                if (brush is ISolidColorBrush solidBrush)
                 {
                     stroke.Color = $"#{solidBrush.Color.R:X2}{solidBrush.Color.G:X2}{solidBrush.Color.B:X2}";
                     stroke.Opacity = solidBrush.Opacity;
