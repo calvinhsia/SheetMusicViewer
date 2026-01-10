@@ -1,0 +1,2 @@
+Fix choosemusic: other tabs
+click in top 3/4 page
