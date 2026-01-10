@@ -743,6 +743,13 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 _dpPage?.Children.Add(grid);
                 SetupGestureHandler();
                 
+                // Update description text for the current page(s)
+                Description0 = GetDescription(pageNo);
+                if (NumPagesPerView > 1)
+                {
+                    Description1 = GetDescription(pageNo + 1);
+                }
+                
                 // Initialize favorite checkboxes from metadata
                 _chkFavoriteEnabled = false;
                 if (_chkFav0 != null)
