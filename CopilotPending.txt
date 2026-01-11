@@ -1,2 +1,2 @@
-Fix choosemusic: other tabs
+Fix choosemusic: sortby ByFolder
 click in top 3/4 page
