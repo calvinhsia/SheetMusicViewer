@@ -821,6 +821,40 @@ namespace SheetMusicLib
                             singlesPageNo += vol.NPagesInThisVolume;
                         }
                     }
+                    
+                    // Validate TOC page numbers are correct (cumulative)
+                    // This handles cases where JSON has incorrect page numbers (e.g., all zeros)
+                    if (!needsRebuildToc && curmetadata.TocEntries.Count == curmetadata.VolumeInfoList.Count)
+                    {
+                        bool tocIsIncorrect = false;
+                        int expectedPageNo = 0;
+                        for (int i = 0; i < curmetadata.VolumeInfoList.Count; i++)
+                        {
+                            if (i < curmetadata.TocEntries.Count && curmetadata.TocEntries[i].PageNo != expectedPageNo)
+                            {
+                                tocIsIncorrect = true;
+                                break;
+                            }
+                            expectedPageNo += curmetadata.VolumeInfoList[i].NPagesInThisVolume;
+                        }
+                        
+                        if (tocIsIncorrect)
+                        {
+                            Debug.WriteLine($"PdfMetaDataCore: Singles folder TOC page numbers are incorrect, rebuilding");
+                            curmetadata.TocEntries.Clear();
+                            int singlesPageNo = 0;
+                            foreach (var vol in curmetadata.VolumeInfoList)
+                            {
+                                curmetadata.TocEntries.Add(new TOCEntry
+                                {
+                                    SongName = Path.GetFileNameWithoutExtension(vol.FileNameVolume),
+                                    PageNo = singlesPageNo
+                                });
+                                singlesPageNo += vol.NPagesInThisVolume;
+                            }
+                            curmetadata.IsDirty = true;
+                        }
+                    }
                 }
             }
             else
@@ -1137,22 +1171,39 @@ namespace SheetMusicLib
                     singlesPageNo += vol.NPagesInThisVolume;
                 }
             }
-
-            // Ensure at least one TOC entry exists
-            if (result.TocEntries.Count == 0)
+            
+            // Validate TOC page numbers are correct for singles folders (cumulative)
+            // This handles cases where JSON has incorrect page numbers (e.g., all zeros)
+            if (!needsRebuildToc && isSingles && result.TocEntries.Count == result.VolumeInfoList.Count)
             {
-                result.TocEntries.Add(new TOCEntry
+                bool tocIsIncorrect = false;
+                int expectedPageNo = 0;
+                for (int i = 0; i < result.VolumeInfoList.Count; i++)
                 {
-                    SongName = Path.GetFileNameWithoutExtension(fullPathPdfFileOrSinglesFolder)
-                });
-                result.IsDirty = true;
-            }
-
-            // Validate last page number is in range
-            var maxPageNum = result.PageNumberOffset + result.VolumeInfoList.Sum(v => v.NPagesInThisVolume);
-            if (result.LastPageNo < result.PageNumberOffset || result.LastPageNo >= maxPageNum)
-            {
-                result.LastPageNo = result.PageNumberOffset;
+                    if (i < result.TocEntries.Count && result.TocEntries[i].PageNo != expectedPageNo)
+                    {
+                        tocIsIncorrect = true;
+                        break;
+                    }
+                    expectedPageNo += result.VolumeInfoList[i].NPagesInThisVolume;
+                }
+                
+                if (tocIsIncorrect)
+                {
+                    Debug.WriteLine($"PdfMetaDataCore: Singles folder TOC page numbers are incorrect, rebuilding");
+                    result.TocEntries.Clear();
+                    int singlesPageNo = 0;
+                    foreach (var vol in result.VolumeInfoList)
+                    {
+                        result.TocEntries.Add(new TOCEntry
+                        {
+                            SongName = Path.GetFileNameWithoutExtension(vol.FileNameVolume),
+                            PageNo = singlesPageNo
+                        });
+                        singlesPageNo += vol.NPagesInThisVolume;
+                    }
+                    result.IsDirty = true;
+                }
             }
 
             return result;
@@ -1499,7 +1550,7 @@ namespace SheetMusicLib
                     if (!File.Exists(pdfFile))
                     {
                         var dir = Path.GetDirectoryName(metadataFile);
-                        var baseName = Path.GetFileNameWithoutExtension(metadataFile);
+                        var baseName = Path.GetFileName(metadataFile);
                         var candidates = Directory.EnumerateFiles(dir!, $"{baseName}*.pdf").OrderBy(f => f).ToList();
                         if (candidates.Count > 0)
                             pdfFile = candidates[0];
@@ -1533,7 +1584,8 @@ namespace SheetMusicLib
                 try
                 {
                     var metadata = await LoadSinglesFolderAsync(singlesFolder, pdfDocumentProvider, exceptionHandler);
-                    if (metadata != null) results.Add(metadata);
+                    if (metadata != null) 
+                        results.Add(metadata);
                 }
                 catch (Exception ex)
                 {
