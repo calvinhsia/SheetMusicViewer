@@ -1428,9 +1428,91 @@ public class PdfMetaDataCoreTests : TestBase
             "ZeroSong should be fixed to actual pageCount (1)");
         
         // TOC should be rebuilt with correct page numbers
+        Assert.AreEqual(2, metadata.TocEntries.Count, "Should have 2 TOC entries");
         Assert.AreEqual(0, metadata.TocEntries[0].PageNo, "ValidSong should be on page 0");
         Assert.AreEqual(99, metadata.TocEntries[1].PageNo, "ZeroSong should be on page 99 (after ValidSong's 99 pages)");
         
         LogMessage("Mixed pageCount handling verified: ValidSong=99 pages, ZeroSong=1 page (fixed from 0)");
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task LoadSinglesFolderAsync_WithIncorrectTOCPageNumbers_FixesTOC()
+    {
+        // This test verifies that TOC page numbers are validated and fixed when loading a Singles folder,
+        // even when volume page counts are correct. This handles JSON files with all pageNo: 0.
+        
+        // Arrange
+        var singlesFolder = Path.Combine(_tempFolder, "JazzSingles");
+        Directory.CreateDirectory(singlesFolder);
+        
+        // Create 3 test PDFs (1 page each) using TestHelpers
+        var pdf1Path = TestHelpers.CreateTestPdf(1);  // Create temp PDF first
+        var pdf2Path = TestHelpers.CreateTestPdf(1);
+        var pdf3Path = TestHelpers.CreateTestPdf(1);
+        
+        // Move them to the singles folder with proper names
+        var pdf1 = Path.Combine(singlesFolder, "Song1.pdf");
+        var pdf2 = Path.Combine(singlesFolder, "Song2.pdf");
+        var pdf3 = Path.Combine(singlesFolder, "Song3.pdf");
+        File.Move(pdf1Path, pdf1);
+        File.Move(pdf2Path, pdf2);
+        File.Move(pdf3Path, pdf3);
+        
+        // Create a JSON metadata file with CORRECT page counts but INCORRECT TOC page numbers (all zeros)
+        // This simulates the actual problem reported by the user
+        var jsonFile = Path.ChangeExtension(singlesFolder, "json");
+        var jsonContent = @"{
+  ""version"": 1,
+  ""lastWrite"": ""2026-01-10T15:51:16.6146576-08:00"",
+  ""lastPageNo"": 0,
+  ""volumes"": [
+    { ""fileName"": ""Song1.pdf"", ""pageCount"": 1 },
+    { ""fileName"": ""Song2.pdf"", ""pageCount"": 1 },
+    { ""fileName"": ""Song3.pdf"", ""pageCount"": 1 }
+  ],
+  ""tableOfContents"": [
+    { ""songName"": ""Song1"", ""pageNo"": 0 },
+    { ""songName"": ""Song2"", ""pageNo"": 0 },
+    { ""songName"": ""Song3"", ""pageNo"": 0 }
+  ],
+  ""favorites"": [],
+  ""inkStrokes"": {}
+}";
+        await File.WriteAllTextAsync(jsonFile, jsonContent);
+        
+        var provider = new PdfToImageDocumentProvider();
+        
+        // Act
+        var metadata = await PdfMetaDataCore.ReadPdfMetaDataAsync(
+            singlesFolder,
+            isSingles: true,
+            provider,
+            exceptionHandler: null);
+        
+        // Assert
+        Assert.IsNotNull(metadata, "Metadata should be loaded");
+        Assert.IsTrue(metadata.IsSinglesFolder, "Should be marked as Singles folder");
+        Assert.AreEqual(3, metadata.VolumeInfoList.Count, "Should have 3 volumes");
+        
+        // Verify page counts are still correct (not changed)
+        Assert.AreEqual(1, metadata.VolumeInfoList[0].NPagesInThisVolume, "Song1 should have 1 page");
+        Assert.AreEqual(1, metadata.VolumeInfoList[1].NPagesInThisVolume, "Song2 should have 1 page");
+        Assert.AreEqual(1, metadata.VolumeInfoList[2].NPagesInThisVolume, "Song3 should have 1 page");
+        
+        // Verify TOC page numbers were FIXED (cumulative)
+        Assert.AreEqual(3, metadata.TocEntries.Count, "Should have 3 TOC entries");
+        Assert.AreEqual(0, metadata.TocEntries[0].PageNo, "Song1 should be on page 0 (fixed)");
+        Assert.AreEqual(1, metadata.TocEntries[1].PageNo, "Song2 should be on page 1 (fixed from 0)");
+        Assert.AreEqual(2, metadata.TocEntries[2].PageNo, "Song3 should be on page 2 (fixed from 0)");
+        
+        // Verify metadata is marked dirty (needs saving)
+        Assert.IsTrue(metadata.IsDirty, "Metadata should be marked dirty after fixing TOC");
+        
+        LogMessage("TOC page number fix verified:");
+        for (int i = 0; i < metadata.TocEntries.Count; i++)
+        {
+            LogMessage($"  {metadata.TocEntries[i].SongName}: page {metadata.TocEntries[i].PageNo}");
+        }
     }
 }
