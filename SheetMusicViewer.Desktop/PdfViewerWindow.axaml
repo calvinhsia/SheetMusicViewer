@@ -46,7 +46,7 @@
                     <TextBlock Text="of" Margin="2,0,2,0" VerticalAlignment="Center" IsEnabled="{Binding PdfUIEnabled}"/>
                     <TextBox Margin="0,0,3,0" MinWidth="28" Height="18" Text="{Binding MaxPageNumberMinus1, Mode=OneWay}" IsReadOnly="True" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center" FontSize="12" Padding="2,0" BorderThickness="1" VerticalContentAlignment="Center"/>
                 </StackPanel>
-                <TextBlock Name="txtDesc0" Text="{Binding Description0}" MaxWidth="500" Opacity="0.5" HorizontalAlignment="Left"/>
+                <TextBlock Name="txtDesc0" Text="{Binding Description0}" MaxWidth="500" HorizontalAlignment="Left"/>
             </StackPanel>
             
             <!-- Center slider controls -->
@@ -110,7 +110,7 @@
                     <CheckBox Name="chkInk1" Content="Ink" IsEnabled="{Binding PdfUIEnabled}" ToolTip.Tip="Turn on/off inking with mouse or pen" IsVisible="{Binding Show2Pages}" Margin="0,0,4,0"/>
                     <CheckBox Name="chkFav1" Content="Fav" Foreground="Lime" IsEnabled="{Binding PdfUIEnabled}" Margin="0,0,3,0" IsVisible="{Binding Show2Pages}"/>
                 </StackPanel>
-                <TextBlock Name="txtDesc1" Text="{Binding Description1}" HorizontalAlignment="Right" Margin="0,0,3,0" IsVisible="{Binding Show2Pages}" Opacity="0.5"/>
+                <TextBlock Name="txtDesc1" Text="{Binding Description1}" HorizontalAlignment="Right" Margin="0,0,3,0" IsVisible="{Binding Show2Pages}"/>
             </StackPanel>
         </Grid>
     </Grid>
