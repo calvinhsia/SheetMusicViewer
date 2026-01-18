@@ -214,5 +214,9 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="PDFtoImage" Version="5.0.0" />
     <PackageReference Include="SkiaSharp" Version="3.116.1" />
+    <!-- Explicit native asset references to ensure version consistency across platforms -->
+    <!-- This fixes libSkiaSharp.so version mismatch on Linux (Ubuntu 22.04) -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.116.1" />
+    <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="8.3.1.1" />
   </ItemGroup>
 </Project>
