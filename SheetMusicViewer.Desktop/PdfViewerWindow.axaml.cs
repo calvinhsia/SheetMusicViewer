@@ -487,7 +487,11 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     
     internal async Task LoadPdfFileAndShowAsync(PdfMetaDataReadResult pdfMetaData, int pageNo)
     {
+        var sw = Stopwatch.StartNew();
+        
         CloseCurrentPdfFile();
+        var closeTime = sw.ElapsedMilliseconds;
+        
         _currentPdfMetaData = pdfMetaData;
         
         var pageNumberOffset = pdfMetaData.PageNumberOffset;
@@ -506,8 +510,24 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         PdfUIEnabled = true;
         PdfTitle = pdfMetaData.GetBookName(_rootMusicFolder);
         
-        // Pre-load PDF bytes for all volumes in the background
-        _ = pdfMetaData.PreloadAllVolumeBytesAsync();
+        // Pre-load PDF bytes for the volume containing the current page FIRST (synchronously)
+        // This ensures the first page renders quickly
+        var currentVolNo = pdfMetaData.GetVolNumFromPageNum(pageNo);
+        var preloadStart = sw.ElapsedMilliseconds;
+        await Task.Run(() => pdfMetaData.GetOrLoadVolumeBytes(currentVolNo));
+        var preloadTime = sw.ElapsedMilliseconds - preloadStart;
+        
+        // Pre-load remaining volumes in the background (fire and forget)
+        _ = Task.Run(() =>
+        {
+            for (int volNo = 0; volNo < pdfMetaData.VolumeInfoList.Count; volNo++)
+            {
+                if (volNo != currentVolNo)
+                {
+                    pdfMetaData.GetOrLoadVolumeBytes(volNo);
+                }
+            }
+        });
         
         // Update thumbnail - load it if not cached
         var thumbnail = pdfMetaData.GetCachedThumbnail<Bitmap>();
@@ -544,7 +564,14 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         
         Title = $"{MyAppName} - {PdfTitle}";
         
+        var beforeShowPage = sw.ElapsedMilliseconds;
         await ShowPageAsync(pageNo);
+        var afterShowPage = sw.ElapsedMilliseconds;
+        
+        // Log timing summary for performance analysis
+        var pdfName = Path.GetFileName(pdfMetaData.GetFullPathFileFromVolno(0) ?? "unknown");
+        Trace.WriteLine($"=== LoadPdf: {pdfName} ===");
+        Trace.WriteLine($"  Close: {closeTime}ms, Preload: {preloadTime}ms, ShowPage: {afterShowPage - beforeShowPage}ms, TOTAL: {afterShowPage}ms");
     }
     
     internal void CloseCurrentPdfFile()
@@ -619,21 +646,26 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
 
             var cacheEntry1 = Show2Pages && pageNo + 1 < maxPageNum ? TryAddCacheEntry(pageNo + 1) : null;
             
-            // Start prefetch of adjacent pages (these run in background, in parallel)
-            if (NumPagesPerView == 1)
+            // Only prefetch adjacent pages if caching is enabled (otherwise it's wasted work)
+            var cacheDisabled = AppSettings.Instance.UserOptions.DisablePageCache;
+            if (!cacheDisabled)
             {
-                TryAddCacheEntry(pageNo + 1);
-                TryAddCacheEntry(pageNo + 2);
-                TryAddCacheEntry(pageNo - 1);
-            }
-            else
-            {
-                TryAddCacheEntry(pageNo + 2);
-                TryAddCacheEntry(pageNo + 3);
-                TryAddCacheEntry(pageNo + 4);
-                TryAddCacheEntry(pageNo + 5);
-                TryAddCacheEntry(pageNo - 1);
-                TryAddCacheEntry(pageNo - 2);
+                // Start prefetch of adjacent pages (these run in background, in parallel)
+                if (NumPagesPerView == 1)
+                {
+                    TryAddCacheEntry(pageNo + 1);
+                    TryAddCacheEntry(pageNo + 2);
+                    TryAddCacheEntry(pageNo - 1);
+                }
+                else
+                {
+                    TryAddCacheEntry(pageNo + 2);
+                    TryAddCacheEntry(pageNo + 3);
+                    TryAddCacheEntry(pageNo + 4);
+                    TryAddCacheEntry(pageNo + 5);
+                    TryAddCacheEntry(pageNo - 1);
+                    TryAddCacheEntry(pageNo - 2);
+                }
             }
             
             // Now await the current page(s)
@@ -787,19 +819,25 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         // Check if caching is disabled (for performance testing)
         var cacheDisabled = AppSettings.Instance.UserOptions.DisablePageCache;
         
-        // If cache is disabled, just create a new render task without caching
-        if (cacheDisabled)
+        // Even with cache disabled, check if we already have an in-flight render for this page
+        // to avoid duplicate work
+        if (_pageCache.TryGetValue(pageNo, out var existing) && 
+            !existing.Cts.IsCancellationRequested && 
+            !existing.Task.IsCanceled &&
+            !existing.Task.IsCompleted)
         {
-            return new PageCacheEntry
-            {
-                PageNo = pageNo,
-                Age = _currentCacheAge++,
-                Task = RenderPageWithTrackingAsync(pageNo)
-            };
+            existing.Age = _currentCacheAge++; // Update age on access
+            return existing;
         }
         
-        // Check if we already have a valid entry
-        if (_pageCache.TryGetValue(pageNo, out var existing) && 
+        // If cache is disabled and the task completed, remove it so we re-render fresh
+        if (cacheDisabled && existing != null && existing.Task.IsCompleted)
+        {
+            _pageCache.Remove(pageNo);
+        }
+        
+        // If cache is enabled and we have a completed valid entry, reuse it
+        if (!cacheDisabled && existing != null && 
             !existing.Cts.IsCancellationRequested && 
             !existing.Task.IsCanceled)
         {
@@ -815,17 +853,20 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             Task = RenderPageWithTrackingAsync(pageNo)
         };
         
-        // Evict old entries if cache is full
-        var maxCacheSize = AppSettings.Instance.UserOptions.PageCacheMaxSize;
-        if (_pageCache.Count >= maxCacheSize)
+        // Evict old entries if cache is full (only if caching enabled)
+        if (!cacheDisabled)
         {
-            var toRemove = _pageCache.Values
-                .OrderBy(e => e.Age)
-                .Take(_pageCache.Count - maxCacheSize + 1)
-                .ToList();
-            foreach (var old in toRemove)
+            var maxCacheSize = AppSettings.Instance.UserOptions.PageCacheMaxSize;
+            if (_pageCache.Count >= maxCacheSize)
             {
-                _pageCache.Remove(old.PageNo);
+                var toRemove = _pageCache.Values
+                    .OrderBy(e => e.Age)
+                    .Take(_pageCache.Count - maxCacheSize + 1)
+                    .ToList();
+                foreach (var old in toRemove)
+                {
+                    _pageCache.Remove(old.PageNo);
+                }
             }
         }
         
@@ -879,6 +920,8 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         
         return await Task.Run(() =>
         {
+            var sw = Stopwatch.StartNew();
+            
             // Get the PDF file path for this page
             var volNo = _currentPdfMetaData.GetVolNumFromPageNum(pageNo);
             var pdfPath = _currentPdfMetaData.GetFullPathFileFromVolno(volNo);
@@ -906,6 +949,8 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             
             // Get PDF bytes from metadata cache (loads from disk if not cached)
             var pdfBytes = _currentPdfMetaData.GetOrLoadVolumeBytes(volNo);
+            var getBytesTime = sw.ElapsedMilliseconds;
+            
             if (pdfBytes == null)
             {
                 throw new FileNotFoundException($"PDF file not found for page {pageNo}: {pdfPath}");
@@ -923,12 +968,21 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                     $"Delete the .json metadata file to regenerate it.");
             }
             
+            // Get render DPI from settings (user-configurable)
+            var renderDpi = AppSettings.Instance.UserOptions.RenderDpi;
+            
             using var skBitmap = Conversion.ToImage(pdfBytes, page: (Index)pageIndexInVolume, 
-                options: new PDFtoImage.RenderOptions(Dpi: 150, Rotation: pdfRotation));
+                options: new PDFtoImage.RenderOptions(Dpi: renderDpi, Rotation: pdfRotation));
+            var renderTime = sw.ElapsedMilliseconds;
             
             // Convert SKBitmap directly to Avalonia Bitmap without PNG encoding
             // This is significantly faster than encoding to PNG and decoding
-            return ConvertSkBitmapToAvaloniaBitmap(skBitmap);
+            var result = ConvertSkBitmapToAvaloniaBitmap(skBitmap);
+            var convertTime = sw.ElapsedMilliseconds;
+            
+            Trace.WriteLine($"  RenderPage {pageNo}: DPI={renderDpi}, GetBytes={getBytesTime}ms, Render={renderTime - getBytesTime}ms, Convert={convertTime - renderTime}ms");
+            
+            return result;
         });
     }
 
