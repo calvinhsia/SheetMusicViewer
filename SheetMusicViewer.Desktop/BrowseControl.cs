@@ -101,6 +101,30 @@ public class BrowseControl : DockPanel
     }
 
     /// <summary>
+    /// Clear the filter textbox
+    /// </summary>
+    public void ClearFilter()
+    {
+        _listFilter?.ClearFilter();
+    }
+
+    /// <summary>
+    /// Get the current filter text
+    /// </summary>
+    public string GetFilterText()
+    {
+        return _listFilter?.GetFilterText() ?? string.Empty;
+    }
+
+    /// <summary>
+    /// Set the filter text
+    /// </summary>
+    public void SetFilterText(string filterText)
+    {
+        _listFilter?.SetFilterText(filterText);
+    }
+
+    /// <summary>
     /// Adds a custom context menu item to the browse control
     /// </summary>
     /// <param name="itemName">The display name for the menu item</param>
@@ -117,7 +141,7 @@ internal class ListBoxListFilter : DockPanel
     readonly TextBox _txtFilter = new TextBox { Width = 200 };
     readonly TextBlock _txtStatus = new TextBlock();
     ListBoxBrowseView? _browse;
-    private static string? _LastFilter;
+    // Removed static _LastFilter - was causing filter sharing between instances
     private readonly bool _filterOnLeft;
 
     internal ListBoxListFilter(ListBoxBrowseView? browse, bool filterOnLeft = true)
@@ -141,6 +165,30 @@ internal class ListBoxListFilter : DockPanel
         _txtFilter.Focus();
     }
 
+    /// <summary>
+    /// Clear the filter textbox
+    /// </summary>
+    internal void ClearFilter()
+    {
+        _txtFilter.Text = string.Empty;
+    }
+
+    /// <summary>
+    /// Get the current filter text
+    /// </summary>
+    internal string GetFilterText()
+    {
+        return _txtFilter.Text ?? string.Empty;
+    }
+
+    /// <summary>
+    /// Set the filter text
+    /// </summary>
+    internal void SetFilterText(string filterText)
+    {
+        _txtFilter.Text = filterText ?? string.Empty;
+    }
+
     private void BuildUI()
     {
         var spFilter = new StackPanel 
@@ -160,7 +208,7 @@ internal class ListBoxListFilter : DockPanel
             VerticalContentAlignment = VerticalAlignment.Center,
             [ToolTip.TipProperty] = "Case insensitive search (ListBox with virtualization)"
         });
-        _txtFilter.Text = _LastFilter;
+        // Filter starts empty for each BrowseControl instance
         _txtFilter.Watermark = "Enter filter text...";
         _txtFilter.VerticalAlignment = VerticalAlignment.Center;
         _txtFilter.VerticalContentAlignment = VerticalAlignment.Center;
@@ -179,7 +227,7 @@ internal class ListBoxListFilter : DockPanel
         try
         {
             var filtText = _txtFilter.Text?.Trim().ToLower() ?? string.Empty;
-            _LastFilter = filtText;
+            // Each BrowseControl manages its own filter state
 
             _browse?.ApplyFilter(filtText);
             RefreshFilterStat();

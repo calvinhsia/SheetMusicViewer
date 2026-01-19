@@ -41,6 +41,7 @@ public class ChooseMusicWindow : Window
     // Query tab - uses BrowseControl
     private BrowseControl? _queryBrowseControl;
     private Grid _queryTabGrid;
+    private string _queryFilterText = string.Empty; // Persist filter text within app instance
     
     // Playlist tab
     private ComboBox _playlistComboBox;
@@ -814,19 +815,43 @@ public class ChooseMusicWindow : Window
                 
                 if (header == "Fa_vorites" && _allFavoriteItems.Count == 0)
                 {
+                    // Save Query filter before switching
+                    if (_queryBrowseControl != null)
+                    {
+                        _queryFilterText = _queryBrowseControl.GetFilterText();
+                    }
                     FillFavoritesTab();
+                }
+                else if (header == "_Books")
+                {
+                    // Save Query filter before switching
+                    if (_queryBrowseControl != null)
+                    {
+                        _queryFilterText = _queryBrowseControl.GetFilterText();
+                    }
                 }
                 else if (header == "_Query")
                 {
                     if (_queryBrowseControl == null)
                     {
                         FillQueryTab();
+                        // Restore filter text if we have a saved value
+                        if (!string.IsNullOrEmpty(_queryFilterText))
+                        {
+                            _queryBrowseControl?.SetFilterText(_queryFilterText);
+                        }
                     }
                     // Focus the filter textbox when Query tab is activated
                     _queryBrowseControl?.FocusFilter();
                 }
                 else if (header == "_Playlists")
                 {
+                    // Save the Query tab filter before switching away
+                    if (_queryBrowseControl != null)
+                    {
+                        _queryFilterText = _queryBrowseControl.GetFilterText();
+                    }
+                    
                     // Reload playlists from disk in case OneDrive synced changes
                     AppSettings.Instance.ReloadRoaming();
                     
@@ -1225,6 +1250,11 @@ public class ChooseMusicWindow : Window
                 // Use the playlist object directly from the Tag - don't look it up from AppSettings
                 // because that can trigger a reload which causes Avalonia timing issues
                 _currentPlaylist = playlist;
+                
+                // Clear both filters when playlist changes
+                _playlistSongsBrowseControl?.ClearFilter();
+                _playlistEntriesBrowseControl?.ClearFilter();
+                
                 RefreshPlaylistEntries();
             }
         }
