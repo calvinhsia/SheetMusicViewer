@@ -35,7 +35,8 @@ public class OptionsWindow : Window
         
         BuildUI();
         
-        KeyDown += OnKeyDown;
+        // Use AddHandler with tunneling to catch Escape even when focus is in child controls
+        AddHandler(KeyDownEvent, OnKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
     }
     
     private void OnKeyDown(object? sender, KeyEventArgs e)
