@@ -101,6 +101,14 @@ public class BrowseControl : DockPanel
     }
 
     /// <summary>
+    /// Clear the filter textbox
+    /// </summary>
+    public void ClearFilter()
+    {
+        _listFilter?.ClearFilter();
+    }
+
+    /// <summary>
     /// Adds a custom context menu item to the browse control
     /// </summary>
     /// <param name="itemName">The display name for the menu item</param>
@@ -139,6 +147,14 @@ internal class ListBoxListFilter : DockPanel
     internal void FocusFilter()
     {
         _txtFilter.Focus();
+    }
+
+    /// <summary>
+    /// Clear the filter textbox
+    /// </summary>
+    internal void ClearFilter()
+    {
+        _txtFilter.Text = string.Empty;
     }
 
     private void BuildUI()

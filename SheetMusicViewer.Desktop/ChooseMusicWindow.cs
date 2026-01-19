@@ -1225,6 +1225,11 @@ public class ChooseMusicWindow : Window
                 // Use the playlist object directly from the Tag - don't look it up from AppSettings
                 // because that can trigger a reload which causes Avalonia timing issues
                 _currentPlaylist = playlist;
+                
+                // Clear both filters when playlist changes
+                _playlistSongsBrowseControl?.ClearFilter();
+                _playlistEntriesBrowseControl?.ClearFilter();
+                
                 RefreshPlaylistEntries();
             }
         }
