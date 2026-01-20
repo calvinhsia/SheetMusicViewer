@@ -316,7 +316,8 @@ public class AppSettings
     private void LoadRoamingFromMusicFolder()
     {
         var roamingPath = RoamingSettingsPath;
-        Logger.LogInfo($"LoadRoamingFromMusicFolder: roamingPath={roamingPath}");
+        var currentPlaylistCount = Playlists?.Count ?? 0;
+        Logger.LogInfo($"LoadRoamingFromMusicFolder: roamingPath={roamingPath}, current in-memory playlists={currentPlaylistCount}");
         if (string.IsNullOrEmpty(roamingPath))
         {
             Logger.LogWarning("LoadRoamingFromMusicFolder: roamingPath is null/empty, _musicRootFolder not set");
@@ -327,14 +328,20 @@ public class AppSettings
         {
             if (File.Exists(roamingPath))
             {
+                var fileInfo = new FileInfo(roamingPath);
+                Logger.LogInfo($"LoadRoamingFromMusicFolder: File exists, LastWrite={fileInfo.LastWriteTime:yyyy-MM-dd HH:mm:ss.fff}");
+                
                 var json = File.ReadAllText(roamingPath);
                 Logger.LogInfo($"LoadRoamingFromMusicFolder: Read {json.Length} chars from {roamingPath}");
                 var roamingSettings = JsonSerializer.Deserialize<RoamingSettings>(json, JsonOptions);
                 if (roamingSettings != null)
                 {
+                    var loadedCount = roamingSettings.Playlists?.Count ?? 0;
+                    Logger.LogInfo($"LoadRoamingFromMusicFolder: Loaded {loadedCount} playlists from file, replacing {currentPlaylistCount} in-memory playlists");
+                    
                     Playlists = roamingSettings.Playlists ?? new List<Playlist>();
                     LastSelectedPlaylist = roamingSettings.LastSelectedPlaylist;
-                    Logger.LogInfo($"LoadRoamingFromMusicFolder: Loaded {Playlists.Count} playlists, LastSelected={LastSelectedPlaylist}");
+                    Logger.LogInfo($"LoadRoamingFromMusicFolder: Now have {Playlists.Count} playlists, LastSelected={LastSelectedPlaylist}");
                     if (roamingSettings.UserOptions != null)
                     {
                         UserOptions = roamingSettings.UserOptions;
@@ -358,6 +365,7 @@ public class AppSettings
     /// </summary>
     public void ReloadRoaming()
     {
+        Logger.LogInfo($"ReloadRoaming: Called - will reload playlists from disk");
         LoadRoamingFromMusicFolder();
     }
 
@@ -425,7 +433,11 @@ public class AppSettings
     public void SaveRoaming()
     {
         var path = RoamingSettingsPath;
-        if (string.IsNullOrEmpty(path)) return;
+        if (string.IsNullOrEmpty(path))
+        {
+            Logger.LogWarning($"SaveRoaming: Cannot save - RoamingSettingsPath is null/empty (music folder not set)");
+            return;
+        }
         
         try
         {
@@ -443,7 +455,9 @@ public class AppSettings
             };
 
             var json = JsonSerializer.Serialize(roamingSettings, JsonOptions);
+            Logger.LogInfo($"SaveRoaming: Saving {Playlists.Count} playlists to {path} ({json.Length} chars)");
             File.WriteAllText(path, json);
+            Logger.LogInfo($"SaveRoaming: Successfully saved to {path}");
         }
         catch (Exception ex)
         {
