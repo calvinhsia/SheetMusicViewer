@@ -853,7 +853,9 @@ public class ChooseMusicWindow : Window
                     }
                     
                     // Reload playlists from disk in case OneDrive synced changes
+                    Logger.LogInfo($"OnTabSelectionChanged: Switching to Playlists tab, calling ReloadRoaming()");
                     AppSettings.Instance.ReloadRoaming();
+                    Logger.LogInfo($"OnTabSelectionChanged: ReloadRoaming() completed, playlist count={AppSettings.Instance.Playlists.Count}");
                     
                     if (_playlistSongsBrowseControl == null)
                     {
@@ -1283,8 +1285,11 @@ public class ChooseMusicWindow : Window
         }
         
         var newPlaylist = new Playlist { Name = name };
+        Logger.LogInfo($"OnNewPlaylistClick: Adding playlist '{name}', current count={AppSettings.Instance.Playlists.Count}");
         AppSettings.Instance.Playlists.Add(newPlaylist);
+        Logger.LogInfo($"OnNewPlaylistClick: After add, count={AppSettings.Instance.Playlists.Count}, calling Save()");
         AppSettings.Instance.Save();
+        Logger.LogInfo($"OnNewPlaylistClick: Save() completed");
         
         // Set current playlist before refreshing combo to avoid selection issues
         _currentPlaylist = newPlaylist;
