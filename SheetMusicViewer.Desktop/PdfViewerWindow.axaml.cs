@@ -753,6 +753,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                         IsInkingEnabled = false
                     };
                     _inkCanvas0.SaveRequested += OnInkCanvasSaveRequested;
+                    _inkCanvas0.UndoRedoStateChanged += OnInkCanvasUndoRedoStateChanged;
                     Grid.SetColumn(_inkCanvas0, 0);
                     grid.Children.Add(_inkCanvas0);
 
@@ -773,6 +774,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                         IsInkingEnabled = false
                     };
                     _inkCanvas1.SaveRequested += OnInkCanvasSaveRequested;
+                    _inkCanvas1.UndoRedoStateChanged += OnInkCanvasUndoRedoStateChanged;
                     Grid.SetColumn(_inkCanvas1, 2);
                     grid.Children.Add(_inkCanvas1);
                 }
@@ -785,6 +787,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                         IsInkingEnabled = false
                     };
                     _inkCanvas0.SaveRequested += OnInkCanvasSaveRequested;
+                    _inkCanvas0.UndoRedoStateChanged += OnInkCanvasUndoRedoStateChanged;
                     grid.Children.Add(_inkCanvas0);
                     _inkCanvas1 = null;
                 }
