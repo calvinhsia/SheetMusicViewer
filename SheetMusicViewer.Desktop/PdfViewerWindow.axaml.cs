@@ -145,14 +145,28 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         _chkInk0.IsCheckedChanged += (s, e) => 
         { 
             if (_inkCanvas0 != null) 
+            {
+                // Save ink when turning off inking mode
+                if (_chkInk0.IsChecked != true && _inkCanvas0.HasUnsavedStrokes)
+                {
+                    SaveInkFromCanvas(_inkCanvas0);
+                }
                 _inkCanvas0.IsInkingEnabled = _chkInk0.IsChecked == true;
+            }
             UpdateGestureHandlerState();
         };
         
         _chkInk1.IsCheckedChanged += (s, e) => 
         { 
             if (_inkCanvas1 != null) 
+            {
+                // Save ink when turning off inking mode
+                if (_chkInk1.IsChecked != true && _inkCanvas1.HasUnsavedStrokes)
+                {
+                    SaveInkFromCanvas(_inkCanvas1);
+                }
                 _inkCanvas1.IsInkingEnabled = _chkInk1.IsChecked == true;
+            }
             UpdateGestureHandlerState();
         };
         
@@ -738,6 +752,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                         VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
                         IsInkingEnabled = false
                     };
+                    _inkCanvas0.SaveRequested += OnInkCanvasSaveRequested;
                     Grid.SetColumn(_inkCanvas0, 0);
                     grid.Children.Add(_inkCanvas0);
 
@@ -757,6 +772,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                         VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
                         IsInkingEnabled = false
                     };
+                    _inkCanvas1.SaveRequested += OnInkCanvasSaveRequested;
                     Grid.SetColumn(_inkCanvas1, 2);
                     grid.Children.Add(_inkCanvas1);
                 }
@@ -768,6 +784,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                         VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
                         IsInkingEnabled = false
                     };
+                    _inkCanvas0.SaveRequested += OnInkCanvasSaveRequested;
                     grid.Children.Add(_inkCanvas0);
                     _inkCanvas1 = null;
                 }
@@ -780,6 +797,16 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 if (NumPagesPerView > 1)
                 {
                     Description1 = GetDescription(pageNo + 1);
+                }
+                
+                // Reset ink checkboxes to off when navigating to a new page
+                if (_chkInk0 != null)
+                {
+                    _chkInk0.IsChecked = false;
+                }
+                if (_chkInk1 != null)
+                {
+                    _chkInk1.IsChecked = false;
                 }
                 
                 // Initialize favorite checkboxes from metadata
@@ -1184,6 +1211,34 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     }
     
     /// <summary>
+    /// Handle save request from ink canvas toolbar button
+    /// </summary>
+    private void OnInkCanvasSaveRequested(object? sender, EventArgs e)
+    {
+        if (sender is InkCanvasControl inkCanvas)
+        {
+            SaveInkFromCanvas(inkCanvas);
+            Trace.WriteLine($"Ink saved from toolbar for page {inkCanvas.PageNo}");
+        }
+    }
+    
+    /// <summary>
+    /// Saves ink strokes from a specific ink canvas to the PDF metadata
+    /// </summary>
+    private void SaveInkFromCanvas(InkCanvasControl inkCanvas)
+    {
+        if (_currentPdfMetaData == null || !inkCanvas.HasUnsavedStrokes)
+            return;
+            
+        var inkData = inkCanvas.GetInkStrokeDataForSaving();
+        UpdateInkStrokeInMetadata(inkCanvas.PageNo, inkData);
+        inkCanvas.MarkAsSaved();
+        
+        _currentPdfMetaData.IsDirty = true;
+        PdfMetaDataCore.SaveToJson(_currentPdfMetaData);
+    }
+    
+    /// <summary>
     /// Updates or removes ink stroke data for a specific page in the metadata
     /// </summary>
     private void UpdateInkStrokeInMetadata(int pageNo, InkStrokeClass? inkData)
@@ -1233,9 +1288,13 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     {
         if (_gestureHandler != null)
         {
-            _gestureHandler.IsDisabled = 
-                (_chkInk0?.IsChecked == true) || 
-                (_chkInk1?.IsChecked == true);
+            // Don't disable the gesture handler - let individual InkCanvasControl
+            // handle inking events. This allows navigation on non-inking pages
+            // while still being able to ink on the enabled page.
+            // The InkCanvasControl.OnPointerPressed only handles events when 
+            // IsInkingEnabled is true, so events from the non-inking page
+            // will bubble up to the gesture handler.
+            _gestureHandler.IsDisabled = false;
         }
     }
     
