@@ -18,6 +18,8 @@ namespace SheetMusicViewer.Desktop;
 /// <summary>
 /// Custom ink canvas control that supports drawing on top of a PDF page image.
 /// Uses SkiaSharp-compatible rendering for cross-platform support.
+/// Note: The ink toolbar is now managed at the window level (PdfViewerWindow) 
+/// to allow docking at window edges rather than page edges.
 /// </summary>
 public class InkCanvasControl : Panel
 {
@@ -50,24 +52,14 @@ public class InkCanvasControl : Panel
     private readonly Stack<UndoAction> _undoStack = new();
     private readonly Stack<UndoAction> _redoStack = new();
     
-    // Floating toolbar
-    private Border? _toolbarBorder;
-    private StackPanel? _toolbar;
-    private Button? _undoButton;
-    private Button? _redoButton;
-    
-    // Tool selection buttons (to update visual state)
-    private Button? _blackPenButton;
-    private Button? _redPenButton;
-    private Button? _bluePenButton;
-    private Button? _highlighterButton;
-    private Button? _eraserButton;
-    
     // Pen mode tracking
     private InkMode _currentMode = InkMode.Pen;
     
-    // Event for save request
+    // Event for save request (raised by context menu or external toolbar)
     public event EventHandler? SaveRequested;
+    
+    // Event raised when undo/redo state changes (so external toolbar can update)
+    public event EventHandler? UndoRedoStateChanged;
 
     private bool _isInkingEnabled;
     public bool IsInkingEnabled 
@@ -79,7 +71,6 @@ public class InkCanvasControl : Panel
             {
                 _isInkingEnabled = value;
                 Trace.WriteLine($"[InkCanvas] Page {_pageNo}: IsInkingEnabled changed to {value}");
-                UpdateToolbarVisibility();
                 UpdateInkingEventHandlers();
             }
         }
@@ -128,16 +119,12 @@ public class InkCanvasControl : Panel
         // Add context menu (kept for mouse right-click)
         InitializeContextMenu();
         
-        // Create the floating toolbar (hidden by default)
-        CreateFloatingToolbar();
-        
         Trace.WriteLine($"[InkCanvas] Created for page {pageNo}, hasInkData={inkStrokeClass != null}");
     }
 
     protected override Size MeasureOverride(Size availableSize)
     {
         _bgImage.Measure(availableSize);
-        _toolbarBorder?.Measure(availableSize);
         return _bgImage.DesiredSize;
     }
 
@@ -148,21 +135,10 @@ public class InkCanvasControl : Panel
         // Arrange all polylines to fill the same area
         foreach (var child in Children)
         {
-            if (child != _bgImage && child != _toolbarBorder)
+            if (child != _bgImage)
             {
                 child.Arrange(new Rect(finalSize));
             }
-        }
-        
-        // Arrange toolbar at left edge, centered vertically
-        if (_toolbarBorder != null)
-        {
-            _toolbarBorder.Measure(finalSize);
-            var toolbarSize = _toolbarBorder.DesiredSize;
-            var toolbarX = 5; // 5px margin from left edge
-            var toolbarY = (finalSize.Height - toolbarSize.Height) / 2; // Center vertically
-            if (toolbarY < 5) toolbarY = 5; // Minimum margin from top
-            _toolbarBorder.Arrange(new Rect(toolbarX, toolbarY, toolbarSize.Width, toolbarSize.Height));
         }
         
         // Load ink strokes on first valid size
@@ -183,293 +159,6 @@ public class InkCanvasControl : Panel
         }
         
         return finalSize;
-    }
-    
-    /// <summary>
-    /// Creates the floating toolbar with ink controls
-    /// </summary>
-    private void CreateFloatingToolbar()
-    {
-        _toolbar = new StackPanel
-        {
-            Orientation = Orientation.Vertical, // Vertical layout
-            Spacing = 4
-        };
-        
-        // Black pen button (default selected) - use colored squares
-        _blackPenButton = CreateColorButton(Brushes.Black, "Black Pen", () => 
-        {
-            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Black pen selected");
-            SetPenColor(Brushes.Black);
-            UpdateToolSelection(_blackPenButton);
-        });
-        _toolbar.Children.Add(_blackPenButton);
-        
-        // Red pen button
-        _redPenButton = CreateColorButton(Brushes.Red, "Red Pen", () => 
-        {
-            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Red pen selected");
-            SetPenColor(Brushes.Red);
-            UpdateToolSelection(_redPenButton);
-        });
-        _toolbar.Children.Add(_redPenButton);
-        
-        // Blue pen button
-        _bluePenButton = CreateColorButton(Brushes.Blue, "Blue Pen", () => 
-        {
-            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Blue pen selected");
-            SetPenColor(Brushes.Blue);
-            UpdateToolSelection(_bluePenButton);
-        });
-        _toolbar.Children.Add(_bluePenButton);
-        
-        // Highlighter button (yellow)
-        _highlighterButton = CreateColorButton(new SolidColorBrush(Colors.Yellow), "Highlighter", () => 
-        {
-            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Highlighter selected");
-            SetHighlighter();
-            UpdateToolSelection(_highlighterButton);
-        });
-        _toolbar.Children.Add(_highlighterButton);
-        
-        // Separator
-        _toolbar.Children.Add(new Border { Height = 8 });
-        
-        // Line thickness buttons
-        _toolbar.Children.Add(CreateThicknessButton(1, "Thin (1px)"));
-        _toolbar.Children.Add(CreateThicknessButton(2, "Normal (2px)"));
-        _toolbar.Children.Add(CreateThicknessButton(4, "Medium (4px)"));
-        _toolbar.Children.Add(CreateThicknessButton(6, "Thick (6px)"));
-        
-        // Separator
-        _toolbar.Children.Add(new Border { Height = 8 });
-        
-        // Eraser button (white with X)
-        _eraserButton = CreateToolbarButton("X", "Eraser (touch strokes to delete)", () =>
-        {
-            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Eraser selected");
-            _currentMode = InkMode.Eraser;
-            UpdateToolSelection(_eraserButton);
-        });
-        _eraserButton.Background = Brushes.White;
-        _eraserButton.Foreground = Brushes.Red;
-        _toolbar.Children.Add(_eraserButton);
-        
-        // Separator
-        _toolbar.Children.Add(new Border { Height = 8 });
-        
-        // Undo button (not a tool, so no selection state)
-        _undoButton = CreateToolbarButton("↶", "Undo (Ctrl+Z)", () =>
-        {
-            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Undo clicked, stack count={_undoStack.Count}");
-            Undo();
-        }, isToolButton: false);
-        _toolbar.Children.Add(_undoButton);
-        
-        // Redo button
-        _redoButton = CreateToolbarButton("↷", "Redo (Ctrl+Y)", () =>
-        {
-            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Redo clicked, stack count={_redoStack.Count}");
-            Redo();
-        }, isToolButton: false);
-        _toolbar.Children.Add(_redoButton);
-        
-        // Separator
-        _toolbar.Children.Add(new Border { Height = 8 });
-        
-        // Clear button
-        var clearBtn = CreateToolbarButton("🗑", "Clear All Strokes", () =>
-        {
-            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Clear clicked, stroke count={_normalizedStrokes.Count}");
-            ClearStrokes();
-        }, isToolButton: false);
-        _toolbar.Children.Add(clearBtn);
-        
-        // Save button
-        var saveBtn = CreateToolbarButton("💾", "Save Ink", () =>
-        {
-            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Save clicked");
-            SaveRequested?.Invoke(this, EventArgs.Empty);
-        }, isToolButton: false);
-        _toolbar.Children.Add(saveBtn);
-        
-        // Wrap in a border for styling - dock at left edge
-        _toolbarBorder = new Border
-        {
-            Background = new SolidColorBrush(Color.FromArgb(240, 240, 240, 240)),
-            BorderBrush = Brushes.DarkGray,
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(6),
-            Padding = new Thickness(6),
-            Child = _toolbar,
-            IsVisible = false, // Hidden by default
-            IsHitTestVisible = true,
-            ZIndex = 1000
-        };
-        
-        // Handle all pointer events on the toolbar to prevent them from 
-        // bubbling up to the gesture handler and triggering navigation
-        _toolbarBorder.PointerPressed += (s, e) => e.Handled = true;
-        _toolbarBorder.PointerReleased += (s, e) => e.Handled = true;
-        _toolbarBorder.PointerMoved += (s, e) => { if (e.GetCurrentPoint(_toolbarBorder).Properties.IsLeftButtonPressed) e.Handled = true; };
-        
-        Children.Add(_toolbarBorder);
-        UpdateUndoRedoButtons();
-        
-        // Set initial selection to black pen
-        UpdateToolSelection(_blackPenButton);
-    }
-    
-    /// <summary>
-    /// Creates a thickness button showing a horizontal line
-    /// </summary>
-    private Button CreateThicknessButton(double thickness, string tooltip)
-    {
-        // Create a line to show the thickness visually
-        var line = new Border
-        {
-            Width = 24,
-            Height = thickness,
-            Background = Brushes.Black,
-            CornerRadius = new CornerRadius(thickness / 2),
-            VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Center
-        };
-        
-        var btn = new Button
-        {
-            Content = line,
-            MinWidth = 36,
-            MinHeight = 28,
-            Padding = new Thickness(4),
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            VerticalContentAlignment = VerticalAlignment.Center,
-            [ToolTip.TipProperty] = tooltip,
-            Focusable = true,
-            Background = Brushes.LightGray,
-            BorderThickness = new Thickness(1),
-            BorderBrush = Brushes.Gray
-        };
-        
-        btn.Click += (s, e) => 
-        {
-            Trace.WriteLine($"[InkCanvas] Thickness button '{thickness}px' clicked");
-            SetPenThickness(thickness);
-            e.Handled = true;
-        };
-        
-        return btn;
-    }
-    
-    /// <summary>
-    /// Creates a color button with a colored square
-    /// </summary>
-    private Button CreateColorButton(IBrush color, string tooltip, Action onClick)
-    {
-        var colorSquare = new Border
-        {
-            Width = 20,
-            Height = 20,
-            Background = color,
-            BorderBrush = Brushes.DarkGray,
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(2),
-            IsHitTestVisible = false // Let clicks pass through to button
-        };
-        
-        var btn = new Button
-        {
-            Content = colorSquare,
-            MinWidth = 32,
-            MinHeight = 32,
-            Padding = new Thickness(4),
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            VerticalContentAlignment = VerticalAlignment.Center,
-            [ToolTip.TipProperty] = tooltip,
-            Focusable = true,
-            Background = Brushes.LightGray,
-            BorderThickness = new Thickness(1),
-            BorderBrush = Brushes.Gray
-        };
-        
-        btn.Click += (s, e) => 
-        {
-            Trace.WriteLine($"[InkCanvas] Toolbar color button '{tooltip}' Click event fired");
-            onClick();
-            e.Handled = true;
-        };
-        
-        return btn;
-    }
-    
-    private Button CreateToolbarButton(string content, string tooltip, Action onClick, bool isToolButton = true)
-    {
-        var btn = new Button
-        {
-            Content = content,
-            FontSize = 16,
-            MinWidth = 36,
-            MinHeight = 36,
-            Padding = new Thickness(4),
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            VerticalContentAlignment = VerticalAlignment.Center,
-            [ToolTip.TipProperty] = tooltip,
-            Focusable = true,
-            Background = Brushes.LightGray,
-            BorderThickness = new Thickness(1),
-            BorderBrush = Brushes.Gray
-        };
-        
-        btn.Click += (s, e) => 
-        {
-            Trace.WriteLine($"[InkCanvas] Toolbar button '{content}' Click event fired");
-            onClick();
-            e.Handled = true;
-        };
-        
-        return btn;
-    }
-    
-    /// <summary>
-    /// Updates the visual selection state of tool buttons
-    /// </summary>
-    private void UpdateToolSelection(Button? selectedButton)
-    {
-        // Define the selected and unselected backgrounds
-        var selectedBg = new SolidColorBrush(Color.FromRgb(180, 200, 220)); // Light blue tint
-        var unselectedBg = Brushes.Transparent;
-        var selectedBorder = new SolidColorBrush(Color.FromRgb(100, 140, 180)); // Darker blue border
-        var unselectedBorder = Brushes.Transparent;
-        
-        // Update all tool buttons
-        var toolButtons = new[] { _blackPenButton, _redPenButton, _bluePenButton, _highlighterButton, _eraserButton };
-        
-        foreach (var btn in toolButtons)
-        {
-            if (btn == null) continue;
-            
-            if (btn == selectedButton)
-            {
-                btn.Background = selectedBg;
-                btn.BorderBrush = selectedBorder;
-                btn.BorderThickness = new Thickness(2);
-            }
-            else
-            {
-                btn.Background = unselectedBg;
-                btn.BorderBrush = unselectedBorder;
-                btn.BorderThickness = new Thickness(0);
-            }
-        }
-    }
-    
-    private void UpdateToolbarVisibility()
-    {
-        if (_toolbarBorder != null)
-        {
-            _toolbarBorder.IsVisible = _isInkingEnabled;
-            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Toolbar visibility set to {_isInkingEnabled}, Bounds={_toolbarBorder.Bounds}");
-        }
     }
     
     /// <summary>
@@ -499,19 +188,6 @@ public class InkCanvasControl : Panel
         }
     }
     
-    private void UpdateUndoRedoButtons()
-    {
-        if (_undoButton != null)
-        {
-            _undoButton.IsEnabled = CanUndo;
-        }
-        if (_redoButton != null)
-        {
-            _redoButton.IsEnabled = CanRedo;
-        }
-        Trace.WriteLine($"[InkCanvas] Page {_pageNo}: UndoRedo buttons updated - CanUndo={CanUndo}, CanRedo={CanRedo}");
-    }
-
     /// <summary>
     /// Load ink strokes from the InkStrokeClass data
     /// </summary>
@@ -863,7 +539,7 @@ public class InkCanvasControl : Panel
             
             Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Stroke completed with {_currentNormalizedStroke.Count} points, total strokes={_normalizedStrokes.Count}");
             
-            UpdateUndoRedoButtons();
+            UndoRedoStateChanged?.Invoke(this, EventArgs.Empty);
         }
         
         if (_currentPolyline != null)
@@ -915,7 +591,7 @@ public class InkCanvasControl : Panel
                     
                     _hasUnsavedStrokes = true;
                     RerenderStrokes();
-                    UpdateUndoRedoButtons();
+                    UndoRedoStateChanged?.Invoke(this, EventArgs.Empty);
                     return; // Only erase one stroke per call
                 }
             }
@@ -956,7 +632,7 @@ public class InkCanvasControl : Panel
         _redoStack.Push(action);
         _hasUnsavedStrokes = true;
         RerenderStrokes();
-        UpdateUndoRedoButtons();
+        UndoRedoStateChanged?.Invoke(this, EventArgs.Empty);
     }
     
     /// <summary>
@@ -993,7 +669,7 @@ public class InkCanvasControl : Panel
         _undoStack.Push(action);
         _hasUnsavedStrokes = true;
         RerenderStrokes();
-        UpdateUndoRedoButtons();
+        UndoRedoStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void SetPenColor(IBrush brush)
@@ -1023,6 +699,11 @@ public class InkCanvasControl : Panel
         _strokeThickness = 15.0;
         _currentMode = InkMode.Highlighter;
     }
+    
+    public void SetEraserMode()
+    {
+        _currentMode = InkMode.Eraser;
+    }
 
     public void ClearStrokes()
     {
@@ -1047,7 +728,7 @@ public class InkCanvasControl : Panel
         _currentNormalizedStroke = null;
         _currentStrokeMetadata = null;
         _hasUnsavedStrokes = true;
-        UpdateUndoRedoButtons();
+        UndoRedoStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
@@ -1061,8 +742,8 @@ public class InkCanvasControl : Panel
         }
         
         var portableStrokes = GetPortableStrokes();
-        var json = System.Text.Json.JsonSerializer.Serialize(portableStrokes);
-        var strokeData = System.Text.Encoding.UTF8.GetBytes(json);
+        var json = JsonSerializer.Serialize(portableStrokes);
+        var strokeData = Encoding.UTF8.GetBytes(json);
         
         return new InkStrokeClass
         {
