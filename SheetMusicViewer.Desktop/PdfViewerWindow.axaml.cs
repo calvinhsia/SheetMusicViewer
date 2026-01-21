@@ -64,6 +64,16 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private CheckBox? _chkFav1;
     private Image? _imgThumb;
     private Menu? _mainMenu;
+    
+    // Window-level ink toolbars (docked at window edges)
+    private Border? _inkToolbarLeft;
+    private Border? _inkToolbarRight;
+    private StackPanel? _inkToolbarLeftPanel;
+    private StackPanel? _inkToolbarRightPanel;
+    private Button? _inkToolbarLeftUndoButton;
+    private Button? _inkToolbarLeftRedoButton;
+    private Button? _inkToolbarRightUndoButton;
+    private Button? _inkToolbarRightRedoButton;
 
     // Page cache for performance - cache Tasks like WPF version for better parallelism
     private readonly Dictionary<int, PageCacheEntry> _pageCache = new();
@@ -141,6 +151,14 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         _imgThumb = this.GetControl<Image>("ImgThumb");
         _mainMenu = this.GetControl<Menu>("mainMenu");
         
+        // Get window-level ink toolbars and populate them
+        _inkToolbarLeft = this.GetControl<Border>("inkToolbarLeft");
+        _inkToolbarRight = this.GetControl<Border>("inkToolbarRight");
+        _inkToolbarLeftPanel = this.GetControl<StackPanel>("inkToolbarLeftPanel");
+        _inkToolbarRightPanel = this.GetControl<StackPanel>("inkToolbarRightPanel");
+        PopulateInkToolbar(_inkToolbarLeftPanel, isLeftToolbar: true);
+        PopulateInkToolbar(_inkToolbarRightPanel, isLeftToolbar: false);
+        
         // Wire up ink checkbox events
         _chkInk0.IsCheckedChanged += (s, e) => 
         { 
@@ -153,7 +171,13 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 }
                 _inkCanvas0.IsInkingEnabled = _chkInk0.IsChecked == true;
             }
+            // Show/hide left toolbar
+            if (_inkToolbarLeft != null)
+            {
+                _inkToolbarLeft.IsVisible = _chkInk0.IsChecked == true;
+            }
             UpdateGestureHandlerState();
+            UpdateInkToolbarUndoRedoState();
         };
         
         _chkInk1.IsCheckedChanged += (s, e) => 
@@ -167,7 +191,13 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 }
                 _inkCanvas1.IsInkingEnabled = _chkInk1.IsChecked == true;
             }
+            // Show/hide right toolbar
+            if (_inkToolbarRight != null)
+            {
+                _inkToolbarRight.IsVisible = _chkInk1.IsChecked == true;
+            }
             UpdateGestureHandlerState();
+            UpdateInkToolbarUndoRedoState();
         };
         
         // Wire up favorite checkbox events
@@ -1214,18 +1244,6 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     }
     
     /// <summary>
-    /// Handle save request from ink canvas toolbar button
-    /// </summary>
-    private void OnInkCanvasSaveRequested(object? sender, EventArgs e)
-    {
-        if (sender is InkCanvasControl inkCanvas)
-        {
-            SaveInkFromCanvas(inkCanvas);
-            Trace.WriteLine($"Ink saved from toolbar for page {inkCanvas.PageNo}");
-        }
-    }
-    
-    /// <summary>
     /// Saves ink strokes from a specific ink canvas to the PDF metadata
     /// </summary>
     private void SaveInkFromCanvas(InkCanvasControl inkCanvas)
@@ -1263,6 +1281,52 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
     }
     
+    /// <summary>
+    /// Handle save request from ink canvas context menu
+    /// </summary>
+    private void OnInkCanvasSaveRequested(object? sender, EventArgs e)
+    {
+        if (sender is InkCanvasControl inkCanvas)
+        {
+            SaveInkFromCanvas(inkCanvas);
+            Trace.WriteLine($"Ink saved from context menu for page {inkCanvas.PageNo}");
+        }
+    }
+    
+    /// <summary>
+    /// Handle undo/redo state change from ink canvas (to update toolbar buttons)
+    /// </summary>
+    private void OnInkCanvasUndoRedoStateChanged(object? sender, EventArgs e)
+    {
+        UpdateInkToolbarUndoRedoState();
+    }
+    
+    /// <summary>
+    /// Update the undo/redo button states on window-level ink toolbars
+    /// </summary>
+    private void UpdateInkToolbarUndoRedoState()
+    {
+        // Update left toolbar undo/redo buttons based on _inkCanvas0
+        if (_inkToolbarLeftUndoButton != null)
+        {
+            _inkToolbarLeftUndoButton.IsEnabled = _inkCanvas0?.CanUndo ?? false;
+        }
+        if (_inkToolbarLeftRedoButton != null)
+        {
+            _inkToolbarLeftRedoButton.IsEnabled = _inkCanvas0?.CanRedo ?? false;
+        }
+        
+        // Update right toolbar undo/redo buttons based on _inkCanvas1
+        if (_inkToolbarRightUndoButton != null)
+        {
+            _inkToolbarRightUndoButton.IsEnabled = _inkCanvas1?.CanUndo ?? false;
+        }
+        if (_inkToolbarRightRedoButton != null)
+        {
+            _inkToolbarRightRedoButton.IsEnabled = _inkCanvas1?.CanRedo ?? false;
+        }
+    }
+
     private void SetupGestureHandler()
     {
         if (_dpPage == null) return;
@@ -1839,4 +1903,168 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     }
     
     #endregion
+
+    /// <summary>
+    /// Populate an ink toolbar panel with all the tool buttons
+    /// </summary>
+    private void PopulateInkToolbar(StackPanel? panel, bool isLeftToolbar)
+    {
+        if (panel == null) return;
+        
+        // Get the ink canvas this toolbar controls
+        InkCanvasControl? GetTargetCanvas() => isLeftToolbar ? _inkCanvas0 : _inkCanvas1;
+        
+        // Color buttons
+        var blackPenBtn = CreateInkToolbarColorButton(Brushes.Black, "Black Pen", () => GetTargetCanvas()?.SetPenColor(Brushes.Black));
+        panel.Children.Add(blackPenBtn);
+        
+        var redPenBtn = CreateInkToolbarColorButton(Brushes.Red, "Red Pen", () => GetTargetCanvas()?.SetPenColor(Brushes.Red));
+        panel.Children.Add(redPenBtn);
+        
+        var bluePenBtn = CreateInkToolbarColorButton(Brushes.Blue, "Blue Pen", () => GetTargetCanvas()?.SetPenColor(Brushes.Blue));
+        panel.Children.Add(bluePenBtn);
+        
+        var highlighterBtn = CreateInkToolbarColorButton(new SolidColorBrush(Colors.Yellow), "Highlighter", () => GetTargetCanvas()?.SetHighlighter());
+        panel.Children.Add(highlighterBtn);
+        
+        // Separator
+        panel.Children.Add(new Border { Height = 8 });
+        
+        // Thickness buttons
+        panel.Children.Add(CreateInkToolbarThicknessButton(1, "Thin (1px)", () => GetTargetCanvas()?.SetPenThickness(1)));
+        panel.Children.Add(CreateInkToolbarThicknessButton(2, "Normal (2px)", () => GetTargetCanvas()?.SetPenThickness(2)));
+        panel.Children.Add(CreateInkToolbarThicknessButton(4, "Medium (4px)", () => GetTargetCanvas()?.SetPenThickness(4)));
+        panel.Children.Add(CreateInkToolbarThicknessButton(6, "Thick (6px)", () => GetTargetCanvas()?.SetPenThickness(6)));
+        
+        // Separator
+        panel.Children.Add(new Border { Height = 8 });
+        
+        // Eraser button
+        var eraserBtn = CreateInkToolbarButton("X", "Eraser (touch strokes to delete)", () => GetTargetCanvas()?.SetEraserMode());
+        eraserBtn.Background = Brushes.White;
+        eraserBtn.Foreground = Brushes.Red;
+        panel.Children.Add(eraserBtn);
+        
+        // Separator
+        panel.Children.Add(new Border { Height = 8 });
+        
+        // Undo button
+        var undoBtn = CreateInkToolbarButton("↶", "Undo (Ctrl+Z)", () => GetTargetCanvas()?.Undo());
+        undoBtn.IsEnabled = false;
+        panel.Children.Add(undoBtn);
+        
+        // Redo button
+        var redoBtn = CreateInkToolbarButton("↷", "Redo (Ctrl+Y)", () => GetTargetCanvas()?.Redo());
+        redoBtn.IsEnabled = false;
+        panel.Children.Add(redoBtn);
+        
+        // Store undo/redo buttons for state updates
+        if (isLeftToolbar)
+        {
+            _inkToolbarLeftUndoButton = undoBtn;
+            _inkToolbarLeftRedoButton = redoBtn;
+        }
+        else
+        {
+            _inkToolbarRightUndoButton = undoBtn;
+            _inkToolbarRightRedoButton = redoBtn;
+        }
+        
+        // Separator
+        panel.Children.Add(new Border { Height = 8 });
+        
+        // Clear button
+        var clearBtn = CreateInkToolbarButton("🗑", "Clear All Strokes", () => GetTargetCanvas()?.ClearStrokes());
+        panel.Children.Add(clearBtn);
+        
+        // Save button
+        var saveBtn = CreateInkToolbarButton("💾", "Save Ink", () =>
+        {
+            var canvas = GetTargetCanvas();
+            if (canvas != null) SaveInkFromCanvas(canvas);
+        });
+        panel.Children.Add(saveBtn);
+    }
+    
+    private Button CreateInkToolbarColorButton(IBrush color, string tooltip, Action onClick)
+    {
+        var colorSquare = new Border
+        {
+            Width = 20,
+            Height = 20,
+            Background = color,
+            BorderBrush = Brushes.DarkGray,
+            BorderThickness = new Avalonia.Thickness(1),
+            CornerRadius = new Avalonia.CornerRadius(2),
+            IsHitTestVisible = false
+        };
+        
+        var btn = new Button
+        {
+            Content = colorSquare,
+            MinWidth = 32,
+            MinHeight = 32,
+            Padding = new Avalonia.Thickness(4),
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            [ToolTip.TipProperty] = tooltip,
+            Background = Brushes.LightGray,
+            BorderThickness = new Avalonia.Thickness(1),
+            BorderBrush = Brushes.Gray
+        };
+        
+        btn.Click += (s, e) => { onClick(); e.Handled = true; };
+        return btn;
+    }
+    
+    private Button CreateInkToolbarThicknessButton(double thickness, string tooltip, Action onClick)
+    {
+        var line = new Border
+        {
+            Width = 24,
+            Height = thickness,
+            Background = Brushes.Black,
+            CornerRadius = new Avalonia.CornerRadius(thickness / 2),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center
+        };
+        
+        var btn = new Button
+        {
+            Content = line,
+            MinWidth = 36,
+            MinHeight = 28,
+            Padding = new Avalonia.Thickness(4),
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            [ToolTip.TipProperty] = tooltip,
+            Background = Brushes.LightGray,
+            BorderThickness = new Avalonia.Thickness(1),
+            BorderBrush = Brushes.Gray
+        };
+        
+        btn.Click += (s, e) => { onClick(); e.Handled = true; };
+        return btn;
+    }
+    
+    private Button CreateInkToolbarButton(string content, string tooltip, Action onClick)
+    {
+        var btn = new Button
+        {
+            Content = content,
+            FontSize = 16,
+            MinWidth = 36,
+            MinHeight = 36,
+            Padding = new Avalonia.Thickness(4),
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            [ToolTip.TipProperty] = tooltip,
+            Background = Brushes.LightGray,
+            BorderThickness = new Avalonia.Thickness(1),
+            BorderBrush = Brushes.Gray
+        };
+        
+        btn.Click += (s, e) => { onClick(); e.Handled = true; };
+        return btn;
+    }
 }
