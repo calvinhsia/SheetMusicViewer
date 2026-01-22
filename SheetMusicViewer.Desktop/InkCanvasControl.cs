@@ -55,6 +55,10 @@ public class InkCanvasControl : Panel
     // Pen mode tracking
     private InkMode _currentMode = InkMode.Pen;
     
+    // Rectangle drawing fields
+    private Point _rectangleStartPoint;
+    private Rectangle? _currentRectangle;
+    
     // Event for save request (raised by context menu or external toolbar)
     public event EventHandler? SaveRequested;
     
@@ -115,9 +119,6 @@ public class InkCanvasControl : Panel
         
         // Note: Pointer event handlers are attached/detached in UpdateInkingEventHandlers()
         // based on IsInkingEnabled state
-        
-        // Add context menu (kept for mouse right-click)
-        InitializeContextMenu();
         
         Trace.WriteLine($"[InkCanvas] Created for page {pageNo}, hasInkData={inkStrokeClass != null}");
     }
@@ -358,41 +359,6 @@ public class InkCanvasControl : Panel
         );
     }
 
-    private void InitializeContextMenu()
-    {
-        var contextMenu = new ContextMenu();
-        
-        var redItem = new MenuItem { Header = "Red" };
-        redItem.Click += (s, e) => { SetPenColor(Brushes.Red); _currentMode = InkMode.Pen; };
-        contextMenu.Items.Add(redItem);
-        
-        var blackItem = new MenuItem { Header = "Black" };
-        blackItem.Click += (s, e) => { SetPenColor(Brushes.Black); _currentMode = InkMode.Pen; };
-        contextMenu.Items.Add(blackItem);
-        
-        var highlighterItem = new MenuItem { Header = "Highlighter" };
-        highlighterItem.Click += (s, e) => { SetHighlighter(); _currentMode = InkMode.Highlighter; };
-        contextMenu.Items.Add(highlighterItem);
-        
-        contextMenu.Items.Add(new Separator());
-        
-        var undoItem = new MenuItem { Header = "Undo", InputGesture = new KeyGesture(Key.Z, KeyModifiers.Control) };
-        undoItem.Click += (s, e) => Undo();
-        contextMenu.Items.Add(undoItem);
-        
-        var redoItem = new MenuItem { Header = "Redo", InputGesture = new KeyGesture(Key.Y, KeyModifiers.Control) };
-        redoItem.Click += (s, e) => Redo();
-        contextMenu.Items.Add(redoItem);
-        
-        contextMenu.Items.Add(new Separator());
-        
-        var clearItem = new MenuItem { Header = "Clear All on this page" };
-        clearItem.Click += (s, e) => ClearStrokes();
-        contextMenu.Items.Add(clearItem);
-        
-        ContextMenu = contextMenu;
-    }
-
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         Trace.WriteLine($"[InkCanvas] Page {_pageNo}: OnPointerPressed - IsInkingEnabled={IsInkingEnabled}");
@@ -432,6 +398,35 @@ public class InkCanvasControl : Panel
             return;
         
         var normalizedPoint = ScreenToNormalized(drawPoint);
+        
+        // Handle rectangle mode
+        if (_currentMode == InkMode.Rectangle)
+        {
+            _rectangleStartPoint = drawPoint;
+            _currentStrokeMetadata = (_currentBrush, _strokeThickness);
+            
+            // Create preview rectangle - use Margin for positioning since Panel doesn't support Canvas.Left/Top
+            _currentRectangle = new Rectangle
+            {
+                Stroke = _currentBrush,
+                StrokeThickness = _strokeThickness,
+                Fill = null,
+                Width = 0,
+                Height = 0,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Avalonia.Thickness(drawPoint.X, drawPoint.Y, 0, 0)
+            };
+            Children.Add(_currentRectangle);
+            
+            _isDrawing = true;
+            _drawingPointer = e.Pointer;
+            e.Pointer.Capture(_bgImage);
+            e.Handled = true;
+            
+            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Started rectangle at ({drawPoint.X:F0}, {drawPoint.Y:F0})");
+            return;
+        }
         
         _currentNormalizedStroke = new List<Point> { normalizedPoint };
         _currentStrokeMetadata = (_currentBrush, _strokeThickness);
@@ -473,6 +468,24 @@ public class InkCanvasControl : Panel
             return;
         }
         
+        // Handle rectangle mode during drag
+        if (_currentMode == InkMode.Rectangle && _currentRectangle != null)
+        {
+            var currentPoint = e.GetPosition(this);
+            
+            // Calculate rectangle bounds (handle negative width/height when dragging left/up)
+            var x = Math.Min(_rectangleStartPoint.X, currentPoint.X);
+            var y = Math.Min(_rectangleStartPoint.Y, currentPoint.Y);
+            var width = Math.Abs(currentPoint.X - _rectangleStartPoint.X);
+            var height = Math.Abs(currentPoint.Y - _rectangleStartPoint.Y);
+            
+            // Update rectangle position and size using Margin
+            _currentRectangle.Margin = new Avalonia.Thickness(x, y, 0, 0);
+            _currentRectangle.Width = width;
+            _currentRectangle.Height = height;
+            return;
+        }
+        
         if (_currentPolyline == null || _currentNormalizedStroke == null) return;
 
         var drawPoint = e.GetPosition(this);
@@ -497,11 +510,22 @@ public class InkCanvasControl : Panel
             _isDrawing = false;
             _drawingPointer = null;
             e.Pointer.Capture(null);
+            e.Handled = true;
+            return;
+        }
+        
+        // Handle rectangle mode finalization
+        if (_currentMode == InkMode.Rectangle && _currentRectangle != null)
+        {
+            FinalizeCurrentRectangle(e.GetPosition(this));
+            e.Pointer.Capture(null);
+            e.Handled = true;
             return;
         }
 
         FinalizeCurrentStroke();
         e.Pointer.Capture(null);
+        e.Handled = true;
     }
     
     private void OnPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
@@ -511,6 +535,13 @@ public class InkCanvasControl : Panel
         {
             Trace.WriteLine($"[InkCanvas] Page {_pageNo}: PointerCaptureLost while drawing");
             FinalizeCurrentStroke();
+        }
+        
+        // Also finalize rectangle if in progress
+        if (_isDrawing && _currentRectangle != null)
+        {
+            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: PointerCaptureLost while drawing rectangle");
+            FinalizeCurrentRectangle(new Point(_rectangleStartPoint.X, _rectangleStartPoint.Y));
         }
     }
     
@@ -552,6 +583,72 @@ public class InkCanvasControl : Panel
         _currentPolyline = null;
         _isDrawing = false;
         _drawingPointer = null;
+    }
+    
+    /// <summary>
+    /// Finalize the current rectangle and convert it to a polyline stroke
+    /// </summary>
+    private void FinalizeCurrentRectangle(Point endPoint)
+    {
+        if (_currentRectangle == null)
+        {
+            _isDrawing = false;
+            _drawingPointer = null;
+            return;
+        }
+        
+        // Calculate rectangle bounds
+        var x = Math.Min(_rectangleStartPoint.X, endPoint.X);
+        var y = Math.Min(_rectangleStartPoint.Y, endPoint.Y);
+        var width = Math.Abs(endPoint.X - _rectangleStartPoint.X);
+        var height = Math.Abs(endPoint.Y - _rectangleStartPoint.Y);
+        
+        // Only create if rectangle has meaningful size
+        if (width > 2 && height > 2)
+        {
+            // Convert rectangle to 4-corner polyline (closed path)
+            var topLeft = new Point(x, y);
+            var topRight = new Point(x + width, y);
+            var bottomRight = new Point(x + width, y + height);
+            var bottomLeft = new Point(x, y + height);
+            
+            // Create normalized stroke points (rectangle as closed polyline)
+            var normalizedStroke = new List<Point>
+            {
+                ScreenToNormalized(topLeft),
+                ScreenToNormalized(topRight),
+                ScreenToNormalized(bottomRight),
+                ScreenToNormalized(bottomLeft),
+                ScreenToNormalized(topLeft) // Close the rectangle
+            };
+            
+            _normalizedStrokes.Add(normalizedStroke);
+            _strokeMetadata.Add(_currentStrokeMetadata ?? (_currentBrush, _strokeThickness));
+            _hasUnsavedStrokes = true;
+            
+            // Add to undo stack
+            var strokeIndex = _normalizedStrokes.Count - 1;
+            _undoStack.Push(new UndoAction(
+                UndoActionType.Add,
+                normalizedStroke,
+                _currentStrokeMetadata ?? (_currentBrush, _strokeThickness),
+                strokeIndex));
+            _redoStack.Clear();
+            
+            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Rectangle completed at ({x:F0}, {y:F0}) size ({width:F0} x {height:F0}), total strokes={_normalizedStrokes.Count}");
+            
+            UndoRedoStateChanged?.Invoke(this, EventArgs.Empty);
+        }
+        
+        // Remove the preview rectangle
+        Children.Remove(_currentRectangle);
+        _currentRectangle = null;
+        _currentStrokeMetadata = null;
+        _isDrawing = false;
+        _drawingPointer = null;
+        
+        // Re-render to show the new rectangle as a polyline
+        RerenderStrokes();
     }
     
     /// <summary>
@@ -704,6 +801,12 @@ public class InkCanvasControl : Panel
     {
         _currentMode = InkMode.Eraser;
     }
+    
+    public void SetRectangleMode()
+    {
+        _currentMode = InkMode.Rectangle;
+        Trace.WriteLine($"[InkCanvas] Page {_pageNo}: SetRectangleMode - mode changed to Rectangle");
+    }
 
     public void ClearStrokes()
     {
@@ -832,6 +935,7 @@ public class InkCanvasControl : Panel
     {
         Pen,
         Highlighter,
-        Eraser
+        Eraser,
+        Rectangle
     }
 }
