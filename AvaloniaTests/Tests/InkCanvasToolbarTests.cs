@@ -19,6 +19,9 @@ namespace AvaloniaTests.Tests;
 /// <summary>
 /// Unit tests for InkCanvasControl toolbar, undo/redo, and ink mode functionality.
 /// These tests verify the new floating toolbar features.
+/// 
+/// Note: These tests are Windows-only because Avalonia headless with WriteableBitmap
+/// has platform-specific issues on macOS/Linux CI environments.
 /// </summary>
 [TestClass]
 [DoNotParallelize]
@@ -28,21 +31,17 @@ public class InkCanvasToolbarTests
     private static bool _initializationFailed;
     private static string? _initializationError;
     private static readonly object _initLock = new();
+    private static bool _isWindowsPlatform;
 
-    [TestInitialize]
-    public void TestInit()
+    [ClassInitialize]
+    public static void ClassInit(TestContext context)
     {
-        // Skip immediately if not on Windows - don't even try to initialize Avalonia
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            Assert.Inconclusive("InkCanvasControl tests are Windows-only due to Avalonia headless platform limitations");
-        }
+        // Check platform once at class initialization
+        _isWindowsPlatform = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
         
-        EnsureAvaloniaInitialized();
-        
-        if (_initializationFailed)
+        if (_isWindowsPlatform)
         {
-            Assert.Inconclusive($"Avalonia initialization failed: {_initializationError}");
+            EnsureAvaloniaInitialized();
         }
     }
 
@@ -73,8 +72,41 @@ public class InkCanvasToolbarTests
         }
     }
 
+    /// <summary>
+    /// Skip test if not on Windows or if Avalonia initialization failed.
+    /// Returns true if the test should be skipped.
+    /// </summary>
+    private bool ShouldSkipTest()
+    {
+        if (!_isWindowsPlatform)
+        {
+            Assert.Inconclusive("InkCanvasControl tests are Windows-only due to Avalonia headless platform limitations");
+            return true;
+        }
+        
+        if (_initializationFailed)
+        {
+            Assert.Inconclusive($"Avalonia initialization failed: {_initializationError}");
+            return true;
+        }
+        
+        if (!_avaloniaInitialized)
+        {
+            Assert.Inconclusive("Avalonia headless not initialized");
+            return true;
+        }
+        
+        return false;
+    }
+
     private void RunOnDispatcher(Action action)
     {
+        // Don't try to use Dispatcher if not on Windows - it will hang
+        if (!_isWindowsPlatform || !_avaloniaInitialized)
+        {
+            return;
+        }
+        
         if (Dispatcher.UIThread.CheckAccess())
         {
             action();
@@ -87,6 +119,12 @@ public class InkCanvasToolbarTests
 
     private T RunOnDispatcher<T>(Func<T> func)
     {
+        // Don't try to use Dispatcher if not on Windows - it will hang
+        if (!_isWindowsPlatform || !_avaloniaInitialized)
+        {
+            return default!;
+        }
+        
         if (Dispatcher.UIThread.CheckAccess())
         {
             return func();
@@ -113,6 +151,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_ToolbarHidden_WhenInkingDisabled()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange
@@ -133,6 +173,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_ToolbarVisible_WhenInkingEnabled()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange
@@ -152,6 +194,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_ToolbarVisibility_TogglesWithIsInkingEnabled()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange
@@ -181,6 +225,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_CanUndo_FalseWhenNoActions()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange
@@ -197,6 +243,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_CanRedo_FalseWhenNoUndoneActions()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange
@@ -213,6 +261,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_Undo_DoesNotThrowWhenEmpty()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange
@@ -233,6 +283,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_Redo_DoesNotThrowWhenEmpty()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange
@@ -257,6 +309,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_SetPenColor_DoesNotThrow()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange
@@ -278,6 +332,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_SetHighlighter_DoesNotThrow()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange
@@ -297,6 +353,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_SetPenThickness_DoesNotThrow()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange
@@ -322,6 +380,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_HasUnsavedStrokes_FalseInitially()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange
@@ -338,6 +398,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_HasUnsavedStrokes_TrueAfterClearStrokes()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange
@@ -357,6 +419,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_MarkAsSaved_ClearsUnsavedFlag()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange
@@ -381,6 +445,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_SaveRequested_EventCanBeSubscribed()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange
@@ -404,6 +470,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_GetInkStrokeDataForSaving_ReturnsNullWhenNoStrokes()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange
@@ -423,6 +491,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_GetPortableStrokes_ReturnsEmptyCollectionWhenNoStrokes()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange
@@ -447,6 +517,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_PageNo_IsPreserved()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange & Act
@@ -471,6 +543,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_WithExistingInkData_CreatesSuccessfully()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange
@@ -509,6 +583,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_WithNullInkData_CreatesSuccessfully()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange
@@ -528,6 +604,8 @@ public class InkCanvasToolbarTests
     [Timeout(30000)]
     public void InkCanvasControl_WithEmptyStrokeData_CreatesSuccessfully()
     {
+        if (ShouldSkipTest()) return;
+        
         RunOnDispatcher(() =>
         {
             // Arrange
