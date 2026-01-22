@@ -1924,6 +1924,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         var bluePenBtn = CreateInkToolbarColorButton(Brushes.Blue, "Blue Pen", () => GetTargetCanvas()?.SetPenColor(Brushes.Blue));
         panel.Children.Add(bluePenBtn);
         
+        var greenPenBtn = CreateInkToolbarColorButton(Brushes.Green, "Green Pen", () => GetTargetCanvas()?.SetPenColor(Brushes.Green));
+        panel.Children.Add(greenPenBtn);
+        
         var highlighterBtn = CreateInkToolbarColorButton(new SolidColorBrush(Colors.Yellow), "Highlighter", () => GetTargetCanvas()?.SetHighlighter());
         panel.Children.Add(highlighterBtn);
         
@@ -1939,11 +1942,15 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         // Separator
         panel.Children.Add(new Border { Height = 8 });
         
-        // Eraser button
-        var eraserBtn = CreateInkToolbarButton("X", "Eraser (touch strokes to delete)", () => GetTargetCanvas()?.SetEraserMode());
+        // Eraser button - using sponge emoji
+        var eraserBtn = CreateInkToolbarButton("🧽", "Eraser (touch strokes to delete)", () => GetTargetCanvas()?.SetEraserMode());
         eraserBtn.Background = Brushes.White;
-        eraserBtn.Foreground = Brushes.Red;
         panel.Children.Add(eraserBtn);
+        
+        // Rectangle button
+        var rectBtn = CreateInkToolbarButton("▢", "Rectangle (draw a rectangle)", () => GetTargetCanvas()?.SetRectangleMode());
+        rectBtn.Background = Brushes.White;
+        panel.Children.Add(rectBtn);
         
         // Separator
         panel.Children.Add(new Border { Height = 8 });
