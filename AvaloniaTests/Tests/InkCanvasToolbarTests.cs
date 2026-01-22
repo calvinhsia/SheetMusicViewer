@@ -32,15 +32,7 @@ public class InkCanvasToolbarTests
     [TestInitialize]
     public void TestInit()
     {
-        SkipIfNotSupportedPlatform();
-    }
-
-    /// <summary>
-    /// Skip test if not on Windows or if Avalonia initialization failed.
-    /// Avalonia headless with WriteableBitmap has platform-specific issues on macOS/Linux CI.
-    /// </summary>
-    private void SkipIfNotSupportedPlatform()
-    {
+        // Skip immediately if not on Windows - don't even try to initialize Avalonia
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             Assert.Inconclusive("InkCanvasControl tests are Windows-only due to Avalonia headless platform limitations");
