@@ -171,6 +171,13 @@ public class ChooseMusicWindow : Window
             Close();
         }
         
+        // F5 to refresh
+        if (e.Key == Key.F5)
+        {
+            OnRefreshClick(sender, new Avalonia.Interactivity.RoutedEventArgs());
+            e.Handled = true;
+        }
+        
         // Handle Alt+key combinations for tab navigation (mnemonics)
         if (e.KeyModifiers == KeyModifiers.Alt)
         {
@@ -351,6 +358,16 @@ public class ChooseMusicWindow : Window
         _cboRootFolder.DropDownOpened += OnRootFolderDropDownOpened;
         topBar.Children.Add(_cboRootFolder);
         
+        var btnRefresh = new Button 
+        { 
+            Content = "⟳ Refresh", 
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 0),
+            [ToolTip.TipProperty] = "Reload all PDF files and metadata from the music folder (F5)\nUse this to see newly added files or metadata changes"
+        };
+        btnRefresh.Click += OnRefreshClick;
+        topBar.Children.Add(btnRefresh);
+        
         var btnCancel = new Button 
         { 
             Content = "Cancel", 
@@ -431,6 +448,17 @@ public class ChooseMusicWindow : Window
                 await ChangeRootFolderAsync(path);
             }
         }
+    }
+    
+    private async void OnRefreshClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(_rootFolder) || !Directory.Exists(_rootFolder))
+        {
+            return;
+        }
+        
+        // Re-use the existing folder change logic which clears caches and reloads
+        await ChangeRootFolderAsync(_rootFolder);
     }
     
     private async Task ShowFolderPickerAsync()
