@@ -248,6 +248,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         var mnuOptions = this.GetControl<MenuItem>("mnuOptions");
         mnuOptions.Click += (s, e) => _ = ShowOptionsDialogAsync();
         
+        var mnuRefresh = this.GetControl<MenuItem>("mnuRefresh");
+        mnuRefresh.Click += (s, e) => _ = RefreshMusicFolderAsync();
+        
         // Wire up navigation buttons
         var btnPrev = this.GetControl<Button>("btnPrev");
         var btnNext = this.GetControl<Button>("btnNext");
@@ -526,6 +529,47 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         catch (Exception ex)
         {
             Logger.LogException("Options dialog error", ex);
+        }
+    }
+    
+    private async Task RefreshMusicFolderAsync()
+    {
+        if (string.IsNullOrEmpty(_rootMusicFolder) || !Directory.Exists(_rootMusicFolder))
+        {
+            return;
+        }
+        
+        try
+        {
+            // Remember the current PDF path and page so we can restore after refresh
+            var currentPdfPath = _currentPdfMetaData?.GetFullPathFileFromVolno(0);
+            var currentPage = CurrentPageNumber;
+            
+            var provider = new PdfToImageDocumentProvider();
+            (_lstPdfMetaFileData, _) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+                _rootMusicFolder, 
+                provider,
+                useParallelLoading: true);
+            
+            Logger.LogInfo($"Refreshed music folder: {_lstPdfMetaFileData.Count} PDF files loaded");
+            
+            // If we had a PDF open, try to find its updated metadata and reload it
+            if (!string.IsNullOrEmpty(currentPdfPath) && _currentPdfMetaData != null)
+            {
+                var updatedMetadata = _lstPdfMetaFileData.FirstOrDefault(p => 
+                    p.GetFullPathFileFromVolno(0) == currentPdfPath);
+                
+                if (updatedMetadata != null)
+                {
+                    // Reload the current PDF with the refreshed metadata
+                    await LoadPdfFileAndShowAsync(updatedMetadata, currentPage);
+                    Logger.LogInfo($"Reloaded current PDF after refresh: {updatedMetadata.GetBookName(_rootMusicFolder)}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogException("Failed to refresh music folder", ex);
         }
     }
     
