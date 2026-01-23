@@ -363,7 +363,7 @@ public class ChooseMusicWindow : Window
             Content = "⟳ Refresh", 
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 0, 0),
-            [ToolTip.TipProperty] = "Reload all PDF files and metadata from the music folder (F5)\nUse this to see newly added files or metadata changes"
+            [ToolTip.TipProperty] = "Rescan music folder for new or changed files (F5)"
         };
         btnRefresh.Click += OnRefreshClick;
         topBar.Children.Add(btnRefresh);
@@ -1429,7 +1429,7 @@ public class ChooseMusicWindow : Window
         if (_currentPlaylist == null || _playlistEntriesBrowseControl == null) return;
         
         var selectedItems = _playlistEntriesBrowseControl.ListView.SelectedItems?.Cast<object>().ToList();
-        if (selectedItems == null || selectedItems.Count == 0) return;
+        if (selectedItems == null && selectedItems.Count == 0) return;
         
         // Get the entries to remove
         var entriesToRemove = new List<PlaylistEntry>();
