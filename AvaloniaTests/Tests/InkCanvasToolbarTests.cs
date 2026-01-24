@@ -371,6 +371,95 @@ public class InkCanvasToolbarTests
         });
     }
 
+    [TestMethod]
+    [TestCategory("Unit")]
+    [Timeout(30000)]
+    public void InkCanvasControl_SetEraserMode_DoesNotThrow()
+    {
+        if (ShouldSkipTest()) return;
+        
+        RunOnDispatcher(() =>
+        {
+            // Arrange
+            using var bitmap = CreateTestBitmap();
+            var canvas = new InkCanvasControl(bitmap, pageNo: 1);
+
+            // Act - should not throw
+            canvas.SetEraserMode();
+
+            // Assert - no exception means success
+            Assert.IsTrue(true);
+        });
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [Timeout(30000)]
+    public void InkCanvasControl_SetRectangleMode_DoesNotThrow()
+    {
+        if (ShouldSkipTest()) return;
+        
+        RunOnDispatcher(() =>
+        {
+            // Arrange
+            using var bitmap = CreateTestBitmap();
+            var canvas = new InkCanvasControl(bitmap, pageNo: 1);
+
+            // Act - should not throw
+            canvas.SetRectangleMode();
+
+            // Assert - no exception means success
+            Assert.IsTrue(true);
+        });
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [Timeout(30000)]
+    public void InkCanvasControl_SetEllipseMode_DoesNotThrow()
+    {
+        if (ShouldSkipTest()) return;
+        
+        RunOnDispatcher(() =>
+        {
+            // Arrange
+            using var bitmap = CreateTestBitmap();
+            var canvas = new InkCanvasControl(bitmap, pageNo: 1);
+
+            // Act - should not throw
+            canvas.SetEllipseMode();
+
+            // Assert - no exception means success
+            Assert.IsTrue(true);
+        });
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [Timeout(30000)]
+    public void InkCanvasControl_ModeSwitching_WorksCorrectly()
+    {
+        if (ShouldSkipTest()) return;
+        
+        RunOnDispatcher(() =>
+        {
+            // Arrange
+            using var bitmap = CreateTestBitmap();
+            var canvas = new InkCanvasControl(bitmap, pageNo: 1);
+
+            // Act - cycle through all modes without error
+            canvas.SetPenColor(Brushes.Black);
+            canvas.SetHighlighter();
+            canvas.SetEraserMode();
+            canvas.SetRectangleMode();
+            canvas.SetEllipseMode();
+            canvas.SetPenColor(Brushes.Red); // Back to pen mode
+
+            // Assert - no exception means success
+            Assert.IsTrue(true);
+        });
+    }
+
     #endregion
 
     #region HasUnsavedStrokes Tests
