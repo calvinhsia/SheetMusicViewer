@@ -59,6 +59,10 @@ public class InkCanvasControl : Panel
     private Point _rectangleStartPoint;
     private Rectangle? _currentRectangle;
     
+    // Ellipse drawing fields
+    private Point _ellipseStartPoint;
+    private Ellipse? _currentEllipse;
+    
     // Event for save request (raised by context menu or external toolbar)
     public event EventHandler? SaveRequested;
     
@@ -428,6 +432,35 @@ public class InkCanvasControl : Panel
             return;
         }
         
+        // Handle ellipse mode
+        if (_currentMode == InkMode.Ellipse)
+        {
+            _ellipseStartPoint = drawPoint;
+            _currentStrokeMetadata = (_currentBrush, _strokeThickness);
+            
+            // Create preview ellipse - use Margin for positioning since Panel doesn't support Canvas.Left/Top
+            _currentEllipse = new Ellipse
+            {
+                Stroke = _currentBrush,
+                StrokeThickness = _strokeThickness,
+                Fill = null,
+                Width = 0,
+                Height = 0,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Avalonia.Thickness(drawPoint.X, drawPoint.Y, 0, 0)
+            };
+            Children.Add(_currentEllipse);
+            
+            _isDrawing = true;
+            _drawingPointer = e.Pointer;
+            e.Pointer.Capture(_bgImage);
+            e.Handled = true;
+            
+            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Started ellipse at ({drawPoint.X:F0}, {drawPoint.Y:F0})");
+            return;
+        }
+        
         _currentNormalizedStroke = new List<Point> { normalizedPoint };
         _currentStrokeMetadata = (_currentBrush, _strokeThickness);
         
@@ -486,6 +519,24 @@ public class InkCanvasControl : Panel
             return;
         }
         
+        // Handle ellipse mode during drag
+        if (_currentMode == InkMode.Ellipse && _currentEllipse != null)
+        {
+            var currentPoint = e.GetPosition(this);
+            
+            // Calculate ellipse bounds (handle negative width/height when dragging left/up)
+            var x = Math.Min(_ellipseStartPoint.X, currentPoint.X);
+            var y = Math.Min(_ellipseStartPoint.Y, currentPoint.Y);
+            var width = Math.Abs(currentPoint.X - _ellipseStartPoint.X);
+            var height = Math.Abs(currentPoint.Y - _ellipseStartPoint.Y);
+            
+            // Update ellipse position and size using Margin
+            _currentEllipse.Margin = new Avalonia.Thickness(x, y, 0, 0);
+            _currentEllipse.Width = width;
+            _currentEllipse.Height = height;
+            return;
+        }
+        
         if (_currentPolyline == null || _currentNormalizedStroke == null) return;
 
         var drawPoint = e.GetPosition(this);
@@ -523,6 +574,15 @@ public class InkCanvasControl : Panel
             return;
         }
 
+        // Handle ellipse mode finalization
+        if (_currentMode == InkMode.Ellipse && _currentEllipse != null)
+        {
+            FinalizeCurrentEllipse(e.GetPosition(this));
+            e.Pointer.Capture(null);
+            e.Handled = true;
+            return;
+        }
+
         FinalizeCurrentStroke();
         e.Pointer.Capture(null);
         e.Handled = true;
@@ -542,6 +602,13 @@ public class InkCanvasControl : Panel
         {
             Trace.WriteLine($"[InkCanvas] Page {_pageNo}: PointerCaptureLost while drawing rectangle");
             FinalizeCurrentRectangle(new Point(_rectangleStartPoint.X, _rectangleStartPoint.Y));
+        }
+        
+        // Also finalize ellipse if in progress
+        if (_isDrawing && _currentEllipse != null)
+        {
+            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: PointerCaptureLost while drawing ellipse");
+            FinalizeCurrentEllipse(new Point(_ellipseStartPoint.X, _ellipseStartPoint.Y));
         }
     }
     
@@ -648,6 +715,77 @@ public class InkCanvasControl : Panel
         _drawingPointer = null;
         
         // Re-render to show the new rectangle as a polyline
+        RerenderStrokes();
+    }
+    
+    /// <summary>
+    /// Finalize the current ellipse and convert it to a polyline stroke
+    /// </summary>
+    private void FinalizeCurrentEllipse(Point endPoint)
+    {
+        if (_currentEllipse == null)
+        {
+            _isDrawing = false;
+            _drawingPointer = null;
+            return;
+        }
+        
+        // Calculate ellipse bounds
+        var x = Math.Min(_ellipseStartPoint.X, endPoint.X);
+        var y = Math.Min(_ellipseStartPoint.Y, endPoint.Y);
+        var width = Math.Abs(endPoint.X - _ellipseStartPoint.X);
+        var height = Math.Abs(endPoint.Y - _ellipseStartPoint.Y);
+        
+        // Only create if ellipse has meaningful size
+        if (width > 2 && height > 2)
+        {
+            // Convert ellipse to polyline with 36 points (every 10 degrees)
+            var centerX = x + width / 2;
+            var centerY = y + height / 2;
+            var radiusX = width / 2;
+            var radiusY = height / 2;
+            
+            const int numPoints = 36;
+            var points = new List<Point>();
+            for (int i = 0; i <= numPoints; i++)
+            {
+                var angle = i * (2 * Math.PI / numPoints);
+                var px = centerX + radiusX * Math.Cos(angle);
+                var py = centerY + radiusY * Math.Sin(angle);
+                points.Add(new Point(px, py));
+            }
+            
+            // Create normalized stroke points (ellipse as closed polyline)
+            var normalizedStroke = points
+                .Select(p => ScreenToNormalized(p))
+                .ToList();
+            
+            _normalizedStrokes.Add(normalizedStroke);
+            _strokeMetadata.Add(_currentStrokeMetadata ?? (_currentBrush, _strokeThickness));
+            _hasUnsavedStrokes = true;
+            
+            // Add to undo stack
+            var strokeIndex = _normalizedStrokes.Count - 1;
+            _undoStack.Push(new UndoAction(
+                UndoActionType.Add,
+                normalizedStroke,
+                _currentStrokeMetadata ?? (_currentBrush, _strokeThickness),
+                strokeIndex));
+            _redoStack.Clear();
+            
+            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Ellipse completed at ({x:F0}, {y:F0}) size ({width:F0} x {height:F0}), total strokes={_normalizedStrokes.Count}");
+            
+            UndoRedoStateChanged?.Invoke(this, EventArgs.Empty);
+        }
+        
+        // Remove the preview ellipse
+        Children.Remove(_currentEllipse);
+        _currentEllipse = null;
+        _currentStrokeMetadata = null;
+        _isDrawing = false;
+        _drawingPointer = null;
+        
+        // Re-render to show the new ellipse as a polyline
         RerenderStrokes();
     }
     
@@ -808,6 +946,12 @@ public class InkCanvasControl : Panel
         Trace.WriteLine($"[InkCanvas] Page {_pageNo}: SetRectangleMode - mode changed to Rectangle");
     }
 
+    public void SetEllipseMode()
+    {
+        _currentMode = InkMode.Ellipse;
+        Trace.WriteLine($"[InkCanvas] Page {_pageNo}: SetEllipseMode - mode changed to Ellipse");
+    }
+
     public void ClearStrokes()
     {
         // Add all current strokes to undo stack as a batch
@@ -936,6 +1080,7 @@ public class InkCanvasControl : Panel
         Pen,
         Highlighter,
         Eraser,
-        Rectangle
+        Rectangle,
+        Ellipse
     }
 }

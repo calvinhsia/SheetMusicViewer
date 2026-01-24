@@ -1,4 +1,4 @@
-﻿using Avalonia.Controls;
+using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
@@ -1995,6 +1995,11 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         var rectBtn = CreateInkToolbarButton("▢", "Rectangle (draw a rectangle)", () => GetTargetCanvas()?.SetRectangleMode());
         rectBtn.Background = Brushes.White;
         panel.Children.Add(rectBtn);
+        
+        // Ellipse button
+        var ellipseBtn = CreateInkToolbarButton("◯", "Ellipse (draw an ellipse)", () => GetTargetCanvas()?.SetEllipseMode());
+        ellipseBtn.Background = Brushes.White;
+        panel.Children.Add(ellipseBtn);
         
         // Separator
         panel.Children.Add(new Border { Height = 8 });
