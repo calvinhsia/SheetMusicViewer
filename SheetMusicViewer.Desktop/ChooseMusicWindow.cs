@@ -248,6 +248,14 @@ public class ChooseMusicWindow : Window
 
     private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
     {
+        // Cleanup file watcher subscription if we're on Playlists tab
+        if (_tabControl.SelectedItem is TabItem selectedTab && 
+            selectedTab.Header?.ToString() == "_Playlists")
+        {
+            AppSettings.UserDataFileChanged -= OnUserDataFileChanged;
+            AppSettings.DisableUserDataFileWatcher();
+        }
+        
         // Save window state
         var settings = AppSettings.Instance;
         settings.ChooseWindowMaximized = WindowState == WindowState.Maximized;
@@ -262,9 +270,9 @@ public class ChooseMusicWindow : Window
         }
         
         // Save selected tab
-        if (_tabControl.SelectedItem is TabItem selectedTab)
+        if (_tabControl.SelectedItem is TabItem selectedTabForSave)
         {
-            settings.ChooseQueryTab = selectedTab.Header?.ToString() ?? "_Books";
+            settings.ChooseQueryTab = selectedTabForSave.Header?.ToString() ?? "_Books";
         }
         
         // Save last selected playlist
@@ -462,55 +470,12 @@ public class ChooseMusicWindow : Window
         AppSettings.Instance.ReloadRoaming();
         Logger.LogInfo($"OnRefreshClick: ReloadRoaming() completed, playlist count={AppSettings.Instance.Playlists.Count}");
         
-        // If we're on the Playlists tab, refresh the playlist combo and entries
+        // If we're on the Playlists tab, refresh the playlist UI
         if (_tabControl.SelectedItem is TabItem selectedTab && 
             selectedTab.Header?.ToString() == "_Playlists" &&
             _playlistSongsBrowseControl != null)
         {
-            var previousPlaylistName = _currentPlaylist?.Name;
-            
-            _isRefreshingPlaylistCombo = true;
-            try
-            {
-                _playlistComboBox.Items.Clear();
-                foreach (var playlist in AppSettings.Instance.Playlists)
-                {
-                    _playlistComboBox.Items.Add(new ComboBoxItem { Content = playlist.Name, Tag = playlist });
-                }
-                
-                // Try to re-select the same playlist
-                var settings = AppSettings.Instance;
-                if (!string.IsNullOrEmpty(previousPlaylistName) && settings.Playlists.Any(p => p.Name == previousPlaylistName))
-                {
-                    _currentPlaylist = settings.Playlists.First(p => p.Name == previousPlaylistName);
-                    for (int i = 0; i < _playlistComboBox.Items.Count; i++)
-                    {
-                        if (_playlistComboBox.Items[i] is ComboBoxItem item && item.Content?.ToString() == previousPlaylistName)
-                        {
-                            _playlistComboBox.SelectedIndex = i;
-                            break;
-                        }
-                    }
-                }
-                else if (settings.Playlists.Count > 0)
-                {
-                    _currentPlaylist = settings.Playlists[0];
-                    if (_playlistComboBox.Items.Count > 0)
-                    {
-                        _playlistComboBox.SelectedIndex = 0;
-                    }
-                }
-                else
-                {
-                    _currentPlaylist = null;
-                }
-            }
-            finally
-            {
-                _isRefreshingPlaylistCombo = false;
-            }
-            
-            RefreshPlaylistEntries();
+            RefreshPlaylistUIFromSettings();
         }
         
         // Re-use the existing folder change logic which clears caches and reloads
@@ -893,6 +858,19 @@ public class ChooseMusicWindow : Window
         
         try
         {
+            // Check what tab we're leaving (to disable watcher if leaving Playlists)
+            var previousHeader = "";
+            if (e.RemovedItems.Count > 0 && e.RemovedItems[0] is TabItem removedTab)
+            {
+                previousHeader = removedTab.Header?.ToString() ?? "";
+                if (previousHeader == "_Playlists")
+                {
+                    // Leaving Playlists tab - disable file watcher for efficiency
+                    AppSettings.DisableUserDataFileWatcher();
+                    AppSettings.UserDataFileChanged -= OnUserDataFileChanged;
+                }
+            }
+            
             if (_tabControl.SelectedItem is TabItem selectedTab)
             {
                 var header = selectedTab.Header?.ToString() ?? "";
@@ -936,7 +914,11 @@ public class ChooseMusicWindow : Window
                         _queryFilterText = _queryBrowseControl.GetFilterText();
                     }
                     
-                    // Reload playlists from disk in case OneDrive synced changes
+                    // Entering Playlists tab - enable file watcher for auto-refresh
+                    AppSettings.UserDataFileChanged += OnUserDataFileChanged;
+                    AppSettings.EnableUserDataFileWatcher();
+                    
+                    // Reload playlists from disk in case OneDrive synced changes while we were away
                     Logger.LogInfo($"OnTabSelectionChanged: Switching to Playlists tab, calling ReloadRoaming()");
                     AppSettings.Instance.ReloadRoaming();
                     Logger.LogInfo($"OnTabSelectionChanged: ReloadRoaming() completed, playlist count={AppSettings.Instance.Playlists.Count}");
@@ -948,51 +930,7 @@ public class ChooseMusicWindow : Window
                     else
                     {
                         // Refresh the playlist combo and entries with reloaded data
-                        var previousPlaylistName = _currentPlaylist?.Name;
-                        
-                        // Use flag to prevent selection change events during refresh
-                        _isRefreshingPlaylistCombo = true;
-                        try
-                        {
-                            _playlistComboBox.Items.Clear();
-                            foreach (var playlist in AppSettings.Instance.Playlists)
-                            {
-                                _playlistComboBox.Items.Add(new ComboBoxItem { Content = playlist.Name, Tag = playlist });
-                            }
-                            
-                            // Try to re-select the same playlist
-                            var settings = AppSettings.Instance;
-                            if (!string.IsNullOrEmpty(previousPlaylistName) && settings.Playlists.Any(p => p.Name == previousPlaylistName))
-                            {
-                                _currentPlaylist = settings.Playlists.First(p => p.Name == previousPlaylistName);
-                                for (int i = 0; i < _playlistComboBox.Items.Count; i++)
-                                {
-                                    if (_playlistComboBox.Items[i] is ComboBoxItem item && item.Content?.ToString() == previousPlaylistName)
-                                    {
-                                        _playlistComboBox.SelectedIndex = i;
-                                        break;
-                                    }
-                                }
-                            }
-                            else if (settings.Playlists.Count > 0)
-                            {
-                                _currentPlaylist = settings.Playlists[0];
-                                if (_playlistComboBox.Items.Count > 0)
-                                {
-                                    _playlistComboBox.SelectedIndex = 0;
-                                }
-                            }
-                            else
-                            {
-                                _currentPlaylist = null;
-                            }
-                        }
-                        finally
-                        {
-                            _isRefreshingPlaylistCombo = false;
-                        }
-                        
-                        RefreshPlaylistEntries();
+                        RefreshPlaylistUIFromSettings();
                     }
                     
                     // Focus the filter textbox when Playlist tab is activated
@@ -1004,6 +942,87 @@ public class ChooseMusicWindow : Window
         {
             _isHandlingTabChange = false;
         }
+    }
+    
+    /// <summary>
+    /// Handle automatic refresh when userdata.json file changes externally (e.g., OneDrive sync).
+    /// Only called when the Playlists tab is visible (file watcher is enabled).
+    /// </summary>
+    private void OnUserDataFileChanged(object? sender, EventArgs e)
+    {
+        // This event comes from a background thread, so dispatch to UI thread
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                Logger.LogInfo("OnUserDataFileChanged: External file change detected, auto-refreshing playlists");
+                
+                // Reload playlists from disk
+                AppSettings.Instance.ReloadRoaming();
+                
+                // Refresh the UI
+                RefreshPlaylistUIFromSettings();
+                
+                // Update status to indicate auto-refresh
+                _playlistStatus.Text = $"{_currentPlaylist?.Entries.Count ?? 0} song(s) (synced)";
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning($"OnUserDataFileChanged: Error during auto-refresh: {ex.Message}");
+            }
+        });
+    }
+    
+    /// <summary>
+    /// Refresh the playlist UI (combo box and entries) from AppSettings.
+    /// Called when playlists are reloaded from disk.
+    /// </summary>
+    private void RefreshPlaylistUIFromSettings()
+    {
+        var previousPlaylistName = _currentPlaylist?.Name;
+        
+        _isRefreshingPlaylistCombo = true;
+        try
+        {
+            _playlistComboBox.Items.Clear();
+            foreach (var playlist in AppSettings.Instance.Playlists)
+            {
+                _playlistComboBox.Items.Add(new ComboBoxItem { Content = playlist.Name, Tag = playlist });
+            }
+            
+            // Try to re-select the same playlist
+            var settings = AppSettings.Instance;
+            if (!string.IsNullOrEmpty(previousPlaylistName) && settings.Playlists.Any(p => p.Name == previousPlaylistName))
+            {
+                _currentPlaylist = settings.Playlists.First(p => p.Name == previousPlaylistName);
+                for (int i = 0; i < _playlistComboBox.Items.Count; i++)
+                {
+                    if (_playlistComboBox.Items[i] is ComboBoxItem item && item.Content?.ToString() == previousPlaylistName)
+                    {
+                        _playlistComboBox.SelectedIndex = i;
+                        break;
+                    }
+                }
+            }
+            else if (settings.Playlists.Count > 0)
+            {
+                _currentPlaylist = settings.Playlists[0];
+                if (_playlistComboBox.Items.Count > 0)
+                {
+                    _playlistComboBox.SelectedIndex = 0;
+                }
+            }
+            else
+            {
+                _currentPlaylist = null;
+            }
+        }
+        finally
+        {
+            _isRefreshingPlaylistCombo = false;
+        }
+        
+        RefreshPlaylistEntries();
     }
     
     private void FillFavoritesTab()
