@@ -363,7 +363,7 @@ public class ChooseMusicWindow : Window
             Content = "⟳ Refresh", 
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 0, 0),
-            [ToolTip.TipProperty] = "Rescan music folder for new or changed files (F5)"
+            [ToolTip.TipProperty] = "Rescan music folder and reload playlists (F5)"
         };
         btnRefresh.Click += OnRefreshClick;
         topBar.Children.Add(btnRefresh);
@@ -455,6 +455,62 @@ public class ChooseMusicWindow : Window
         if (string.IsNullOrEmpty(_rootFolder) || !Directory.Exists(_rootFolder))
         {
             return;
+        }
+        
+        // Reload roaming settings (playlists) in case OneDrive synced changes from another machine
+        Logger.LogInfo($"OnRefreshClick: Calling ReloadRoaming() to pick up synced playlists");
+        AppSettings.Instance.ReloadRoaming();
+        Logger.LogInfo($"OnRefreshClick: ReloadRoaming() completed, playlist count={AppSettings.Instance.Playlists.Count}");
+        
+        // If we're on the Playlists tab, refresh the playlist combo and entries
+        if (_tabControl.SelectedItem is TabItem selectedTab && 
+            selectedTab.Header?.ToString() == "_Playlists" &&
+            _playlistSongsBrowseControl != null)
+        {
+            var previousPlaylistName = _currentPlaylist?.Name;
+            
+            _isRefreshingPlaylistCombo = true;
+            try
+            {
+                _playlistComboBox.Items.Clear();
+                foreach (var playlist in AppSettings.Instance.Playlists)
+                {
+                    _playlistComboBox.Items.Add(new ComboBoxItem { Content = playlist.Name, Tag = playlist });
+                }
+                
+                // Try to re-select the same playlist
+                var settings = AppSettings.Instance;
+                if (!string.IsNullOrEmpty(previousPlaylistName) && settings.Playlists.Any(p => p.Name == previousPlaylistName))
+                {
+                    _currentPlaylist = settings.Playlists.First(p => p.Name == previousPlaylistName);
+                    for (int i = 0; i < _playlistComboBox.Items.Count; i++)
+                    {
+                        if (_playlistComboBox.Items[i] is ComboBoxItem item && item.Content?.ToString() == previousPlaylistName)
+                        {
+                            _playlistComboBox.SelectedIndex = i;
+                            break;
+                        }
+                    }
+                }
+                else if (settings.Playlists.Count > 0)
+                {
+                    _currentPlaylist = settings.Playlists[0];
+                    if (_playlistComboBox.Items.Count > 0)
+                    {
+                        _playlistComboBox.SelectedIndex = 0;
+                    }
+                }
+                else
+                {
+                    _currentPlaylist = null;
+                }
+            }
+            finally
+            {
+                _isRefreshingPlaylistCombo = false;
+            }
+            
+            RefreshPlaylistEntries();
         }
         
         // Re-use the existing folder change logic which clears caches and reloads

@@ -706,6 +706,137 @@ namespace Tests
         
         [TestMethod]
         [TestCategory("Unit")]
+        public void AppSettings_ReloadRoaming_PicksUpNewSongAddedToPlaylist()
+        {
+            // This test simulates the exact scenario where:
+            // 1. User has a playlist with 2 songs
+            // 2. Another machine (via OneDrive) adds a 3rd song to the same playlist
+            // 3. User clicks Refresh (which calls ReloadRoaming)
+            // 4. The playlist entries should now show 3 songs
+            //
+            // This is the data-level test for what the Refresh button does in ChooseMusicWindow.
+            
+            // Arrange - Create initial playlist with 2 songs
+            var settings = AppSettings.Instance;
+            var playlist = new Playlist { Name = "My Favorites" };
+            playlist.Entries.Add(new PlaylistEntry 
+            { 
+                SongName = "Song 1", 
+                Composer = "Composer 1", 
+                PageNo = 10, 
+                BookName = "Book A", 
+                Notes = "" 
+            });
+            playlist.Entries.Add(new PlaylistEntry 
+            { 
+                SongName = "Song 2", 
+                Composer = "Composer 2", 
+                PageNo = 20, 
+                BookName = "Book B", 
+                Notes = "" 
+            });
+            settings.Playlists.Add(playlist);
+            settings.LastSelectedPlaylist = "My Favorites";
+            settings.Save();
+            
+            // Verify initial state
+            Assert.AreEqual(1, settings.Playlists.Count);
+            Assert.AreEqual(2, settings.Playlists[0].Entries.Count);
+            
+            // Simulate external change (like OneDrive sync from another machine)
+            // Another user added "Song 3" to the playlist
+            var roamingPath = AppSettings.RoamingSettingsPath;
+            Assert.IsNotNull(roamingPath);
+            
+            var externalJson = """
+            {
+                "Playlists": [
+                    {
+                        "Name": "My Favorites",
+                        "CreatedDate": "2024-01-01T00:00:00",
+                        "ModifiedDate": "2024-01-02T00:00:00",
+                        "Entries": [
+                            { "SongName": "Song 1", "PageNo": 10, "Composer": "Composer 1", "BookName": "Book A", "Notes": "" },
+                            { "SongName": "Song 2", "PageNo": 20, "Composer": "Composer 2", "BookName": "Book B", "Notes": "" },
+                            { "SongName": "Song 3 - Added on other machine", "PageNo": 30, "Composer": "Composer 3", "BookName": "Book C", "Notes": "Added via OneDrive sync" }
+                        ]
+                    }
+                ],
+                "LastSelectedPlaylist": "My Favorites"
+            }
+            """;
+            File.WriteAllText(roamingPath!, externalJson);
+            
+            // Act - User clicks Refresh, which calls ReloadRoaming()
+            settings.ReloadRoaming();
+            
+            // Assert - Should now have 3 songs in the playlist
+            Assert.AreEqual(1, settings.Playlists.Count, "Should still have 1 playlist");
+            Assert.AreEqual("My Favorites", settings.Playlists[0].Name, "Playlist name should be preserved");
+            Assert.AreEqual(3, settings.Playlists[0].Entries.Count, "Should now have 3 entries after refresh");
+            
+            // Verify all entries are present
+            Assert.AreEqual("Song 1", settings.Playlists[0].Entries[0].SongName);
+            Assert.AreEqual("Song 2", settings.Playlists[0].Entries[1].SongName);
+            Assert.AreEqual("Song 3 - Added on other machine", settings.Playlists[0].Entries[2].SongName);
+            Assert.AreEqual("Added via OneDrive sync", settings.Playlists[0].Entries[2].Notes);
+            
+            AddLogEntry("ReloadRoaming correctly picks up new song added to playlist from another machine");
+        }
+        
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void AppSettings_ReloadRoaming_PicksUpNewPlaylistFromAnotherMachine()
+        {
+            // This test simulates the scenario where:
+            // 1. User has 2 playlists
+            // 2. Another machine (via OneDrive) creates a new 3rd playlist
+            // 3. User clicks Refresh (which calls ReloadRoaming)
+            // 4. The playlist list should now show 3 playlists
+            
+            // Arrange - Create initial state with 2 playlists
+            var settings = AppSettings.Instance;
+            settings.Playlists.Add(new Playlist { Name = "Playlist 1" });
+            settings.Playlists.Add(new Playlist { Name = "Playlist 2" });
+            settings.Save();
+            
+            Assert.AreEqual(2, settings.Playlists.Count);
+            
+            // Simulate external change - another machine created "Playlist 3"
+            var roamingPath = AppSettings.RoamingSettingsPath;
+            Assert.IsNotNull(roamingPath);
+            
+            var externalJson = """
+            {
+                "Playlists": [
+                    { "Name": "Playlist 1", "Entries": [] },
+                    { "Name": "Playlist 2", "Entries": [] },
+                    { "Name": "Playlist 3 - From other machine", "Entries": [
+                        { "SongName": "New Song", "PageNo": 1, "Composer": "", "BookName": "", "Notes": "" }
+                    ] }
+                ],
+                "LastSelectedPlaylist": "Playlist 3 - From other machine"
+            }
+            """;
+            File.WriteAllText(roamingPath!, externalJson);
+            
+            // Act
+            settings.ReloadRoaming();
+            
+            // Assert
+            Assert.AreEqual(3, settings.Playlists.Count, "Should now have 3 playlists");
+            Assert.AreEqual("Playlist 1", settings.Playlists[0].Name);
+            Assert.AreEqual("Playlist 2", settings.Playlists[1].Name);
+            Assert.AreEqual("Playlist 3 - From other machine", settings.Playlists[2].Name);
+            Assert.AreEqual(1, settings.Playlists[2].Entries.Count);
+            Assert.AreEqual("New Song", settings.Playlists[2].Entries[0].SongName);
+            Assert.AreEqual("Playlist 3 - From other machine", settings.LastSelectedPlaylist);
+            
+            AddLogEntry("ReloadRoaming correctly picks up new playlist from another machine");
+        }
+
+        [TestMethod]
+        [TestCategory("Unit")]
         public void AppSettings_ReloadRoaming_PreservesLocalSettings()
         {
             // Arrange - Set both local and roaming settings
