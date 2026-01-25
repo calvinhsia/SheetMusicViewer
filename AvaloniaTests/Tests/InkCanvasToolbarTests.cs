@@ -99,40 +99,40 @@ public class InkCanvasToolbarTests
         return false;
     }
 
+    /// <summary>
+    /// Execute an action for Avalonia control testing.
+    /// 
+    /// Note: With headless Avalonia (SetupWithoutStarting), there's no message pump running,
+    /// so we can't use Dispatcher.UIThread.Invoke() which would deadlock.
+    /// Avalonia headless allows control creation on any thread, so just run directly.
+    /// </summary>
     private void RunOnDispatcher(Action action)
     {
-        // Don't try to use Dispatcher if not on Windows - it will hang
+        // Don't try to run if not on Windows or not initialized
         if (!_isWindowsPlatform || !_avaloniaInitialized)
         {
             return;
         }
         
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            action();
-        }
-        else
-        {
-            Dispatcher.UIThread.Invoke(action);
-        }
+        // In headless mode with SetupWithoutStarting(), there's no message pump,
+        // so Dispatcher.UIThread.Invoke() would deadlock.
+        // Avalonia headless allows control creation on any thread, so just run directly.
+        action();
     }
 
+    /// <summary>
+    /// Execute a function for Avalonia control testing.
+    /// </summary>
     private T RunOnDispatcher<T>(Func<T> func)
     {
-        // Don't try to use Dispatcher if not on Windows - it will hang
+        // Don't try to run if not on Windows or not initialized
         if (!_isWindowsPlatform || !_avaloniaInitialized)
         {
             return default!;
         }
         
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            return func();
-        }
-        else
-        {
-            return Dispatcher.UIThread.Invoke(func);
-        }
+        // In headless mode, just run directly (see RunOnDispatcher(Action) comment)
+        return func();
     }
 
     private static WriteableBitmap CreateTestBitmap(int width = 200, int height = 300)
