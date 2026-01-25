@@ -92,32 +92,26 @@ public class InkCanvasControlTests : TestBase
     /// <summary>
     /// Execute an action on the Avalonia dispatcher thread.
     /// This ensures thread affinity for Avalonia UI objects.
+    /// 
+    /// Note: With headless Avalonia (SetupWithoutStarting), there's no message pump running,
+    /// so we can't use Invoke() which would deadlock. Instead, we run directly since
+    /// Avalonia headless allows control creation on any thread.
     /// </summary>
     private void RunOnDispatcher(Action action)
     {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            action();
-        }
-        else
-        {
-            Dispatcher.UIThread.Invoke(action);
-        }
+        // In headless mode with SetupWithoutStarting(), there's no message pump,
+        // so Dispatcher.UIThread.Invoke() would deadlock.
+        // Avalonia headless allows control creation on any thread, so just run directly.
+        action();
     }
 
     /// <summary>
-    /// Execute an async function on the Avalonia dispatcher thread.
+    /// Execute a function on the Avalonia dispatcher thread.
     /// </summary>
     private T RunOnDispatcher<T>(Func<T> func)
     {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            return func();
-        }
-        else
-        {
-            return Dispatcher.UIThread.Invoke(func);
-        }
+        // In headless mode, just run directly (see RunOnDispatcher(Action) comment)
+        return func();
     }
 
     /// <summary>
