@@ -25,9 +25,21 @@ public class AppSettings
     private static string? _musicRootFolder;
     private static AppSettings? _instance;
     private static readonly object _lock = new();
+    private static FileSystemWatcher? _userDataFileWatcher;
+    private static DateTime _lastUserDataFileChange = DateTime.MinValue;
+    private static bool _isSavingUserData = false; // Prevent reload when we're the ones saving
     
     private const string RoamingFolderName = ".sheetmusicviewer";
     private const string RoamingFileName = "userdata.json";
+    private const int FileChangeDebounceMs = 500; // Debounce rapid file change notifications
+
+    /// <summary>
+    /// Event raised when userdata.json file changes externally (e.g., OneDrive sync).
+    /// UI can subscribe to this to refresh playlist display when visible.
+    /// Only raised when file watcher is enabled via EnableUserDataFileWatcher().
+    /// Note: This watches userdata.json only, NOT settings.json.
+    /// </summary>
+    public static event EventHandler? UserDataFileChanged;
 
     /// <summary>
     /// Gets the singleton instance of AppSettings.
@@ -63,6 +75,7 @@ public class AppSettings
     /// Sets the music root folder, which determines where roaming settings are stored.
     /// Roaming settings (playlists, preferences) are stored in {musicRootFolder}/.sheetmusicviewer/userdata.json
     /// This keeps user data with the music collection, which is typically already in OneDrive.
+    /// Note: This does NOT enable the file watcher - call EnableUserDataFileWatcher() separately when needed.
     /// </summary>
     /// <param name="musicRootFolder">Path to the music root folder containing PDF files</param>
     public static void SetMusicRootFolder(string? musicRootFolder)
@@ -83,6 +96,123 @@ public class AppSettings
             {
                 Logger.LogInfo($"SetMusicRootFolder: Not reloading. _instance={_instance != null}, changed={musicRootFolder != previousFolder}, hasFolder={!string.IsNullOrEmpty(musicRootFolder)}");
             }
+        }
+    }
+    
+    /// <summary>
+    /// Enable the FileSystemWatcher for userdata.json (playlists file).
+    /// Call this when the Playlists UI becomes visible.
+    /// The watcher will raise UserDataFileChanged when external changes are detected.
+    /// Note: This only watches userdata.json, NOT settings.json.
+    /// </summary>
+    public static void EnableUserDataFileWatcher()
+    {
+        // Already enabled?
+        if (_userDataFileWatcher != null && _userDataFileWatcher.EnableRaisingEvents)
+        {
+            Logger.LogInfo("EnableUserDataFileWatcher: Already enabled");
+            return;
+        }
+        
+        var roamingPath = RoamingSettingsPath;
+        if (string.IsNullOrEmpty(roamingPath))
+        {
+            Logger.LogInfo("EnableUserDataFileWatcher: No roaming path, watcher not created");
+            return;
+        }
+        
+        var directory = Path.GetDirectoryName(roamingPath);
+        var fileName = Path.GetFileName(roamingPath);
+        
+        if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+        {
+            Logger.LogInfo($"EnableUserDataFileWatcher: Directory doesn't exist yet: {directory}");
+            return;
+        }
+        
+        try
+        {
+            // Create new watcher if needed
+            if (_userDataFileWatcher == null)
+            {
+                _userDataFileWatcher = new FileSystemWatcher(directory, fileName)
+                {
+                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.CreationTime
+                };
+                _userDataFileWatcher.Changed += OnUserDataFileChanged;
+                _userDataFileWatcher.Created += OnUserDataFileChanged;
+            }
+            
+            _userDataFileWatcher.EnableRaisingEvents = true;
+            Logger.LogInfo($"EnableUserDataFileWatcher: Watching {roamingPath}");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning($"EnableUserDataFileWatcher: Failed to create watcher: {ex.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// Disable the FileSystemWatcher for userdata.json.
+    /// Call this when the Playlists UI is no longer visible to save resources.
+    /// </summary>
+    public static void DisableUserDataFileWatcher()
+    {
+        if (_userDataFileWatcher != null)
+        {
+            _userDataFileWatcher.EnableRaisingEvents = false;
+            Logger.LogInfo("DisableUserDataFileWatcher: Watcher disabled");
+        }
+    }
+    
+    /// <summary>
+    /// Handle userdata.json file change events with debouncing.
+    /// </summary>
+    private static void OnUserDataFileChanged(object sender, FileSystemEventArgs e)
+    {
+        // Ignore if we're the ones saving
+        if (_isSavingUserData)
+        {
+            Logger.LogInfo("OnUserDataFileChanged: Ignoring - we're saving");
+            return;
+        }
+        
+        // Debounce rapid notifications (FileSystemWatcher often fires multiple times)
+        var now = DateTime.Now;
+        if ((now - _lastUserDataFileChange).TotalMilliseconds < FileChangeDebounceMs)
+        {
+            Logger.LogInfo("OnUserDataFileChanged: Ignoring - debounce");
+            return;
+        }
+        _lastUserDataFileChange = now;
+        
+        Logger.LogInfo($"OnUserDataFileChanged: External change detected, raising event");
+        
+        // Raise event on a slight delay to ensure file is fully written
+        Task.Delay(100).ContinueWith(_ =>
+        {
+            try
+            {
+                UserDataFileChanged?.Invoke(null, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning($"OnUserDataFileChanged: Error raising event: {ex.Message}");
+            }
+        });
+    }
+    
+    /// <summary>
+    /// Dispose the file watcher completely. Call when application is shutting down.
+    /// </summary>
+    public static void DisposeWatcher()
+    {
+        if (_userDataFileWatcher != null)
+        {
+            _userDataFileWatcher.EnableRaisingEvents = false;
+            _userDataFileWatcher.Dispose();
+            _userDataFileWatcher = null;
+            Logger.LogInfo("DisposeWatcher: File watcher disposed");
         }
     }
 
@@ -316,7 +446,8 @@ public class AppSettings
     private void LoadRoamingFromMusicFolder()
     {
         var roamingPath = RoamingSettingsPath;
-        Logger.LogInfo($"LoadRoamingFromMusicFolder: roamingPath={roamingPath}");
+        var currentPlaylistCount = Playlists?.Count ?? 0;
+        Logger.LogInfo($"LoadRoamingFromMusicFolder: roamingPath={roamingPath}, current in-memory playlists={currentPlaylistCount}");
         if (string.IsNullOrEmpty(roamingPath))
         {
             Logger.LogWarning("LoadRoamingFromMusicFolder: roamingPath is null/empty, _musicRootFolder not set");
@@ -327,14 +458,20 @@ public class AppSettings
         {
             if (File.Exists(roamingPath))
             {
+                var fileInfo = new FileInfo(roamingPath);
+                Logger.LogInfo($"LoadRoamingFromMusicFolder: File exists, LastWrite={fileInfo.LastWriteTime:yyyy-MM-dd HH:mm:ss.fff}");
+                
                 var json = File.ReadAllText(roamingPath);
                 Logger.LogInfo($"LoadRoamingFromMusicFolder: Read {json.Length} chars from {roamingPath}");
                 var roamingSettings = JsonSerializer.Deserialize<RoamingSettings>(json, JsonOptions);
                 if (roamingSettings != null)
                 {
+                    var loadedCount = roamingSettings.Playlists?.Count ?? 0;
+                    Logger.LogInfo($"LoadRoamingFromMusicFolder: Loaded {loadedCount} playlists from file, replacing {currentPlaylistCount} in-memory playlists");
+                    
                     Playlists = roamingSettings.Playlists ?? new List<Playlist>();
                     LastSelectedPlaylist = roamingSettings.LastSelectedPlaylist;
-                    Logger.LogInfo($"LoadRoamingFromMusicFolder: Loaded {Playlists.Count} playlists, LastSelected={LastSelectedPlaylist}");
+                    Logger.LogInfo($"LoadRoamingFromMusicFolder: Now have {Playlists.Count} playlists, LastSelected={LastSelectedPlaylist}");
                     if (roamingSettings.UserOptions != null)
                     {
                         UserOptions = roamingSettings.UserOptions;
@@ -358,6 +495,7 @@ public class AppSettings
     /// </summary>
     public void ReloadRoaming()
     {
+        Logger.LogInfo($"ReloadRoaming: Called - will reload playlists from disk");
         LoadRoamingFromMusicFolder();
     }
 
@@ -425,10 +563,17 @@ public class AppSettings
     public void SaveRoaming()
     {
         var path = RoamingSettingsPath;
-        if (string.IsNullOrEmpty(path)) return;
+        if (string.IsNullOrEmpty(path))
+        {
+            Logger.LogWarning($"SaveRoaming: Cannot save - RoamingSettingsPath is null/empty (music folder not set)");
+            return;
+        }
         
         try
         {
+            // Set flag to prevent file watcher from triggering reload
+            _isSavingUserData = true;
+            
             var directory = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
             {
@@ -443,11 +588,18 @@ public class AppSettings
             };
 
             var json = JsonSerializer.Serialize(roamingSettings, JsonOptions);
+            Logger.LogInfo($"SaveRoaming: Saving {Playlists.Count} playlists to {path} ({json.Length} chars)");
             File.WriteAllText(path, json);
+            Logger.LogInfo($"SaveRoaming: Successfully saved to {path}");
         }
         catch (Exception ex)
         {
             Logger.LogWarning($"Error saving roaming settings: {ex.Message}");
+        }
+        finally
+        {
+            // Reset flag after a delay to allow file system events to settle
+            Task.Delay(FileChangeDebounceMs + 100).ContinueWith(_ => _isSavingUserData = false);
         }
     }
 
@@ -537,8 +689,14 @@ public class AppSettings
     {
         lock (_lock)
         {
+            // Dispose watcher before reset
+            DisposeWatcher();
+            
             _instance = null;
             _musicRootFolder = null;
+            _isSavingUserData = false;
+            _lastUserDataFileChange = DateTime.MinValue;
+            
             if (!string.IsNullOrEmpty(testSettingsPath))
             {
                 _localSettingsPath = testSettingsPath;
