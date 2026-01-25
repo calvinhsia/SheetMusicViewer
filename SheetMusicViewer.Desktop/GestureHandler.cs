@@ -89,11 +89,13 @@ public class GestureHandler
             _target.RenderTransform = new MatrixTransform(Matrix.Identity);
         }
         
-        // Wire up pointer events
-        _target.PointerPressed += OnPointerPressed;
-        _target.PointerMoved += OnPointerMoved;
-        _target.PointerReleased += OnPointerReleased;
-        _target.PointerCaptureLost += OnPointerCaptureLost;
+        // Wire up pointer events using AddHandler to properly see handled events
+        // We need to check e.Handled ourselves since child controls (like InkCanvas) 
+        // may have already handled the event
+        _target.AddHandler(Control.PointerPressedEvent, OnPointerPressed, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+        _target.AddHandler(Control.PointerMovedEvent, OnPointerMoved, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+        _target.AddHandler(Control.PointerReleasedEvent, OnPointerReleased, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+        _target.AddHandler(Control.PointerCaptureLostEvent, OnPointerCaptureLost, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
         
         // Wire up mouse wheel for Ctrl+scroll zoom
         _target.PointerWheelChanged += OnPointerWheelChanged;
@@ -105,10 +107,10 @@ public class GestureHandler
     public void Detach()
     {
         Log("Detaching gesture handler");
-        _target.PointerPressed -= OnPointerPressed;
-        _target.PointerMoved -= OnPointerMoved;
-        _target.PointerReleased -= OnPointerReleased;
-        _target.PointerCaptureLost -= OnPointerCaptureLost;
+        _target.RemoveHandler(Control.PointerPressedEvent, OnPointerPressed);
+        _target.RemoveHandler(Control.PointerMovedEvent, OnPointerMoved);
+        _target.RemoveHandler(Control.PointerReleasedEvent, OnPointerReleased);
+        _target.RemoveHandler(Control.PointerCaptureLostEvent, OnPointerCaptureLost);
         _target.PointerWheelChanged -= OnPointerWheelChanged;
     }
 
@@ -129,9 +131,10 @@ public class GestureHandler
         // Get position relative to parent (unaffected by our transform)
         var pos = e.GetPosition(_target.Parent as Control ?? _target);
         
-        Log($"PRESSED: id={pointerId} type={pointerType} pos=({pos.X:F0},{pos.Y:F0}) disabled={IsDisabled} count={_activePointers.Count}");
+        Log($"PRESSED: id={pointerId} type={pointerType} pos=({pos.X:F0},{pos.Y:F0}) disabled={IsDisabled} count={_activePointers.Count} handled={e.Handled}");
         
-        if (IsDisabled) return;
+        // Skip if disabled or already handled by a child control (e.g., InkCanvas)
+        if (IsDisabled || e.Handled) return;
         
         _activePointers[pointerId] = e.GetCurrentPoint(_target.Parent as Control ?? _target);
         _hasMoved = false;
@@ -201,9 +204,10 @@ public class GestureHandler
         
         var pos = e.GetPosition(_target.Parent as Control ?? _target);
         
-        Log($"RELEASED: id={pointerId} pos=({pos.X:F0},{pos.Y:F0}) count={_activePointers.Count} wasGest={wasGesturing} moved={_hasMoved}");
+        Log($"RELEASED: id={pointerId} pos=({pos.X:F0},{pos.Y:F0}) count={_activePointers.Count} wasGest={wasGesturing} moved={_hasMoved} handled={e.Handled}");
         
-        if (_activePointers.Count == 1 && !wasGesturing && !IsDisabled && !_hasMoved)
+        // Skip tap/navigation processing if the event was already handled (e.g., by InkCanvas eraser)
+        if (_activePointers.Count == 1 && !wasGesturing && !IsDisabled && !_hasMoved && !e.Handled)
         {
             var now = Environment.TickCount;
             var diff = Math.Abs(now - _lastTouchTimestamp);
