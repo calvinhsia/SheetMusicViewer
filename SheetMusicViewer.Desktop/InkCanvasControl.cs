@@ -1,7 +1,8 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
+using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using SheetMusicLib;
@@ -17,6 +18,8 @@ namespace SheetMusicViewer.Desktop;
 /// <summary>
 /// Custom ink canvas control that supports drawing on top of a PDF page image.
 /// Uses SkiaSharp-compatible rendering for cross-platform support.
+/// Note: The ink toolbar is now managed at the window level (PdfViewerWindow) 
+/// to allow docking at window edges rather than page edges.
 /// </summary>
 public class InkCanvasControl : Panel
 {
@@ -44,8 +47,42 @@ public class InkCanvasControl : Panel
     // Store stroke metadata (color, thickness, opacity) for each stroke
     private readonly List<(IBrush Brush, double Thickness)> _strokeMetadata = new();
     private (IBrush Brush, double Thickness)? _currentStrokeMetadata;
+    
+    // Undo/Redo stacks
+    private readonly Stack<UndoAction> _undoStack = new();
+    private readonly Stack<UndoAction> _redoStack = new();
+    
+    // Pen mode tracking
+    private InkMode _currentMode = InkMode.Pen;
+    
+    // Rectangle drawing fields
+    private Point _rectangleStartPoint;
+    private Rectangle? _currentRectangle;
+    
+    // Ellipse drawing fields
+    private Point _ellipseStartPoint;
+    private Ellipse? _currentEllipse;
+    
+    // Event for save request (raised by context menu or external toolbar)
+    public event EventHandler? SaveRequested;
+    
+    // Event raised when undo/redo state changes (so external toolbar can update)
+    public event EventHandler? UndoRedoStateChanged;
 
-    public bool IsInkingEnabled { get; set; }
+    private bool _isInkingEnabled;
+    public bool IsInkingEnabled 
+    { 
+        get => _isInkingEnabled;
+        set
+        {
+            if (_isInkingEnabled != value)
+            {
+                _isInkingEnabled = value;
+                Trace.WriteLine($"[InkCanvas] Page {_pageNo}: IsInkingEnabled changed to {value}");
+                UpdateInkingEventHandlers();
+            }
+        }
+    }
 
     /// <summary>
     /// Returns true if there are strokes that haven't been saved yet
@@ -56,6 +93,16 @@ public class InkCanvasControl : Panel
     /// The page number this canvas represents
     /// </summary>
     public int PageNo => _pageNo;
+    
+    /// <summary>
+    /// Returns true if undo is available
+    /// </summary>
+    public bool CanUndo => _undoStack.Count > 0;
+    
+    /// <summary>
+    /// Returns true if redo is available
+    /// </summary>
+    public bool CanRedo => _redoStack.Count > 0;
 
     public InkCanvasControl(Bitmap backgroundImage, int pageNo = 0, InkStrokeClass? inkStrokeClass = null)
     {
@@ -69,16 +116,15 @@ public class InkCanvasControl : Panel
         _bgImage = new Image
         {
             Source = backgroundImage,
-            Stretch = Stretch.Uniform
+            Stretch = Stretch.Uniform,
+            IsHitTestVisible = false // Initially not inking, so allow events to pass through
         };
         Children.Add(_bgImage);
         
-        PointerPressed += OnPointerPressed;
-        PointerMoved += OnPointerMoved;
-        PointerReleased += OnPointerReleased;
+        // Note: Pointer event handlers are attached/detached in UpdateInkingEventHandlers()
+        // based on IsInkingEnabled state
         
-        // Add context menu
-        InitializeContextMenu();
+        Trace.WriteLine($"[InkCanvas] Created for page {pageNo}, hasInkData={inkStrokeClass != null}");
     }
 
     protected override Size MeasureOverride(Size availableSize)
@@ -119,7 +165,34 @@ public class InkCanvasControl : Panel
         
         return finalSize;
     }
-
+    
+    /// <summary>
+    /// Attach or detach pointer event handlers based on inking state.
+    /// When inking is disabled, we don't want to capture any pointer events
+    /// so they can pass through to the parent for navigation.
+    /// </summary>
+    private void UpdateInkingEventHandlers()
+    {
+        if (_isInkingEnabled)
+        {
+            // Enable hit testing and attach event handlers
+            _bgImage.IsHitTestVisible = true;
+            _bgImage.PointerPressed += OnPointerPressed;
+            _bgImage.PointerMoved += OnPointerMoved;
+            _bgImage.PointerReleased += OnPointerReleased;
+            _bgImage.PointerCaptureLost += OnPointerCaptureLost;
+        }
+        else
+        {
+            // Disable hit testing and detach event handlers
+            _bgImage.IsHitTestVisible = false;
+            _bgImage.PointerPressed -= OnPointerPressed;
+            _bgImage.PointerMoved -= OnPointerMoved;
+            _bgImage.PointerReleased -= OnPointerReleased;
+            _bgImage.PointerCaptureLost -= OnPointerCaptureLost;
+        }
+    }
+    
     /// <summary>
     /// Load ink strokes from the InkStrokeClass data
     /// </summary>
@@ -209,7 +282,7 @@ public class InkCanvasControl : Panel
         // Check if it's JSON format (starts with '{')
         if (data[0] != '{')
         {
-            // Not JSON - likely ISF binary which can't be parsed without Windows APIs
+            // Not JSON - likely ISF binary which can't be parsed without Windows API
             return null;
         }
 
@@ -290,45 +363,103 @@ public class InkCanvasControl : Panel
         );
     }
 
-    private void InitializeContextMenu()
-    {
-        var contextMenu = new ContextMenu();
-        
-        var redItem = new MenuItem { Header = "Red" };
-        redItem.Click += (s, e) => SetPenColor(Brushes.Red);
-        contextMenu.Items.Add(redItem);
-        
-        var blackItem = new MenuItem { Header = "Black" };
-        blackItem.Click += (s, e) => SetPenColor(Brushes.Black);
-        contextMenu.Items.Add(blackItem);
-        
-        var highlighterItem = new MenuItem { Header = "Highlighter" };
-        highlighterItem.Click += (s, e) => SetHighlighter();
-        contextMenu.Items.Add(highlighterItem);
-        
-        var clearItem = new MenuItem { Header = "Clear All on this page" };
-        clearItem.Click += (s, e) => ClearStrokes();
-        contextMenu.Items.Add(clearItem);
-        
-        ContextMenu = contextMenu;
-    }
-
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        Trace.WriteLine($"[InkCanvas] Page {_pageNo}: OnPointerPressed - IsInkingEnabled={IsInkingEnabled}");
+        
         if (!IsInkingEnabled) return;
         
+        var properties = e.GetCurrentPoint(_bgImage).Properties;
+        
+        Trace.WriteLine($"[InkCanvas] Page {_pageNo}: PointerPressed for drawing - Mode={_currentMode}, IsEraser={properties.IsEraser}, IsLeft={properties.IsLeftButtonPressed}");
+        
+        // Check for pen eraser
+        if (properties.IsEraser)
+        {
+            _currentMode = InkMode.Eraser;
+        }
+        
+        // Handle eraser mode - erase strokes that are touched
+        if (_currentMode == InkMode.Eraser)
+        {
+            var point = e.GetPosition(this);
+            TryEraseStrokeAt(point);
+            e.Pointer.Capture(_bgImage);
+            _isDrawing = true;
+            _drawingPointer = e.Pointer;
+            e.Handled = true;
+            return;
+        }
+        
         // Only draw with left mouse button (or primary touch/pen)
-        var properties = e.GetCurrentPoint(this).Properties;
         if (!properties.IsLeftButtonPressed)
             return;
 
-        var point = e.GetPosition(this);
+        var drawPoint = e.GetPosition(this);
         
         // Only start drawing if pointer is within bounds
-        if (point.X < 0 || point.Y < 0 || point.X > Bounds.Width || point.Y > Bounds.Height)
+        if (drawPoint.X < 0 || drawPoint.Y < 0 || drawPoint.X > Bounds.Width || drawPoint.Y > Bounds.Height)
             return;
         
-        var normalizedPoint = ScreenToNormalized(point);
+        var normalizedPoint = ScreenToNormalized(drawPoint);
+        
+        // Handle rectangle mode
+        if (_currentMode == InkMode.Rectangle)
+        {
+            _rectangleStartPoint = drawPoint;
+            _currentStrokeMetadata = (_currentBrush, _strokeThickness);
+            
+            // Create preview rectangle - use Margin for positioning since Panel doesn't support Canvas.Left/Top
+            _currentRectangle = new Rectangle
+            {
+                Stroke = _currentBrush,
+                StrokeThickness = _strokeThickness,
+                Fill = null,
+                Width = 0,
+                Height = 0,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Avalonia.Thickness(drawPoint.X, drawPoint.Y, 0, 0)
+            };
+            Children.Add(_currentRectangle);
+            
+            _isDrawing = true;
+            _drawingPointer = e.Pointer;
+            e.Pointer.Capture(_bgImage);
+            e.Handled = true;
+            
+            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Started rectangle at ({drawPoint.X:F0}, {drawPoint.Y:F0})");
+            return;
+        }
+        
+        // Handle ellipse mode
+        if (_currentMode == InkMode.Ellipse)
+        {
+            _ellipseStartPoint = drawPoint;
+            _currentStrokeMetadata = (_currentBrush, _strokeThickness);
+            
+            // Create preview ellipse - use Margin for positioning since Panel doesn't support Canvas.Left/Top
+            _currentEllipse = new Ellipse
+            {
+                Stroke = _currentBrush,
+                StrokeThickness = _strokeThickness,
+                Fill = null,
+                Width = 0,
+                Height = 0,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Avalonia.Thickness(drawPoint.X, drawPoint.Y, 0, 0)
+            };
+            Children.Add(_currentEllipse);
+            
+            _isDrawing = true;
+            _drawingPointer = e.Pointer;
+            e.Pointer.Capture(_bgImage);
+            e.Handled = true;
+            
+            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Started ellipse at ({drawPoint.X:F0}, {drawPoint.Y:F0})");
+            return;
+        }
         
         _currentNormalizedStroke = new List<Point> { normalizedPoint };
         _currentStrokeMetadata = (_currentBrush, _strokeThickness);
@@ -338,41 +469,154 @@ public class InkCanvasControl : Panel
             Stroke = _currentBrush,
             StrokeThickness = _strokeThickness,
             StrokeLineCap = PenLineCap.Round,
-            Points = new Points { point }
+            Points = new Points { drawPoint }
         };
+        
+        // Log the brush being used
+        if (_currentBrush is ISolidColorBrush scb)
+        {
+            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Started drawing with color=#{scb.Color.R:X2}{scb.Color.G:X2}{scb.Color.B:X2}, thickness={_strokeThickness}");
+        }
         
         Children.Add(_currentPolyline);
         _isDrawing = true;
-        _drawingPointer = e.Pointer; // Track the pointer that started drawing
-        e.Pointer.Capture(this);
+        _drawingPointer = e.Pointer;
+        e.Pointer.Capture(_bgImage);
+        e.Handled = true;
     }
 
     private void OnPointerMoved(object? sender, PointerEventArgs e)
     {
-        if (!IsInkingEnabled || !_isDrawing || _currentPolyline == null || _currentNormalizedStroke == null) return;
+        if (!IsInkingEnabled || !_isDrawing) return;
         
-        // Only process moves from the pointer that started the drawing
         if (_drawingPointer == null || e.Pointer.Id != _drawingPointer.Id) return;
         
-        // For pen/stylus, check if it's actually in contact (not just hovering)
-        var properties = e.GetCurrentPoint(this).Properties;
-        if (e.Pointer.Type == PointerType.Pen && !properties.IsLeftButtonPressed)
+        var properties = e.GetCurrentPoint(_bgImage).Properties;
+        
+        // Handle eraser mode during drag
+        if (_currentMode == InkMode.Eraser || properties.IsEraser)
+        {
+            var point = e.GetPosition(this);
+            TryEraseStrokeAt(point);
             return;
+        }
+        
+        // Handle rectangle mode during drag
+        if (_currentMode == InkMode.Rectangle && _currentRectangle != null)
+        {
+            var currentPoint = e.GetPosition(this);
+            
+            // Calculate rectangle bounds (handle negative width/height when dragging left/up)
+            var x = Math.Min(_rectangleStartPoint.X, currentPoint.X);
+            var y = Math.Min(_rectangleStartPoint.Y, currentPoint.Y);
+            var width = Math.Abs(currentPoint.X - _rectangleStartPoint.X);
+            var height = Math.Abs(currentPoint.Y - _rectangleStartPoint.Y);
+            
+            // Update rectangle position and size using Margin
+            _currentRectangle.Margin = new Avalonia.Thickness(x, y, 0, 0);
+            _currentRectangle.Width = width;
+            _currentRectangle.Height = height;
+            return;
+        }
+        
+        // Handle ellipse mode during drag
+        if (_currentMode == InkMode.Ellipse && _currentEllipse != null)
+        {
+            var currentPoint = e.GetPosition(this);
+            
+            // Calculate ellipse bounds (handle negative width/height when dragging left/up)
+            var x = Math.Min(_ellipseStartPoint.X, currentPoint.X);
+            var y = Math.Min(_ellipseStartPoint.Y, currentPoint.Y);
+            var width = Math.Abs(currentPoint.X - _ellipseStartPoint.X);
+            var height = Math.Abs(currentPoint.Y - _ellipseStartPoint.Y);
+            
+            // Update ellipse position and size using Margin
+            _currentEllipse.Margin = new Avalonia.Thickness(x, y, 0, 0);
+            _currentEllipse.Width = width;
+            _currentEllipse.Height = height;
+            return;
+        }
+        
+        if (_currentPolyline == null || _currentNormalizedStroke == null) return;
 
-        var point = e.GetPosition(this);
-        var normalizedPoint = ScreenToNormalized(point);
+        var drawPoint = e.GetPosition(this);
+        var normalizedPoint = ScreenToNormalized(drawPoint);
         
         _currentNormalizedStroke.Add(normalizedPoint);
-        _currentPolyline.Points.Add(point);
+        _currentPolyline.Points.Add(drawPoint);
     }
 
     private void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         if (!IsInkingEnabled || !_isDrawing) return;
         
-        // Only handle release from the pointer that was drawing
         if (_drawingPointer == null || e.Pointer.Id != _drawingPointer.Id) return;
+        
+        Trace.WriteLine($"[InkCanvas] Page {_pageNo}: OnPointerReleased");
+        
+        // Check if pen eraser was released
+        var properties = e.GetCurrentPoint(_bgImage).Properties;
+        if (properties.IsEraser || _currentMode == InkMode.Eraser)
+        {
+            _isDrawing = false;
+            _drawingPointer = null;
+            e.Pointer.Capture(null);
+            e.Handled = true;
+            return;
+        }
+        
+        // Handle rectangle mode finalization
+        if (_currentMode == InkMode.Rectangle && _currentRectangle != null)
+        {
+            FinalizeCurrentRectangle(e.GetPosition(this));
+            e.Pointer.Capture(null);
+            e.Handled = true;
+            return;
+        }
 
+        // Handle ellipse mode finalization
+        if (_currentMode == InkMode.Ellipse && _currentEllipse != null)
+        {
+            FinalizeCurrentEllipse(e.GetPosition(this));
+            e.Pointer.Capture(null);
+            e.Handled = true;
+            return;
+        }
+
+        FinalizeCurrentStroke();
+        e.Pointer.Capture(null);
+        e.Handled = true;
+    }
+    
+    private void OnPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        // If we lose capture while drawing, finalize the stroke
+        if (_isDrawing && _currentNormalizedStroke != null)
+        {
+            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: PointerCaptureLost while drawing");
+            FinalizeCurrentStroke();
+        }
+        
+        // Also finalize rectangle if in progress
+        if (_isDrawing && _currentRectangle != null)
+        {
+            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: PointerCaptureLost while drawing rectangle");
+            FinalizeCurrentRectangle(new Point(_rectangleStartPoint.X, _rectangleStartPoint.Y));
+        }
+        
+        // Also finalize ellipse if in progress
+        if (_isDrawing && _currentEllipse != null)
+        {
+            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: PointerCaptureLost while drawing ellipse");
+            FinalizeCurrentEllipse(new Point(_ellipseStartPoint.X, _ellipseStartPoint.Y));
+        }
+    }
+    
+    /// <summary>
+    /// Finalize the current stroke and add it to the stroke collection
+    /// </summary>
+    private void FinalizeCurrentStroke()
+    {
         if (_currentNormalizedStroke != null && _currentNormalizedStroke.Count > 0)
         {
             _normalizedStrokes.Add(_currentNormalizedStroke);
@@ -380,7 +624,20 @@ public class InkCanvasControl : Panel
             {
                 _strokeMetadata.Add(_currentStrokeMetadata.Value);
             }
-            _hasUnsavedStrokes = true; // Mark as having unsaved changes
+            _hasUnsavedStrokes = true;
+            
+            // Add to undo stack
+            var strokeIndex = _normalizedStrokes.Count - 1;
+            _undoStack.Push(new UndoAction(
+                UndoActionType.Add, 
+                _currentNormalizedStroke, 
+                _currentStrokeMetadata ?? (_currentBrush, _strokeThickness),
+                strokeIndex));
+            _redoStack.Clear();
+            
+            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Stroke completed with {_currentNormalizedStroke.Count} points, total strokes={_normalizedStrokes.Count}");
+            
+            UndoRedoStateChanged?.Invoke(this, EventArgs.Empty);
         }
         
         if (_currentPolyline != null)
@@ -393,13 +650,277 @@ public class InkCanvasControl : Panel
         _currentPolyline = null;
         _isDrawing = false;
         _drawingPointer = null;
-        e.Pointer.Capture(null);
+    }
+    
+    /// <summary>
+    /// Finalize the current rectangle and convert it to a polyline stroke
+    /// </summary>
+    private void FinalizeCurrentRectangle(Point endPoint)
+    {
+        if (_currentRectangle == null)
+        {
+            _isDrawing = false;
+            _drawingPointer = null;
+            return;
+        }
+        
+        // Calculate rectangle bounds
+        var x = Math.Min(_rectangleStartPoint.X, endPoint.X);
+        var y = Math.Min(_rectangleStartPoint.Y, endPoint.Y);
+        var width = Math.Abs(endPoint.X - _rectangleStartPoint.X);
+        var height = Math.Abs(endPoint.Y - _rectangleStartPoint.Y);
+        
+        // Only create if rectangle has meaningful size
+        if (width > 2 && height > 2)
+        {
+            // Convert rectangle to 4-corner polyline (closed path)
+            var topLeft = new Point(x, y);
+            var topRight = new Point(x + width, y);
+            var bottomRight = new Point(x + width, y + height);
+            var bottomLeft = new Point(x, y + height);
+            
+            // Create normalized stroke points (rectangle as closed polyline)
+            var normalizedStroke = new List<Point>
+            {
+                ScreenToNormalized(topLeft),
+                ScreenToNormalized(topRight),
+                ScreenToNormalized(bottomRight),
+                ScreenToNormalized(bottomLeft),
+                ScreenToNormalized(topLeft) // Close the rectangle
+            };
+            
+            _normalizedStrokes.Add(normalizedStroke);
+            _strokeMetadata.Add(_currentStrokeMetadata ?? (_currentBrush, _strokeThickness));
+            _hasUnsavedStrokes = true;
+            
+            // Add to undo stack
+            var strokeIndex = _normalizedStrokes.Count - 1;
+            _undoStack.Push(new UndoAction(
+                UndoActionType.Add,
+                normalizedStroke,
+                _currentStrokeMetadata ?? (_currentBrush, _strokeThickness),
+                strokeIndex));
+            _redoStack.Clear();
+            
+            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Rectangle completed at ({x:F0}, {y:F0}) size ({width:F0} x {height:F0}), total strokes={_normalizedStrokes.Count}");
+            
+            UndoRedoStateChanged?.Invoke(this, EventArgs.Empty);
+        }
+        
+        // Remove the preview rectangle
+        Children.Remove(_currentRectangle);
+        _currentRectangle = null;
+        _currentStrokeMetadata = null;
+        _isDrawing = false;
+        _drawingPointer = null;
+        
+        // Re-render to show the new rectangle as a polyline
+        RerenderStrokes();
+    }
+    
+    /// <summary>
+    /// Finalize the current ellipse and convert it to a polyline stroke
+    /// </summary>
+    private void FinalizeCurrentEllipse(Point endPoint)
+    {
+        if (_currentEllipse == null)
+        {
+            _isDrawing = false;
+            _drawingPointer = null;
+            return;
+        }
+        
+        // Calculate ellipse bounds
+        var x = Math.Min(_ellipseStartPoint.X, endPoint.X);
+        var y = Math.Min(_ellipseStartPoint.Y, endPoint.Y);
+        var width = Math.Abs(endPoint.X - _ellipseStartPoint.X);
+        var height = Math.Abs(endPoint.Y - _ellipseStartPoint.Y);
+        
+        // Only create if ellipse has meaningful size
+        if (width > 2 && height > 2)
+        {
+            // Convert ellipse to polyline with 36 points (every 10 degrees)
+            var centerX = x + width / 2;
+            var centerY = y + height / 2;
+            var radiusX = width / 2;
+            var radiusY = height / 2;
+            
+            const int numPoints = 36;
+            var points = new List<Point>();
+            for (int i = 0; i <= numPoints; i++)
+            {
+                var angle = i * (2 * Math.PI / numPoints);
+                var px = centerX + radiusX * Math.Cos(angle);
+                var py = centerY + radiusY * Math.Sin(angle);
+                points.Add(new Point(px, py));
+            }
+            
+            // Create normalized stroke points (ellipse as closed polyline)
+            var normalizedStroke = points
+                .Select(p => ScreenToNormalized(p))
+                .ToList();
+            
+            _normalizedStrokes.Add(normalizedStroke);
+            _strokeMetadata.Add(_currentStrokeMetadata ?? (_currentBrush, _strokeThickness));
+            _hasUnsavedStrokes = true;
+            
+            // Add to undo stack
+            var strokeIndex = _normalizedStrokes.Count - 1;
+            _undoStack.Push(new UndoAction(
+                UndoActionType.Add,
+                normalizedStroke,
+                _currentStrokeMetadata ?? (_currentBrush, _strokeThickness),
+                strokeIndex));
+            _redoStack.Clear();
+            
+            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: Ellipse completed at ({x:F0}, {y:F0}) size ({width:F0} x {height:F0}), total strokes={_normalizedStrokes.Count}");
+            
+            UndoRedoStateChanged?.Invoke(this, EventArgs.Empty);
+        }
+        
+        // Remove the preview ellipse
+        Children.Remove(_currentEllipse);
+        _currentEllipse = null;
+        _currentStrokeMetadata = null;
+        _isDrawing = false;
+        _drawingPointer = null;
+        
+        // Re-render to show the new ellipse as a polyline
+        RerenderStrokes();
+    }
+    
+    /// <summary>
+    /// Try to erase a stroke at the given screen position
+    /// </summary>
+    private void TryEraseStrokeAt(Point screenPoint)
+    {
+        var normalizedPoint = ScreenToNormalized(screenPoint);
+        const double hitThreshold = 0.02; // 2% of canvas size
+        
+        // Find stroke near this point
+        for (int i = _normalizedStrokes.Count - 1; i >= 0; i--)
+        {
+            var stroke = _normalizedStrokes[i];
+            foreach (var pt in stroke)
+            {
+                var dx = pt.X - normalizedPoint.X;
+                var dy = pt.Y - normalizedPoint.Y;
+                var dist = Math.Sqrt(dx * dx + dy * dy);
+                
+                if (dist < hitThreshold)
+                {
+                    // Found a stroke to erase
+                    var removedStroke = _normalizedStrokes[i];
+                    var removedMetadata = i < _strokeMetadata.Count ? _strokeMetadata[i] : (_currentBrush, _strokeThickness);
+                    
+                    // Push to undo stack before removing
+                    _undoStack.Push(new UndoAction(UndoActionType.Remove, removedStroke, removedMetadata, i));
+                    _redoStack.Clear();
+                    
+                    // Remove stroke
+                    _normalizedStrokes.RemoveAt(i);
+                    if (i < _strokeMetadata.Count)
+                    {
+                        _strokeMetadata.RemoveAt(i);
+                    }
+                    
+                    _hasUnsavedStrokes = true;
+                    RerenderStrokes();
+                    UndoRedoStateChanged?.Invoke(this, EventArgs.Empty);
+                    return; // Only erase one stroke per call
+                }
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Undo the last stroke action
+    /// </summary>
+    public void Undo()
+    {
+        if (_undoStack.Count == 0) return;
+        
+        var action = _undoStack.Pop();
+        
+        if (action.Type == UndoActionType.Add)
+        {
+            // Undo an add = remove the stroke
+            if (action.Index < _normalizedStrokes.Count)
+            {
+                _normalizedStrokes.RemoveAt(action.Index);
+                if (action.Index < _strokeMetadata.Count)
+                {
+                    _strokeMetadata.RemoveAt(action.Index);
+                }
+            }
+        }
+        else // UndoActionType.Remove
+        {
+            // Undo a remove = re-add the stroke
+            if (action.Index <= _normalizedStrokes.Count)
+            {
+                _normalizedStrokes.Insert(action.Index, action.Stroke);
+                _strokeMetadata.Insert(action.Index, action.Metadata);
+            }
+        }
+        
+        _redoStack.Push(action);
+        _hasUnsavedStrokes = true;
+        RerenderStrokes();
+        UndoRedoStateChanged?.Invoke(this, EventArgs.Empty);
+    }
+    
+    /// <summary>
+    /// Redo the last undone action
+    /// </summary>
+    public void Redo()
+    {
+        if (_redoStack.Count == 0) return;
+        
+        var action = _redoStack.Pop();
+        
+        if (action.Type == UndoActionType.Add)
+        {
+            // Redo an add = re-add the stroke
+            if (action.Index <= _normalizedStrokes.Count)
+            {
+                _normalizedStrokes.Insert(action.Index, action.Stroke);
+                _strokeMetadata.Insert(action.Index, action.Metadata);
+            }
+        }
+        else // UndoActionType.Remove
+        {
+            // Redo a remove = remove the stroke again
+            if (action.Index < _normalizedStrokes.Count)
+            {
+                _normalizedStrokes.RemoveAt(action.Index);
+                if (action.Index < _strokeMetadata.Count)
+                {
+                    _strokeMetadata.RemoveAt(action.Index);
+                }
+            }
+        }
+        
+        _undoStack.Push(action);
+        _hasUnsavedStrokes = true;
+        RerenderStrokes();
+        UndoRedoStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void SetPenColor(IBrush brush)
     {
+        var oldBrush = _currentBrush;
+        var oldMode = _currentMode;
         _currentBrush = brush;
         _strokeThickness = 2.0;
+        _currentMode = InkMode.Pen;
+        
+        // Log the color change and mode change
+        if (brush is ISolidColorBrush scb)
+        {
+            var oldColor = oldBrush is ISolidColorBrush oscb ? $"#{oscb.Color.R:X2}{oscb.Color.G:X2}{oscb.Color.B:X2}" : "unknown";
+            Trace.WriteLine($"[InkCanvas] Page {_pageNo}: SetPenColor - mode changed from {oldMode} to {_currentMode}, color from {oldColor} to #{scb.Color.R:X2}{scb.Color.G:X2}{scb.Color.B:X2}");
+        }
     }
 
     public void SetPenThickness(double thickness)
@@ -411,10 +932,38 @@ public class InkCanvasControl : Panel
     {
         _currentBrush = new SolidColorBrush(Colors.Yellow, 0.5);
         _strokeThickness = 15.0;
+        _currentMode = InkMode.Highlighter;
+    }
+    
+    public void SetEraserMode()
+    {
+        _currentMode = InkMode.Eraser;
+    }
+    
+    public void SetRectangleMode()
+    {
+        _currentMode = InkMode.Rectangle;
+        Trace.WriteLine($"[InkCanvas] Page {_pageNo}: SetRectangleMode - mode changed to Rectangle");
+    }
+
+    public void SetEllipseMode()
+    {
+        _currentMode = InkMode.Ellipse;
+        Trace.WriteLine($"[InkCanvas] Page {_pageNo}: SetEllipseMode - mode changed to Ellipse");
     }
 
     public void ClearStrokes()
     {
+        // Add all current strokes to undo stack as a batch
+        // For simplicity, we add them individually in reverse order
+        for (int i = _normalizedStrokes.Count - 1; i >= 0; i--)
+        {
+            var stroke = _normalizedStrokes[i];
+            var metadata = i < _strokeMetadata.Count ? _strokeMetadata[i] : (_currentBrush, _strokeThickness);
+            _undoStack.Push(new UndoAction(UndoActionType.Remove, stroke, metadata, i));
+        }
+        _redoStack.Clear();
+        
         foreach (var polyline in _renderedPolylines)
         {
             Children.Remove(polyline);
@@ -425,7 +974,8 @@ public class InkCanvasControl : Panel
         _currentPolyline = null;
         _currentNormalizedStroke = null;
         _currentStrokeMetadata = null;
-        _hasUnsavedStrokes = true; // Clearing strokes is also a change
+        _hasUnsavedStrokes = true;
+        UndoRedoStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
@@ -435,13 +985,12 @@ public class InkCanvasControl : Panel
     {
         if (_normalizedStrokes.Count == 0 || Bounds.Width <= 0 || Bounds.Height <= 0)
         {
-            // No strokes or invalid bounds - return null to indicate deletion
             return null;
         }
         
         var portableStrokes = GetPortableStrokes();
-        var json = System.Text.Json.JsonSerializer.Serialize(portableStrokes);
-        var strokeData = System.Text.Encoding.UTF8.GetBytes(json);
+        var json = JsonSerializer.Serialize(portableStrokes);
+        var strokeData = Encoding.UTF8.GetBytes(json);
         
         return new InkStrokeClass
         {
@@ -503,5 +1052,35 @@ public class InkCanvasControl : Panel
         }
         
         return result;
+    }
+    
+    /// <summary>
+    /// Represents an action that can be undone/redone
+    /// </summary>
+    private record UndoAction(
+        UndoActionType Type,
+        List<Point> Stroke,
+        (IBrush Brush, double Thickness) Metadata,
+        int Index);
+    
+    /// <summary>
+    /// Type of undo action
+    /// </summary>
+    private enum UndoActionType
+    {
+        Add,    // A stroke was added
+        Remove  // A stroke was removed
+    }
+    
+    /// <summary>
+    /// Current ink mode
+    /// </summary>
+    private enum InkMode
+    {
+        Pen,
+        Highlighter,
+        Eraser,
+        Rectangle,
+        Ellipse
     }
 }
