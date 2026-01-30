@@ -137,6 +137,10 @@ chmod +x SheetMusicViewer
 
 **Singles folders**: Create a folder ending in "Singles" (e.g., `JazzSingles`) and each PDF inside is treated as a separate song.
 
+> **Tip: Custom cover image for Singles folders**  
+> The thumbnail displayed in the book chooser is generated from the **first PDF in alphabetical order**. To use a specific PDF as the cover image, rename it so it sorts first (e.g., prefix with `!` '@' or `00-`).  
+> Example: `!Cover.pdf` or `00-FolderCover.pdf` will appear before `Amazing Grace.pdf`.
+
 **Hidden folders**: Any subfolder named "Hidden" will be ignored.
 
 ## Why Instant Page Turns Matter
