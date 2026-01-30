@@ -1029,10 +1029,21 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             // Get the PDF file path for this page
             var volNo = _currentPdfMetaData.GetVolNumFromPageNum(pageNo);
             var pdfPath = _currentPdfMetaData.GetFullPathFileFromVolno(volNo);
+            var bookName = _currentPdfMetaData.GetBookName(_rootMusicFolder);
             
-            if (string.IsNullOrEmpty(pdfPath) || !File.Exists(pdfPath))
+            if (string.IsNullOrEmpty(pdfPath))
             {
-                throw new FileNotFoundException($"PDF file not found for page {pageNo}");
+                throw new FileNotFoundException(
+                    $"Could not determine PDF file path for page {pageNo} " +
+                    $"(book: '{bookName}', volume {volNo})");
+            }
+            
+            if (!File.Exists(pdfPath))
+            {
+                throw new FileNotFoundException(
+                    $"PDF file not found for page {pageNo}: '{pdfPath}' " +
+                    $"(book: '{bookName}', volume {volNo}). " +
+                    $"The file may have been moved or deleted.");
             }
             
             // Calculate the page index within this volume
@@ -1057,7 +1068,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             
             if (pdfBytes == null)
             {
-                throw new FileNotFoundException($"PDF file not found for page {pageNo}: {pdfPath}");
+                // This should not happen since we checked File.Exists above,
+                // but handle it gracefully in case of race condition
+                throw new FileNotFoundException(
+                    $"Failed to load PDF bytes for page {pageNo}: '{pdfPath}' " +
+                    $"(book: '{bookName}', volume {volNo}). " +
+                    $"The file exists but could not be read.");
             }
             
             // Validate page index against actual PDF page count for better error messages
