@@ -268,11 +268,11 @@ public partial class MetaDataFormViewModel : ObservableObject
 {
     private readonly PdfMetaDataReadResult? _pdfMetaData;
     private readonly string _rootFolder;
-    
+
     // Original values to track dirty state
     private int _originalPageNumberOffset;
     private string? _originalDocNotes;
-    private List<(int PageNo, string? SongName, string? Composer, string? Date, string? Notes)> _originalTocEntries = new();
+    private List<(int PageNo, string? SongName, string? Composer, string? Date, string? Notes, string? Link)> _originalTocEntries = new();
 
     [ObservableProperty]
     private int _pageNumberOffset;
@@ -281,7 +281,38 @@ public partial class MetaDataFormViewModel : ObservableObject
     private string? _docNotes;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedItemHasLink))]
     private TocEntryViewModel? _selectedItem;
+
+    /// <summary>
+    /// Whether the selected item has a link - used for binding Open button.
+    /// Updated when SelectedItem changes or when SelectedItem.Link changes.
+    /// </summary>
+    public bool SelectedItemHasLink => SelectedItem?.HasLink ?? false;
+
+    /// <summary>
+    /// Called when SelectedItem changes - subscribe to property changes on the new item
+    /// </summary>
+    partial void OnSelectedItemChanged(TocEntryViewModel? oldValue, TocEntryViewModel? newValue)
+    {
+        if (oldValue != null)
+        {
+            oldValue.PropertyChanged -= SelectedItem_PropertyChanged;
+        }
+        if (newValue != null)
+        {
+            newValue.PropertyChanged += SelectedItem_PropertyChanged;
+        }
+    }
+
+    private void SelectedItem_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        // When the Link property changes on the selected item, notify that SelectedItemHasLink changed
+        if (e.PropertyName == nameof(TocEntryViewModel.Link) || e.PropertyName == nameof(TocEntryViewModel.HasLink))
+        {
+            OnPropertyChanged(nameof(SelectedItemHasLink));
+        }
+    }
 
     [ObservableProperty]
     private ObservableCollection<TocEntryViewModel> _tocEntries = new();
@@ -291,7 +322,7 @@ public partial class MetaDataFormViewModel : ObservableObject
 
     [ObservableProperty]
     private ObservableCollection<string> _volInfoDisplay = new();
-    
+
     [ObservableProperty]
     private bool _songNameIsEnabled = true;
 
@@ -303,7 +334,7 @@ public partial class MetaDataFormViewModel : ObservableObject
     public Func<IClipboard?>? GetClipboardFunc { get; set; }
 
     public string Title { get; }
-    
+
     /// <summary>
     /// Returns true if any changes have been made since loading
     /// </summary>
@@ -313,24 +344,25 @@ public partial class MetaDataFormViewModel : ObservableObject
         {
             if (PageNumberOffset != _originalPageNumberOffset) return true;
             if (DocNotes != _originalDocNotes) return true;
-            
+
             if (TocEntries.Count != _originalTocEntries.Count) return true;
-            
+
             for (int i = 0; i < TocEntries.Count; i++)
             {
                 var current = TocEntries[i];
                 var original = _originalTocEntries[i];
-                
+
                 if (current.PageNo != original.PageNo ||
                     current.SongName != original.SongName ||
                     current.Composer != original.Composer ||
                     current.Date != original.Date ||
-                    current.Notes != original.Notes)
+                    current.Notes != original.Notes ||
+                    current.Link != original.Link)
                 {
                     return true;
                 }
             }
-            
+
             return false;
         }
     }
@@ -425,17 +457,17 @@ public partial class MetaDataFormViewModel : ObservableObject
             var closestEntry = TocEntries.LastOrDefault(t => t.PageNo <= currentPageNo) ?? TocEntries[0];
             SelectedItem = closestEntry;
         }
-        
+
         // Store original values for dirty tracking
         _originalPageNumberOffset = PageNumberOffset;
         _originalDocNotes = DocNotes;
-        _originalTocEntries = TocEntries.Select(t => (t.PageNo, t.SongName, t.Composer, t.Date, t.Notes)).ToList();
+        _originalTocEntries = TocEntries.Select(t => (t.PageNo, t.SongName, t.Composer, t.Date, t.Notes, t.Link)).ToList();
     }
 
     private static string GetDescription(int pageNo, PdfMetaDataReadResult data)
     {
         var tocEntry = data.TocEntries.FirstOrDefault(t => t.PageNo == pageNo);
-        
+
         if (tocEntry == null)
         {
             tocEntry = data.TocEntries
@@ -538,6 +570,70 @@ public partial class MetaDataFormViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void OpenLink()
+    {
+        if (SelectedItem != null && !string.IsNullOrEmpty(SelectedItem.Link))
+        {
+            OpenUrl(SelectedItem.Link);
+        }
+    }
+
+    /// <summary>
+    /// Validates that a URL is safe to open (http/https only)
+    /// </summary>
+    private static bool IsValidUrl(string url, out string? errorMessage)
+    {
+        errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            errorMessage = "URL is empty";
+            return false;
+        }
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            errorMessage = "Invalid URL format";
+            return false;
+        }
+
+        // Only allow http and https schemes for security
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+        {
+            errorMessage = $"Only http:// and https:// URLs are allowed (got {uri.Scheme}://)";
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Opens a URL in the default browser after validation
+    /// </summary>
+    private static void OpenUrl(string url)
+    {
+        try
+        {
+            if (!IsValidUrl(url, out var errorMessage))
+            {
+                System.Diagnostics.Debug.WriteLine($"Invalid URL: {errorMessage}");
+                return;
+            }
+
+            // Use Process.Start with UseShellExecute for cross-platform URL opening
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to open URL: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
     private void Cancel()
     {
         CloseAction?.Invoke(false);
@@ -560,9 +656,10 @@ public partial class MetaDataFormViewModel : ObservableObject
                 SongName = t.SongName,
                 Composer = t.Composer,
                 Date = t.Date,
-                Notes = t.Notes
+                Notes = t.Notes,
+                Link = t.Link
             }).ToList();
-            
+
             // Adjust favorites if PageNumberOffset changed
             if (delta != 0)
             {
@@ -574,7 +671,7 @@ public partial class MetaDataFormViewModel : ObservableObject
 
             // Mark as dirty so it will be saved
             _pdfMetaData.IsDirty = true;
-            
+
             // Use the centralized save method from PdfMetaDataCore
             var success = PdfMetaDataCore.SaveToJson(_pdfMetaData, forceSave: true);
 
@@ -607,14 +704,29 @@ public partial class TocEntryViewModel : ObservableObject
 
     [ObservableProperty]
     private string? _notes;
-    
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasLink))]
+    [NotifyPropertyChangedFor(nameof(LinkDisplay))]
+    private string? _link;
+
     [ObservableProperty]
     private bool _isFavorite;
-    
+
     /// <summary>
     /// Display string for favorite column - shows star if favorite
     /// </summary>
-    public string FavDisplay => _isFavorite ? "★" : "";
+    public string FavDisplay => IsFavorite ? "★" : "";
+
+    /// <summary>
+    /// Display string for link column - shows link icon if link exists
+    /// </summary>
+    public string LinkDisplay => !string.IsNullOrEmpty(Link) ? "🔗" : "";
+
+    /// <summary>
+    /// Whether this entry has a link
+    /// </summary>
+    public bool HasLink => !string.IsNullOrEmpty(Link);
 
     public TocEntryViewModel()
     {
@@ -627,6 +739,7 @@ public partial class TocEntryViewModel : ObservableObject
         _composer = entry.Composer;
         _date = entry.Date;
         _notes = entry.Notes;
+        _link = entry.Link;
         _isFavorite = isFavorite;
     }
 }

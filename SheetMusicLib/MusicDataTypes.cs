@@ -26,6 +26,10 @@ namespace SheetMusicLib
         /// </summary>
         public string Date { get; set; }
         public int PageNo { get; set; }
+        /// <summary>
+        /// Optional URL link (e.g., YouTube video, purchase link)
+        /// </summary>
+        public string Link { get; set; }
 
         public object Clone()
         {
@@ -35,7 +39,8 @@ namespace SheetMusicLib
                 Composer = this.Composer,
                 Notes = this.Notes,
                 Date = this.Date,
-                PageNo = this.PageNo
+                PageNo = this.PageNo,
+                Link = this.Link
             };
         }
 

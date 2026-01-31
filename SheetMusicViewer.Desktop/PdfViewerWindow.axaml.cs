@@ -27,7 +27,7 @@ namespace SheetMusicViewer.Desktop;
 public partial class PdfViewerWindow : Window, INotifyPropertyChanged
 {
     public const string MyAppName = "SheetMusicViewer";
-    
+
     public new event PropertyChangedEventHandler? PropertyChanged;
 
     private int _currentPageNumber = 1;
@@ -36,13 +36,17 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private string _pdfTitle = string.Empty;
     private string _description0 = string.Empty;
     private string _description1 = string.Empty;
+    private bool _hasLink0;
+    private bool _hasLink1;
+    private string _link0Tooltip = "No link for this song";
+    private string _link1Tooltip = "No link for this song";
     private int _maxPageNumberMinus1;
     private bool _disableSliderValueChanged;
     private bool _chkFavoriteEnabled;
     private bool _isThumbnailLoadingInProgress;
     private int _cacheLoadingCount;
     private string _cacheStatus = string.Empty;
-    
+
     // PDF metadata
     private string _rootMusicFolder = string.Empty;
     private List<PdfMetaDataReadResult> _lstPdfMetaFileData = new();
@@ -235,44 +239,51 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         {
             Show2Pages = !Show2Pages;
         };
-        
+
         var mnuAbout = this.GetControl<MenuItem>("mnuAbout");
         mnuAbout.Click += BtnAbout_Click;
-        
+
         var mnuShowLogs = this.GetControl<MenuItem>("mnuShowLogs");
         mnuShowLogs.Click += MnuShowLogs_Click;
-        
+
         var mnuQuit = this.GetControl<MenuItem>("mnuQuit");
         mnuQuit.Click += (s, e) => Close();
-        
+
         var mnuOptions = this.GetControl<MenuItem>("mnuOptions");
         mnuOptions.Click += (s, e) => _ = ShowOptionsDialogAsync();
-        
+
         var mnuRefresh = this.GetControl<MenuItem>("mnuRefresh");
         mnuRefresh.Click += (s, e) => _ = RefreshMusicFolderAsync();
-        
+
+        // Wire up per-page link buttons
+        var btnLink0 = this.GetControl<Button>("btnLink0");
+        btnLink0.Click += (s, e) => OpenLinkForPage(0);
+
+        var btnLink1 = this.GetControl<Button>("btnLink1");
+        btnLink1.Click += (s, e) => OpenLinkForPage(1);
+
         // Wire up navigation buttons
         var btnPrev = this.GetControl<Button>("btnPrev");
         var btnNext = this.GetControl<Button>("btnNext");
         btnPrev.Click += (s, e) => BtnPrevNext_Click(isPrevious: true);
         btnNext.Click += (s, e) => BtnPrevNext_Click(isPrevious: false);
-        
+
         // Wire up thumbnail button for metadata editor (Alt-E)
         var btnThumb = this.GetControl<Button>("btnThumb");
         btnThumb.Click += (s, e) => _ = ShowMetaDataFormAsync();
-        
+
         // Wire up slider events
         _slider = this.GetControl<Slider>("slider");
         _sliderPopup = this.GetControl<Popup>("SliderPopup");
         _tbSliderPopup = this.GetControl<TextBlock>("tbSliderPopup");
-        
+
         _slider.TemplateApplied += Slider_TemplateApplied;
         _slider.AddHandler(RangeBase.ValueChangedEvent, Slider_ValueChanged);
-        
+
         // Add keyboard handler
         this.KeyDown += Window_KeyDown;
     }
-    
+
     private async Task OnWindowLoadedAsync()
     {
         try
@@ -477,21 +488,21 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             Logger.LogException("ChooseMusic dialog error", ex);
         }
     }
-    
+
     private async Task ShowMetaDataFormAsync()
     {
         if (_isShowingMetaDataForm || _currentPdfMetaData == null)
             return;
-            
+
         try
         {
             _isShowingMetaDataForm = true;
-            
+
             var viewModel = new MetaDataFormViewModel(_currentPdfMetaData, _rootMusicFolder, CurrentPageNumber);
             var metaDataForm = new MetaDataFormWindow(viewModel);
-            
+
             await metaDataForm.ShowDialog(this);
-            
+
             // Handle navigation to a specific page if user double-clicked a TOC entry or favorite
             if (metaDataForm.PageNumberResult.HasValue)
             {
@@ -518,7 +529,118 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             _isShowingMetaDataForm = false;
         }
     }
-    
+
+    /// <summary>
+    /// Validates that a URL is safe to open (http/https only)
+    /// </summary>
+    private static bool IsValidUrl(string url, out string? errorMessage)
+    {
+        errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            errorMessage = "URL is empty";
+            return false;
+        }
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            errorMessage = "Invalid URL format";
+            return false;
+        }
+
+        // Only allow http and https schemes for security
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+        {
+            errorMessage = $"Only http:// and https:// URLs are allowed (got {uri.Scheme}://)";
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Opens the link associated with a specific displayed page.
+    /// </summary>
+    /// <param name="pageIndex">0 for left page, 1 for right page</param>
+    private void OpenLinkForPage(int pageIndex)
+    {
+        if (_currentPdfMetaData == null)
+            return;
+
+        // Calculate the actual page number based on the page index
+        var pageNo = CurrentPageNumber + pageIndex;
+
+        // Find the TOC entry for this page (or the closest previous one)
+        var tocEntry = _currentPdfMetaData.TocEntries
+            .Where(t => t.PageNo <= pageNo)
+            .OrderByDescending(t => t.PageNo)
+            .FirstOrDefault();
+
+        if (tocEntry == null || string.IsNullOrEmpty(tocEntry.Link))
+        {
+            Logger.LogInfo($"No link found for page {pageNo}");
+            return;
+        }
+
+        if (!IsValidUrl(tocEntry.Link, out var errorMessage))
+        {
+            Logger.LogWarning($"Invalid URL for '{tocEntry.SongName}': {errorMessage}");
+            return;
+        }
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = tocEntry.Link,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.LogException($"Failed to open link: {tocEntry.Link}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Checks if a specific page has a link associated with it.
+    /// </summary>
+    private bool HasLinkForPage(int pageNo)
+    {
+        if (_currentPdfMetaData == null)
+            return false;
+
+        // Find the TOC entry for this page (or the closest previous one)
+        var tocEntry = _currentPdfMetaData.TocEntries
+            .Where(t => t.PageNo <= pageNo)
+            .OrderByDescending(t => t.PageNo)
+            .FirstOrDefault();
+
+        return tocEntry != null && !string.IsNullOrEmpty(tocEntry.Link);
+    }
+
+    /// <summary>
+    /// Gets the link info for a specific page - returns (hasLink, linkUrl).
+    /// </summary>
+    private (bool HasLink, string? Link) GetLinkInfoForPage(int pageNo)
+    {
+        if (_currentPdfMetaData == null)
+            return (false, null);
+
+        // Find the TOC entry for this page (or the closest previous one)
+        var tocEntry = _currentPdfMetaData.TocEntries
+            .Where(t => t.PageNo <= pageNo)
+            .OrderByDescending(t => t.PageNo)
+            .FirstOrDefault();
+
+        if (tocEntry != null && !string.IsNullOrEmpty(tocEntry.Link))
+        {
+            return (true, tocEntry.Link);
+        }
+        return (false, null);
+    }
+
     private async Task ShowOptionsDialogAsync()
     {
         try
@@ -531,20 +653,20 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             Logger.LogException("Options dialog error", ex);
         }
     }
-    
+
     private async Task RefreshMusicFolderAsync()
     {
         if (string.IsNullOrEmpty(_rootMusicFolder) || !Directory.Exists(_rootMusicFolder))
         {
             return;
         }
-        
+
         try
         {
             // Remember the current PDF path and page so we can restore after refresh
             var currentPdfPath = _currentPdfMetaData?.GetFullPathFileFromVolno(0);
             var currentPage = CurrentPageNumber;
-            
+
             var provider = new PdfToImageDocumentProvider();
             (_lstPdfMetaFileData, _) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
                 _rootMusicFolder, 
@@ -868,14 +990,26 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
 
                 _dpPage?.Children.Add(grid);
                 SetupGestureHandler();
-                
-                // Update description text for the current page(s)
+
+                // Update description text and link info for the current page(s)
                 Description0 = GetDescription(pageNo);
+                var (hasLink0, link0) = GetLinkInfoForPage(pageNo);
+                HasLink0 = hasLink0;
+                Link0Tooltip = hasLink0 ? $"Open: {link0}" : "No link for this song";
+
                 if (NumPagesPerView > 1)
                 {
                     Description1 = GetDescription(pageNo + 1);
+                    var (hasLink1, link1) = GetLinkInfoForPage(pageNo + 1);
+                    HasLink1 = hasLink1;
+                    Link1Tooltip = hasLink1 ? $"Open: {link1}" : "No link for this song";
                 }
-                
+                else
+                {
+                    HasLink1 = false;
+                    Link1Tooltip = "No link for this song";
+                }
+
                 // Reset ink checkboxes to off when navigating to a new page
                 if (_chkInk0 != null)
                 {
@@ -885,7 +1019,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 {
                     _chkInk1.IsChecked = false;
                 }
-                
+
                 // Initialize favorite checkboxes from metadata
                 _chkFavoriteEnabled = false;
                 if (_chkFav0 != null)
@@ -1790,6 +1924,11 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                     }
                     e.Handled = true;
                     return;
+                case Key.L:
+                    // Alt+L opens the link for the left page (page 0)
+                    OpenLinkForPage(0);
+                    e.Handled = true;
+                    return;
                 case Key.M:
                     // Open the menu - find and open the MenuItem
                     if (_mainMenu?.Items.Count > 0 && _mainMenu.Items[0] is MenuItem menuItem)
@@ -1803,7 +1942,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                     return;
             }
         }
-        
+
         // Handle navigation keys (no modifiers)
         if (e.KeyModifiers == KeyModifiers.None)
         {
@@ -1927,6 +2066,46 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         set
         {
             _description1 = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool HasLink0
+    {
+        get => _hasLink0;
+        set
+        {
+            _hasLink0 = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool HasLink1
+    {
+        get => _hasLink1;
+        set
+        {
+            _hasLink1 = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string Link0Tooltip
+    {
+        get => _link0Tooltip;
+        set
+        {
+            _link0Tooltip = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string Link1Tooltip
+    {
+        get => _link1Tooltip;
+        set
+        {
+            _link1Tooltip = value;
             OnPropertyChanged();
         }
     }

@@ -71,6 +71,10 @@ namespace SheetMusicLib
 
         [JsonPropertyName("pageNo")]
         public int PageNo { get; set; }
+
+        [JsonPropertyName("link")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string Link { get; set; }
     }
 
     public class JsonFavorite

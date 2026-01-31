@@ -1076,7 +1076,8 @@ namespace SheetMusicLib
                     Composer = toc.Composer,
                     Date = toc.Date,
                     Notes = toc.Notes,
-                    PageNo = toc.PageNo
+                    PageNo = toc.PageNo,
+                    Link = toc.Link
                 });
             }
 
@@ -1682,7 +1683,8 @@ namespace SheetMusicLib
                     SongName = toc.SongName,
                     Composer = toc.Composer,
                     Date = toc.Date,
-                    Notes = toc.Notes
+                    Notes = toc.Notes,
+                    Link = toc.Link
                 });
             }
 

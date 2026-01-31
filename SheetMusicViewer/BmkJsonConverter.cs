@@ -229,7 +229,8 @@ namespace SheetMusicViewer
                     Composer = toc.Composer,
                     Date = toc.Date,
                     Notes = toc.Notes,
-                    PageNo = toc.PageNo
+                    PageNo = toc.PageNo,
+                    Link = toc.Link
                 });
             }
 
@@ -316,7 +317,8 @@ namespace SheetMusicViewer
                     Composer = toc.Composer,
                     Date = toc.Date,
                     Notes = toc.Notes,
-                    PageNo = toc.PageNo
+                    PageNo = toc.PageNo,
+                    Link = toc.Link
                 });
             }
 
