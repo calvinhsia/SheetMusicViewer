@@ -54,8 +54,10 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="80"/>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
@@ -77,6 +79,13 @@
 
                     <TextBlock Grid.Row="4" Grid.Column="0" Text="Notes:" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,5,0"/>
                     <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding SelectedItem.Notes, Mode=TwoWay}"/>
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Link:" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,5,0"/>
+                    <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding SelectedItem.Link, Mode=TwoWay}" 
+                             ToolTip.Tip="URL link (e.g., YouTube video)"/>
+                    <Button Grid.Row="5" Grid.Column="2" Content="Open" Command="{Binding OpenLinkCommand}" 
+                            IsEnabled="{Binding SelectedItemHasLink}" Margin="5,0,0,0"
+                            ToolTip.Tip="Open link in browser"/>
                 </Grid>
             </StackPanel>
 
@@ -115,7 +124,8 @@
                       DoubleTapped="TocDataGrid_DoubleTapped">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Page" Binding="{Binding PageNo}" Width="60" x:DataType="local:TocEntryViewModel"/>
-                    <DataGridTextColumn Header="Fav" Binding="{Binding FavDisplay}" Width="65" IsReadOnly="True" x:DataType="local:TocEntryViewModel"/>
+                    <DataGridTextColumn Header="Fav" Binding="{Binding FavDisplay}" Width="50" IsReadOnly="True" x:DataType="local:TocEntryViewModel"/>
+                    <DataGridTextColumn Header="🔗" Binding="{Binding LinkDisplay}" Width="40" IsReadOnly="True" x:DataType="local:TocEntryViewModel"/>
                     <DataGridTemplateColumn Header="SongName" Width="250" x:DataType="local:TocEntryViewModel">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate x:DataType="local:TocEntryViewModel">
@@ -163,3 +173,5 @@
         </Grid>
     </Grid>
 </Window>
+
+

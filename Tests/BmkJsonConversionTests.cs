@@ -74,7 +74,8 @@ namespace Tests
                 Composer = "John Newton",
                 Date = "1779",
                 Notes = "Classic hymn",
-                PageNo = 5
+                PageNo = 5,
+                Link = "https://www.youtube.com/watch?v=CDdvReNKKuk"
             });
 
             metadata.ToggleFavorite(7, IsFavorite: true, FavoriteName: "My favorite page");
@@ -95,6 +96,7 @@ namespace Tests
             Assert.AreEqual(1, jsonData.TableOfContents.Count);
             Assert.AreEqual("Amazing Grace", jsonData.TableOfContents[0].SongName);
             Assert.AreEqual("John Newton", jsonData.TableOfContents[0].Composer);
+            Assert.AreEqual("https://www.youtube.com/watch?v=CDdvReNKKuk", jsonData.TableOfContents[0].Link);
             Assert.AreEqual(2, jsonData.Favorites.Count);
             Assert.AreEqual("My favorite page", jsonData.Favorites[0].Name);
 
@@ -109,6 +111,7 @@ namespace Tests
             Assert.AreEqual(20, restored.lstVolInfo[0].NPagesInThisVolume);
             Assert.AreEqual(1, restored.lstTocEntries.Count);
             Assert.AreEqual("Amazing Grace", restored.lstTocEntries[0].SongName);
+            Assert.AreEqual("https://www.youtube.com/watch?v=CDdvReNKKuk", restored.lstTocEntries[0].Link);
             Assert.AreEqual(2, restored.dictFav.Count);
             Assert.IsTrue(restored.IsFavorite(7));
             Assert.IsTrue(restored.IsFavorite(12));
