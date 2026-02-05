@@ -102,9 +102,8 @@ public class InkCanvasToolbarTests
     /// <summary>
     /// Execute an action for Avalonia control testing.
     /// 
-    /// Note: With headless Avalonia (SetupWithoutStarting), there's no message pump running,
-    /// so we can't use Dispatcher.UIThread.Invoke() which would deadlock.
-    /// Avalonia headless allows control creation on any thread, so just run directly.
+    /// In headless mode, we try to use the Dispatcher if available, otherwise run directly.
+    /// This handles cases where Avalonia's thread affinity is enforced.
     /// </summary>
     private void RunOnDispatcher(Action action)
     {
@@ -113,11 +112,28 @@ public class InkCanvasToolbarTests
         {
             return;
         }
-        
-        // In headless mode with SetupWithoutStarting(), there's no message pump,
-        // so Dispatcher.UIThread.Invoke() would deadlock.
-        // Avalonia headless allows control creation on any thread, so just run directly.
-        action();
+
+        // Try to use the dispatcher if it's available and has a thread
+        try
+        {
+            if (Dispatcher.UIThread.CheckAccess())
+            {
+                // Already on UI thread, run directly
+                action();
+            }
+            else
+            {
+                // Try to post to UI thread - use InvokeAsync and wait
+                // This may throw if no message pump is running
+                Dispatcher.UIThread.InvokeAsync(action).GetAwaiter().GetResult();
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // Dispatcher not available or no message pump - run directly
+            // This is expected in some headless configurations
+            action();
+        }
     }
 
     /// <summary>
@@ -130,9 +146,24 @@ public class InkCanvasToolbarTests
         {
             return default!;
         }
-        
-        // In headless mode, just run directly (see RunOnDispatcher(Action) comment)
-        return func();
+
+        // Try to use the dispatcher if it's available
+        try
+        {
+            if (Dispatcher.UIThread.CheckAccess())
+            {
+                return func();
+            }
+            else
+            {
+                return Dispatcher.UIThread.InvokeAsync(func).GetAwaiter().GetResult();
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // Dispatcher not available - run directly
+            return func();
+        }
     }
 
     private static WriteableBitmap CreateTestBitmap(int width = 200, int height = 300)
