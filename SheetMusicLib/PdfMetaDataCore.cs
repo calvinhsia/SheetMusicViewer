@@ -911,7 +911,10 @@ namespace SheetMusicLib
                     }
                 }
 
-                // Sort volumes by filename
+                // Sort volumes by filename alphabetically.
+                // The first volume (index 0) determines the thumbnail image shown in the book chooser.
+                // Users can control which PDF is used as the cover by renaming it to sort first
+                // (e.g., prefix with '@', '!' or '00-').
                 curmetadata.VolumeInfoList = curmetadata.VolumeInfoList
                     .OrderBy(v => v.FileNameVolume)
                     .ToList();
@@ -1073,7 +1076,8 @@ namespace SheetMusicLib
                     Composer = toc.Composer,
                     Date = toc.Date,
                     Notes = toc.Notes,
-                    PageNo = toc.PageNo
+                    PageNo = toc.PageNo,
+                    Link = toc.Link
                 });
             }
 
@@ -1679,7 +1683,8 @@ namespace SheetMusicLib
                     SongName = toc.SongName,
                     Composer = toc.Composer,
                     Date = toc.Date,
-                    Notes = toc.Notes
+                    Notes = toc.Notes,
+                    Link = toc.Link
                 });
             }
 

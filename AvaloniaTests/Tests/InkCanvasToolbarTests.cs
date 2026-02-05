@@ -32,19 +32,20 @@ public class InkCanvasToolbarTests
     private static string? _initializationError;
     private static readonly object _initLock = new();
     private static bool _isWindowsPlatform;
+    private static Thread? _avaloniaThread;
 
     [ClassInitialize]
     public static void ClassInit(TestContext context)
     {
         // Check platform once at class initialization
         _isWindowsPlatform = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-        
-        if (_isWindowsPlatform)
-        {
-            EnsureAvaloniaInitialized();
-        }
     }
 
+    /// <summary>
+    /// Ensures Avalonia is initialized on the current thread.
+    /// This must be called from the test thread since Avalonia requires 
+    /// all operations on the thread that initialized it.
+    /// </summary>
     private static void EnsureAvaloniaInitialized()
     {
         lock (_initLock)
@@ -58,11 +59,13 @@ public class InkCanvasToolbarTests
                     .UseHeadless(new AvaloniaHeadlessPlatformOptions())
                     .SetupWithoutStarting();
                 _avaloniaInitialized = true;
+                _avaloniaThread = Thread.CurrentThread;
             }
             catch (InvalidOperationException ex) when (ex.Message.Contains("already") || ex.Message.Contains("initialized"))
             {
                 // Already initialized - that's fine
                 _avaloniaInitialized = true;
+                _avaloniaThread = Thread.CurrentThread;
             }
             catch (Exception ex)
             {
@@ -84,6 +87,9 @@ public class InkCanvasToolbarTests
             return true;
         }
         
+        // Initialize Avalonia on the test thread if not already done
+        EnsureAvaloniaInitialized();
+        
         if (_initializationFailed)
         {
             Assert.Inconclusive($"Avalonia initialization failed: {_initializationError}");
@@ -93,6 +99,13 @@ public class InkCanvasToolbarTests
         if (!_avaloniaInitialized)
         {
             Assert.Inconclusive("Avalonia headless not initialized");
+            return true;
+        }
+        
+        // Check if we're on the Avalonia thread
+        if (_avaloniaThread != null && Thread.CurrentThread != _avaloniaThread)
+        {
+            Assert.Inconclusive("Test running on different thread than Avalonia was initialized on");
             return true;
         }
         
