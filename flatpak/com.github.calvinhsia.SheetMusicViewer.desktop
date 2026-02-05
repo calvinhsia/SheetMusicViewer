@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Sheet Music Viewer
+Comment=Cross-platform PDF sheet music viewer with annotations
+Exec=SheetMusicViewer %f
+Icon=com.github.calvinhsia.SheetMusicViewer
+Terminal=false
+Type=Application
+Categories=Audio;Music;Viewer;
+Keywords=sheet;music;pdf;viewer;annotation;ink;
+MimeType=application/pdf;
+StartupNotify=true
+StartupWMClass=SheetMusicViewer

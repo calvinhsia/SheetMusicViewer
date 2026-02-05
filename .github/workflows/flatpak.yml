@@ -1,0 +1,144 @@
+# =============================================================================
+# Flatpak Build Workflow for Sheet Music Viewer
+# =============================================================================
+#
+# LOCAL TESTING INSTRUCTIONS (Ubuntu/Fedora/Debian):
+# --------------------------------------------------
+#
+# 1. INSTALL PREREQUISITES:
+#    sudo apt install flatpak flatpak-builder imagemagick   # Debian/Ubuntu
+#    sudo dnf install flatpak flatpak-builder ImageMagick   # Fedora
+#
+# 2. ADD FLATHUB REMOTE (if not already added):
+#    flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+#
+# 3. INSTALL SDK AND RUNTIME:
+#    flatpak install flathub org.freedesktop.Platform//24.08
+#    flatpak install flathub org.freedesktop.Sdk//24.08
+#
+# 4. PUBLISH THE APP (from repo root):
+#    dotnet publish SheetMusicViewer.Desktop/SheetMusicViewer.Desktop.csproj \
+#      -c Release -r linux-x64 --self-contained true \
+#      -p:PublishSingleFile=true -o flatpak/publish
+#
+# 5. GENERATE ICONS:
+#    mkdir -p flatpak/icons/{256x256,128x128,64x64}
+#    convert 'SheetMusicViewer.Desktop/Assets/Music.ico[0]' -resize 256x256 flatpak/icons/256x256/sheetmusicviewer.png
+#    convert 'SheetMusicViewer.Desktop/Assets/Music.ico[0]' -resize 128x128 flatpak/icons/128x128/sheetmusicviewer.png
+#    convert 'SheetMusicViewer.Desktop/Assets/Music.ico[0]' -resize 64x64 flatpak/icons/64x64/sheetmusicviewer.png
+#
+# 6. BUILD FLATPAK (from repo root):
+#    flatpak-builder --force-clean build-dir flatpak/com.github.calvinhsia.SheetMusicViewer.yml
+#
+# 7. INSTALL AND RUN LOCALLY:
+#    flatpak-builder --user --install --force-clean build-dir flatpak/com.github.calvinhsia.SheetMusicViewer.yml
+#    flatpak run com.github.calvinhsia.SheetMusicViewer
+#
+# 8. UNINSTALL (when done testing):
+#    flatpak uninstall com.github.calvinhsia.SheetMusicViewer
+#
+# TROUBLESHOOTING:
+# ----------------
+# - If icons fail to convert, try: convert 'Music.ico' -resize 256x256 icon.png
+# - Check sandbox permissions: flatpak info --show-permissions com.github.calvinhsia.SheetMusicViewer
+# - View app logs: flatpak run --command=sh com.github.calvinhsia.SheetMusicViewer
+# - Rebuild without cache: flatpak-builder --force-clean --disable-cache build-dir manifest.yml
+#
+# =============================================================================
+
+name: Build Flatpak
+
+on:
+  push:
+    branches: [ flatpak, main ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-flatpak:
+    runs-on: ubuntu-latest
+    
+    container:
+      image: bilelmoussaoui/flatpak-github-actions:freedesktop-24.08
+      options: --privileged
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+      
+      - name: Restore dependencies
+        run: dotnet restore SheetMusicViewer.Desktop/SheetMusicViewer.Desktop.csproj
+      
+      - name: Publish for Linux x64
+        run: |
+          dotnet publish SheetMusicViewer.Desktop/SheetMusicViewer.Desktop.csproj \
+            -c Release \
+            -r linux-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:EnableCompressionInSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o flatpak/publish
+      
+      - name: Generate icons from ICO
+        run: |
+          # Install ImageMagick for icon conversion
+          apt-get update && apt-get install -y imagemagick
+          
+          # Create icon directories
+          mkdir -p flatpak/icons/256x256
+          mkdir -p flatpak/icons/128x128
+          mkdir -p flatpak/icons/64x64
+          
+          # Convert ICO to PNG at various sizes
+          # The ICO file contains multiple sizes; extract the largest and resize
+          convert 'SheetMusicViewer.Desktop/Assets/Music.ico[0]' -resize 256x256 flatpak/icons/256x256/sheetmusicviewer.png
+          convert 'SheetMusicViewer.Desktop/Assets/Music.ico[0]' -resize 128x128 flatpak/icons/128x128/sheetmusicviewer.png
+          convert 'SheetMusicViewer.Desktop/Assets/Music.ico[0]' -resize 64x64 flatpak/icons/64x64/sheetmusicviewer.png
+      
+      - name: Build Flatpak
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: SheetMusicViewer.flatpak
+          manifest-path: flatpak/com.github.calvinhsia.SheetMusicViewer.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+      
+      - name: Upload Flatpak artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SheetMusicViewer-flatpak
+          path: SheetMusicViewer.flatpak
+          retention-days: 30
+
+  # Optional: Upload to Flathub on release tags
+  publish-flathub:
+    needs: build-flatpak
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - name: Download Flatpak artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SheetMusicViewer-flatpak
+      
+      - name: Display artifact info
+        run: |
+          echo "Flatpak bundle ready for Flathub submission"
+          ls -la *.flatpak
+          echo ""
+          echo "To publish to Flathub:"
+          echo "1. Fork https://github.com/flathub/flathub"
+          echo "2. Add your manifest"
+          echo "3. Submit a PR to flathub/flathub"
