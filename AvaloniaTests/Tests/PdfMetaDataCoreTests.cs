@@ -242,7 +242,8 @@ public class PdfMetaDataCoreTests : TestBase
             SongName = "First Song",
             Composer = "Bach",
             Date = "1720",
-            Notes = "BWV 1001"
+            Notes = "BWV 1001",
+            Link = "https://www.youtube.com/watch?v=test123"
         });
         originalMetadata.TocEntries.Add(new TOCEntry
         {
@@ -271,22 +272,24 @@ public class PdfMetaDataCoreTests : TestBase
         Assert.AreEqual(originalMetadata.LastPageNo, loadedMetadata.LastPageNo, "LastPageNo should match");
         Assert.AreEqual(originalMetadata.PageNumberOffset, loadedMetadata.PageNumberOffset, "PageNumberOffset should match");
         Assert.AreEqual(originalMetadata.Notes, loadedMetadata.Notes, "Notes should match");
-        
+
         Assert.AreEqual(1, loadedMetadata.VolumeInfoList.Count, "Should have 1 volume");
         Assert.AreEqual(10, loadedMetadata.VolumeInfoList[0].NPagesInThisVolume, "Volume page count should match");
         Assert.AreEqual(2, loadedMetadata.VolumeInfoList[0].Rotation, "Rotation should match");
-        
+
         Assert.AreEqual(2, loadedMetadata.TocEntries.Count, "Should have 2 TOC entries");
         Assert.AreEqual("First Song", loadedMetadata.TocEntries[0].SongName, "First TOC song name should match");
         Assert.AreEqual("Bach", loadedMetadata.TocEntries[0].Composer, "First TOC composer should match");
         Assert.AreEqual("1720", loadedMetadata.TocEntries[0].Date, "First TOC date should match");
         Assert.AreEqual("BWV 1001", loadedMetadata.TocEntries[0].Notes, "First TOC notes should match");
-        
+        Assert.AreEqual("https://www.youtube.com/watch?v=test123", loadedMetadata.TocEntries[0].Link, "First TOC link should match");
+        Assert.IsNull(loadedMetadata.TocEntries[1].Link, "Second TOC link should be null");
+
         Assert.AreEqual(1, loadedMetadata.Favorites.Count, "Should have 1 favorite");
         Assert.AreEqual(3, loadedMetadata.Favorites[0].Pageno, "Favorite page number should match");
-        
+
         Assert.IsFalse(loadedMetadata.IsDirty, "Loaded metadata should not be dirty");
-        
+
         LogMessage("Round trip test passed - all data preserved");
     }
 

@@ -1986,6 +1986,11 @@ public class ChooseMusicWindow : Window
         _tbxTotals.Text = $"#Books = {items.Count} #Songs = {totalSongs:n0} #Pages = {totalPages:n0} #Fav={totalFavs:n0}";
     }
 
+    /// <summary>
+    /// Gets a thumbnail image for a PDF book or singles folder.
+    /// For singles folders, the thumbnail is generated from the first PDF file in alphabetical order.
+    /// To use a specific PDF as the cover, rename it to sort first (e.g., prefix with '!' '@' or '00-').
+    /// </summary>
     private async Task<Bitmap> GetPdfThumbnailAsync(PdfMetaDataReadResult pdfMetaData)
     {
         return await Task.Run(() =>
@@ -1994,7 +1999,10 @@ public class ChooseMusicWindow : Window
             {
                 throw new InvalidOperationException($"No volumes in metadata");
             }
-            
+
+            // For singles folders, VolumeInfoList is sorted alphabetically by filename.
+            // The first volume (index 0) determines the thumbnail image.
+            // Users can control which PDF is used as the cover by renaming it to sort first.
             var firstVolume = pdfMetaData.VolumeInfoList[0];
             var pdfPath = pdfMetaData.GetFullPathFileFromVolno(0);
             
