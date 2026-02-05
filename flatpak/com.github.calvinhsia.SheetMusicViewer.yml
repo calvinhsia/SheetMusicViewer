@@ -1,0 +1,46 @@
+app-id: com.github.calvinhsia.SheetMusicViewer
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: SheetMusicViewer
+
+finish-args:
+  # X11 + XShm access (for Avalonia)
+  - --share=ipc
+  - --socket=x11
+  # Wayland support
+  - --socket=wayland
+  # OpenGL acceleration
+  - --device=dri
+  # Access to user's documents for sheet music files
+  - --filesystem=xdg-documents
+  - --filesystem=xdg-music
+  # For opening/saving files via portal
+  - --filesystem=home:ro
+  # Network access (for future features if needed)
+  - --share=network
+
+modules:
+  - name: sheetmusicviewer
+    buildsystem: simple
+    build-commands:
+      # Install the self-contained .NET application
+      - install -Dm755 SheetMusicViewer -t /app/bin/
+      # Install desktop entry
+      - install -Dm644 com.github.calvinhsia.SheetMusicViewer.desktop -t /app/share/applications/
+      # Install AppStream metadata
+      - install -Dm644 com.github.calvinhsia.SheetMusicViewer.metainfo.xml -t /app/share/metainfo/
+      # Install icons (multiple sizes for different contexts)
+      - install -Dm644 icons/256x256/sheetmusicviewer.png /app/share/icons/hicolor/256x256/apps/com.github.calvinhsia.SheetMusicViewer.png
+      - install -Dm644 icons/128x128/sheetmusicviewer.png /app/share/icons/hicolor/128x128/apps/com.github.calvinhsia.SheetMusicViewer.png
+      - install -Dm644 icons/64x64/sheetmusicviewer.png /app/share/icons/hicolor/64x64/apps/com.github.calvinhsia.SheetMusicViewer.png
+    sources:
+      - type: file
+        path: publish/SheetMusicViewer
+      - type: file
+        path: com.github.calvinhsia.SheetMusicViewer.desktop
+      - type: file
+        path: com.github.calvinhsia.SheetMusicViewer.metainfo.xml
+      - type: dir
+        path: icons
+        dest: icons

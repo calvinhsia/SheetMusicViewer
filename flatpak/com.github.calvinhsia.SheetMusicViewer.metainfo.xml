@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.github.calvinhsia.SheetMusicViewer</id>
+  <name>Sheet Music Viewer</name>
+  <summary>Cross-platform PDF sheet music viewer with annotations</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  
+  <description>
+    <p>
+      Sheet Music Viewer is a cross-platform application for viewing PDF sheet music 
+      with powerful annotation capabilities. Built with Avalonia for a native experience 
+      on Windows, macOS, and Linux.
+    </p>
+    <p>Features include:</p>
+    <ul>
+      <li>PDF sheet music viewing with smooth navigation</li>
+      <li>Ink annotations with pen, highlighter, and shape tools</li>
+      <li>Undo/redo support for annotations</li>
+      <li>Page turn gestures and keyboard shortcuts</li>
+      <li>Bookmark and organize your music library</li>
+    </ul>
+  </description>
+  
+  <launchable type="desktop-id">com.github.calvinhsia.SheetMusicViewer.desktop</launchable>
+  
+  <url type="homepage">https://github.com/calvinhsia/SheetMusicViewer</url>
+  <url type="bugtracker">https://github.com/calvinhsia/SheetMusicViewer/issues</url>
+  
+  <developer id="com.github.calvinhsia">
+    <name>Calvin Hsia</name>
+  </developer>
+  
+  <provides>
+    <binary>SheetMusicViewer</binary>
+  </provides>
+  
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  
+  <recommends>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </recommends>
+  
+  <content_rating type="oars-1.1" />
+  
+  <releases>
+    <release version="1.0.0" date="2025-01-01">
+      <description>
+        <p>Initial Flatpak release</p>
+      </description>
+    </release>
+  </releases>
+  
+  <keywords>
+    <keyword>sheet music</keyword>
+    <keyword>pdf</keyword>
+    <keyword>viewer</keyword>
+    <keyword>annotation</keyword>
+    <keyword>music</keyword>
+  </keywords>
+  
+  <categories>
+    <category>Audio</category>
+    <category>Music</category>
+    <category>Viewer</category>
+  </categories>
+</component>
