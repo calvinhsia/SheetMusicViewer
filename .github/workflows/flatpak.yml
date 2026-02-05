@@ -70,13 +70,18 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
+
+      - name: Install system dependencies
+        run: |
+          # Install libicu (required for .NET globalization) and ImageMagick (for icon conversion)
+          dnf install -y libicu ImageMagick
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
           dotnet-quality: 'preview'
-      
+
       - name: Restore dependencies
         run: dotnet restore SheetMusicViewer.Desktop/SheetMusicViewer.Desktop.csproj
       
@@ -93,14 +98,11 @@ jobs:
       
       - name: Generate icons from ICO
         run: |
-          # Install ImageMagick for icon conversion
-          apt-get update && apt-get install -y imagemagick
-          
           # Create icon directories
           mkdir -p flatpak/icons/256x256
           mkdir -p flatpak/icons/128x128
           mkdir -p flatpak/icons/64x64
-          
+
           # Convert ICO to PNG at various sizes
           # The ICO file contains multiple sizes; extract the largest and resize
           convert 'SheetMusicViewer.Desktop/Assets/Music.ico[0]' -resize 256x256 flatpak/icons/256x256/sheetmusicviewer.png
