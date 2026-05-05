@@ -86,6 +86,10 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private int _lastNavigationDelta; // Track navigation direction for prefetch priority
     private bool _isShowingMetaDataForm; // Prevent showing multiple MetaDataForm dialogs
 
+    // Metronome
+    private MetronomeService? _metronomeService;
+    private MetronomeOverlayWindow? _metronomeOverlay;
+
     private class PageCacheEntry
     {
         public CancellationTokenSource Cts { get; } = new();
@@ -254,6 +258,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
 
         var mnuRefresh = this.GetControl<MenuItem>("mnuRefresh");
         mnuRefresh.Click += (s, e) => _ = RefreshMusicFolderAsync();
+
+        var mnuMetronome = this.GetControl<MenuItem>("mnuMetronome");
+        mnuMetronome.Click += (s, e) => ToggleMetronomeOverlay();
 
         // Wire up per-page link buttons
         var btnLink0 = this.GetControl<Button>("btnLink0");
@@ -459,7 +466,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
         
         settings.Save();
-        
+
+        // Stop metronome if running
+        _metronomeService?.Stop();
+        _metronomeService?.Dispose();
+        _metronomeService = null;
+
         // CloseCurrentPdfFile will save the lastPageNo to the PDF metadata JSON
         CloseCurrentPdfFile();
     }
@@ -1611,6 +1623,33 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         NavigateAsync(delta);
     }
     
+    #region Metronome
+
+    private void ToggleMetronomeOverlay()
+    {
+        // Lazily create the service and overlay
+        if (_metronomeService == null)
+        {
+            _metronomeService = new MetronomeService();
+        }
+
+        if (_metronomeOverlay == null || !_metronomeOverlay.IsVisible)
+        {
+            if (_metronomeOverlay == null)
+            {
+                _metronomeOverlay = new MetronomeOverlayWindow(_metronomeService);
+                _metronomeOverlay.Closed += (_, _) => _metronomeOverlay = null;
+            }
+            _metronomeOverlay.Show(this);
+        }
+        else
+        {
+            _metronomeOverlay.Hide();
+        }
+    }
+
+    #endregion
+
     #region Event Handlers
     
     private void Slider_TemplateApplied(object? sender, TemplateAppliedEventArgs e)
@@ -1935,6 +1974,11 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                     {
                         menuItem.Open();
                     }
+                    e.Handled = true;
+                    return;
+                case Key.T:
+                    // Alt+T toggles metronome overlay
+                    ToggleMetronomeOverlay();
                     e.Handled = true;
                     return;
                 default:
