@@ -386,6 +386,9 @@ public class AppSettings
     public double MetaDataWindowLeft { get; set; } = -1;
     public bool MetaDataWindowMaximized { get; set; } = true;
 
+    // Metronome overlay settings
+    public MetronomeSettings Metronome { get; set; } = new();
+
     #endregion
 
     /// <summary>
@@ -427,6 +430,8 @@ public class AppSettings
                     settings.MetaDataWindowTop = localSettings.MetaDataWindowTop;
                     settings.MetaDataWindowLeft = localSettings.MetaDataWindowLeft;
                     settings.MetaDataWindowMaximized = localSettings.MetaDataWindowMaximized;
+                    if (localSettings.Metronome != null)
+                        settings.Metronome = localSettings.Metronome;
                 }
             }
         }
@@ -544,7 +549,8 @@ public class AppSettings
                 MetaDataWindowHeight = MetaDataWindowHeight,
                 MetaDataWindowTop = MetaDataWindowTop,
                 MetaDataWindowLeft = MetaDataWindowLeft,
-                MetaDataWindowMaximized = MetaDataWindowMaximized
+                MetaDataWindowMaximized = MetaDataWindowMaximized,
+                Metronome = Metronome
             };
 
             var json = JsonSerializer.Serialize(localSettings, JsonOptions);
@@ -736,6 +742,7 @@ public class AppSettings
         public double MetaDataWindowTop { get; set; } = -1;
         public double MetaDataWindowLeft { get; set; } = -1;
         public bool MetaDataWindowMaximized { get; set; } = true;
+        public MetronomeSettings Metronome { get; set; } = new();
     }
     
     /// <summary>
