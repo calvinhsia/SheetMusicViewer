@@ -70,7 +70,17 @@ public sealed class MetronomeService : IDisposable
         {
             _tempo = Math.Clamp(value, 20, 300);
             _beatIntervalMs = BpmToMs(_tempo);
-            // If running, the next scheduled tick will pick up the new interval automatically
+            // Re-anchor the drift-correction epoch so the next beat fires at the
+            // NEW interval from now, not from the original start time.
+            // Without this, lowering BPM causes a long silence because the old
+            // epoch math puts the next expected beat far in the future.
+            if (IsRunning)
+            {
+                _startEpochMs      = Environment.TickCount64;
+                _totalBeatsElapsed = 0;
+                // Fire the next beat immediately at the new interval
+                _timer?.Change((int)_beatIntervalMs, Timeout.Infinite);
+            }
         }
     }
 
