@@ -137,6 +137,8 @@
                             <MenuItem Name="mnuOptions" Header="_Options..." InputGesture="Alt+O" ToolTip.Tip="Configure application settings"/>
                             <MenuItem Name="mnuRefresh" Header="_Refresh Music Folder" InputGesture="F5" ToolTip.Tip="Rescan music folder for new or changed files"/>
                             <Separator/>
+                            <MenuItem Name="mnuMetronome" Header="🎵 _Metronome" InputGesture="Alt+T" ToolTip.Tip="Show/Hide metronome overlay (Alt+T)"/>
+                            <Separator/>
                             <MenuItem Name="mnuShowLogs" Header="Show _Logs" ToolTip.Tip="Show application log file"/>
                             <MenuItem Name="mnuAbout" Header="_About" ToolTip.Tip="Show build information"/>
                             <MenuItem Name="mnuQuit" Header="_Quit Application" InputGesture="Alt+Q" ToolTip.Tip="Exit application"/>
