@@ -103,12 +103,13 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     public PdfViewerWindow()
     {
         InitializeComponent();
-        DataContext = this;
-        
-        // Load settings
+
+        // Load settings before setting DataContext so bindings read the correct initial values
         var settings = AppSettings.Instance;
         _show2Pages = settings.Show2Pages;
         _rootMusicFolder = settings.RootFolderMRU.FirstOrDefault() ?? string.Empty;
+
+        DataContext = this;
         
         Trace.WriteLine($"PdfViewerWindow constructor: WindowMaximized={settings.WindowMaximized} from {AppSettings.SettingsPath}");
         
