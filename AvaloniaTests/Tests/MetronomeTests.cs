@@ -4,6 +4,7 @@ using SheetMusicViewer.Desktop;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace AvaloniaTests.Tests;
@@ -328,30 +329,69 @@ public class MetronomeTests : TestBase
 
     [TestMethod]
     [TestCategory("Unit")]
-    public void GenerateClick_ProducesNonEmptySamples()
+    public void GenerateBeat_AllSounds_ProduceNonEmptySamples()
     {
-        var accent = MetronomeService.GenerateClick(isAccent: true,  sampleRate: 44100);
-        var normal = MetronomeService.GenerateClick(isAccent: false, sampleRate: 44100);
-        Assert.IsTrue(accent.Length > 0, "Accent click should have samples");
-        Assert.IsTrue(normal.Length > 0, "Normal click should have samples");
+        foreach (var sound in Enum.GetValues<BeatSound>())
+        {
+            var accent = MetronomeService.GenerateBeat(isAccent: true,  sound: sound, sampleRate: 44100);
+            var normal = MetronomeService.GenerateBeat(isAccent: false, sound: sound, sampleRate: 44100);
+            Assert.IsTrue(accent.Length > 0, $"{sound} accent click should have samples");
+            Assert.IsTrue(normal.Length > 0, $"{sound} normal click should have samples");
+        }
     }
 
     [TestMethod]
     [TestCategory("Unit")]
-    public void GenerateClick_SamplesAreWithinRange()
+    public void GenerateBeat_AllSounds_SamplesAreWithinRange()
     {
-        var samples = MetronomeService.GenerateClick(isAccent: true, sampleRate: 44100);
+        foreach (var sound in Enum.GetValues<BeatSound>())
+        {
+            var samples = MetronomeService.GenerateBeat(isAccent: true, sound: sound, sampleRate: 44100);
+            foreach (var s in samples)
+                Assert.IsTrue(s >= -2.0f && s <= 2.0f, $"[{sound}] sample {s} out of range");
+        }
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public void GenerateBeat_AllSounds_AccentAndNormalAreDifferent()
+    {
+        foreach (var sound in Enum.GetValues<BeatSound>())
+        {
+            var accent = MetronomeService.GenerateBeat(isAccent: true,  sound: sound, sampleRate: 44100);
+            var normal = MetronomeService.GenerateBeat(isAccent: false, sound: sound, sampleRate: 44100);
+            bool differs = Enumerable.Range(0, Math.Min(accent.Length, normal.Length))
+                .Any(i => Math.Abs(accent[i] - normal[i]) > 0.001f);
+            Assert.IsTrue(differs, $"[{sound}] accent and normal should differ");
+        }
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public void GenerateBeat_ProducesNonEmptySamples()
+    {
+        // back-compat overload (defaults to Woodblock)
+        var accent = MetronomeService.GenerateBeat(isAccent: true,  sampleRate: 44100);
+        var normal = MetronomeService.GenerateBeat(isAccent: false, sampleRate: 44100);
+        Assert.IsTrue(accent.Length > 0);
+        Assert.IsTrue(normal.Length > 0);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public void GenerateBeat_SamplesAreWithinRange()
+    {
+        var samples = MetronomeService.GenerateBeat(isAccent: true, sampleRate: 44100);
         foreach (var s in samples)
             Assert.IsTrue(s >= -1.5f && s <= 1.5f, $"Sample {s} out of expected range");
     }
 
     [TestMethod]
     [TestCategory("Unit")]
-    public void GenerateClick_AccentAndNormalAreDifferent()
+    public void GenerateBeat_AccentAndNormalAreDifferent()
     {
-        var accent = MetronomeService.GenerateClick(isAccent: true,  sampleRate: 44100);
-        var normal = MetronomeService.GenerateClick(isAccent: false, sampleRate: 44100);
-        // They should differ in at least some samples (different pitch/volume)
+        var accent = MetronomeService.GenerateBeat(isAccent: true,  sampleRate: 44100);
+        var normal = MetronomeService.GenerateBeat(isAccent: false, sampleRate: 44100);
         bool differs = false;
         for (int i = 0; i < Math.Min(accent.Length, normal.Length); i++)
             if (Math.Abs(accent[i] - normal[i]) > 0.001f) { differs = true; break; }
@@ -360,10 +400,33 @@ public class MetronomeTests : TestBase
 
     [TestMethod]
     [TestCategory("Unit")]
-    public void ClickToWav_ProducesValidRiffHeader()
+    public void MetronomeService_Sound_DefaultIsWoodblock()
     {
-        var samples = MetronomeService.GenerateClick(isAccent: true, sampleRate: 44100);
-        var wav     = MetronomeService.ClickToWav(samples, sampleRate: 44100);
+        Assert.AreEqual(BeatSound.Woodblock, _metronome!.Sound);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public void MetronomeService_Sound_CanBeChanged()
+    {
+        _metronome!.Sound = BeatSound.Hihat;
+        Assert.AreEqual(BeatSound.Hihat, _metronome.Sound);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public void MetronomeSettings_DefaultSound_IsWoodblock()
+    {
+        var s = new MetronomeSettings();
+        Assert.AreEqual(BeatSound.Woodblock, s.Sound);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public void BeatToWav_ProducesValidRiffHeader()
+    {
+        var samples = MetronomeService.GenerateBeat(isAccent: true, sampleRate: 44100);
+        var wav     = MetronomeService.BeatToWav(samples, sampleRate: 44100);
         Assert.IsTrue(wav.Length > 44, "WAV should have header + data");
         Assert.AreEqual((byte)'R', wav[0]);
         Assert.AreEqual((byte)'I', wav[1]);
@@ -377,9 +440,9 @@ public class MetronomeTests : TestBase
 
     [TestMethod]
     [TestCategory("Unit")]
-    public void ClickToWav_EmptySamples_ProducesHeaderOnly()
+    public void BeatToWav_EmptySamples_ProducesHeaderOnly()
     {
-        var wav = MetronomeService.ClickToWav([], sampleRate: 44100);
+        var wav = MetronomeService.BeatToWav([], sampleRate: 44100);
         Assert.AreEqual(44, wav.Length, "Empty samples → 44-byte header only");
     }
 

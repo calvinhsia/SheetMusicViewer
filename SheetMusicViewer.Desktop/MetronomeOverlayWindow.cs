@@ -4,10 +4,15 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Controls.Primitives;
+using Avalonia.Styling;
+using Avalonia.VisualTree;
 using Avalonia.Threading;
 using SheetMusicLib;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 
 namespace SheetMusicViewer.Desktop;
@@ -37,10 +42,11 @@ public class MetronomeOverlayWindow : Window, INotifyPropertyChanged
     private IPointer? _dragPointer;   // captured pointer
 
     // ── Bindable backing fields ───────────────────────────────────────────
-    private bool   _isRunning;
-    private int    _tempo;
-    private int    _accentEvery;
-    private bool   _muteAudio;
+    private bool       _isRunning;
+    private int        _tempo;
+    private int        _accentEvery;
+    private bool       _muteAudio;
+    private BeatSound _sound;
     private string _startStopLabel = "▶ Start";
     private IBrush _beatBrush      = IdleBrush;
     private string _beatCountText  = "–";
@@ -90,6 +96,22 @@ public class MetronomeOverlayWindow : Window, INotifyPropertyChanged
         }
     }
 
+    public BeatSound Sound
+    {
+        get => _sound;
+        set
+        {
+            _sound = value;
+            OnPC();
+            _metronome.Sound = value;
+            SaveSettings();
+        }
+    }
+
+    /// <summary>All available sounds for binding to the ComboBox.</summary>
+    public IReadOnlyList<BeatSound> AllSounds { get; } =
+        Enum.GetValues<BeatSound>().ToList();
+
     public string StartStopLabel
     {
         get => _startStopLabel;
@@ -120,11 +142,13 @@ public class MetronomeOverlayWindow : Window, INotifyPropertyChanged
         _tempo       = settings.Tempo;
         _accentEvery = settings.AccentEvery;
         _muteAudio   = settings.MuteAudio;
+        _sound       = settings.Sound;
 
         // Push to engine
         _metronome.Tempo       = _tempo;
         _metronome.AccentEvery = _accentEvery;
         _metronome.MuteAudio   = _muteAudio;
+        _metronome.Sound       = _sound;
         _isRunning             = metronome.IsRunning;
 
         // Fade timer restores idle colour after each beat flash
@@ -133,8 +157,8 @@ public class MetronomeOverlayWindow : Window, INotifyPropertyChanged
 
         // ── Window chrome ──────────────────────────────────────────────────
         Title                 = "Metronome";
-        Width                 = 280;
-        Height                = 220;
+        Width                 = 300;
+        Height                = 250;
         CanResize             = true;
         ShowInTaskbar         = false;
         Topmost               = true;
@@ -300,6 +324,32 @@ public class MetronomeOverlayWindow : Window, INotifyPropertyChanged
         accentRow.Children.Add(accentHint);
         root.Children.Add(accentRow);
 
+        // ── Sound selector row ─────────────────────────────────────────────
+        var soundRow = new StackPanel
+        {
+            Orientation         = Orientation.Horizontal,
+            Spacing             = 6,
+            HorizontalAlignment = HorizontalAlignment.Center
+        };
+        soundRow.Children.Add(MakeLabel("Sound:"));
+
+        var soundCombo = new ComboBox
+        {
+            ItemsSource       = AllSounds,
+            SelectedItem      = _sound,
+            Foreground        = Brushes.White,
+            Background        = new SolidColorBrush(Color.FromArgb(160, 60, 60, 60)),
+            BorderBrush       = Brushes.Gray,
+            MinWidth          = 110,
+        };
+        soundCombo.SelectionChanged += (_, _) =>
+        {
+            if (soundCombo.SelectedItem is BeatSound s)
+                Sound = s;
+        };
+        soundRow.Children.Add(soundCombo);
+        root.Children.Add(soundRow);
+
         // ── Controls row: Start/Stop + Mute ───────────────────────────────
         var ctrlRow = new StackPanel
         {
@@ -345,9 +395,28 @@ public class MetronomeOverlayWindow : Window, INotifyPropertyChanged
     private bool IsDraggableSource(object? source) =>
         source is Border or StackPanel or TextBlock or Grid;
 
+    // Interactive controls that should receive touch/pen events directly (not start a drag).
+    // Walk up the visual tree because e.Source may be an internal template child (e.g. the
+    // Border inside a ComboBox) rather than the control itself.
+    private static bool IsInsideInteractiveControl(object? source)
+    {
+        var visual = source as Avalonia.Visual;
+        while (visual is not null)
+        {
+            if (visual is Button or ComboBox or CheckBox or NumericUpDown
+                       or TextBox or ListBoxItem or ScrollBar or Slider
+                       or RepeatButton or ToggleButton)
+                return true;
+            visual = visual.GetVisualParent() as Avalonia.Visual;
+        }
+        return false;
+    }
+
     private void OnDragPressed(object? sender, PointerPressedEventArgs e)
     {
         bool isTouch = e.Pointer.Type is PointerType.Touch or PointerType.Pen;
+        // Never steal events (touch or mouse) that originate inside an interactive control.
+        if (IsInsideInteractiveControl(e.Source)) return;
         if (!isTouch && !IsDraggableSource(e.Source)) return;
 
         _isDragging   = true;
@@ -453,6 +522,7 @@ public class MetronomeOverlayWindow : Window, INotifyPropertyChanged
         s.Tempo       = _tempo;
         s.AccentEvery = _accentEvery;
         s.MuteAudio   = _muteAudio;
+        s.Sound       = _sound;
         s.WindowLeft  = Position.X;
         s.WindowTop   = Position.Y;
         AppSettings.Instance.SaveLocal();

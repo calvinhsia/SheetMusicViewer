@@ -1,5 +1,6 @@
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
+using SheetMusicLib;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -33,6 +34,7 @@ public sealed class MetronomeService : IDisposable
     private int _tempo = 120;           // beats per minute
     private int _accentEvery = 4;       // 0 = no accent; N = accent on every Nth beat
     private bool _muteAudio;
+    private BeatSound _sound = BeatSound.Woodblock;
 
     // ── Runtime state ──────────────────────────────────────────────────────
     private System.Threading.Timer? _timer;
@@ -100,6 +102,16 @@ public sealed class MetronomeService : IDisposable
         set => _muteAudio = value;
     }
 
+    public BeatSound Sound
+    {
+        get => _sound;
+        set
+        {
+            _sound = value;
+            RenderSamples();   // pre-render the new beat sound immediately
+        }
+    }
+
     // ── Lifecycle ────────────────────────────────────────────────────────────
     public MetronomeService()
     {
@@ -151,10 +163,10 @@ public sealed class MetronomeService : IDisposable
             Trace.WriteLine($"MetronomeService: Beat handler error: {ex.Message}");
         }
 
-        // Play audio click
+        // Play audio beat
         if (!_muteAudio && _audioReady)
         {
-            PlayClick(isAccent);
+            PlayBeat(isAccent);
         }
 
         _totalBeatsElapsed++;
@@ -188,9 +200,8 @@ public sealed class MetronomeService : IDisposable
             {
                 _accentWavPath = Path.Combine(Path.GetTempPath(), "smc_metronome_accent.wav");
                 _normalWavPath = Path.Combine(Path.GetTempPath(), "smc_metronome_normal.wav");
-                File.WriteAllBytes(_accentWavPath, ClickToWav(GenerateClick(isAccent: true,  sampleRate: 44100)));
-                File.WriteAllBytes(_normalWavPath, ClickToWav(GenerateClick(isAccent: false, sampleRate: 44100)));
                 _audioReady = true;
+                RenderSamples();
             }
         }
         catch (Exception ex)
@@ -203,9 +214,6 @@ public sealed class MetronomeService : IDisposable
     private void InitWasapi()
     {
         // Pre-render both clicks as float PCM
-        _accentSamples = GenerateClick(isAccent: true,  sampleRate: WavSampleRate);
-        _normalSamples = GenerateClick(isAccent: false, sampleRate: WavSampleRate);
-
         var waveFormat = WaveFormat.CreateIeeeFloatWaveFormat(WavSampleRate, 1);
         _mixer = new MixingSampleProvider(waveFormat) { ReadFully = true };
 
@@ -216,6 +224,22 @@ public sealed class MetronomeService : IDisposable
         _wasapiOut.Init(_mixer);
         _wasapiOut.Play();
         _audioReady = true;
+
+        RenderSamples();
+    }
+
+    /// <summary>Re-renders _accentSamples/_normalSamples for the current Sound.</summary>
+    private void RenderSamples()
+    {
+        _accentSamples = GenerateBeat(isAccent: true,  sound: _sound, sampleRate: WavSampleRate);
+        _normalSamples = GenerateBeat(isAccent: false, sound: _sound, sampleRate: WavSampleRate);
+
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && _audioReady)
+        {
+            // Rewrite temp WAV files for mac/linux
+            if (_accentWavPath != null) File.WriteAllBytes(_accentWavPath, BeatToWav(_accentSamples, 44100));
+            if (_normalWavPath != null) File.WriteAllBytes(_normalWavPath, BeatToWav(_normalSamples, 44100));
+        }
     }
 
     private void CleanupAudio()
@@ -225,14 +249,14 @@ public sealed class MetronomeService : IDisposable
         try { if (_normalWavPath != null) File.Delete(_normalWavPath); } catch { }
     }
 
-    private void PlayClick(bool isAccent)
+    private void PlayBeat(bool isAccent)
     {
         if (!_audioReady) return;
         try
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                PlayClickWasapi(isAccent);
+                PlayBeatWasapi(isAccent);
             }
             else
             {
@@ -258,11 +282,11 @@ public sealed class MetronomeService : IDisposable
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"MetronomeService: PlayClick error: {ex.Message}");
+            Trace.WriteLine($"MetronomeService: PlayBeat error: {ex.Message}");
         }
     }
 
-    private void PlayClickWasapi(bool isAccent)
+    private void PlayBeatWasapi(bool isAccent)
     {
         var samples = isAccent ? _accentSamples : _normalSamples;
         if (samples == null || _mixer == null) return;
@@ -281,58 +305,143 @@ public sealed class MetronomeService : IDisposable
         return bytes;
     }
 
+    // ── Beat synthesis ────────────────────────────────────────────────────────
+
     /// <summary>
-    /// Synthesises a realistic metronome click:
-    /// - Sharp transient via a short burst of noise with instant attack
-    /// - Pitched "body" from two sine tones that decay exponentially
-    /// - All enveloped with a fast exponential decay so there is no tail
-    /// Accent click is higher-pitched and louder than the normal click.
+    /// Dispatches to the correct synthesizer for the chosen <see cref="BeatSound"/>.
+    /// All synthesizers return float[] PCM at <paramref name="sampleRate"/>.
     /// </summary>
-    public static float[] GenerateClick(bool isAccent, int sampleRate)
+    public static float[] GenerateBeat(bool isAccent, BeatSound sound, int sampleRate)
     {
-        // Tuning: accent is a high woodblock-ish click, normal is a softer lower tick
-        double bodyFreq   = isAccent ? 1800.0 : 1100.0;  // main tone (Hz)
-        double bodyFreq2  = isAccent ? 900.0  :  550.0;  // 2nd partial (Hz)
-        float  bodyVol    = isAccent ? 0.55f  :   0.40f;
-        float  noiseVol   = isAccent ? 0.45f  :   0.28f;
-        double decayRate  = isAccent ? 55.0   :   45.0;  // higher = faster decay
-        double noiseTau   = isAccent ? 180.0  :  140.0;  // noise decays faster still
-        double durationMs = 80.0;                         // total click length (ms)
-
-        int numSamples = (int)(sampleRate * durationMs / 1000.0);
-        var samples    = new float[numSamples];
-        var rng        = new Random(42);  // deterministic so tests are stable
-
-        for (int i = 0; i < numSamples; i++)
+        return sound switch
         {
-            double t = i / (double)sampleRate;
+            BeatSound.Sine      => SynthSine     (isAccent, sampleRate),
+            BeatSound.Rimshot   => SynthRimshot  (isAccent, sampleRate),
+            BeatSound.Hihat     => SynthHihat    (isAccent, sampleRate),
+            BeatSound.Beep      => SynthBeep     (isAccent, sampleRate),
+            _                    => SynthWoodblock(isAccent, sampleRate),  // Woodblock (default)
+        };
+    }
 
-            // Exponential amplitude envelope (fast decay, instant attack)
-            double env      = Math.Exp(-decayRate * t);
-            double noiseEnv = Math.Exp(-noiseTau  * t);
+    // ── back-compat overload: delegates to Woodblock ──
+    public static float[] GenerateBeat(bool isAccent, int sampleRate) =>
+        GenerateBeat(isAccent, BeatSound.Woodblock, sampleRate);
 
-            // Tonal body: two sine partials
+    /// <summary>Woodblock: two-partial tone + noise burst, exponential decay.</summary>
+    private static float[] SynthWoodblock(bool isAccent, int sampleRate)
+    {
+        double bodyFreq  = isAccent ? 1800.0 : 1100.0;
+        double bodyFreq2 = isAccent ?  900.0 :  550.0;
+        float  bodyVol   = isAccent ?  0.55f :   0.40f;
+        float  noiseVol  = isAccent ?  0.45f :   0.28f;
+        double decayRate = isAccent ?   55.0 :    45.0;
+        double noiseTau  = isAccent ?  180.0 :   140.0;
+        int    n         = (int)(sampleRate * 0.080);
+        var    buf       = new float[n];
+        var    rng       = new Random(42);
+        for (int i = 0; i < n; i++)
+        {
+            double t    = i / (double)sampleRate;
+            double env  = Math.Exp(-decayRate * t);
+            double nEnv = Math.Exp(-noiseTau  * t);
             double tone = Math.Sin(2 * Math.PI * bodyFreq  * t)
                         + Math.Sin(2 * Math.PI * bodyFreq2 * t) * 0.4;
-
-            // Percussive transient: band-limited noise burst
-            double noise = (rng.NextDouble() * 2.0 - 1.0);
-
-            samples[i] = (float)(tone * bodyVol * env + noise * noiseVol * noiseEnv);
+            buf[i] = (float)(tone * bodyVol * env + (rng.NextDouble() * 2 - 1) * noiseVol * nEnv);
         }
+        return SoftClip(buf);
+    }
 
-        // Soft-clip to avoid any inter-sample overs
-        for (int i = 0; i < numSamples; i++)
+    /// <summary>Sine: smooth pure tone with linear fade-out.</summary>
+    private static float[] SynthSine(bool isAccent, int sampleRate)
+    {
+        double freq  = isAccent ? 880.0 : 660.0;
+        float  vol   = isAccent ? 0.9f  : 0.6f;
+        int    n     = (int)(sampleRate * 0.10);
+        var    buf   = new float[n];
+        int    fade  = (int)(n * 0.70);
+        for (int i = 0; i < n; i++)
         {
-            float s = samples[i];
-            samples[i] = s / (1.0f + Math.Abs(s)) * 1.8f;  // tanh approximation
+            double t    = i / (double)sampleRate;
+            double env  = i < fade ? 1.0 : 1.0 - (double)(i - fade) / (n - fade);
+            buf[i] = (float)(Math.Sin(2 * Math.PI * freq * t) * vol * env);
         }
+        return buf;
+    }
 
-        return samples;
+    /// <summary>Rimshot: very short, high-pitched noise + sine transient.</summary>
+    private static float[] SynthRimshot(bool isAccent, int sampleRate)
+    {
+        double freq  = isAccent ? 2500.0 : 1800.0;
+        float  vol   = isAccent ?  0.85f :  0.65f;
+        double decay = isAccent ?  200.0 :  160.0;
+        int    n     = (int)(sampleRate * 0.045);
+        var    buf   = new float[n];
+        var    rng   = new Random(7);
+        for (int i = 0; i < n; i++)
+        {
+            double t   = i / (double)sampleRate;
+            double env = Math.Exp(-decay * t);
+            double sig = Math.Sin(2 * Math.PI * freq * t) * 0.6
+                       + (rng.NextDouble() * 2 - 1) * 0.4;
+            buf[i] = (float)(sig * vol * env);
+        }
+        return SoftClip(buf);
+    }
+
+    /// <summary>Hihat: filtered white noise, metallic/crisp.</summary>
+    private static float[] SynthHihat(bool isAccent, int sampleRate)
+    {
+        float  vol   = isAccent ? 0.80f :  0.55f;
+        double decay = isAccent ?  90.0 :   70.0;
+        int    n     = (int)(sampleRate * 0.060);
+        var    buf   = new float[n];
+        var    rng   = new Random(13);
+        // Simple two-pole high-pass to give metallic colour
+        double hp = 0, prev = 0;
+        for (int i = 0; i < n; i++)
+        {
+            double t    = i / (double)sampleRate;
+            double env  = Math.Exp(-decay * t);
+            double raw  = rng.NextDouble() * 2 - 1;
+            // one-pole HP: y[n] = 0.9*(y[n-1] + x[n] - x[n-1])
+            hp   = 0.92 * (hp + raw - prev);
+            prev = raw;
+            buf[i] = (float)(hp * vol * env);
+        }
+        return SoftClip(buf);
+    }
+
+    /// <summary>Beep: short square-wave blip.</summary>
+    private static float[] SynthBeep(bool isAccent, int sampleRate)
+    {
+        double freq  = isAccent ? 1046.5 : 784.0;   // C6 / G5
+        float  vol   = isAccent ?  0.70f :  0.50f;
+        int    n     = (int)(sampleRate * 0.055);
+        var    buf   = new float[n];
+        int    fade  = (int)(n * 0.80);
+        for (int i = 0; i < n; i++)
+        {
+            double t   = i / (double)sampleRate;
+            double env = i < fade ? 1.0 : 1.0 - (double)(i - fade) / (n - fade);
+            // Square wave: sign of sine
+            double sq  = Math.Sin(2 * Math.PI * freq * t) >= 0 ? 1.0 : -1.0;
+            buf[i] = (float)(sq * vol * env);
+        }
+        return buf;
+    }
+
+    private static float[] SoftClip(float[] buf)
+    {
+        for (int i = 0; i < buf.Length; i++)
+        {
+            float s = buf[i];
+            buf[i] = s / (1.0f + Math.Abs(s)) * 1.8f;
+        }
+        return buf;
     }
 
     /// <summary>Wraps float[] PCM samples into a standard 16-bit mono WAV byte array.</summary>
-    public static byte[] ClickToWav(float[] samples, int sampleRate = 44100)
+    public static byte[] BeatToWav(float[] samples, int sampleRate = 44100)
     {
         const int bitsPerSample = 16;
         const int channels      = 1;
