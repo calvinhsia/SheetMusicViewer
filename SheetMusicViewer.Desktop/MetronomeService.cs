@@ -44,8 +44,8 @@ public sealed class MetronomeService : IDisposable
     private long _totalBeatsElapsed;    // beats since Start()
 
     // ── Audio ───────────────────────────────────────────────────────────────
-    // Windows: WASAPI via NAudio (in-memory PCM, no temp files)
-    private WasapiOut?   _wasapiOut;
+    // Windows: WaveOutEvent via NAudio — routes to current default device including Bluetooth
+    private WaveOutEvent?   _waveOut;
     private MixingSampleProvider? _mixer;
     private float[]?     _accentSamples;
     private float[]?     _normalSamples;
@@ -213,16 +213,14 @@ public sealed class MetronomeService : IDisposable
 
     private void InitWasapi()
     {
-        // Pre-render both clicks as float PCM
+        // Use WaveOutEvent (WinMM) — automatically routes to the current default
+        // playback device, including Bluetooth speakers, without WASAPI format negotiation.
         var waveFormat = WaveFormat.CreateIeeeFloatWaveFormat(WavSampleRate, 1);
         _mixer = new MixingSampleProvider(waveFormat) { ReadFully = true };
 
-        _wasapiOut = new WasapiOut(
-            NAudio.CoreAudioApi.AudioClientShareMode.Shared,
-            useEventSync: true,
-            latency: 50);
-        _wasapiOut.Init(_mixer);
-        _wasapiOut.Play();
+        _waveOut = new WaveOutEvent { DesiredLatency = 100 };
+        _waveOut.Init(_mixer);
+        _waveOut.Play();
         _audioReady = true;
 
         RenderSamples();
@@ -244,7 +242,7 @@ public sealed class MetronomeService : IDisposable
 
     private void CleanupAudio()
     {
-        try { _wasapiOut?.Stop(); _wasapiOut?.Dispose(); _wasapiOut = null; } catch { }
+        try { _waveOut?.Stop(); _waveOut?.Dispose(); _waveOut = null; } catch { }
         try { if (_accentWavPath != null) File.Delete(_accentWavPath); } catch { }
         try { if (_normalWavPath != null) File.Delete(_normalWavPath); } catch { }
     }
