@@ -126,6 +126,7 @@ public class MuseScoreExportManualTests : TestBase
 
         if (museScorePath is not null)
             LogMessage($"\nTo open in MuseScore run:\n  \"{museScorePath}\" \"{mxlResult}\"");
+        MuseScoreExportService.SetTempoInMusicXml(mxlResult, bpm: 90, progress: progress);
         MuseScoreExportService.LaunchMuseScore(museScorePath ?? string.Empty, mxlResult);
     }
 
