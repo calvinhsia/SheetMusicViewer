@@ -33,6 +33,7 @@ public class ExportToMuseScoreWindow : Window
     private NumericUpDown _nudEndPage = null!;
     private TextBox _txtAudiverisPath = null!;
     private TextBox _txtMuseScorePath = null!;
+    private TextBox _txtGhostscriptPath = null!;
     private NumericUpDown _nudTempo = null!;
     private ProgressBar _progressBar = null!;
     private TextBox _txtStatus = null!;
@@ -195,6 +196,12 @@ public class ExportToMuseScoreWindow : Window
             "MuseScore Studio 4 (opens the converted MusicXML)",
             () => MuseScoreExportService.AutoDetectMuseScore(),
             "MuseScorePath"));
+
+        toolPanel.Children.Add(CreatePathRow("Ghostscript:", ref _txtGhostscriptPath,
+            AppSettings.Instance.GhostscriptPath,
+            "Ghostscript (gswin64c / gs) — normalises PDFs so Audiveris sees all pages. Optional but recommended.",
+            () => MuseScoreExportService.AutoDetectGhostscript(),
+            "GhostscriptPath"));
 
         // Tempo row
         var tempoRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 4, 0, 0) };
@@ -429,6 +436,7 @@ public class ExportToMuseScoreWindow : Window
         // Persist paths to settings
         AppSettings.Instance.AudiverisPath = audiverisPath;
         AppSettings.Instance.MuseScorePath = museScorePath;
+        AppSettings.Instance.GhostscriptPath = _txtGhostscriptPath.Text?.Trim() ?? "";
         AppSettings.Instance.Save();
 
         // Determine page range
