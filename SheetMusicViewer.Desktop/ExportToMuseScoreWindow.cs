@@ -33,6 +33,7 @@ public class ExportToMuseScoreWindow : Window
     private NumericUpDown _nudEndPage = null!;
     private TextBox _txtAudiverisPath = null!;
     private TextBox _txtMuseScorePath = null!;
+    private NumericUpDown _nudTempo = null!;
     private ProgressBar _progressBar = null!;
     private TextBox _txtStatus = null!;
     private ScrollViewer _statusScroll = null!;
@@ -194,6 +195,14 @@ public class ExportToMuseScoreWindow : Window
             "MuseScore Studio 4 (opens the converted MusicXML)",
             () => MuseScoreExportService.AutoDetectMuseScore(),
             "MuseScorePath"));
+
+        // Tempo row
+        var tempoRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 4, 0, 0) };
+        tempoRow.Children.Add(new TextBlock { Text = "Playback tempo:", Width = 110, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 });
+        _nudTempo = new NumericUpDown { Value = 120, Minimum = 20, Maximum = 300, Width = 90, FormatString = "0" };
+        tempoRow.Children.Add(_nudTempo);
+        tempoRow.Children.Add(new TextBlock { Text = "BPM  (quarter note)", VerticalAlignment = VerticalAlignment.Center, Foreground = Brushes.Gray, FontSize = 11 });
+        toolPanel.Children.Add(tempoRow);
 
         mainGrid.Children.Add(toolPanel);
 
@@ -481,6 +490,14 @@ public class ExportToMuseScoreWindow : Window
                 progress, _cts.Token);
 
             SetStatus($"Conversion complete: {outputFile}");
+
+            var bpm = (int)(_nudTempo.Value ?? 120);
+            if (bpm != 120 || true)  // always inject so the file carries an explicit tempo
+            {
+                SetStatus($"Setting playback tempo to {bpm} BPM…");
+                MuseScoreExportService.SetTempoInMusicXml(outputFile, bpm, progress);
+            }
+
             SetStatus("Launching MuseScore…");
 
             MuseScoreExportService.LaunchMuseScore(museScorePath, outputFile);

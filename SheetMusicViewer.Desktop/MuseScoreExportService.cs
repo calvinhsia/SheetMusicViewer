@@ -512,6 +512,105 @@ public static class MuseScoreExportService
     }
 
     /// <summary>
+    /// Injects (or replaces) a &lt;sound tempo="bpm"/&gt; element into the first measure of the
+    /// given MusicXML file so that MuseScore opens it at the requested tempo instead of the
+    /// default 120 BPM.  Handles both plain .xml/.musicxml and zipped .mxl files.
+    /// </summary>
+    public static void SetTempoInMusicXml(string filePath, int bpm, IProgress<string>? progress = null)
+    {
+        if (bpm <= 0) return;
+
+        bool isMxl = filePath.EndsWith(".mxl", StringComparison.OrdinalIgnoreCase);
+
+        if (isMxl)
+        {
+            // .mxl is a ZIP; the score is the first .xml entry that is NOT META-INF/container.xml
+            var tempPath = filePath + ".tmp";
+            try
+            {
+                using (var zipRead = ZipFile.OpenRead(filePath))
+                using (var zipWrite = ZipFile.Open(tempPath, ZipArchiveMode.Create))
+                {
+                    foreach (var entry in zipRead.Entries)
+                    {
+                        var newEntry = zipWrite.CreateEntry(entry.FullName, CompressionLevel.Fastest);
+                        using var src = entry.Open();
+                        using var dst = newEntry.Open();
+
+                        bool isScoreXml = entry.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase)
+                                          && !entry.FullName.StartsWith("META-INF", StringComparison.OrdinalIgnoreCase);
+                        if (isScoreXml)
+                        {
+                            using var reader = new StreamReader(src);
+                            var xml = reader.ReadToEnd();
+                            var patched = InjectTempoIntoXml(xml, bpm);
+                            using var writer = new StreamWriter(dst);
+                            writer.Write(patched);
+                        }
+                        else
+                        {
+                            src.CopyTo(dst);
+                        }
+                    }
+                }
+                File.Delete(filePath);
+                File.Move(tempPath, filePath);
+                progress?.Report($"Tempo set to {bpm} BPM in exported score.");
+            }
+            catch (Exception ex)
+            {
+                progress?.Report($"⚠ Could not set tempo: {ex.Message}");
+                if (File.Exists(tempPath)) File.Delete(tempPath);
+            }
+        }
+        else
+        {
+            try
+            {
+                var xml = File.ReadAllText(filePath);
+                var patched = InjectTempoIntoXml(xml, bpm);
+                File.WriteAllText(filePath, patched);
+                progress?.Report($"Tempo set to {bpm} BPM in exported score.");
+            }
+            catch (Exception ex)
+            {
+                progress?.Report($"⚠ Could not set tempo: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Injects &lt;sound tempo="bpm"/&gt; as the first child of the first &lt;measure&gt; element.
+    /// Removes any existing &lt;sound tempo=...&gt; elements in that measure first.
+    /// </summary>
+    private static string InjectTempoIntoXml(string xml, int bpm)
+    {
+        var doc = XDocument.Parse(xml);
+        XNamespace ns = doc.Root?.Name.Namespace ?? XNamespace.None;
+
+        // Find the first <measure> across any <part>
+        var firstMeasure = doc.Descendants(ns + "measure").FirstOrDefault()
+                        ?? doc.Descendants("measure").FirstOrDefault();
+        if (firstMeasure == null) return xml;
+
+        // Remove any existing <sound tempo=...> in this measure
+        firstMeasure.Elements(ns + "sound")
+            .Where(e => e.Attribute("tempo") != null)
+            .ToList()
+            .ForEach(e => e.Remove());
+        firstMeasure.Elements("sound")
+            .Where(e => e.Attribute("tempo") != null)
+            .ToList()
+            .ForEach(e => e.Remove());
+
+        // Insert <sound tempo="bpm"/> as first child
+        var soundEl = new XElement(ns + "sound", new XAttribute("tempo", bpm.ToString()));
+        firstMeasure.AddFirst(soundEl);
+
+        return doc.ToString(SaveOptions.OmitDuplicateNamespaces);
+    }
+
+    /// <summary>
     /// Launches MuseScore Studio with the given file.
     /// </summary>
     public static void LaunchMuseScore(string museScorePath, string filePath)
