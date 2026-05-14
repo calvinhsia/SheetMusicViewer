@@ -394,6 +394,8 @@ public class AppSettings
     public string AudiverisPath { get; set; } = string.Empty;
     /// <summary>Path to the MuseScore Studio executable.</summary>
     public string MuseScorePath { get; set; } = string.Empty;
+    /// <summary>Path to the Ghostscript executable (gswin64c / gs). Used to normalise PDFs before Audiveris.</summary>
+    public string GhostscriptPath { get; set; } = string.Empty;
 
     #endregion
 

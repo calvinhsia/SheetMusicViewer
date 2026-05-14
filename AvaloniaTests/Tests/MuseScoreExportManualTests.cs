@@ -11,27 +11,28 @@ namespace AvaloniaTests.Tests;
 /// <summary>
 /// Manual end-to-end test for the MuseScore export pipeline.
 /// Exercises Audiveris OMR conversion and MuseScore launch on a real PDF.
-/// Run manually: dotnet test --filter "TestCategory=Manual&amp;MethodName=ExportPatriciaRagToMuseScore"
+/// Run manually: dotnet test --filter "TestCategory=Manual&amp;MethodName=ExportPdfToMuseScore"
 /// </summary>
 [TestClass]
 [TestCategory("Manual")]
 public class MuseScoreExportManualTests : TestBase
 {
-    private const string PatriciaRagPdf =
-        @"C:\Users\Calvi\OneDrive\SheetMusic\Ragtime\Collections\PatriciaRag.pdf";
+    private const string inputPdf =
+        @"C:\Users\Calvi\OneDrive\SheetMusic\Pop\Frank Bjorn Alley Cat1.pdf";  // 1-page title only — no music
+                                                                              //@"C:\Users\Calvi\OneDrive\SheetMusic\Ragtime\Collections\PatriciaRag.pdf";
 
     /// <summary>
-    /// Runs the full Audiveris → MusicXML pipeline on PatriciaRag.pdf (all pages),
+    /// Runs the full Audiveris → MusicXML pipeline on the specified PDF (all pages),
     /// prints the paths of every intermediate temp file to the test output,
     /// and verifies that a non-empty .mxl file was produced.
     /// MuseScore is NOT launched automatically so the test remains headless.
     /// </summary>
     [TestMethod]
-    public async Task ExportPatriciaRagToMuseScore()
+    public async Task ExportPdfToMuseScore()
     {
         // ── Prerequisites ─────────────────────────────────────────────────────
-        if (!File.Exists(PatriciaRagPdf))
-            Assert.Inconclusive($"Source PDF not found: {PatriciaRagPdf}");
+        if (!File.Exists(inputPdf))
+            Assert.Inconclusive($"Source PDF not found: {inputPdf}");
 
         var audiverisPath = MuseScoreExportService.AutoDetectAudiveris();
         if (audiverisPath is null)
@@ -41,16 +42,16 @@ public class MuseScoreExportManualTests : TestBase
 
         var museScorePath = MuseScoreExportService.AutoDetectMuseScore();
 
-        LogMessage("=== MuseScore Export Manual Test: PatriciaRag ===");
-        LogMessage($"Source PDF     : {PatriciaRagPdf}");
+        LogMessage("=== MuseScore Export Manual Test: PDF Export ===");
+        LogMessage($"Source PDF     : {inputPdf}");
         LogMessage($"Audiveris      : {audiverisPath}");
         LogMessage($"MuseScore      : {museScorePath ?? "(not found – launch skipped)"}");
 
         // ── Temp directory (same as production code) ──────────────────────────
         var outputDir = Path.Combine(Path.GetTempPath(), "SheetMusicViewer_Audiveris");
-        var baseName  = Path.GetFileNameWithoutExtension(PatriciaRagPdf);
-        var omrFile   = Path.Combine(outputDir, baseName + ".omr");
-        var mxlFile   = Path.Combine(outputDir, baseName + ".mxl");
+        var baseName = Path.GetFileNameWithoutExtension(inputPdf);
+        var omrFile = Path.Combine(outputDir, baseName + ".omr");
+        var mxlFile = Path.Combine(outputDir, baseName + ".mxl");
 
         LogMessage($"\nTemp output dir: {outputDir}");
         LogMessage($"Expected .omr  : {omrFile}");
@@ -82,11 +83,11 @@ public class MuseScoreExportManualTests : TestBase
         {
             mxlResult = await MuseScoreExportService.RunAudiverisAsync(
                 audiverisPath!,
-                PatriciaRagPdf,
-                startPage: 3,   // process all pages
-                endPage:   3,
-                progress:  progress,
-                ct:        CancellationToken.None);
+                inputPdf,
+                startPage: 0,   // process all pages
+                endPage: 0,     // process all pages
+                progress: progress,
+                ct: CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -100,9 +101,9 @@ public class MuseScoreExportManualTests : TestBase
 
         // ── Report intermediate artifacts ──────────────────────────────────────
         LogMessage("\n=== Intermediate / output files ===");
-        ReportFile(omrFile,    ".omr (Audiveris book)");
-        ReportFile(mxlFile,    ".mxl (MusicXML result)");
-        ReportFile(mxlResult,  "returned mxl path");
+        ReportFile(omrFile, ".omr (Audiveris book)");
+        ReportFile(mxlFile, ".mxl (MusicXML result)");
+        ReportFile(mxlResult, "returned mxl path");
 
         // Also list all files in the output dir for easy inspection
         LogMessage($"\nAll files in {outputDir}:");

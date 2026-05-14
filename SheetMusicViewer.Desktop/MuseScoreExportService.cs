@@ -98,6 +98,50 @@ public static class MuseScoreExportService
     }
 
     /// <summary>
+    /// Default candidate paths for Ghostscript (used to normalise PDFs before Audiveris).
+    /// </summary>
+    public static IReadOnlyList<string> GhostscriptDefaultPaths { get; } = BuildGhostscriptPaths();
+
+    private static string[] BuildGhostscriptPaths()
+    {
+        var list = new List<string>();
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            var pf  = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            var pfx = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+            // Ghostscript installers put versioned dirs under Program Files\gs\gsX.XX\bin
+            foreach (var root in new[] { pf, pfx })
+            {
+                var gsRoot = Path.Combine(root, "gs");
+                if (Directory.Exists(gsRoot))
+                {
+                    foreach (var ver in Directory.GetDirectories(gsRoot).OrderByDescending(d => d))
+                    {
+                        var exe = Path.Combine(ver, "bin", "gswin64c.exe");
+                        if (File.Exists(exe)) list.Add(exe);
+                        exe = Path.Combine(ver, "bin", "gswin32c.exe");
+                        if (File.Exists(exe)) list.Add(exe);
+                    }
+                }
+            }
+            // Also check common fixed paths
+            list.Add(Path.Combine(pf,  "gs", "bin", "gswin64c.exe"));
+            list.Add(Path.Combine(pfx, "gs", "bin", "gswin32c.exe"));
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            list.Add("/usr/local/bin/gs");
+            list.Add("/opt/homebrew/bin/gs");
+        }
+        else
+        {
+            list.Add("/usr/bin/gs");
+            list.Add("/usr/local/bin/gs");
+        }
+        return list.ToArray();
+    }
+
+    /// <summary>
     /// Returns the first default path that exists on disk, or null if none found.
     /// </summary>
     public static string? AutoDetectAudiveris() =>
@@ -108,6 +152,12 @@ public static class MuseScoreExportService
     /// </summary>
     public static string? AutoDetectMuseScore() =>
         MuseScoreDefaultPaths.FirstOrDefault(File.Exists);
+
+    /// <summary>
+    /// Returns the first Ghostscript executable found on disk, or null.
+    /// </summary>
+    public static string? AutoDetectGhostscript() =>
+        GhostscriptDefaultPaths.FirstOrDefault(File.Exists);
 
     /// <summary>
     /// Extracts a subset of PDF pages to a temporary file using PdfPig (iText-style byte copy).
@@ -188,8 +238,32 @@ public static class MuseScoreExportService
         var baseName = Path.GetFileNameWithoutExtension(pdfPath);
         var omrFile = Path.Combine(outputDir, baseName + ".omr");
 
+        // Record time just before we start so the output-file search can
+        // reject stale files from previous runs of different PDFs.
+        var runStartedAt = DateTime.UtcNow;
+
         bool hasRange = startPage > 0 && endPage > 0;
         var rangeLabel = hasRange ? $" (sheets {startPage}–{endPage})" : "";
+
+        // ── Optional: normalise the PDF with Ghostscript ──────────────────────
+        // Some PDFs use non-standard page trees that cause Audiveris (via PDFBox)
+        // to see only 1 page.  Ghostscript re-renders them so every page is visible.
+        var gsPath = AppSettings.Instance.GhostscriptPath;
+        if (string.IsNullOrWhiteSpace(gsPath))
+            gsPath = AutoDetectGhostscript();
+        var allowGhostscript = false;
+        if (allowGhostscript && !string.IsNullOrWhiteSpace(gsPath) && File.Exists(gsPath))
+        {
+            pdfPath = await NormalisePdfWithGhostscriptAsync(gsPath, pdfPath, outputDir, progress, ct);
+            // Re-derive baseName and omrFile from the (possibly renamed) normalised PDF.
+            baseName = Path.GetFileNameWithoutExtension(pdfPath);
+            omrFile  = Path.Combine(outputDir, baseName + ".omr");
+        }
+        else
+        {
+            progress?.Report("⚠ Ghostscript not found — skipping PDF normalisation. " +
+                             "If Audiveris sees fewer pages than expected, install Ghostscript.");
+        }
 
         // ── Pass 1: transcribe through PAGE step → .omr ────────────────────────
         // Must pass -step PAGE explicitly; without it Audiveris just loads/saves
@@ -216,6 +290,32 @@ public static class MuseScoreExportService
         if (!File.Exists(omrFile))
             throw new FileNotFoundException(
                 $"Audiveris pass 1 did not produce an .omr file in: {outputDir}");
+
+        // ── Detect out-of-range / completely empty pass 1 early ─────────────────
+        // Check whether Audiveris actually loaded any sheet images into the .omr.
+        // We look for "sheet#N/" directories in the ZIP rather than <steps/> in
+        // book.xml, which Audiveris writes as empty even when LOAD/BINARY ran.
+        var processedSheetCount = GetOmrZipSheetCount(omrFile);
+        if (processedSheetCount == 0)
+        {
+            var totalInOmr = GetOmrSheetCount(omrFile);
+            if (hasRange)
+            {
+                throw new InvalidOperationException(
+                    $"Audiveris did not load any sheets for the requested range ({startPage}–{endPage})." +
+                    $" The PDF has {totalInOmr} sheet(s) according to its page tree.\n\n" +
+                    "The requested page range may be outside the bounds of this PDF.\n" +
+                    "Try a smaller range or switch to \"Entire PDF\".");
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"Audiveris could not load any pages from this PDF" +
+                    $" ({totalInOmr} sheet(s) reported in page tree).\n\n" +
+                    "The PDF may use a non-standard page structure that PDFBox cannot read.\n" +
+                    "Install Ghostscript to enable automatic PDF normalisation before conversion.");
+            }
+        }
 
         // ── Collect valid sheet numbers BEFORE patching (invalid flags still present) ──
         var validSheetNumbers = GetValidSheetNumbers(omrFile);
@@ -278,12 +378,23 @@ public static class MuseScoreExportService
         var subDir = Path.Combine(outputDir, baseName);
         var searchDir = Directory.Exists(subDir) ? subDir : outputDir;
 
+        // Only accept files that (a) belong to this export (name starts with baseName)
+        // and (b) were written after this run started, to avoid returning stale
+        // output files left over from previous exports of other PDFs.
         foreach (var pattern in new[] { "*.mxl", "*.musicxml", "*.xml" })
         {
             var found = Directory.EnumerateFiles(searchDir, pattern, SearchOption.AllDirectories)
+                .Where(f =>
+                    Path.GetFileNameWithoutExtension(f)
+                        .StartsWith(baseName, StringComparison.OrdinalIgnoreCase) &&
+                    File.GetLastWriteTimeUtc(f) >= runStartedAt)
                 .OrderByDescending(File.GetLastWriteTime)
                 .FirstOrDefault();
-            if (found != null) return found;
+            if (found != null)
+            {
+                ValidateMusicXmlHasNotes(found);
+                return found;
+            }
         }
 
         // Check if Audiveris flagged every sheet as invalid (no staff lines recognized)
@@ -314,6 +425,24 @@ public static class MuseScoreExportService
             using var reader = new StreamReader(entry.Open());
             var doc = XDocument.Parse(reader.ReadToEnd());
             return doc.Descendants("sheet").Count();
+        }
+        catch { return 0; }
+    }
+
+    /// <summary>
+    /// Returns the number of sheet data folders in the .omr ZIP (entries like "sheet#1/").
+    /// Audiveris creates these when it actually loads a sheet image, regardless of whether
+    /// recognition succeeded.  book.xml &lt;steps/&gt; is unreliable for this purpose.
+    /// </summary>
+    private static int GetOmrZipSheetCount(string omrPath)
+    {
+        try
+        {
+            using var zip = ZipFile.OpenRead(omrPath);
+            return zip.Entries
+                .Count(e => System.Text.RegularExpressions.Regex.IsMatch(
+                    e.FullName, @"^sheet#\d+/",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase));
         }
         catch { return 0; }
     }
@@ -434,6 +563,84 @@ public static class MuseScoreExportService
         progress?.Report("Patched .omr written successfully.");
     }
 
+    /// <summary>
+    /// Uses Ghostscript to rasterize the PDF into a high-resolution multi-page TIFF.
+    /// This bypasses Audiveris's PDFBox layer entirely, giving it clean bitmap pixels
+    /// to detect staff lines from, and also avoids non-standard PDF page-tree issues.
+    /// If GS fails the original PDF path is returned unchanged.
+    /// </summary>
+    private static async Task<string> NormalisePdfWithGhostscriptAsync(
+        string gsPath,
+        string pdfPath,
+        string outputDir,
+        IProgress<string>? progress,
+        CancellationToken ct)
+    {
+        var baseName = Path.GetFileNameWithoutExtension(pdfPath);
+        // Produce a multi-page TIFF that Audiveris can load as an image-based book.
+        var normalisedPath = Path.Combine(outputDir, baseName + "_gs.tif");
+
+        progress?.Report("Rasterizing PDF with Ghostscript (300 DPI) for better staff detection\u2026");
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = gsPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError  = true,
+            UseShellExecute  = false,
+            CreateNoWindow   = true
+        };
+        // tiffgray: grayscale multi-page TIFF — ideal for OMR (black/white staves)
+        // -r300: 300 DPI — minimum reliable resolution for Audiveris staff detection
+        // -dCompressPages=true: keep file size reasonable
+        psi.ArgumentList.Add("-dBATCH");
+        psi.ArgumentList.Add("-dNOPAUSE");
+        psi.ArgumentList.Add("-dSAFER");
+        psi.ArgumentList.Add("-sDEVICE=tiffgray");
+        psi.ArgumentList.Add("-r300");
+        psi.ArgumentList.Add("-dCompressPages=true");
+        psi.ArgumentList.Add($"-sOutputFile={normalisedPath}");
+        psi.ArgumentList.Add(pdfPath);
+
+        Logger.LogInfo($"Ghostscript rasterize: {gsPath} -> {normalisedPath}");
+
+        using var proc = new Process { StartInfo = psi };
+        var errLines = new System.Text.StringBuilder();
+        proc.ErrorDataReceived += (_, e) => { if (e.Data != null) errLines.AppendLine(e.Data); };
+        proc.OutputDataReceived += (_, e) =>
+        {
+            if (e.Data != null)
+            {
+                Logger.LogInfo($"[GS] {e.Data}");
+                // Surface "Processing pages N through M" so the user sees page count
+                if (e.Data.Contains("Processing pages") || e.Data.Contains("Page "))
+                    progress?.Report(e.Data.Trim());
+            }
+        };
+
+        proc.Start();
+        proc.BeginOutputReadLine();
+        proc.BeginErrorReadLine();
+
+        await Task.Run(() =>
+        {
+            while (!proc.WaitForExit(200))
+                ct.ThrowIfCancellationRequested();
+        }, ct);
+
+        if (proc.ExitCode != 0 || !File.Exists(normalisedPath))
+        {
+            progress?.Report($"\u26a0 Ghostscript rasterization failed (exit {proc.ExitCode}) \u2014 proceeding with original PDF.");
+            Logger.LogInfo($"[GS] stderr: {errLines}");
+            return pdfPath;
+        }
+
+        var origKb = new FileInfo(pdfPath).Length  / 1024;
+        var normKb = new FileInfo(normalisedPath).Length / 1024;
+        progress?.Report($"PDF rasterized to TIFF: {origKb} KB PDF \u2192 {normKb} KB TIFF");
+        return normalisedPath;
+    }
+
     private static async Task RunAudiverisProcessAsync(
         string audiverisPath,
         Action<IList<string>> addArgs,
@@ -508,6 +715,69 @@ public static class MuseScoreExportService
             var err = errorLines.Length > 0 ? errorLines.ToString().Trim() : "(no stderr)";
             throw new InvalidOperationException(
                 $"Audiveris exited with code {process.ExitCode}.\n{err}");
+        }
+    }
+
+    /// <summary>
+    /// Reads the exported MusicXML (plain or .mxl ZIP) and verifies it contains at least
+    /// one &lt;note&gt; element.  Throws <see cref="InvalidOperationException"/> with an
+    /// actionable message when the file exists but has no musical content.
+    /// </summary>
+    private static void ValidateMusicXmlHasNotes(string filePath)
+    {
+        try
+        {
+            string xml;
+
+            if (filePath.EndsWith(".mxl", StringComparison.OrdinalIgnoreCase))
+            {
+                // .mxl is a ZIP; pick the first score .xml entry (skip META-INF)
+                using var zip = ZipFile.OpenRead(filePath);
+                var scoreEntry = zip.Entries.FirstOrDefault(e =>
+                    e.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) &&
+                    !e.FullName.StartsWith("META-INF", StringComparison.OrdinalIgnoreCase));
+                if (scoreEntry == null) return; // can't validate, let MuseScore try
+                using var reader = new StreamReader(scoreEntry.Open());
+                xml = reader.ReadToEnd();
+            }
+            else
+            {
+                xml = File.ReadAllText(filePath);
+            }
+
+            var doc = XDocument.Parse(xml);
+            XNamespace ns = doc.Root?.Name.Namespace ?? XNamespace.None;
+
+            bool hasNotes = doc.Descendants(ns + "note").Any()
+                         || doc.Descendants("note").Any();
+
+            if (!hasNotes)
+            {
+                int measureCount = doc.Descendants(ns + "measure").Count()
+                                 + doc.Descendants("measure").Count();
+
+                var detail = measureCount > 0
+                    ? $"The file contains {measureCount} measure(s) but no notes — " +
+                      "Audiveris may have recognised the page layout but could not decode the notation."
+                    : "The file contains no measures or notes — " +
+                      "the selected pages may be a title/cover page, or the scan quality may be too low for Audiveris to read.";
+
+                throw new InvalidOperationException(
+                    $"The exported MusicXML has no music content.\n\n{detail}\n\n" +
+                    "Suggestions:\n" +
+                    "• Make sure the selected page range covers pages with printed music staves.\n" +
+                    "• Try a wider page range or use the full PDF.\n" +
+                    "• Open the .omr file in Audiveris and check the transcription manually.");
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            throw; // re-throw our own validation error
+        }
+        catch (Exception ex)
+        {
+            // Parsing/IO errors: log and let MuseScore decide — don't block the user
+            Logger.LogInfo($"[ValidateMusicXml] Could not validate {filePath}: {ex.Message}");
         }
     }
 
