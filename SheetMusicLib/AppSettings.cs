@@ -389,6 +389,12 @@ public class AppSettings
     // Metronome overlay settings
     public MetronomeSettings Metronome { get; set; } = new();
 
+    // External tool paths
+    /// <summary>Path to the Audiveris executable or batch file.</summary>
+    public string AudiverisPath { get; set; } = string.Empty;
+    /// <summary>Path to the MuseScore Studio executable.</summary>
+    public string MuseScorePath { get; set; } = string.Empty;
+
     #endregion
 
     /// <summary>
@@ -432,6 +438,10 @@ public class AppSettings
                     settings.MetaDataWindowMaximized = localSettings.MetaDataWindowMaximized;
                     if (localSettings.Metronome != null)
                         settings.Metronome = localSettings.Metronome;
+                    if (!string.IsNullOrEmpty(localSettings.AudiverisPath))
+                        settings.AudiverisPath = localSettings.AudiverisPath;
+                    if (!string.IsNullOrEmpty(localSettings.MuseScorePath))
+                        settings.MuseScorePath = localSettings.MuseScorePath;
                 }
             }
         }
@@ -550,7 +560,9 @@ public class AppSettings
                 MetaDataWindowTop = MetaDataWindowTop,
                 MetaDataWindowLeft = MetaDataWindowLeft,
                 MetaDataWindowMaximized = MetaDataWindowMaximized,
-                Metronome = Metronome
+                Metronome = Metronome,
+                AudiverisPath = AudiverisPath,
+                MuseScorePath = MuseScorePath
             };
 
             var json = JsonSerializer.Serialize(localSettings, JsonOptions);
@@ -743,8 +755,10 @@ public class AppSettings
         public double MetaDataWindowLeft { get; set; } = -1;
         public bool MetaDataWindowMaximized { get; set; } = true;
         public MetronomeSettings Metronome { get; set; } = new();
+        public string AudiverisPath { get; set; } = string.Empty;
+        public string MuseScorePath { get; set; } = string.Empty;
     }
-    
+
     /// <summary>
     /// Helper class for serializing only roaming settings
     /// </summary>

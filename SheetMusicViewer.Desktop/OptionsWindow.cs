@@ -3,7 +3,10 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using SheetMusicLib;
+using System;
+using System.Collections.Generic;
 
 namespace SheetMusicViewer.Desktop;
 
@@ -22,12 +25,14 @@ public class OptionsWindow : Window
     private NumericUpDown _nudRenderDpi = null!;
     private NumericUpDown _nudThumbnailWidth = null!;
     private NumericUpDown _nudThumbnailHeight = null!;
+    private TextBox _txtAudiverisPath = null!;
+    private TextBox _txtMuseScorePath = null!;
     
     public OptionsWindow()
     {
         Title = "Options";
-        Width = 500;
-        Height = 650;
+        Width = 560;
+        Height = 780;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         CanResize = true;
         MinWidth = 400;
@@ -166,6 +171,24 @@ public class OptionsWindow : Window
             "Height of thumbnail images in chooser",
             out _nudThumbnailHeight));
         
+        // === External Tools Section ===
+        optionsPanel.Children.Add(CreateSectionHeader("External Tools"));
+        optionsPanel.Children.Add(CreateHelpText("Used by Menu ► Open in MuseScore. Paths are saved per machine."));
+
+        optionsPanel.Children.Add(CreateToolPathOption(
+            "Audiveris:",
+            AppSettings.Instance.AudiverisPath,
+            "Path to the Audiveris batch file or executable (OMR engine)",
+            () => MuseScoreExportService.AutoDetectAudiveris(),
+            out _txtAudiverisPath));
+
+        optionsPanel.Children.Add(CreateToolPathOption(
+            "MuseScore:",
+            AppSettings.Instance.MuseScorePath,
+            "Path to the MuseScore Studio executable",
+            () => MuseScoreExportService.AutoDetectMuseScore(),
+            out _txtMuseScorePath));
+
         // === Button Panel ===
         var buttonPanel = new StackPanel
         {
@@ -231,12 +254,60 @@ public class OptionsWindow : Window
             FontSize = 11,
             Foreground = Brushes.Gray,
             TextWrapping = TextWrapping.Wrap,
-            MaxWidth = 400
+            MaxWidth = 460
         };
     }
-    
+
+    private Control CreateToolPathOption(
+        string label,
+        string currentValue,
+        string helpText,
+        Func<string?> autoDetect,
+        out TextBox textBoxOut)
+    {
+        var panel = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 8) };
+
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        row.Children.Add(new TextBlock { Text = label, Width = 80, VerticalAlignment = VerticalAlignment.Center });
+
+        var textBox = new TextBox { Text = currentValue, Width = 260 };
+        textBoxOut = textBox;
+        row.Children.Add(textBox);
+
+        var btnDetect = new Button { Content = "Auto-detect", Padding = new Thickness(6, 2) };
+        btnDetect.Click += (_, _) =>
+        {
+            var detected = autoDetect();
+            textBox.Text = detected ?? string.Empty;
+        };
+        row.Children.Add(btnDetect);
+
+        var btnBrowse = new Button { Content = "…", Width = 30, Padding = new Thickness(2) };
+        btnBrowse.Click += async (_, _) =>
+        {
+            var filters = new List<Avalonia.Platform.Storage.FilePickerFileType>
+            {
+                new Avalonia.Platform.Storage.FilePickerFileType("Executables") { Patterns = new[] { "*.exe", "*.bat", "*.sh" } },
+                new Avalonia.Platform.Storage.FilePickerFileType("All files") { Patterns = new[] { "*.*" } }
+            };
+            var result = await StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+            {
+                Title = $"Locate {label.TrimEnd(':')}",
+                AllowMultiple = false,
+                FileTypeFilter = filters
+            });
+            if (result.Count > 0)
+                textBox.Text = result[0].Path.LocalPath;
+        };
+        row.Children.Add(btnBrowse);
+
+        panel.Children.Add(row);
+        panel.Children.Add(CreateHelpText(helpText));
+        return panel;
+    }
+
     private static Control CreateNumericOption(
-        string label, 
+        string label,
         double value, 
         double min, 
         double max, 
@@ -284,6 +355,7 @@ public class OptionsWindow : Window
         _nudRenderDpi.Value = defaults.RenderDpi;
         _nudThumbnailWidth.Value = defaults.ThumbnailWidth;
         _nudThumbnailHeight.Value = defaults.ThumbnailHeight;
+        // Note: External tool paths are not reset to defaults (they are machine-specific)
     }
     
     private void SaveSettings()
@@ -300,7 +372,11 @@ public class OptionsWindow : Window
         settings.RenderDpi = (int)(_nudRenderDpi.Value ?? defaults.RenderDpi);
         settings.ThumbnailWidth = (int)(_nudThumbnailWidth.Value ?? defaults.ThumbnailWidth);
         settings.ThumbnailHeight = (int)(_nudThumbnailHeight.Value ?? defaults.ThumbnailHeight);
-        
+
+        // External tool paths (local/machine settings)
+        AppSettings.Instance.AudiverisPath = _txtAudiverisPath.Text?.Trim() ?? string.Empty;
+        AppSettings.Instance.MuseScorePath = _txtMuseScorePath.Text?.Trim() ?? string.Empty;
+
         AppSettings.Instance.Save();
     }
 }
