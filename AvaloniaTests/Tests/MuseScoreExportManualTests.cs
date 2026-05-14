@@ -41,10 +41,10 @@ public class MuseScoreExportManualTests : TestBase
 
         var museScorePath = MuseScoreExportService.AutoDetectMuseScore();
 
-        TestContext.WriteLine("=== MuseScore Export Manual Test: PatriciaRag ===");
-        TestContext.WriteLine($"Source PDF     : {PatriciaRagPdf}");
-        TestContext.WriteLine($"Audiveris      : {audiverisPath}");
-        TestContext.WriteLine($"MuseScore      : {museScorePath ?? "(not found – launch skipped)"}");
+        LogMessage("=== MuseScore Export Manual Test: PatriciaRag ===");
+        LogMessage($"Source PDF     : {PatriciaRagPdf}");
+        LogMessage($"Audiveris      : {audiverisPath}");
+        LogMessage($"MuseScore      : {museScorePath ?? "(not found – launch skipped)"}");
 
         // ── Temp directory (same as production code) ──────────────────────────
         var outputDir = Path.Combine(Path.GetTempPath(), "SheetMusicViewer_Audiveris");
@@ -52,9 +52,9 @@ public class MuseScoreExportManualTests : TestBase
         var omrFile   = Path.Combine(outputDir, baseName + ".omr");
         var mxlFile   = Path.Combine(outputDir, baseName + ".mxl");
 
-        TestContext.WriteLine($"\nTemp output dir: {outputDir}");
-        TestContext.WriteLine($"Expected .omr  : {omrFile}");
-        TestContext.WriteLine($"Expected .mxl  : {mxlFile}");
+        LogMessage($"\nTemp output dir: {outputDir}");
+        LogMessage($"Expected .omr  : {omrFile}");
+        LogMessage($"Expected .mxl  : {mxlFile}");
 
         // Delete stale artifacts so the run is fresh
         foreach (var stale in new[] { omrFile, mxlFile })
@@ -62,7 +62,7 @@ public class MuseScoreExportManualTests : TestBase
             if (File.Exists(stale))
             {
                 File.Delete(stale);
-                TestContext.WriteLine($"Deleted stale  : {stale}");
+                LogMessage($"Deleted stale  : {stale}");
             }
         }
 
@@ -71,10 +71,10 @@ public class MuseScoreExportManualTests : TestBase
         var progress = new Progress<string>(msg =>
         {
             log.Add(msg);
-            TestContext.WriteLine($"  [progress] {msg}");
+            LogMessage($"  [progress] {msg}");
         });
 
-        TestContext.WriteLine("\n--- Starting Audiveris pipeline ---");
+        LogMessage("\n--- Starting Audiveris pipeline ---");
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
         string mxlResult;
@@ -83,35 +83,35 @@ public class MuseScoreExportManualTests : TestBase
             mxlResult = await MuseScoreExportService.RunAudiverisAsync(
                 audiverisPath!,
                 PatriciaRagPdf,
-                startPage: 0,   // process all pages
-                endPage:   0,
+                startPage: 3,   // process all pages
+                endPage:   3,
                 progress:  progress,
                 ct:        CancellationToken.None);
         }
         catch (Exception ex)
         {
-            TestContext.WriteLine($"\n[EXCEPTION] {ex}");
+            LogMessage($"\n[EXCEPTION] {ex}");
             Assert.Fail($"RunAudiverisAsync threw: {ex.Message}");
             return;
         }
 
         sw.Stop();
-        TestContext.WriteLine($"--- Pipeline finished in {sw.Elapsed.TotalSeconds:F1}s ---");
+        LogMessage($"--- Pipeline finished in {sw.Elapsed.TotalSeconds:F1}s ---");
 
         // ── Report intermediate artifacts ──────────────────────────────────────
-        TestContext.WriteLine("\n=== Intermediate / output files ===");
+        LogMessage("\n=== Intermediate / output files ===");
         ReportFile(omrFile,    ".omr (Audiveris book)");
         ReportFile(mxlFile,    ".mxl (MusicXML result)");
         ReportFile(mxlResult,  "returned mxl path");
 
         // Also list all files in the output dir for easy inspection
-        TestContext.WriteLine($"\nAll files in {outputDir}:");
+        LogMessage($"\nAll files in {outputDir}:");
         if (Directory.Exists(outputDir))
         {
             foreach (var f in Directory.GetFiles(outputDir, "*", SearchOption.AllDirectories))
             {
                 var info = new FileInfo(f);
-                TestContext.WriteLine($"  {info.Length,10:N0} bytes  {f}");
+                LogMessage($"  {info.Length,10:N0} bytes  {f}");
             }
         }
 
@@ -121,11 +121,12 @@ public class MuseScoreExportManualTests : TestBase
         Assert.IsTrue(new FileInfo(mxlResult).Length > 0,
             $"MusicXML output file is empty: {mxlResult}");
 
-        TestContext.WriteLine($"\n✓ MusicXML produced: {mxlResult}");
-        TestContext.WriteLine($"  Size: {new FileInfo(mxlResult).Length:N0} bytes");
+        LogMessage($"\n✓ MusicXML produced: {mxlResult}");
+        LogMessage($"  Size: {new FileInfo(mxlResult).Length:N0} bytes");
 
         if (museScorePath is not null)
-            TestContext.WriteLine($"\nTo open in MuseScore run:\n  \"{museScorePath}\" \"{mxlResult}\"");
+            LogMessage($"\nTo open in MuseScore run:\n  \"{museScorePath}\" \"{mxlResult}\"");
+        MuseScoreExportService.LaunchMuseScore(museScorePath ?? string.Empty, mxlResult);
     }
 
     private void ReportFile(string path, string label)
@@ -133,11 +134,11 @@ public class MuseScoreExportManualTests : TestBase
         if (File.Exists(path))
         {
             var info = new FileInfo(path);
-            TestContext.WriteLine($"  {label,-30} {info.Length,10:N0} bytes  {path}");
+            LogMessage($"  {label,-30} {info.Length,10:N0} bytes  {path}");
         }
         else
         {
-            TestContext.WriteLine($"  {label,-30} (not found) {path}");
+            LogMessage($"  {label,-30} (not found) {path}");
         }
     }
 }

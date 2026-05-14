@@ -231,11 +231,31 @@ public static class MuseScoreExportService
         // Exit code is ignored: Audiveris still exits 1 on rhythm warnings even when
         // export succeeds; we check for the actual output file ourselves.
         progress?.Report("Pass 2: Running PAGE step and exporting MusicXML…");
-        var validSheetsArg = (validSheetNumbers.Count > 0 && validSheetNumbers.Count < totalOmrSheets)
-            ? string.Join(",", validSheetNumbers)
-            : null;
+
+        // When a page range was given, only those sheets were transcribed in pass 1.
+        // Always restrict pass 2 to that same range so Audiveris does not try to
+        // process un-transcribed sheets (e.g. a title page) that will be flagged
+        // invalid and cause the export run to abort.
+        IEnumerable<int> exportSheets;
+        if (hasRange)
+        {
+            // Intersect the requested range with the sheets that were actually valid.
+            var rangeSet = Enumerable.Range(startPage, endPage - startPage + 1).ToHashSet();
+            exportSheets = validSheetNumbers.Count > 0
+                ? validSheetNumbers.Where(n => rangeSet.Contains(n))
+                : rangeSet.Order();
+        }
+        else
+        {
+            exportSheets = (validSheetNumbers.Count > 0 && validSheetNumbers.Count < totalOmrSheets)
+                ? validSheetNumbers
+                : Enumerable.Empty<int>();
+        }
+
+        var exportList = exportSheets.ToList();
+        var validSheetsArg = exportList.Count > 0 ? string.Join(",", exportList) : null;
         if (validSheetsArg != null)
-            progress?.Report($"  Skipping invalid sheets — exporting only sheets: {validSheetsArg}");
+            progress?.Report($"  Exporting sheets: {validSheetsArg}");
 
         await RunAudiverisProcessAsync(audiverisPath, args =>
         {
