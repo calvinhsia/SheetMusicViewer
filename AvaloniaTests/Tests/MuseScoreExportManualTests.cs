@@ -1,36 +1,76 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SheetMusicLib;
 using SheetMusicViewer.Desktop;
 using System;
-using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace AvaloniaTests.Tests;
 
 /// <summary>
-/// Manual end-to-end test for the MuseScore export pipeline.
-/// Exercises Audiveris OMR conversion and MuseScore launch on a real PDF.
-/// Run manually: dotnet test --filter "TestCategory=Manual&amp;MethodName=ExportPdfToMuseScore"
+/// Manual end-to-end tests for the MuseScore export pipeline.
+/// Run manually: dotnet test --filter "TestCategory=Manual"
 /// </summary>
 [TestClass]
 [TestCategory("Manual")]
 public class MuseScoreExportManualTests : TestBase
 {
-    private const string inputPdf =
-        @"C:\Users\Calvi\OneDrive\SheetMusic\Pop\Frank Bjorn Alley Cat1.pdf";  // 1-page title only — no music
-                                                                              //@"C:\Users\Calvi\OneDrive\SheetMusic\Ragtime\Collections\PatriciaRag.pdf";
+    // ── Test entry points ────────────────────────────────────────────────────
+
+    /// <summary>Single-volume PDF: PatriciaRag (one file, multiple pages).</summary>
+    [TestMethod]
+    public async Task ExportSingleVolume()
+    {
+        const string pdf = @"C:\Users\Calvi\OneDrive\SheetMusic\Ragtime\Collections\PatriciaRag.pdf";
+        await RunExportPipelineAsync(pdf, bookStart: 0, bookEnd: 0);
+    }
+
+    /// <summary>Multi-volume PDF: Alley Cat (base file + numbered siblings, combined via Ghostscript).</summary>
+    [TestMethod]
+    public async Task ExportMultiVolume_AlleyCat()
+    {
+        const string pdf = @"C:\Users\Calvi\OneDrive\SheetMusic\Pop\Frank Bjorn Alley Cat.pdf";
+        await RunExportPipelineAsync(pdf, bookStart: 0, bookEnd: 0);
+    }
 
     /// <summary>
-    /// Runs the full Audiveris → MusicXML pipeline on the specified PDF (all pages),
-    /// prints the paths of every intermediate temp file to the test output,
-    /// and verifies that a non-empty .mxl file was produced.
-    /// MuseScore is NOT launched automatically so the test remains headless.
+    /// Multi-volume, rotated PDF: "Something Doing" from Scott Joplin Complete Piano Works.
+    /// TOC display page 251 with pageNumberOffset=-45 → bookStart = 251-(-45)+1 = 297.
+    /// The song ends before "Lily Queen" at display page 257 → bookEnd = 257-(-45) = 301.
+    /// All three volumes have rotation=2 (180° / upside-down), handled by Ghostscript.
     /// </summary>
     [TestMethod]
-    public async Task ExportPdfToMuseScore()
+    public async Task ExportMultiVolume_ScottJoplin_SomethingDoing()
     {
-        // ── Prerequisites ─────────────────────────────────────────────────────
+        // The JSON file is "Scott Joplin Complete Piano Works1.json" and the base PDF
+        // is "Scott Joplin Complete Piano Works1.pdf".  Volumes: ...1.pdf, ...2.pdf, ...3.pdf.
+        const string pdf = @"C:\Users\Calvi\OneDrive\SheetMusic\Ragtime\Collections\Scott Joplin Complete Piano Works1.pdf";
+
+        // Rotation from JSON: all three volumes have "rotation": 2 (180 degrees).
+        const int rotation = 2;
+
+        // Page range for "Something Doing" (TOC pageNo=251, pageNumberOffset=-45):
+        //   bookStart = 251 - (-45) + 1 = 297
+        //   bookEnd   = 257 - (-45)     = 302  (one sheet before "Lily Queen" at display 257)
+        // The user specified pp. 251-255 (display), i.e. physical 297-301.
+        const int bookStart = 297;
+        const int bookEnd   = 301;
+
+        await RunExportPipelineAsync(pdf, bookStart, bookEnd, rotation);
+    }
+
+    // ── Shared pipeline ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Builds metadata for <paramref name="inputPdf"/>, auto-detecting sibling volume
+    /// files by counting numeric suffixes (1, 2, 3 ...) until one is not found on disk.
+    /// Then runs the full Audiveris to MusicXML pipeline and launches MuseScore.
+    /// </summary>
+    private async Task RunExportPipelineAsync(string inputPdf, int bookStart, int bookEnd, int rotation = 0)
+    {
+        // Prerequisites
         if (!File.Exists(inputPdf))
             Assert.Inconclusive($"Source PDF not found: {inputPdf}");
 
@@ -42,22 +82,60 @@ public class MuseScoreExportManualTests : TestBase
 
         var museScorePath = MuseScoreExportService.AutoDetectMuseScore();
 
-        LogMessage("=== MuseScore Export Manual Test: PDF Export ===");
+        LogMessage($"=== MuseScore Export Manual Test: {Path.GetFileNameWithoutExtension(inputPdf)} ===");
         LogMessage($"Source PDF     : {inputPdf}");
         LogMessage($"Audiveris      : {audiverisPath}");
-        LogMessage($"MuseScore      : {museScorePath ?? "(not found – launch skipped)"}");
+        LogMessage($"MuseScore      : {museScorePath ?? "(not found - launch skipped)"}");
 
-        // ── Temp directory (same as production code) ──────────────────────────
+        // Build volume metadata.
+        // Naming convention: BaseName.pdf, BaseName1.pdf, BaseName2.pdf, ...
+        // vol 0 is always the base file; then increment suffix until no file found.
+        var pdfMeta = new PdfMetaDataReadResult
+        {
+            FullPathFile    = inputPdf,
+            IsSinglesFolder = false,
+        };
+
+        var dir  = Path.GetDirectoryName(inputPdf)!;
+        var stem = Path.GetFileNameWithoutExtension(inputPdf);
+
+        // vol 0 - base file
+        pdfMeta.VolumeInfoList.Add(new PdfVolumeInfoBase
+        {
+            FileNameVolume     = Path.GetFileName(inputPdf),
+            NPagesInThisVolume = 0,
+            Rotation           = rotation
+        });
+
+        // vol 1, 2, 3 ... - numbered siblings
+        for (int suffix = 1; ; suffix++)
+        {
+            var candidate = stem + suffix + ".pdf";
+            if (!File.Exists(Path.Combine(dir, candidate)))
+                break;
+            pdfMeta.VolumeInfoList.Add(new PdfVolumeInfoBase
+            {
+                FileNameVolume     = candidate,
+                NPagesInThisVolume = 0,
+                Rotation           = rotation
+            });
+        }
+
+        LogMessage($"Volumes        : {pdfMeta.VolumeInfoList.Count} ({string.Join(", ", pdfMeta.VolumeInfoList.Select(v => v.FileNameVolume))})");
+        LogMessage($"Rotation       : {rotation} ({rotation * 90} degrees)");
+        var rangeDesc = (bookStart == 0 && bookEnd == 0) ? "all pages" : $"book pages {bookStart}–{bookEnd}";
+        LogMessage($"Page range     : {rangeDesc}");
+
+        // Temp directory
         var outputDir = Path.Combine(Path.GetTempPath(), "SheetMusicViewer_Audiveris");
-        var baseName = Path.GetFileNameWithoutExtension(inputPdf);
-        var omrFile = Path.Combine(outputDir, baseName + ".omr");
-        var mxlFile = Path.Combine(outputDir, baseName + ".mxl");
+        var baseName  = Path.GetFileNameWithoutExtension(inputPdf);
+        var omrFile   = Path.Combine(outputDir, baseName + ".omr");
+        var mxlFile   = Path.Combine(outputDir, baseName + ".mxl");
 
         LogMessage($"\nTemp output dir: {outputDir}");
         LogMessage($"Expected .omr  : {omrFile}");
         LogMessage($"Expected .mxl  : {mxlFile}");
 
-        // Delete stale artifacts so the run is fresh
         foreach (var stale in new[] { omrFile, mxlFile })
         {
             if (File.Exists(stale))
@@ -67,13 +145,8 @@ public class MuseScoreExportManualTests : TestBase
             }
         }
 
-        // ── Run the pipeline ──────────────────────────────────────────────────
-        var log = new List<string>();
-        var progress = new Progress<string>(msg =>
-        {
-            log.Add(msg);
-            LogMessage($"  [progress] {msg}");
-        });
+        // Run the pipeline
+        var progress = new Progress<string>(msg => LogMessage($"  [progress] {msg}"));
 
         LogMessage("\n--- Starting Audiveris pipeline ---");
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -83,11 +156,11 @@ public class MuseScoreExportManualTests : TestBase
         {
             mxlResult = await MuseScoreExportService.RunAudiverisAsync(
                 audiverisPath!,
-                inputPdf,
-                startPage: 0,   // process all pages
-                endPage: 0,     // process all pages
-                progress: progress,
-                ct: CancellationToken.None);
+                pdfMeta,
+                bookStart: bookStart,
+                bookEnd:   bookEnd,
+                progress:  progress,
+                ct:        CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -99,13 +172,12 @@ public class MuseScoreExportManualTests : TestBase
         sw.Stop();
         LogMessage($"--- Pipeline finished in {sw.Elapsed.TotalSeconds:F1}s ---");
 
-        // ── Report intermediate artifacts ──────────────────────────────────────
+        // Report artifacts
         LogMessage("\n=== Intermediate / output files ===");
-        ReportFile(omrFile, ".omr (Audiveris book)");
-        ReportFile(mxlFile, ".mxl (MusicXML result)");
+        ReportFile(omrFile,   ".omr (Audiveris book)");
+        ReportFile(mxlFile,   ".mxl (MusicXML result)");
         ReportFile(mxlResult, "returned mxl path");
 
-        // Also list all files in the output dir for easy inspection
         LogMessage($"\nAll files in {outputDir}:");
         if (Directory.Exists(outputDir))
         {
@@ -116,20 +188,23 @@ public class MuseScoreExportManualTests : TestBase
             }
         }
 
-        // ── Assertions ────────────────────────────────────────────────────────
+        // Assertions
         Assert.IsTrue(File.Exists(mxlResult),
             $"MusicXML output file not found: {mxlResult}");
         Assert.IsTrue(new FileInfo(mxlResult).Length > 0,
             $"MusicXML output file is empty: {mxlResult}");
 
-        LogMessage($"\n✓ MusicXML produced: {mxlResult}");
+        LogMessage($"\nMusicXML produced: {mxlResult}");
         LogMessage($"  Size: {new FileInfo(mxlResult).Length:N0} bytes");
 
         if (museScorePath is not null)
             LogMessage($"\nTo open in MuseScore run:\n  \"{museScorePath}\" \"{mxlResult}\"");
+
         MuseScoreExportService.SetTempoInMusicXml(mxlResult, bpm: 90, progress: progress);
         MuseScoreExportService.LaunchMuseScore(museScorePath ?? string.Empty, mxlResult);
     }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
 
     private void ReportFile(string path, string label)
     {

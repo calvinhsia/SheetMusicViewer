@@ -211,13 +211,151 @@ public static class MuseScoreExportService
     }
 
     /// <summary>
+    /// A segment of pages within a single volume PDF.
+    /// </summary>
+    /// <summary>
+    /// PortableRotation value from the JSON metadata (0=normal, 1=90°CW, 2=180°, 3=270°CW).
+    /// Passed to Ghostscript so upside-down books (e.g. Scott Joplin) are rotated before OMR.
+    /// </summary>
+    public record VolumeSegment(string PdfPath, int LocalStart, int LocalEnd, int Rotation = 0);
+
+    /// <summary>
+    /// Maps a book-page range (1-based, across all volumes) to a list of per-volume
+    /// segments, each carrying the PDF path and the 1-based sheet range within that PDF.
+    /// bookStart/bookEnd are 1-based page numbers in the full set (1 = first page of vol 0).
+    /// Pass bookStart=0/bookEnd=0 to include all pages of all volumes.
+    /// </summary>
+    public static List<VolumeSegment> ResolveVolumeSegments(
+        PdfMetaDataReadResult meta,
+        int bookStart,  // 1-based in the full set, or 0 for "all"
+        int bookEnd)    // 1-based inclusive in the full set, or 0 for "all"
+    {
+        var volumes = meta.VolumeInfoList;
+
+        // When page counts are unknown (NPagesInThisVolume==0) or "all" requested,
+        // emit each volume as a full-volume segment (localStart=0, localEnd=0).
+        bool allPages = bookStart <= 0 || bookEnd <= 0;
+        bool unknownPageCounts = volumes.All(v => v.NPagesInThisVolume == 0);
+
+        if (allPages || unknownPageCounts)
+        {
+            return volumes.Select((v, i) =>
+                new VolumeSegment(meta.GetFullPathFileFromVolno(i), 0, 0, v.Rotation)).ToList();
+        }
+
+        var segments = new List<VolumeSegment>();
+        int offset = 0;  // cumulative page count before current volume (0-based)
+
+        for (int v = 0; v < volumes.Count; v++)
+        {
+            int volPages = volumes[v].NPagesInThisVolume;
+            // 1-based range of this volume in book-page space
+            int volBookStart = offset + 1;
+            int volBookEnd   = offset + volPages;
+
+            // Intersection with requested range
+            int intersectStart = Math.Max(bookStart, volBookStart);
+            int intersectEnd   = Math.Min(bookEnd,   volBookEnd);
+
+            if (intersectStart <= intersectEnd)
+            {
+                // Convert to 1-based local sheet numbers within this volume's PDF.
+                // Use 0/0 when the whole volume is covered (lets Audiveris skip -sheets).
+                int localStart = intersectStart - offset;
+                int localEnd   = intersectEnd   - offset;
+                if (localStart == 1 && localEnd == volPages) { localStart = 0; localEnd = 0; }
+                var pdfPath = meta.GetFullPathFileFromVolno(v);
+                segments.Add(new VolumeSegment(pdfPath, localStart, localEnd, volumes[v].Rotation));
+            }
+
+            offset += volPages;
+        }
+
+        return segments;
+    }
+
+    /// <summary>
     /// Runs Audiveris on the given PDF and returns the output MXL/XML file path.
     /// Strategy:
     ///   Pass 1 — batch transcribe (no -export); always writes .omr, exit code ignored.
     ///   Patch  — edit book.xml inside the .omr ZIP to set valid="true" on all SheetStub
     ///            elements, overriding the rhythm-warning block that prevents export.
     ///   Pass 2 — batch export the patched .omr; this skips re-transcription and exports cleanly.
-    /// startPage/endPage: 1-based inclusive; pass 0 for both to process all pages.
+    /// bookStart/bookEnd: 1-based page numbers in the full multi-volume set; pass 0/0 for all pages.
+    /// </summary>
+    public static async Task<string> RunAudiverisAsync(
+        string audiverisPath,
+        PdfMetaDataReadResult pdfMetaData,
+        int bookStart = 0,
+        int bookEnd = 0,
+        IProgress<string>? progress = null,
+        CancellationToken ct = default)
+    {
+        var segments = ResolveVolumeSegments(pdfMetaData, bookStart, bookEnd);
+
+        if (segments.Count == 0)
+            throw new InvalidOperationException(
+                "The requested page range does not overlap any volume in this book.");
+
+        if (segments.Count == 1)
+        {
+            var s = segments[0];
+            return await RunAudiverisAsync(audiverisPath, s.PdfPath, s.LocalStart, s.LocalEnd, progress, ct, s.Rotation);
+        }
+
+        // Multiple volumes — use Ghostscript to concatenate all volume PDFs (or page slices)
+        // into a single multi-page TIFF, then run one Audiveris pass on that combined file.
+        // This avoids having to merge MusicXML files later and gives Audiveris a clean
+        // continuous image sequence covering the full requested range.
+        var gsPath = AppSettings.Instance.GhostscriptPath;
+        if (string.IsNullOrWhiteSpace(gsPath))
+            gsPath = AutoDetectGhostscript();
+
+        if (!string.IsNullOrWhiteSpace(gsPath) && File.Exists(gsPath))
+        {
+            progress?.Report($"Range spans {segments.Count} volumes — combining with Ghostscript into a single TIFF…");
+            var outputDir = Path.Combine(Path.GetTempPath(), "SheetMusicViewer_Audiveris");
+            Directory.CreateDirectory(outputDir);
+
+            // Build a combined name from the base of the first and last PDF
+            var firstName = Path.GetFileNameWithoutExtension(segments[0].PdfPath);
+            var lastName  = Path.GetFileNameWithoutExtension(segments[^1].PdfPath);
+            var combinedBaseName = firstName == lastName ? firstName : $"{firstName}_to_{lastName}";
+            var combinedTiff = Path.Combine(outputDir, combinedBaseName + "_combined.tif");
+
+            var combined = await CombineVolumesWithGhostscriptAsync(
+                gsPath, segments, combinedTiff, outputDir, progress, ct);
+
+            // Run one Audiveris pass on the combined TIFF (all pages = 0,0)
+            return await RunAudiverisAsync(audiverisPath, combined, 0, 0, progress, ct);
+        }
+
+        // GS not available — fall back to processing each volume separately and warn.
+        progress?.Report($"⚠ Ghostscript not found — processing {segments.Count} volumes separately. " +
+                         "Install Ghostscript for seamless multi-volume export.");
+        var results = new List<string>();
+        for (int i = 0; i < segments.Count; i++)
+        {
+            var s = segments[i];
+            progress?.Report($"Volume {i + 1}/{segments.Count}: {Path.GetFileName(s.PdfPath)} sheets {s.LocalStart}–{s.LocalEnd}");
+            var mxl = await RunAudiverisAsync(audiverisPath, s.PdfPath, s.LocalStart, s.LocalEnd, progress, ct);
+            results.Add(mxl);
+        }
+
+        if (results.Count > 1)
+            progress?.Report($"⚠ {results.Count} MusicXML files produced (one per volume). Opening volume 1; remaining files are in the same temp folder.");
+
+        return results[0];
+    }
+
+    /// <summary>
+    /// Runs Audiveris on the given PDF and returns the output MXL/XML file path.
+    /// Strategy:
+    ///   Pass 1 — batch transcribe (no -export); always writes .omr, exit code ignored.
+    ///   Patch  — edit book.xml inside the .omr ZIP to set valid="true" on all SheetStub
+    ///            elements, overriding the rhythm-warning block that prevents export.
+    ///   Pass 2 — batch export the patched .omr; this skips re-transcription and exports cleanly.
+    /// startPage/endPage: 1-based inclusive within the single PDF; pass 0 for both to process all pages.
     /// </summary>
     public static async Task<string> RunAudiverisAsync(
         string audiverisPath,
@@ -225,7 +363,8 @@ public static class MuseScoreExportService
         int startPage = 0,
         int endPage = 0,
         IProgress<string>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        int rotation = 0)
     {
         if (!File.Exists(audiverisPath))
             throw new FileNotFoundException($"Audiveris not found at: {audiverisPath}");
@@ -245,24 +384,19 @@ public static class MuseScoreExportService
         bool hasRange = startPage > 0 && endPage > 0;
         var rangeLabel = hasRange ? $" (sheets {startPage}–{endPage})" : "";
 
-        // ── Optional: normalise the PDF with Ghostscript ──────────────────────
-        // Some PDFs use non-standard page trees that cause Audiveris (via PDFBox)
-        // to see only 1 page.  Ghostscript re-renders them so every page is visible.
+        // ── Optional: rasterize the PDF with Ghostscript ─────────────────────
+        // When enabled, Ghostscript rasterizes the PDF to a TIFF at 300 DPI, completely
+        // bypassing Audiveris's PDFBox reader. This fixes PDFs with non-standard page
+        // trees that PDFBox expands to only 1 page.
         var gsPath = AppSettings.Instance.GhostscriptPath;
         if (string.IsNullOrWhiteSpace(gsPath))
             gsPath = AutoDetectGhostscript();
-        var allowGhostscript = false;
-        if (allowGhostscript && !string.IsNullOrWhiteSpace(gsPath) && File.Exists(gsPath))
+        if (AppSettings.Instance.UseGhostscript && !string.IsNullOrWhiteSpace(gsPath) && File.Exists(gsPath))
         {
-            pdfPath = await NormalisePdfWithGhostscriptAsync(gsPath, pdfPath, outputDir, progress, ct);
-            // Re-derive baseName and omrFile from the (possibly renamed) normalised PDF.
+            pdfPath = await NormalisePdfWithGhostscriptAsync(gsPath, pdfPath, outputDir, progress, ct, rotation);
+            // Re-derive baseName and omrFile from the (possibly renamed) normalised file.
             baseName = Path.GetFileNameWithoutExtension(pdfPath);
             omrFile  = Path.Combine(outputDir, baseName + ".omr");
-        }
-        else
-        {
-            progress?.Report("⚠ Ghostscript not found — skipping PDF normalisation. " +
-                             "If Audiveris sees fewer pages than expected, install Ghostscript.");
         }
 
         // ── Pass 1: transcribe through PAGE step → .omr ────────────────────────
@@ -564,6 +698,156 @@ public static class MuseScoreExportService
     }
 
     /// <summary>
+    /// Uses Ghostscript to concatenate the page slices from multiple volume PDFs into a
+    /// single multi-page TIFF.  Each segment's LocalStart/LocalEnd selects which pages
+    /// are taken from that PDF (0/0 = all pages of that PDF).
+    /// Returns the path to the combined TIFF (or the first PDF path on failure).
+    /// </summary>
+    private static async Task<string> CombineVolumesWithGhostscriptAsync(
+        string gsPath,
+        IReadOnlyList<VolumeSegment> segments,
+        string outputTiff,
+        string outputDir,
+        IProgress<string>? progress,
+        CancellationToken ct)
+    {
+        // For segments that are partial (LocalStart > 0), we first extract just those
+        // pages to a temp PDF using GS pdfwrite, then feed that temp PDF into the
+        // final tiffgray run.  Full-volume segments (0/0) are fed directly.
+        // Track (filePath, rotation) so per-volume orientation can be applied.
+        var inputFiles = new List<(string Path, int Rotation)>();
+
+        for (int i = 0; i < segments.Count; i++)
+        {
+            var seg = segments[i];
+            bool isFullVolume = seg.LocalStart == 0 && seg.LocalEnd == 0;
+
+            if (isFullVolume)
+            {
+                inputFiles.Add((seg.PdfPath, seg.Rotation));
+            }
+            else
+            {
+                // Extract the requested page range from this volume to a temp PDF
+                var sliceName = $"{Path.GetFileNameWithoutExtension(seg.PdfPath)}_p{seg.LocalStart}-{seg.LocalEnd}.pdf";
+                var slicePath = Path.Combine(outputDir, sliceName);
+
+                progress?.Report($"  Extracting pages {seg.LocalStart}–{seg.LocalEnd} from {Path.GetFileName(seg.PdfPath)}…");
+
+                var psiSlice = new ProcessStartInfo
+                {
+                    FileName = gsPath,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError  = true,
+                    UseShellExecute  = false,
+                    CreateNoWindow   = true
+                };
+                psiSlice.ArgumentList.Add("-dBATCH");
+                psiSlice.ArgumentList.Add("-dNOPAUSE");
+                psiSlice.ArgumentList.Add("-dSAFER");
+                psiSlice.ArgumentList.Add("-sDEVICE=pdfwrite");
+                psiSlice.ArgumentList.Add($"-dFirstPage={seg.LocalStart}");
+                psiSlice.ArgumentList.Add($"-dLastPage={seg.LocalEnd}");
+                psiSlice.ArgumentList.Add($"-sOutputFile={slicePath}");
+                psiSlice.ArgumentList.Add(seg.PdfPath);
+
+                using var sliceProc = new Process { StartInfo = psiSlice };
+                sliceProc.Start();
+                sliceProc.BeginOutputReadLine();
+                sliceProc.BeginErrorReadLine();
+                await Task.Run(() => { while (!sliceProc.WaitForExit(200)) ct.ThrowIfCancellationRequested(); }, ct);
+
+                inputFiles.Add((File.Exists(slicePath) ? slicePath : seg.PdfPath, seg.Rotation));
+            }
+        }
+
+        // Now rasterize all input PDFs in order into one multi-page TIFF.
+        // If all volumes share the same rotation we set it once; otherwise we inject
+        // a per-file PostScript orientation snippet between each input.
+        bool uniformRotation = inputFiles.All(f => f.Rotation == inputFiles[0].Rotation);
+        int commonRotation   = inputFiles[0].Rotation;
+
+        progress?.Report($"Combining {inputFiles.Count} PDF(s) into a single 300 DPI TIFF for Audiveris…");
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = gsPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError  = true,
+            UseShellExecute  = false,
+            CreateNoWindow   = true
+        };
+        psi.ArgumentList.Add("-dBATCH");
+        psi.ArgumentList.Add("-dNOPAUSE");
+        psi.ArgumentList.Add("-dSAFER");
+        psi.ArgumentList.Add("-sDEVICE=tiffgray");
+        psi.ArgumentList.Add("-r300");
+        psi.ArgumentList.Add("-dCompressPages=true");
+        psi.ArgumentList.Add("-dAutoRotatePages=/None");
+        psi.ArgumentList.Add($"-sOutputFile={outputTiff}");
+        if (uniformRotation && commonRotation != 0)
+        {
+            // Apply once before all input files
+            psi.ArgumentList.Add("-c");
+            psi.ArgumentList.Add($"<</Orientation {commonRotation}>> setpagedevice");
+            psi.ArgumentList.Add("-f");
+            foreach (var (f, _) in inputFiles)
+                psi.ArgumentList.Add(f);
+        }
+        else if (uniformRotation)
+        {
+            foreach (var (f, _) in inputFiles)
+                psi.ArgumentList.Add(f);
+        }
+        else
+        {
+            // Mixed rotations: interleave per-file orientation snippets
+            foreach (var (f, rot) in inputFiles)
+            {
+                if (rot != 0)
+                {
+                    psi.ArgumentList.Add("-c");
+                    psi.ArgumentList.Add($"<</Orientation {rot}>> setpagedevice");
+                    psi.ArgumentList.Add("-f");
+                }
+                psi.ArgumentList.Add(f);
+            }
+        }
+
+        Logger.LogInfo($"Ghostscript combine: {string.Join(" + ", inputFiles.Select(f => Path.GetFileName(f.Path)))} -> {Path.GetFileName(outputTiff)}");
+
+        using var proc = new Process { StartInfo = psi };
+        var errLines = new System.Text.StringBuilder();
+        proc.ErrorDataReceived += (_, e) => { if (e.Data != null) errLines.AppendLine(e.Data); };
+        proc.OutputDataReceived += (_, e) =>
+        {
+            if (e.Data != null)
+            {
+                Logger.LogInfo($"[GS] {e.Data}");
+                if (e.Data.Contains("Processing pages") || e.Data.Contains("Page "))
+                    progress?.Report(e.Data.Trim());
+            }
+        };
+
+        proc.Start();
+        proc.BeginOutputReadLine();
+        proc.BeginErrorReadLine();
+
+        await Task.Run(() => { while (!proc.WaitForExit(200)) ct.ThrowIfCancellationRequested(); }, ct);
+
+        if (proc.ExitCode != 0 || !File.Exists(outputTiff))
+        {
+            progress?.Report($"⚠ Ghostscript combine failed (exit {proc.ExitCode}) — falling back to first volume only.");
+            Logger.LogInfo($"[GS] stderr: {errLines}");
+            return segments[0].PdfPath;
+        }
+
+        var kb = new FileInfo(outputTiff).Length / 1024;
+        progress?.Report($"Combined TIFF: {kb:N0} KB  ({inputFiles.Count} volume(s), {Path.GetFileName(outputTiff)})");
+        return outputTiff;
+    }
+
+    /// <summary>
     /// Uses Ghostscript to rasterize the PDF into a high-resolution multi-page TIFF.
     /// This bypasses Audiveris's PDFBox layer entirely, giving it clean bitmap pixels
     /// to detect staff lines from, and also avoids non-standard PDF page-tree issues.
@@ -574,13 +858,19 @@ public static class MuseScoreExportService
         string pdfPath,
         string outputDir,
         IProgress<string>? progress,
-        CancellationToken ct)
+        CancellationToken ct,
+        int rotation = 0)
     {
         var baseName = Path.GetFileNameWithoutExtension(pdfPath);
         // Produce a multi-page TIFF that Audiveris can load as an image-based book.
         var normalisedPath = Path.Combine(outputDir, baseName + "_gs.tif");
 
-        progress?.Report("Rasterizing PDF with Ghostscript (300 DPI) for better staff detection\u2026");
+        // rotation: 0=normal, 1=90°CW, 2=180°, 3=270°CW (matches PortableRotation enum)
+        // GS -dAutoRotatePages=/None keeps our explicit orientation from overriding the PDF's.
+        // -c "<</Orientation N>> setpagedevice" sets the physical page orientation before the input.
+        int gsOrientation = rotation; // GS Orientation: 0=portrait, 1=landscape, 2=upside-down, 3=seascape
+        var rotationLabel = rotation == 0 ? "normal" : $"{rotation * 90}°";
+        progress?.Report($"Rasterizing PDF with Ghostscript (300 DPI, rotation={rotationLabel}) for better staff detection\u2026");
 
         var psi = new ProcessStartInfo
         {
@@ -599,7 +889,15 @@ public static class MuseScoreExportService
         psi.ArgumentList.Add("-sDEVICE=tiffgray");
         psi.ArgumentList.Add("-r300");
         psi.ArgumentList.Add("-dCompressPages=true");
+        psi.ArgumentList.Add("-dAutoRotatePages=/None");
         psi.ArgumentList.Add($"-sOutputFile={normalisedPath}");
+        if (gsOrientation != 0)
+        {
+            // Inject the orientation via a PostScript snippet before the input file
+            psi.ArgumentList.Add("-c");
+            psi.ArgumentList.Add($"<</Orientation {gsOrientation}>> setpagedevice");
+            psi.ArgumentList.Add("-f");
+        }
         psi.ArgumentList.Add(pdfPath);
 
         Logger.LogInfo($"Ghostscript rasterize: {gsPath} -> {normalisedPath}");
