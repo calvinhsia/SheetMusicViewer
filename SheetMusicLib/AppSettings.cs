@@ -394,8 +394,10 @@ public class AppSettings
     public string AudiverisPath { get; set; } = string.Empty;
     /// <summary>Path to the MuseScore Studio executable.</summary>
     public string MuseScorePath { get; set; } = string.Empty;
-    /// <summary>Path to the Ghostscript executable (gswin64c / gs). Used to normalise PDFs before Audiveris.</summary>
+    /// <summary>Path to the Ghostscript executable (gswin64c / gs). Used to rasterize PDFs before Audiveris.</summary>
     public string GhostscriptPath { get; set; } = string.Empty;
+    /// <summary>Whether to rasterize the PDF with Ghostscript before passing to Audiveris. Off by default.</summary>
+    public bool UseGhostscript { get; set; } = false;
 
     #endregion
 
@@ -444,6 +446,9 @@ public class AppSettings
                         settings.AudiverisPath = localSettings.AudiverisPath;
                     if (!string.IsNullOrEmpty(localSettings.MuseScorePath))
                         settings.MuseScorePath = localSettings.MuseScorePath;
+                    if (!string.IsNullOrEmpty(localSettings.GhostscriptPath))
+                        settings.GhostscriptPath = localSettings.GhostscriptPath;
+                    settings.UseGhostscript = localSettings.UseGhostscript;
                 }
             }
         }
@@ -564,7 +569,9 @@ public class AppSettings
                 MetaDataWindowMaximized = MetaDataWindowMaximized,
                 Metronome = Metronome,
                 AudiverisPath = AudiverisPath,
-                MuseScorePath = MuseScorePath
+                MuseScorePath = MuseScorePath,
+                GhostscriptPath = GhostscriptPath,
+                UseGhostscript = UseGhostscript
             };
 
             var json = JsonSerializer.Serialize(localSettings, JsonOptions);
@@ -759,6 +766,8 @@ public class AppSettings
         public MetronomeSettings Metronome { get; set; } = new();
         public string AudiverisPath { get; set; } = string.Empty;
         public string MuseScorePath { get; set; } = string.Empty;
+        public string GhostscriptPath { get; set; } = string.Empty;
+        public bool UseGhostscript { get; set; } = false;
     }
 
     /// <summary>

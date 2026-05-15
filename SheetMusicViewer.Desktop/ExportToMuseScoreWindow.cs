@@ -34,6 +34,8 @@ public class ExportToMuseScoreWindow : Window
     private TextBox _txtAudiverisPath = null!;
     private TextBox _txtMuseScorePath = null!;
     private TextBox _txtGhostscriptPath = null!;
+    private CheckBox _chkUseGhostscript = null!;
+    private Control _gsPathRow = null!;
     private NumericUpDown _nudTempo = null!;
     private ProgressBar _progressBar = null!;
     private TextBox _txtStatus = null!;
@@ -197,16 +199,35 @@ public class ExportToMuseScoreWindow : Window
             () => MuseScoreExportService.AutoDetectMuseScore(),
             "MuseScorePath"));
 
-        toolPanel.Children.Add(CreatePathRow("Ghostscript:", ref _txtGhostscriptPath,
+        // Ghostscript — optional, off by default
+        _chkUseGhostscript = new CheckBox
+        {
+            Content = "Use Ghostscript to rasterize PDF before Audiveris  (helps when Audiveris sees fewer pages than expected)",
+            IsChecked = AppSettings.Instance.UseGhostscript,
+            Margin = new Thickness(0, 4, 0, 0),
+            FontSize = 12
+        };
+        _chkUseGhostscript.IsCheckedChanged += (_, _) =>
+        {
+            _gsPathRow.IsVisible = _chkUseGhostscript.IsChecked == true;
+        };
+        toolPanel.Children.Add(_chkUseGhostscript);
+
+        TextBox gsTextBox = null!;
+        var gsRowControl = CreatePathRow("Ghostscript:", ref gsTextBox,
             AppSettings.Instance.GhostscriptPath,
-            "Ghostscript (gswin64c / gs) — normalises PDFs so Audiveris sees all pages. Optional but recommended.",
+            "Ghostscript (gswin64c / gs) — rasterizes PDFs at 300 DPI so Audiveris can detect all pages.",
             () => MuseScoreExportService.AutoDetectGhostscript(),
-            "GhostscriptPath"));
+            "GhostscriptPath");
+        _txtGhostscriptPath = gsTextBox;
+        _gsPathRow = gsRowControl;
+        _gsPathRow.IsVisible = AppSettings.Instance.UseGhostscript;
+        toolPanel.Children.Add(_gsPathRow);
 
         // Tempo row
         var tempoRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 4, 0, 0) };
         tempoRow.Children.Add(new TextBlock { Text = "Playback tempo:", Width = 110, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 });
-        _nudTempo = new NumericUpDown { Value = 120, Minimum = 20, Maximum = 300, Width = 90, FormatString = "0" };
+        _nudTempo = new NumericUpDown { Value = 120, Minimum = 20, Maximum = 300, Width = 110, FormatString = "0" };
         tempoRow.Children.Add(_nudTempo);
         tempoRow.Children.Add(new TextBlock { Text = "BPM  (quarter note)", VerticalAlignment = VerticalAlignment.Center, Foreground = Brushes.Gray, FontSize = 11 });
         toolPanel.Children.Add(tempoRow);
@@ -437,6 +458,7 @@ public class ExportToMuseScoreWindow : Window
         AppSettings.Instance.AudiverisPath = audiverisPath;
         AppSettings.Instance.MuseScorePath = museScorePath;
         AppSettings.Instance.GhostscriptPath = _txtGhostscriptPath.Text?.Trim() ?? "";
+        AppSettings.Instance.UseGhostscript = _chkUseGhostscript.IsChecked == true;
         AppSettings.Instance.Save();
 
         // Determine page range
@@ -483,18 +505,19 @@ public class ExportToMuseScoreWindow : Window
 
         try
         {
-            bool isFullPdf = startPage == 1 && endPage == totalPages;
-            if (isFullPdf)
-                SetStatus($"Using entire PDF ({totalPages} pages): {System.IO.Path.GetFileName(pdfPath)}");
+            int volumeCount = _pdfMetaData.VolumeInfoList.Count;
+            bool isFullSet = startPage == 1 && endPage == totalPages;
+            if (isFullSet)
+                SetStatus($"Using all {totalPages} pages across {volumeCount} volume(s).");
             else
-                SetStatus($"Processing pages {startPage}–{endPage} of {System.IO.Path.GetFileName(pdfPath)}…");
+                SetStatus($"Processing pages {startPage}–{endPage} of {totalPages} (across {volumeCount} volume(s))…");
 
             SetStatus("Running Audiveris (this may take several minutes)…");
 
             var outputFile = await MuseScoreExportService.RunAudiverisAsync(
-                audiverisPath, pdfPath,
-                isFullPdf ? 0 : startPage,
-                isFullPdf ? 0 : endPage,
+                audiverisPath, _pdfMetaData,
+                isFullSet ? 0 : startPage,
+                isFullSet ? 0 : endPage,
                 progress, _cts.Token);
 
             SetStatus($"Conversion complete: {outputFile}");
