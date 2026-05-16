@@ -207,10 +207,7 @@ public class ExportToMuseScoreWindow : Window
             Margin = new Thickness(0, 4, 0, 0),
             FontSize = 12
         };
-        _chkUseGhostscript.IsCheckedChanged += (_, _) =>
-        {
-            _gsPathRow.IsVisible = _chkUseGhostscript.IsChecked == true;
-        };
+        _chkUseGhostscript.IsCheckedChanged += (_, _) => { };
         toolPanel.Children.Add(_chkUseGhostscript);
 
         TextBox gsTextBox = null!;
@@ -221,7 +218,7 @@ public class ExportToMuseScoreWindow : Window
             "GhostscriptPath");
         _txtGhostscriptPath = gsTextBox;
         _gsPathRow = gsRowControl;
-        _gsPathRow.IsVisible = AppSettings.Instance.UseGhostscript;
+        _gsPathRow.IsVisible = true;
         toolPanel.Children.Add(_gsPathRow);
 
         // Tempo row

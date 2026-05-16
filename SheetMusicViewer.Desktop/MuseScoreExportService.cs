@@ -1214,6 +1214,11 @@ public static class MuseScoreExportService
             if (IsGenericName(partName.Value))
                 partName.Value = "Piano";
         }
+        foreach (var partAbbr in doc.Descendants(ns + "part-abbreviation").Concat(doc.Descendants("part-abbreviation")))
+        {
+            if (IsGenericName(partAbbr.Value))
+                partAbbr.Value = "Pno.";
+        }
         foreach (var instName in doc.Descendants(ns + "instrument-name").Concat(doc.Descendants("instrument-name")))
         {
             if (IsGenericName(instName.Value))
