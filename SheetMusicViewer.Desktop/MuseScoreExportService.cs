@@ -391,12 +391,28 @@ public static class MuseScoreExportService
         var gsPath = AppSettings.Instance.GhostscriptPath;
         if (string.IsNullOrWhiteSpace(gsPath))
             gsPath = AutoDetectGhostscript();
-        if (AppSettings.Instance.UseGhostscript && !string.IsNullOrWhiteSpace(gsPath) && File.Exists(gsPath))
+        // Apply GS normalization when explicitly enabled OR when rotation correction is needed.
+        // A rotated PDF (rotation != 0) produces an upside-down score if fed raw to Audiveris.
+        bool needsGsForRotation = rotation != 0;
+        // When GS produces a range-sliced TIFF, Audiveris sees pages 1..N not startPage..endPage.
+        bool gsSlicedRange = false;
+        if ((AppSettings.Instance.UseGhostscript || needsGsForRotation) && !string.IsNullOrWhiteSpace(gsPath) && File.Exists(gsPath))
         {
-            pdfPath = await NormalisePdfWithGhostscriptAsync(gsPath, pdfPath, outputDir, progress, ct, rotation);
+            pdfPath = await NormalisePdfWithGhostscriptAsync(gsPath, pdfPath, outputDir, progress, ct, rotation,
+                hasRange ? startPage : 0, hasRange ? endPage : 0);
             // Re-derive baseName and omrFile from the (possibly renamed) normalised file.
             baseName = Path.GetFileNameWithoutExtension(pdfPath);
             omrFile  = Path.Combine(outputDir, baseName + ".omr");
+            // The TIFF contains only the requested pages renumbered 1..N, so tell
+            // Audiveris to process sheets 1..(endPage-startPage+1) instead.
+            if (hasRange)
+            {
+                gsSlicedRange = true;
+                int sliceCount = endPage - startPage + 1;
+                startPage = 1;
+                endPage   = sliceCount;
+                rangeLabel = $" (sheets 1–{sliceCount} of sliced TIFF)";
+            }
         }
 
         // ── Pass 1: transcribe through PAGE step → .omr ────────────────────────
@@ -623,7 +639,10 @@ public static class MuseScoreExportService
     }
 
     /// <summary>
-    /// Opens the .omr ZIP archive and removes invalid="true" from sheet elements.
+    /// Opens the .omr ZIP archive and removes:
+    ///   • invalid="true" from sheet elements (so pass 2 will export them), and
+    ///   • movement-start="true" from page elements (so Audiveris produces one Score,
+    ///     not multiple scores that overwrite each other in the .mxl output).
     /// Uses a safe copy-then-replace approach to avoid ZipArchiveMode.Update
     /// corrupting other compressed entries in the archive.
     /// Does NOT fake any step completion — pass 2 will run -step PAGE itself.
@@ -660,15 +679,29 @@ public static class MuseScoreExportService
             }
         }
 
+        // Remove movement-start="true" from all <page> elements.
+        // When present, Audiveris splits the book into multiple Score objects that all
+        // export to the same .mvtnull.mxl filename, so only the last (shortest) one
+        // survives on disk — causing MuseScore to show only a few measures.
+        foreach (var page in doc.Descendants("page"))
+        {
+            var mvAttr = page.Attribute("movement-start");
+            if (mvAttr != null)
+            {
+                mvAttr.Remove();
+                changed = true;
+            }
+        }
+
         if (!changed)
         {
-            progress?.Report("book.xml: no invalid flags found");
+            progress?.Report("book.xml: no invalid flags or movement-start attributes found");
             return;
         }
 
         // Rewrite the whole ZIP to avoid ZipArchiveMode.Update corrupting compressed entries.
         var newXml = doc.ToString(SaveOptions.OmitDuplicateNamespaces);
-        progress?.Report("Patched book.xml: removed invalid flags — rewriting .omr safely…");
+        progress?.Report("Patched book.xml: removed invalid flags and movement-start attributes — rewriting .omr safely…");
 
         var tempPath = omrPath + ".tmp";
         using (var zipRead = ZipFile.OpenRead(omrPath))
@@ -699,21 +732,25 @@ public static class MuseScoreExportService
 
     /// <summary>
     /// Uses Ghostscript to concatenate the page slices from multiple volume PDFs into a
-    /// single multi-page TIFF.  Each segment's LocalStart/LocalEnd selects which pages
+    /// single normalised PDF.  Each segment's LocalStart/LocalEnd selects which pages
     /// are taken from that PDF (0/0 = all pages of that PDF).
-    /// Returns the path to the combined TIFF (or the first PDF path on failure).
+    /// Rotation is burned into the page content so Audiveris PDFBox gives correct part names.
+    /// Returns the path to the combined PDF (or the first PDF path on failure).
     /// </summary>
     private static async Task<string> CombineVolumesWithGhostscriptAsync(
         string gsPath,
         IReadOnlyList<VolumeSegment> segments,
-        string outputTiff,
+        string outputTiff,   // parameter name kept for call-site compat; .tif ext is replaced with .pdf
         string outputDir,
         IProgress<string>? progress,
         CancellationToken ct)
     {
+        // Derive the output PDF path from the caller-supplied tiff path.
+        var outputPdf = Path.ChangeExtension(outputTiff, ".pdf");
+
         // For segments that are partial (LocalStart > 0), we first extract just those
         // pages to a temp PDF using GS pdfwrite, then feed that temp PDF into the
-        // final tiffgray run.  Full-volume segments (0/0) are fed directly.
+        // final pdfwrite run.  Full-volume segments (0/0) are fed directly.
         // Track (filePath, rotation) so per-volume orientation can be applied.
         var inputFiles = new List<(string Path, int Rotation)>();
 
@@ -761,13 +798,12 @@ public static class MuseScoreExportService
             }
         }
 
-        // Now rasterize all input PDFs in order into one multi-page TIFF.
-        // If all volumes share the same rotation we set it once; otherwise we inject
-        // a per-file PostScript orientation snippet between each input.
+        // Combine all input PDFs in order into one normalised PDF.
+        // pdfwrite burns rotation into page content so Audiveris PDFBox gives correct part names.
         bool uniformRotation = inputFiles.All(f => f.Rotation == inputFiles[0].Rotation);
         int commonRotation   = inputFiles[0].Rotation;
 
-        progress?.Report($"Combining {inputFiles.Count} PDF(s) into a single 300 DPI TIFF for Audiveris…");
+        progress?.Report($"Combining {inputFiles.Count} PDF(s) into a single normalised PDF for Audiveris…");
 
         var psi = new ProcessStartInfo
         {
@@ -780,11 +816,10 @@ public static class MuseScoreExportService
         psi.ArgumentList.Add("-dBATCH");
         psi.ArgumentList.Add("-dNOPAUSE");
         psi.ArgumentList.Add("-dSAFER");
-        psi.ArgumentList.Add("-sDEVICE=tiffgray");
-        psi.ArgumentList.Add("-r300");
+        psi.ArgumentList.Add("-sDEVICE=pdfwrite");
         psi.ArgumentList.Add("-dCompressPages=true");
         psi.ArgumentList.Add("-dAutoRotatePages=/None");
-        psi.ArgumentList.Add($"-sOutputFile={outputTiff}");
+        psi.ArgumentList.Add($"-sOutputFile={outputPdf}");
         if (uniformRotation && commonRotation != 0)
         {
             // Apply once before all input files
@@ -814,7 +849,7 @@ public static class MuseScoreExportService
             }
         }
 
-        Logger.LogInfo($"Ghostscript combine: {string.Join(" + ", inputFiles.Select(f => Path.GetFileName(f.Path)))} -> {Path.GetFileName(outputTiff)}");
+        Logger.LogInfo($"Ghostscript combine: {string.Join(" + ", inputFiles.Select(f => Path.GetFileName(f.Path)))} -> {Path.GetFileName(outputPdf)}");
 
         using var proc = new Process { StartInfo = psi };
         var errLines = new System.Text.StringBuilder();
@@ -835,22 +870,22 @@ public static class MuseScoreExportService
 
         await Task.Run(() => { while (!proc.WaitForExit(200)) ct.ThrowIfCancellationRequested(); }, ct);
 
-        if (proc.ExitCode != 0 || !File.Exists(outputTiff))
+        if (proc.ExitCode != 0 || !File.Exists(outputPdf))
         {
             progress?.Report($"⚠ Ghostscript combine failed (exit {proc.ExitCode}) — falling back to first volume only.");
             Logger.LogInfo($"[GS] stderr: {errLines}");
             return segments[0].PdfPath;
         }
 
-        var kb = new FileInfo(outputTiff).Length / 1024;
-        progress?.Report($"Combined TIFF: {kb:N0} KB  ({inputFiles.Count} volume(s), {Path.GetFileName(outputTiff)})");
-        return outputTiff;
+        var kb = new FileInfo(outputPdf).Length / 1024;
+        progress?.Report($"Combined PDF: {kb:N0} KB  ({inputFiles.Count} volume(s), {Path.GetFileName(outputPdf)})");
+        return outputPdf;
     }
 
     /// <summary>
-    /// Uses Ghostscript to rasterize the PDF into a high-resolution multi-page TIFF.
-    /// This bypasses Audiveris's PDFBox layer entirely, giving it clean bitmap pixels
-    /// to detect staff lines from, and also avoids non-standard PDF page-tree issues.
+    /// Uses Ghostscript to produce a normalised, page-range-sliced PDF from the input.
+    /// Rotation is burned into the page content (pdfwrite + setpagedevice), so Audiveris's
+    /// PDFBox reader sees a clean upright PDF with correct instrument names (Piano, not Voice).
     /// If GS fails the original PDF path is returned unchanged.
     /// </summary>
     private static async Task<string> NormalisePdfWithGhostscriptAsync(
@@ -859,18 +894,22 @@ public static class MuseScoreExportService
         string outputDir,
         IProgress<string>? progress,
         CancellationToken ct,
-        int rotation = 0)
+        int rotation = 0,
+        int firstPage = 0,
+        int lastPage = 0)
     {
         var baseName = Path.GetFileNameWithoutExtension(pdfPath);
-        // Produce a multi-page TIFF that Audiveris can load as an image-based book.
-        var normalisedPath = Path.Combine(outputDir, baseName + "_gs.tif");
+        bool hasPageRange = firstPage > 0 && lastPage > 0;
+        // Include the page range in the filename so different ranges don't collide in the cache.
+        var rangeSuffix = hasPageRange ? $"_p{firstPage}-{lastPage}" : "";
+        // Produce a normalised PDF — keeps Audiveris in its PDF codepath so part names are "Piano".
+        var normalisedPath = Path.Combine(outputDir, baseName + rangeSuffix + "_gs.pdf");
 
         // rotation: 0=normal, 1=90°CW, 2=180°, 3=270°CW (matches PortableRotation enum)
-        // GS -dAutoRotatePages=/None keeps our explicit orientation from overriding the PDF's.
-        // -c "<</Orientation N>> setpagedevice" sets the physical page orientation before the input.
-        int gsOrientation = rotation; // GS Orientation: 0=portrait, 1=landscape, 2=upside-down, 3=seascape
+        // Using pdfwrite burns the rotation into the page transform so no /Rotate entries survive.
+        int gsOrientation = rotation;
         var rotationLabel = rotation == 0 ? "normal" : $"{rotation * 90}°";
-        progress?.Report($"Rasterizing PDF with Ghostscript (300 DPI, rotation={rotationLabel}) for better staff detection\u2026");
+        progress?.Report($"Normalising PDF with Ghostscript (rotation={rotationLabel}) for Audiveris\u2026");
 
         var psi = new ProcessStartInfo
         {
@@ -880,20 +919,25 @@ public static class MuseScoreExportService
             UseShellExecute  = false,
             CreateNoWindow   = true
         };
-        // tiffgray: grayscale multi-page TIFF — ideal for OMR (black/white staves)
-        // -r300: 300 DPI — minimum reliable resolution for Audiveris staff detection
-        // -dCompressPages=true: keep file size reasonable
+        // pdfwrite: re-render each page into a clean PDF — preserves vector quality for Audiveris PDFBox.
+        // -dAutoRotatePages=/None: prevents GS from overriding our explicit orientation.
+        // -dCompressPages=true: keep file size reasonable.
         psi.ArgumentList.Add("-dBATCH");
         psi.ArgumentList.Add("-dNOPAUSE");
         psi.ArgumentList.Add("-dSAFER");
-        psi.ArgumentList.Add("-sDEVICE=tiffgray");
-        psi.ArgumentList.Add("-r300");
+        psi.ArgumentList.Add("-sDEVICE=pdfwrite");
         psi.ArgumentList.Add("-dCompressPages=true");
         psi.ArgumentList.Add("-dAutoRotatePages=/None");
+        if (hasPageRange)
+        {
+            // Slice only the requested pages — Audiveris then sees pages 1..N, not 31..35 in a 108-page file.
+            psi.ArgumentList.Add($"-dFirstPage={firstPage}");
+            psi.ArgumentList.Add($"-dLastPage={lastPage}");
+        }
         psi.ArgumentList.Add($"-sOutputFile={normalisedPath}");
         if (gsOrientation != 0)
         {
-            // Inject the orientation via a PostScript snippet before the input file
+            // Burn the rotation into each page's content stream via a PostScript snippet.
             psi.ArgumentList.Add("-c");
             psi.ArgumentList.Add($"<</Orientation {gsOrientation}>> setpagedevice");
             psi.ArgumentList.Add("-f");
@@ -928,14 +972,14 @@ public static class MuseScoreExportService
 
         if (proc.ExitCode != 0 || !File.Exists(normalisedPath))
         {
-            progress?.Report($"\u26a0 Ghostscript rasterization failed (exit {proc.ExitCode}) \u2014 proceeding with original PDF.");
+            progress?.Report($"\u26a0 Ghostscript normalisation failed (exit {proc.ExitCode}) \u2014 proceeding with original PDF.");
             Logger.LogInfo($"[GS] stderr: {errLines}");
             return pdfPath;
         }
 
         var origKb = new FileInfo(pdfPath).Length  / 1024;
         var normKb = new FileInfo(normalisedPath).Length / 1024;
-        progress?.Report($"PDF rasterized to TIFF: {origKb} KB PDF \u2192 {normKb} KB TIFF");
+        progress?.Report($"PDF normalised: {origKb} KB \u2192 {normKb} KB (_gs.pdf, {(hasPageRange ? $"pages {firstPage}\u2013{lastPage}" : "all pages")})");
         return normalisedPath;
     }
 
@@ -1086,7 +1130,7 @@ public static class MuseScoreExportService
     /// </summary>
     public static void SetTempoInMusicXml(string filePath, int bpm, IProgress<string>? progress = null)
     {
-        if (bpm <= 0) return;
+        // bpm <= 0: skip tempo injection but still patch instrument names
 
         bool isMxl = filePath.EndsWith(".mxl", StringComparison.OrdinalIgnoreCase);
 
@@ -1111,7 +1155,8 @@ public static class MuseScoreExportService
                         {
                             using var reader = new StreamReader(src);
                             var xml = reader.ReadToEnd();
-                            var patched = InjectTempoIntoXml(xml, bpm);
+                            var patched = bpm > 0 ? InjectTempoIntoXml(xml, bpm) : xml;
+                            patched = PatchInstrumentNames(patched);
                             using var writer = new StreamWriter(dst);
                             writer.Write(patched);
                         }
@@ -1136,7 +1181,8 @@ public static class MuseScoreExportService
             try
             {
                 var xml = File.ReadAllText(filePath);
-                var patched = InjectTempoIntoXml(xml, bpm);
+                var patched = bpm > 0 ? InjectTempoIntoXml(xml, bpm) : xml;
+                patched = PatchInstrumentNames(patched);
                 File.WriteAllText(filePath, patched);
                 progress?.Report($"Tempo set to {bpm} BPM in exported score.");
             }
@@ -1145,6 +1191,39 @@ public static class MuseScoreExportService
                 progress?.Report($"⚠ Could not set tempo: {ex.Message}");
             }
         }
+    }
+
+    /// <summary>
+    /// Patches part names in MusicXML: any part whose name is generic ("Voice", "voice", empty,
+    /// or a bare "Part N" string) is renamed to "Piano" and its MIDI program is set to 1 (Acoustic Grand Piano).
+    /// Audiveris uses "Voice" when processing image-based input (TIFF) instead of PDF.
+    /// </summary>
+    public static string PatchInstrumentNames(string xml)
+    {
+        var doc = XDocument.Parse(xml);
+        XNamespace ns = doc.Root?.Name.Namespace ?? XNamespace.None;
+
+        bool IsGenericName(string? name) =>
+            string.IsNullOrWhiteSpace(name) ||
+            string.Equals(name, "Voice", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(name, "voice", StringComparison.OrdinalIgnoreCase) ||
+            System.Text.RegularExpressions.Regex.IsMatch(name!.Trim(), @"^Part\s*\d+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        foreach (var partName in doc.Descendants(ns + "part-name").Concat(doc.Descendants("part-name")))
+        {
+            if (IsGenericName(partName.Value))
+                partName.Value = "Piano";
+        }
+        foreach (var instName in doc.Descendants(ns + "instrument-name").Concat(doc.Descendants("instrument-name")))
+        {
+            if (IsGenericName(instName.Value))
+                instName.Value = "Piano";
+        }
+        // Ensure MIDI program is set to 1 (Acoustic Grand Piano) for all parts
+        foreach (var midiProg in doc.Descendants(ns + "midi-program").Concat(doc.Descendants("midi-program")))
+            midiProg.Value = "1";
+
+        return doc.ToString(SaveOptions.OmitDuplicateNamespaces);
     }
 
     /// <summary>
