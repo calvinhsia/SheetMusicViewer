@@ -439,9 +439,38 @@ public class ExportToMuseScoreWindow : Window
 
     private async Task RunExportAsync()
     {
-        // Validate tool paths
+        // Validate tool paths — auto-detect if fields are still empty
         var audiverisPath = _txtAudiverisPath.Text?.Trim() ?? "";
         var museScorePath = _txtMuseScorePath.Text?.Trim() ?? "";
+        var gsPath        = _txtGhostscriptPath.Text?.Trim() ?? "";
+
+        if (string.IsNullOrEmpty(audiverisPath))
+        {
+            audiverisPath = MuseScoreExportService.AutoDetectAudiveris() ?? "";
+            if (!string.IsNullOrEmpty(audiverisPath))
+            {
+                _txtAudiverisPath.Text = audiverisPath;
+                SetStatus($"Auto-detected Audiveris: {audiverisPath}");
+            }
+        }
+        if (string.IsNullOrEmpty(museScorePath))
+        {
+            museScorePath = MuseScoreExportService.AutoDetectMuseScore() ?? "";
+            if (!string.IsNullOrEmpty(museScorePath))
+            {
+                _txtMuseScorePath.Text = museScorePath;
+                SetStatus($"Auto-detected MuseScore: {museScorePath}");
+            }
+        }
+        if (string.IsNullOrEmpty(gsPath))
+        {
+            gsPath = MuseScoreExportService.AutoDetectGhostscript() ?? "";
+            if (!string.IsNullOrEmpty(gsPath))
+            {
+                _txtGhostscriptPath.Text = gsPath;
+                SetStatus($"Auto-detected Ghostscript: {gsPath}");
+            }
+        }
 
         if (string.IsNullOrEmpty(audiverisPath))
         {
