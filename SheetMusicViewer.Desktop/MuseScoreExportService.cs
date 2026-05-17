@@ -399,7 +399,8 @@ public static class MuseScoreExportService
         if ((AppSettings.Instance.UseGhostscript || needsGsForRotation) && !string.IsNullOrWhiteSpace(gsPath) && File.Exists(gsPath))
         {
             pdfPath = await NormalisePdfWithGhostscriptAsync(gsPath, pdfPath, outputDir, progress, ct, rotation,
-                hasRange ? startPage : 0, hasRange ? endPage : 0);
+                hasRange ? startPage : 0, hasRange ? endPage : 0,
+                spinePaddingPx: AppSettings.Instance.SpinePaddingPx);
             // Re-derive baseName and omrFile from the (possibly renamed) normalised file.
             baseName = Path.GetFileNameWithoutExtension(pdfPath);
             omrFile  = Path.Combine(outputDir, baseName + ".omr");
@@ -896,7 +897,8 @@ public static class MuseScoreExportService
         CancellationToken ct,
         int rotation = 0,
         int firstPage = 0,
-        int lastPage = 0)
+        int lastPage = 0,
+        int spinePaddingPx = 0)
     {
         var baseName = Path.GetFileNameWithoutExtension(pdfPath);
         bool hasPageRange = firstPage > 0 && lastPage > 0;
@@ -935,11 +937,60 @@ public static class MuseScoreExportService
             psi.ArgumentList.Add($"-dLastPage={lastPage}");
         }
         psi.ArgumentList.Add($"-sOutputFile={normalisedPath}");
-        if (gsOrientation != 0)
+
+        // Build PostScript preamble combining rotation and/or spine padding.
+        // We always use -c / -f when there is *any* PS to inject so GS processes it before the file.
+        bool hasRotation = gsOrientation != 0;
+        bool hasPadding  = spinePaddingPx > 0;
+        if (hasRotation || hasPadding)
         {
-            // Burn the rotation into each page's content stream via a PostScript snippet.
+            var ps = new System.Text.StringBuilder();
+
+            if (hasRotation)
+            {
+                // Burn the rotation into each page's content stream via a PostScript snippet.
+                ps.Append($"<</Orientation {gsOrientation}>> setpagedevice ");
+            }
+
+            if (hasPadding)
+            {
+                // Add white padding on the spine-side edge of each page to compensate for
+                // gutter clipping from book-feeder scans.
+                //   Even pages → right edge clipped → pad right  (translate left by 0, expand width right)
+                //   Odd  pages → left  edge clipped → pad left   (translate right, expand width left)
+                // We install a BeginPage procedure that:
+                //   1. Queries the current page number (via /PageCount or page counter).
+                //   2. Reads the current MediaBox.
+                //   3. Enlarges it by spinePaddingPx on the appropriate side.
+                //   4. Sets the new MediaBox so the extra white space appears in the output.
+                // Note: page numbers here are 1-based within the output (after -dFirstPage slicing).
+                ps.Append(
+                    $"/SpinePad {spinePaddingPx} def " +
+                    $"/origBeginPage /BeginPage where {{ pop /BeginPage load }} {{ {{ }} }} ifelse def " +
+                    $"<< /BeginPage {{ " +
+                    $"  origBeginPage exec " +
+                    $"  currentpagedevice /PageCount known {{ " +
+                    $"    currentpagedevice /PageCount get 1 add " +  // 1-based page index
+                    $"  }} {{ 1 }} ifelse " +
+                    $"  2 mod 0 eq " + // true = even page → pad right; false = odd → pad left
+                    $"  {{ " + // even page: extend right edge
+                    $"    currentpagedevice /PageSize get aload pop " + // w h
+                    $"    SpinePad add " +                              // w h+pad  (width stays, height arg unused here)
+                    $"    exch SpinePad add exch " +                   // (w+pad) h+pad
+                    $"    2 array astore /PageSize exch << /PageSize 3 -1 roll >> setpagedevice " +
+                    $"  }} {{ " + // odd page: translate right and extend left
+                    $"    currentpagedevice /PageSize get aload pop " +
+                    $"    SpinePad add exch SpinePad add exch " +
+                    $"    2 array astore /PageSize exch << /PageSize 3 -1 roll >> setpagedevice " +
+                    $"    SpinePad 0 translate " +
+                    $"  }} ifelse " +
+                    $"}} >> setpagedevice ");
+
+                progress?.Report($"Spine padding enabled: {spinePaddingPx} px on gutter edge per page.");
+            }
+
             psi.ArgumentList.Add("-c");
-            psi.ArgumentList.Add($"<</Orientation {gsOrientation}>> setpagedevice");
+            psi.ArgumentList.Add(ps.ToString().Trim());
             psi.ArgumentList.Add("-f");
         }
         psi.ArgumentList.Add(pdfPath);

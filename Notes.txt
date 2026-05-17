@@ -1,0 +1,6 @@
+i think i've determined why some pages aren't doing well. 
+The pages were created by manually scanning the original book with a page feeder. 
+Some of the pages weren't centered when scanning. The even pages were on the left and the odd on the right in the original book. 
+That means the part of the pages nearest the spine were in the gutter and didn't quite get scanned. 
+For the even pages, that meant the end of the staff was slightly clipped. 
+For the odd pages the clilpping included the Clefs at the beginning of each staff. That could meand Audiveris had a hard time. 

@@ -33,6 +33,7 @@ public class ExportToMuseScoreWindow : Window
     private NumericUpDown _nudEndPage = null!;
     private TextBox _txtAudiverisPath = null!;
     private TextBox _txtMuseScorePath = null!;
+    private NumericUpDown _nudSpinePadding = null!;
     private TextBox _txtGhostscriptPath = null!;
     private CheckBox _chkUseGhostscript = null!;
     private Control _gsPathRow = null!;
@@ -58,9 +59,9 @@ public class ExportToMuseScoreWindow : Window
 
         Title = "Open in MuseScore";
         Width = 640;
-        Height = 620;
+        Height = 820;
         MinWidth = 520;
-        MinHeight = 540;
+        MinHeight = 720;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         CanResize = true;
 
@@ -74,6 +75,11 @@ public class ExportToMuseScoreWindow : Window
         if (e.Key == Key.Escape && (_cts == null || _cts.IsCancellationRequested))
         {
             Close();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter && _btnExport.IsVisible && _btnExport.IsEnabled)
+        {
+            _ = RunExportAsync();
             e.Handled = true;
         }
     }
@@ -221,6 +227,14 @@ public class ExportToMuseScoreWindow : Window
         _gsPathRow.IsVisible = true;
         toolPanel.Children.Add(_gsPathRow);
 
+        // Spine-padding row
+        var spineRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 4, 0, 0) };
+        spineRow.Children.Add(new TextBlock { Text = "Spine padding:", Width = 110, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 });
+        _nudSpinePadding = new NumericUpDown { Value = AppSettings.Instance.SpinePaddingPx, Minimum = 0, Maximum = 300, Width = 110, FormatString = "0" };
+        spineRow.Children.Add(_nudSpinePadding);
+        spineRow.Children.Add(new TextBlock { Text = "px  (0 = off)  — adds white margin on spine/gutter edge to recover clipped clefs", VerticalAlignment = VerticalAlignment.Center, Foreground = Brushes.Gray, FontSize = 11, TextWrapping = TextWrapping.Wrap });
+        toolPanel.Children.Add(spineRow);
+
         // Tempo row
         var tempoRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 4, 0, 0) };
         tempoRow.Children.Add(new TextBlock { Text = "Playback tempo:", Width = 110, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 });
@@ -288,7 +302,7 @@ public class ExportToMuseScoreWindow : Window
         _btnClose.Click += (_, _) => Close();
         buttonPanel.Children.Add(_btnClose);
 
-        _btnExport = new Button { Content = "▶  Export & Open", Width = 130 };
+        _btnExport = new Button { Content = "▶  Export & Open", Width = 130, IsDefault = true };
         _btnExport.Click += (_, _) => _ = RunExportAsync();
         buttonPanel.Children.Add(_btnExport);
 
@@ -485,6 +499,7 @@ public class ExportToMuseScoreWindow : Window
         AppSettings.Instance.MuseScorePath = museScorePath;
         AppSettings.Instance.GhostscriptPath = _txtGhostscriptPath.Text?.Trim() ?? "";
         AppSettings.Instance.UseGhostscript = _chkUseGhostscript.IsChecked == true;
+        AppSettings.Instance.SpinePaddingPx = (int)(_nudSpinePadding.Value ?? 0);
         AppSettings.Instance.Save();
 
         // Determine page range
