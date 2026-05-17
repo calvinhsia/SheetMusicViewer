@@ -119,16 +119,18 @@ public class InkCanvasToolbarTests
     /// </summary>
     private void RunOnDispatcher(Action action)
     {
-        // Don't try to run if not on Windows or not initialized
         if (!_isWindowsPlatform || !_avaloniaInitialized)
-        {
             return;
-        }
 
-        // Since we ensure Avalonia is initialized on the test thread and tests 
-        // are serialized, we should always be on the correct thread.
-        // Run the action directly.
-        action();
+        Exception? caught = null;
+        Dispatcher.UIThread.Post(() =>
+        {
+            try { action(); }
+            catch (Exception ex) { caught = ex; }
+        });
+        Dispatcher.UIThread.RunJobs();
+        if (caught != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(caught).Throw();
     }
 
     /// <summary>
@@ -136,15 +138,12 @@ public class InkCanvasToolbarTests
     /// </summary>
     private T RunOnDispatcher<T>(Func<T> func)
     {
-        // Don't try to run if not on Windows or not initialized
         if (!_isWindowsPlatform || !_avaloniaInitialized)
-        {
             return default!;
-        }
 
-        // Since we ensure Avalonia is initialized on the test thread and tests 
-        // are serialized, we should always be on the correct thread.
-        return func();
+        T result = default!;
+        RunOnDispatcher((Action)(() => { result = func(); }));
+        return result;
     }
 
     private static WriteableBitmap CreateTestBitmap(int width = 200, int height = 300)
