@@ -99,10 +99,18 @@ public class InkCanvasControlTests : TestBase
     /// </summary>
     private void RunOnDispatcher(Action action)
     {
-        // In headless mode with SetupWithoutStarting(), there's no message pump,
-        // so Dispatcher.UIThread.Invoke() would deadlock.
-        // Avalonia headless allows control creation on any thread, so just run directly.
-        action();
+        // Post the action to the Avalonia UI thread and pump the dispatcher.
+        // SetupWithoutStarting() designates the setup thread as the UI thread, but MSTest
+        // runs test methods on different threads, so we must post and pump.
+        Exception? caught = null;
+        Dispatcher.UIThread.Post(() =>
+        {
+            try { action(); }
+            catch (Exception ex) { caught = ex; }
+        });
+        Dispatcher.UIThread.RunJobs();
+        if (caught != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(caught).Throw();
     }
 
     /// <summary>
@@ -110,8 +118,9 @@ public class InkCanvasControlTests : TestBase
     /// </summary>
     private T RunOnDispatcher<T>(Func<T> func)
     {
-        // In headless mode, just run directly (see RunOnDispatcher(Action) comment)
-        return func();
+        T result = default!;
+        RunOnDispatcher((Action)(() => { result = func(); }));
+        return result;
     }
 
     /// <summary>
