@@ -377,6 +377,9 @@ public static class MuseScoreExportService
         var baseName = Path.GetFileNameWithoutExtension(pdfPath);
         var omrFile = Path.Combine(outputDir, baseName + ".omr");
 
+        // Overall stopwatch — covers all steps (GS, pass 1, patch, pass 2, tempo inject).
+        var overallSw = Stopwatch.StartNew();
+
         // Record time just before we start so the output-file search can
         // reject stale files from previous runs of different PDFs.
         var runStartedAt = DateTime.UtcNow;
@@ -544,6 +547,11 @@ public static class MuseScoreExportService
             if (found != null)
             {
                 ValidateMusicXmlHasNotes(found);
+                overallSw.Stop();
+                // Use processedSheetCount as the best page count available.
+                int reportedPages = processedSheetCount > 0 ? processedSheetCount : (hasRange ? endPage - startPage + 1 : 1);
+                double secsPerPage = reportedPages > 0 ? overallSw.Elapsed.TotalSeconds / reportedPages : overallSw.Elapsed.TotalSeconds;
+                progress?.Report($"Overall conversion: {overallSw.Elapsed:m\\:ss\\.f} for {reportedPages} page(s) — {secsPerPage:F1} sec/page");
                 return found;
             }
         }
@@ -590,10 +598,15 @@ public static class MuseScoreExportService
         try
         {
             using var zip = ZipFile.OpenRead(omrPath);
+            var sheetRegex = new System.Text.RegularExpressions.Regex(
+                @"^sheet#(\d+)/",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             return zip.Entries
-                .Count(e => System.Text.RegularExpressions.Regex.IsMatch(
-                    e.FullName, @"^sheet#\d+/",
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase));
+                .Select(e => sheetRegex.Match(e.FullName))
+                .Where(m => m.Success)
+                .Select(m => m.Groups[1].Value)
+                .Distinct()
+                .Count();
         }
         catch { return 0; }
     }
@@ -1074,11 +1087,43 @@ public static class MuseScoreExportService
 
         using var process = new Process { StartInfo = psi };
         var errorLines = new System.Text.StringBuilder();
+        var sw = Stopwatch.StartNew();
+
+        // Audiveris log format: "LEVEL  [BookName#N]  ClassName lineNum | message"
+        // Each sheet gets its own thread name like [BookName#1], [BookName#2], etc.
+        // We detect sheet transitions by watching for a new #N in the bracket.
+        var bracketSheetRegex = new System.Text.RegularExpressions.Regex(
+            @"\[.*?#(\d+)\]",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        int lastSheetSeen = 0;
+        int pagesCompleted = 0;
+        var sheetStartTimes = new System.Collections.Generic.Dictionary<int, TimeSpan>();
 
         process.OutputDataReceived += (_, e) =>
         {
             if (e.Data == null) return;
-            // Filter to significant lines to keep the log readable
+
+            // Detect sheet number from bracket before trimming
+            var bracketMatch = bracketSheetRegex.Match(e.Data);
+            if (bracketMatch.Success && int.TryParse(bracketMatch.Groups[1].Value, out int sheetNum))
+            {
+                if (sheetNum != lastSheetSeen)
+                {
+                    // A new sheet has started processing
+                    if (lastSheetSeen > 0 && sheetStartTimes.TryGetValue(lastSheetSeen, out var start))
+                    {
+                        // Previous sheet just finished (new sheet starting = previous done)
+                        var sheetElapsed = sw.Elapsed - start;
+                        pagesCompleted++;
+                        progress?.Report($"  ✓ Sheet #{lastSheetSeen} done in {sheetElapsed.TotalSeconds:F1}s — {pagesCompleted} page(s) total, {sw.Elapsed:m\\:ss} elapsed");
+                    }
+                    lastSheetSeen = sheetNum;
+                    sheetStartTimes[sheetNum] = sw.Elapsed;
+                    progress?.Report($"  → Sheet #{sheetNum} started [{sw.Elapsed:m\\:ss} elapsed]");
+                }
+            }
+
             if (e.Data.Contains("INFO") || e.Data.Contains("WARN") || e.Data.Contains("ERROR"))
             {
                 var trimmed = System.Text.RegularExpressions.Regex.Replace(e.Data, @"^\S+\s+\[\S*\]\s+\S+\s+\|\s*", "").Trim();
@@ -1101,7 +1146,30 @@ public static class MuseScoreExportService
         {
             while (!process.WaitForExit(200))
                 ct.ThrowIfCancellationRequested();
+            // Call no-arg WaitForExit to flush all pending OutputDataReceived callbacks
+            // before we report the summary (avoids the summary appearing before the last lines).
+            process.WaitForExit();
         }, ct);
+
+        sw.Stop();
+
+        // Count the last sheet if it was never followed by a new one
+        if (lastSheetSeen > 0 && sheetStartTimes.TryGetValue(lastSheetSeen, out var lastStart))
+        {
+            var sheetElapsed = sw.Elapsed - lastStart;
+            pagesCompleted++;
+            progress?.Report($"  ✓ Sheet #{lastSheetSeen} done in {sheetElapsed.TotalSeconds:F1}s");
+        }
+
+        if (pagesCompleted > 0)
+        {
+            var pps = sw.Elapsed.TotalSeconds > 0 ? pagesCompleted / sw.Elapsed.TotalSeconds : 0;
+            progress?.Report($"Pass complete — {pagesCompleted} page(s) in {sw.Elapsed:m\\:ss\\.f} ({pps:F2} pages/sec)");
+        }
+        else
+        {
+            progress?.Report($"Pass complete — {sw.Elapsed:m\\:ss\\.f} elapsed");
+        }
 
         if (!ignoreExitCode && process.ExitCode != 0)
         {
