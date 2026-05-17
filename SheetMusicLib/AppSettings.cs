@@ -398,6 +398,11 @@ public class AppSettings
     public string GhostscriptPath { get; set; } = string.Empty;
     /// <summary>Whether to rasterize the PDF with Ghostscript before passing to Audiveris. Off by default.</summary>
     public bool UseGhostscript { get; set; } = false;
+    /// <summary>
+    /// Pixels of white padding added to the spine-side edge of each page before Audiveris.
+    /// Even pages get right-edge padding; odd pages get left-edge padding. 0 = disabled.
+    /// </summary>
+    public int SpinePaddingPx { get; set; } = 0;
 
     #endregion
 
@@ -449,6 +454,7 @@ public class AppSettings
                     if (!string.IsNullOrEmpty(localSettings.GhostscriptPath))
                         settings.GhostscriptPath = localSettings.GhostscriptPath;
                     settings.UseGhostscript = localSettings.UseGhostscript;
+                    settings.SpinePaddingPx = localSettings.SpinePaddingPx;
                 }
             }
         }
@@ -571,7 +577,8 @@ public class AppSettings
                 AudiverisPath = AudiverisPath,
                 MuseScorePath = MuseScorePath,
                 GhostscriptPath = GhostscriptPath,
-                UseGhostscript = UseGhostscript
+                UseGhostscript = UseGhostscript,
+                SpinePaddingPx = SpinePaddingPx
             };
 
             var json = JsonSerializer.Serialize(localSettings, JsonOptions);
@@ -768,6 +775,7 @@ public class AppSettings
         public string MuseScorePath { get; set; } = string.Empty;
         public string GhostscriptPath { get; set; } = string.Empty;
         public bool UseGhostscript { get; set; } = false;
+        public int SpinePaddingPx { get; set; } = 0;
     }
 
     /// <summary>
