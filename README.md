@@ -3,6 +3,7 @@
 PDF Sheet Music Viewer by Calvin Hsia 2019
 
 Allows users to view downloaded or scanned Sheet Music in PDF format to play on a musical instrument, such as a piano.
+Also can export PDF music to MuseScore so you can edit music notation  or hear your music being played.
 
 **Runs on:** Windows 10/11, macOS, and Linux  
 **Updated 2025:** Migrated from WPF to Avalonia UI for cross-platform support.
@@ -18,6 +19,8 @@ Allows users to view downloaded or scanned Sheet Music in PDF format to play on 
 * Multi-volume book support (large books split across multiple PDFs)
 * Table of Contents with search by composer, title, etc.
 * Remembers your last viewed page for each book
+* **Built-in Metronome** — drift-corrected, floating overlay, configurable BPM/accent/sound
+* **MuseScore Export** — Hear your music: convert any PDF page range to an editable/playable MuseScore file via Audiveris OMR
 
 ---
 
@@ -130,6 +133,35 @@ chmod +x SheetMusicViewer
 4. Click the **Ink** checkbox again to save and exit ink mode
 
 > **Tip:** Zoom in before inking to make precise corrections easier.
+
+### Metronome
+
+SheetMusicViewer includes a built-in, drift-corrected metronome:
+
+1. Open **Menu → Metronome** (or click the metronome toolbar button)
+2. A floating overlay window appears so you can read music while it ticks
+3. Set your **BPM** (20–300), **beats per measure**, and **click sound** (woodblock, click, or beep)
+4. Press **Start / Stop** — or tap **Tap Tempo** to set BPM from your natural feel
+5. Enable **Mute** for a visual flash-only beat (no audio)
+
+Settings are saved and restored automatically between sessions.
+
+### MuseScore Export
+
+Convert any PDF page range to an editable MuseScore file using [Audiveris](https://github.com/Audiveris/audiveris) Optical Music Recognition (OMR):
+
+**Prerequisites** (install once):
+- [Audiveris](https://github.com/Audiveris/audiveris/releases) — OMR engine
+- [MuseScore Studio 4](https://musescore.org/en/download) — score editor
+
+**Steps:**
+1. Navigate to the page(s) you want to convert
+2. Open **Menu → Export to MuseScore…**
+3. Set the start and end page of the passage
+4. Click **Export** — Audiveris is auto-detected; no path setup needed in most cases
+5. MuseScore Studio opens automatically with the result
+
+> **Tip:** Best results come from clearly engraved, high-resolution PDFs. Handwritten or low-resolution scans may need manual correction in MuseScore afterward.
 
 ### Organizing Your Music
 

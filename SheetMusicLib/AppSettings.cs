@@ -389,6 +389,21 @@ public class AppSettings
     // Metronome overlay settings
     public MetronomeSettings Metronome { get; set; } = new();
 
+    // External tool paths
+    /// <summary>Path to the Audiveris executable or batch file.</summary>
+    public string AudiverisPath { get; set; } = string.Empty;
+    /// <summary>Path to the MuseScore Studio executable.</summary>
+    public string MuseScorePath { get; set; } = string.Empty;
+    /// <summary>Path to the Ghostscript executable (gswin64c / gs). Used to rasterize PDFs before Audiveris.</summary>
+    public string GhostscriptPath { get; set; } = string.Empty;
+    /// <summary>Whether to rasterize the PDF with Ghostscript before passing to Audiveris. Off by default.</summary>
+    public bool UseGhostscript { get; set; } = false;
+    /// <summary>
+    /// Pixels of white padding added to the spine-side edge of each page before Audiveris.
+    /// Even pages get right-edge padding; odd pages get left-edge padding. 0 = disabled.
+    /// </summary>
+    public int SpinePaddingPx { get; set; } = 0;
+
     #endregion
 
     /// <summary>
@@ -432,6 +447,14 @@ public class AppSettings
                     settings.MetaDataWindowMaximized = localSettings.MetaDataWindowMaximized;
                     if (localSettings.Metronome != null)
                         settings.Metronome = localSettings.Metronome;
+                    if (!string.IsNullOrEmpty(localSettings.AudiverisPath))
+                        settings.AudiverisPath = localSettings.AudiverisPath;
+                    if (!string.IsNullOrEmpty(localSettings.MuseScorePath))
+                        settings.MuseScorePath = localSettings.MuseScorePath;
+                    if (!string.IsNullOrEmpty(localSettings.GhostscriptPath))
+                        settings.GhostscriptPath = localSettings.GhostscriptPath;
+                    settings.UseGhostscript = localSettings.UseGhostscript;
+                    settings.SpinePaddingPx = localSettings.SpinePaddingPx;
                 }
             }
         }
@@ -550,7 +573,12 @@ public class AppSettings
                 MetaDataWindowTop = MetaDataWindowTop,
                 MetaDataWindowLeft = MetaDataWindowLeft,
                 MetaDataWindowMaximized = MetaDataWindowMaximized,
-                Metronome = Metronome
+                Metronome = Metronome,
+                AudiverisPath = AudiverisPath,
+                MuseScorePath = MuseScorePath,
+                GhostscriptPath = GhostscriptPath,
+                UseGhostscript = UseGhostscript,
+                SpinePaddingPx = SpinePaddingPx
             };
 
             var json = JsonSerializer.Serialize(localSettings, JsonOptions);
@@ -743,8 +771,13 @@ public class AppSettings
         public double MetaDataWindowLeft { get; set; } = -1;
         public bool MetaDataWindowMaximized { get; set; } = true;
         public MetronomeSettings Metronome { get; set; } = new();
+        public string AudiverisPath { get; set; } = string.Empty;
+        public string MuseScorePath { get; set; } = string.Empty;
+        public string GhostscriptPath { get; set; } = string.Empty;
+        public bool UseGhostscript { get; set; } = false;
+        public int SpinePaddingPx { get; set; } = 0;
     }
-    
+
     /// <summary>
     /// Helper class for serializing only roaming settings
     /// </summary>
