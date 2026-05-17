@@ -263,6 +263,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         var mnuMetronome = this.GetControl<MenuItem>("mnuMetronome");
         mnuMetronome.Click += (s, e) => ToggleMetronomeOverlay();
 
+        var mnuOpenInMuseScore = this.GetControl<MenuItem>("mnuOpenInMuseScore");
+        mnuOpenInMuseScore.Click += (s, e) => _ = ShowExportToMuseScoreDialogAsync();
+
         // Wire up per-page link buttons
         var btnLink0 = this.GetControl<Button>("btnLink0");
         btnLink0.Click += (s, e) => OpenLinkForPage(0);
@@ -664,6 +667,21 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         catch (Exception ex)
         {
             Logger.LogException("Options dialog error", ex);
+        }
+    }
+
+    private async Task ShowExportToMuseScoreDialogAsync()
+    {
+        if (_currentPdfMetaData == null)
+            return;
+        try
+        {
+            var exportWindow = new ExportToMuseScoreWindow(_currentPdfMetaData, CurrentPageNumber);
+            await exportWindow.ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogException("ExportToMuseScore dialog error", ex);
         }
     }
 
@@ -1980,6 +1998,11 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 case Key.T:
                     // Alt+T toggles metronome overlay
                     ToggleMetronomeOverlay();
+                    e.Handled = true;
+                    return;
+                case Key.S:
+                    // Alt+S opens the Export to MuseScore dialog
+                    _ = ShowExportToMuseScoreDialogAsync();
                     e.Handled = true;
                     return;
                 default:
