@@ -1,10 +1,7 @@
 using Avalonia;
-using Avalonia.Headless;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
-using Avalonia.Themes.Fluent;
-using Avalonia.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SheetMusicLib;
 using SheetMusicViewer.Desktop;
@@ -14,7 +11,6 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace AvaloniaTests.Tests;
 
@@ -26,112 +22,32 @@ namespace AvaloniaTests.Tests;
 /// has platform-specific issues on macOS/Linux CI environments.
 /// </summary>
 [TestClass]
-[DoNotParallelize] // Avalonia initialization is not thread-safe across test classes
+[DoNotParallelize]
 public class InkCanvasControlTests : TestBase
 {
-    private static bool _avaloniaInitialized = false;
-    private static bool _initializationFailed = false;
-    private static string _initializationError = null;
-    private static readonly object _initLock = new();
-
-    /// <summary>
-    /// Initialize Avalonia once for all tests.
-    /// </summary>
-    private static void EnsureAvaloniaInitialized()
-    {
-        lock (_initLock)
-        {
-            if (_avaloniaInitialized || _initializationFailed)
-                return;
-
-            try
-            {
-                // Initialize Avalonia with headless platform for testing
-                AppBuilder.Configure<TestApp>()
-                    .UseHeadless(new AvaloniaHeadlessPlatformOptions())
-                    .SetupWithoutStarting();
-
-                _avaloniaInitialized = true;
-            }
-            catch (InvalidOperationException ex) when (ex.Message.Contains("already") || ex.Message.Contains("initialized"))
-            {
-                // Avalonia already initialized - that's fine
-                _avaloniaInitialized = true;
-            }
-            catch (Exception ex)
-            {
-                _initializationFailed = true;
-                _initializationError = ex.Message;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Skip test if not on Windows or if Avalonia initialization failed.
-    /// Avalonia headless with WriteableBitmap has platform-specific issues on macOS/Linux CI.
-    /// </summary>
     private void SkipIfNotSupportedPlatform()
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
             Assert.Inconclusive("InkCanvasControl tests are Windows-only due to Avalonia headless platform limitations");
-        }
-        
-        EnsureAvaloniaInitialized();
-        
-        if (_initializationFailed)
-        {
-            Assert.Inconclusive($"Avalonia headless initialization failed: {_initializationError}");
-        }
-        if (!_avaloniaInitialized)
-        {
+
+        if (AvaloniaUIThreadFixture.InitializationFailed)
+            Assert.Inconclusive($"Avalonia headless initialization failed: {AvaloniaUIThreadFixture.InitializationError}");
+
+        if (!AvaloniaUIThreadFixture.IsInitialized)
             Assert.Inconclusive("Avalonia headless not initialized - skipping test");
-        }
     }
 
-    /// <summary>
-    /// Execute an action on the Avalonia dispatcher thread.
-    /// This ensures thread affinity for Avalonia UI objects.
-    /// 
-    /// Note: With headless Avalonia (SetupWithoutStarting), there's no message pump running,
-    /// so we can't use Invoke() which would deadlock. Instead, we run directly since
-    /// Avalonia headless allows control creation on any thread.
-    /// </summary>
     private void RunOnDispatcher(Action action)
     {
-        // Post the action to the Avalonia UI thread and pump the dispatcher.
-        // SetupWithoutStarting() designates the setup thread as the UI thread, but MSTest
-        // runs test methods on different threads, so we must post and pump.
-        Exception? caught = null;
-        Dispatcher.UIThread.Post(() =>
-        {
-            try { action(); }
-            catch (Exception ex) { caught = ex; }
-        });
-        Dispatcher.UIThread.RunJobs();
-        if (caught != null)
-            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(caught).Throw();
+        if (!AvaloniaUIThreadFixture.IsSupported) return;
+        AvaloniaUIThreadFixture.RunOnUIThread(action);
     }
 
-    /// <summary>
-    /// Execute a function on the Avalonia dispatcher thread.
-    /// </summary>
     private T RunOnDispatcher<T>(Func<T> func)
     {
         T result = default!;
         RunOnDispatcher((Action)(() => { result = func(); }));
         return result;
-    }
-
-    /// <summary>
-    /// Minimal Avalonia app for headless testing
-    /// </summary>
-    private class TestApp : Application
-    {
-        public override void Initialize()
-        {
-            Styles.Add(new FluentTheme());
-        }
     }
 
     /// <summary>
