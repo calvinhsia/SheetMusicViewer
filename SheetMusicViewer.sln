@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.3.11222.16
@@ -15,7 +15,18 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		README.md = README.md
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WpfApp", "WpfApp\WpfApp.csproj", "{D25AE10D-12AF-42C8-948C-4A25994B50BE}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
+ProjectSection(SolutionItems) = preProject
+docs\architecture.md = docs\architecture.md
+docs\bmk-json-format.md = docs\bmk-json-format.md
+docs\development.md = docs\development.md
+docs\features.md = docs\features.md
+docs\metronome.md = docs\metronome.md
+docs\Migration-WPF-to-Avalonia.md = docs\Migration-WPF-to-Avalonia.md
+docs\musescore-export.md = docs\musescore-export.md
+docs\README.md = docs\README.md
+EndProjectSection
+EndProjectProject("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WpfApp", "WpfApp\WpfApp.csproj", "{D25AE10D-12AF-42C8-948C-4A25994B50BE}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AvaloniaTests", "AvaloniaTests\AvaloniaTests.csproj", "{6A9FA10A-2ACA-0DAA-24CC-1459B0516635}"
 EndProject
