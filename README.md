@@ -20,7 +20,7 @@ Also can export PDF music to MuseScore so you can edit music notation  or hear y
 * Table of Contents with search by composer, title, etc.
 * Remembers your last viewed page for each book
 * **Built-in Metronome** — drift-corrected, floating overlay, configurable BPM/accent/sound
-* **MuseScore Export** — Hear your music: convert any PDF page range to an editable/playable MuseScore file via Audiveris OMR
+* **MuseScore Export** — Hear your music: convert any PDF page range to an editable/playable MuseScore file via Audiveris OMR. Open the result in MuseScore Studio and export MIDI to any device.
 
 ---
 
