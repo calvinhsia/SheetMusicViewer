@@ -425,6 +425,14 @@ public static class MuseScoreExportService
         // PAGE is the final step (after RHYTHMS) that creates the Score object.
         // Exit code is ignored: Audiveris exits 1 when rhythm warnings occur but
         // still writes a fully-populated .omr with all sheet data.
+        // Log the page dimensions of the file being fed to Audiveris so the user can
+        // diagnose issues such as spine-padding making pages appear blank.
+        var pdfPageSize = TryReadPdfFirstPageSize(pdfPath);
+        if (pdfPageSize.HasValue)
+            progress?.Report($"Input to Audiveris: {Path.GetFileName(pdfPath)}  page size = {pdfPageSize.Value.Width:F1} × {pdfPageSize.Value.Height:F1} pts  ({pdfPageSize.Value.Width / 72.0:F2}" + $" × {pdfPageSize.Value.Height / 72.0:F2} in)");
+        else
+            progress?.Report($"Input to Audiveris: {Path.GetFileName(pdfPath)}  (page size unavailable)");
+
         progress?.Report($"Pass 1: Transcribing with Audiveris{rangeLabel} (this may take several minutes)…");
         await RunAudiverisProcessAsync(audiverisPath, args =>
         {
@@ -969,37 +977,43 @@ public static class MuseScoreExportService
             {
                 // Add white padding on the spine-side edge of each page to compensate for
                 // gutter clipping from book-feeder scans.
-                //   Even pages → right edge clipped → pad right  (translate left by 0, expand width right)
-                //   Odd  pages → left  edge clipped → pad left   (translate right, expand width left)
-                // We install a BeginPage procedure that:
-                //   1. Queries the current page number (via /PageCount or page counter).
-                //   2. Reads the current MediaBox.
-                //   3. Enlarges it by spinePaddingPx on the appropriate side.
-                //   4. Sets the new MediaBox so the extra white space appears in the output.
-                // Note: page numbers here are 1-based within the output (after -dFirstPage slicing).
+                //   Even pages → right edge clipped → pad right  (content stays at x=0, white extends right)
+                //   Odd  pages → left  edge clipped → pad left   (translate content right by SpinePad)
+                //
+                // KEY: We must NOT call setpagedevice inside a BeginPage callback — doing so
+                // re-triggers BeginPage recursively causing /execstackoverflow.
+                // Instead, set the widened media size upfront via GS command-line flags so
+                // BeginPage only needs a translate for odd pages.
+                var pageSize = TryReadPdfFirstPageSize(pdfPath);
+                float origW = pageSize.HasValue ? pageSize.Value.Width  : 595f;
+                float origH = pageSize.HasValue ? pageSize.Value.Height : 842f;
+                float newW  = origW + spinePaddingPx;
+
+                // Tell GS the output canvas is wider than the source pages.
+                // -dFIXEDMEDIA prevents GS from resizing the canvas per page.
+                psi.ArgumentList.Add($"-dDEVICEWIDTHPOINTS={newW:F4}");
+                psi.ArgumentList.Add($"-dDEVICEHEIGHTPOINTS={origH:F4}");
+                psi.ArgumentList.Add("-dFIXEDMEDIA");
+
+                // BeginPage: for odd pages (right-hand page, gutter on left), shift content
+                // right by SpinePad so whitespace appears on the left (binding) edge.
+                // For even pages (left-hand, gutter on right) no translate needed — the
+                // wider canvas already leaves white on the right.
+                // PageCount in pdfwrite is 1-based at BeginPage time (already incremented),
+                // so use it directly without adding 1.
                 ps.Append(
                     $"/SpinePad {spinePaddingPx} def " +
-                    $"/origBeginPage /BeginPage where {{ pop /BeginPage load }} {{ {{ }} }} ifelse def " +
                     $"<< /BeginPage {{ " +
-                    $"  origBeginPage exec " +
-                    $"  currentpagedevice /PageCount known {{ " +
-                    $"    currentpagedevice /PageCount get 1 add " +  // 1-based page index
-                    $"  }} {{ 1 }} ifelse " +
-                    $"  2 mod 0 eq " + // true = even page → pad right; false = odd → pad left
-                    $"  {{ " + // even page: extend right edge
-                    $"    currentpagedevice /PageSize get aload pop " + // w h
-                    $"    SpinePad add " +                              // w h+pad  (width stays, height arg unused here)
-                    $"    exch SpinePad add exch " +                   // (w+pad) h+pad
-                    $"    2 array astore /PageSize exch << /PageSize 3 -1 roll >> setpagedevice " +
-                    $"  }} {{ " + // odd page: translate right and extend left
-                    $"    currentpagedevice /PageSize get aload pop " +
-                    $"    SpinePad add exch SpinePad add exch " +
-                    $"    2 array astore /PageSize exch << /PageSize 3 -1 roll >> setpagedevice " +
-                    $"    SpinePad 0 translate " +
-                    $"  }} ifelse " +
+                    $"  currentpagedevice /PageCount known " +
+                    $"    {{ currentpagedevice /PageCount get }} " +
+                    $"    {{ 1 }} " +
+                    $"  ifelse " +
+                    $"  2 mod 1 eq " + // true = odd page (right-hand) → shift content right
+                    $"  {{ SpinePad 0 translate }} " +
+                    $"  if " +
                     $"}} >> setpagedevice ");
 
-                progress?.Report($"Spine padding enabled: {spinePaddingPx} px on gutter edge per page.");
+                progress?.Report($"Spine padding enabled: {spinePaddingPx} pts on gutter edge per page (canvas widened from {origW:F0} to {newW:F0} pts).");
             }
 
             psi.ArgumentList.Add("-c");
@@ -1037,6 +1051,9 @@ public static class MuseScoreExportService
         if (proc.ExitCode != 0 || !File.Exists(normalisedPath))
         {
             progress?.Report($"\u26a0 Ghostscript normalisation failed (exit {proc.ExitCode}) \u2014 proceeding with original PDF.");
+            var errText = errLines.ToString().Trim();
+            if (!string.IsNullOrEmpty(errText))
+                progress?.Report($"[GS stderr] {errText}");
             Logger.LogInfo($"[GS] stderr: {errLines}");
             return pdfPath;
         }
@@ -1045,6 +1062,49 @@ public static class MuseScoreExportService
         var normKb = new FileInfo(normalisedPath).Length / 1024;
         progress?.Report($"PDF normalised: {origKb} KB \u2192 {normKb} KB (_gs.pdf, {(hasPageRange ? $"pages {firstPage}\u2013{lastPage}" : "all pages")})");
         return normalisedPath;
+    }
+
+    /// <summary>
+    /// Reads the MediaBox of the first page from a PDF file without any external library.
+    /// Returns width and height in PDF points (1/72 inch). Returns null if parsing fails.
+    /// </summary>
+    private static (float Width, float Height)? TryReadPdfFirstPageSize(string pdfPath)
+    {
+        try
+        {
+            // Read up to 128 KB — enough to find the first /MediaBox and /Rotate in most PDFs.
+            const int maxBytes = 131072;
+            using var fs = new FileStream(pdfPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            int readLen = (int)Math.Min(fs.Length, maxBytes);
+            var buf = new byte[readLen];
+            _ = fs.Read(buf, 0, readLen);
+            var text = System.Text.Encoding.Latin1.GetString(buf);
+
+            // Match /MediaBox [ llx lly urx ury ]
+            var m = System.Text.RegularExpressions.Regex.Match(
+                text,
+                @"/MediaBox\s*\[\s*([\d.+-]+)\s+([\d.+-]+)\s+([\d.+-]+)\s+([\d.+-]+)\s*\]");
+            if (!m.Success) return null;
+
+            float llx = float.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+            float lly = float.Parse(m.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
+            float urx = float.Parse(m.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture);
+            float ury = float.Parse(m.Groups[4].Value, System.Globalization.CultureInfo.InvariantCulture);
+            float rawW = Math.Abs(urx - llx);
+            float rawH = Math.Abs(ury - lly);
+
+            // /Rotate 90 or 270 means the page is displayed with width and height swapped.
+            // Only 90 and 270 swap dimensions; 0 and 180 do not.
+            var rotMatch = System.Text.RegularExpressions.Regex.Match(text, @"/Rotate\s+(\d+)");
+            int rotate = rotMatch.Success ? int.Parse(rotMatch.Groups[1].Value) : 0;
+            rotate = ((rotate % 360) + 360) % 360; // normalise to 0-359
+            bool swapAxes = rotate == 90 || rotate == 270;
+            return swapAxes ? (rawH, rawW) : (rawW, rawH);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static async Task RunAudiverisProcessAsync(

@@ -63,6 +63,7 @@ public class ExportToMuseScoreWindow : Window
         MinWidth = 520;
         MinHeight = 720;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        ShowInTaskbar = false;
         CanResize = true;
 
         BuildUI();
