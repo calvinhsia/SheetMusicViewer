@@ -26,7 +26,8 @@ docs\Migration-WPF-to-Avalonia.md = docs\Migration-WPF-to-Avalonia.md
 docs\musescore-export.md = docs\musescore-export.md
 docs\README.md = docs\README.md
 EndProjectSection
-EndProjectProject("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WpfApp", "WpfApp\WpfApp.csproj", "{D25AE10D-12AF-42C8-948C-4A25994B50BE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WpfApp", "WpfApp\WpfApp.csproj", "{D25AE10D-12AF-42C8-948C-4A25994B50BE}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AvaloniaTests", "AvaloniaTests\AvaloniaTests.csproj", "{6A9FA10A-2ACA-0DAA-24CC-1459B0516635}"
 EndProject
@@ -195,7 +196,6 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{D25AE10D-12AF-42C8-948C-4A25994B50BE} = {0B0AC1D6-0AD1-434D-AC16-CCDDFC3092E7}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C2970F6E-C89F-4559-8E3B-8443119FCB2E}
