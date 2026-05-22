@@ -289,7 +289,9 @@ public static class MuseScoreExportService
         int bookStart = 0,
         int bookEnd = 0,
         IProgress<string>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? persistDir = null,
+        string? songName = null)
     {
         var segments = ResolveVolumeSegments(pdfMetaData, bookStart, bookEnd);
 
@@ -300,7 +302,7 @@ public static class MuseScoreExportService
         if (segments.Count == 1)
         {
             var s = segments[0];
-            return await RunAudiverisAsync(audiverisPath, s.PdfPath, s.LocalStart, s.LocalEnd, progress, ct, s.Rotation);
+            return await RunAudiverisAsync(audiverisPath, s.PdfPath, s.LocalStart, s.LocalEnd, progress, ct, s.Rotation, persistDir, songName);
         }
 
         // Multiple volumes — use Ghostscript to concatenate all volume PDFs (or page slices)
@@ -357,6 +359,58 @@ public static class MuseScoreExportService
     ///   Pass 2 — batch export the patched .omr; this skips re-transcription and exports cleanly.
     /// startPage/endPage: 1-based inclusive within the single PDF; pass 0 for both to process all pages.
     /// </summary>
+    /// <summary>
+    /// Strips characters that are illegal in Windows file names, and trims the result.
+    /// </summary>
+    public static string SanitizeFileName(string name)
+    {
+        var invalid = System.IO.Path.GetInvalidFileNameChars();
+        var sb = new System.Text.StringBuilder(name.Length);
+        foreach (var c in name)
+            sb.Append(Array.IndexOf(invalid, c) >= 0 ? '_' : c);
+        return sb.ToString().Trim().TrimEnd('.');
+    }
+
+    /// <summary>
+    /// Returns the path where a persisted MusicXML export would be placed, or <c>null</c>
+    /// when the range spans multiple volumes (no single deterministic filename).
+    /// Resolves book-page numbers to per-volume local page numbers the same way
+    /// <see cref="RunAudiverisAsync(string,PdfMetaDataReadResult,int,int,IProgress{string},CancellationToken,string)"/> does,
+    /// so the predicted filename always matches the file that will actually be written.
+    /// When <paramref name="songName"/> is supplied it is used as the filename instead of
+    /// the PDF basename + page-range suffix, giving a human-readable cache file name.
+    /// </summary>
+    public static string? ComputeExpectedMxlPath(
+        PdfMetaDataReadResult pdfMetaData,
+        int bookStart,
+        int bookEnd,
+        bool useGhostscript,
+        string persistDir,
+        string? songName = null)
+    {
+        var segments = ResolveVolumeSegments(pdfMetaData, bookStart, bookEnd);
+        // Multi-volume spans produce a combined temp file — no deterministic persist path.
+        if (segments.Count != 1) return null;
+
+        string baseName;
+        if (!string.IsNullOrWhiteSpace(songName))
+        {
+            baseName = SanitizeFileName(songName);
+        }
+        else
+        {
+            var seg = segments[0];
+            baseName = Path.GetFileNameWithoutExtension(seg.PdfPath);
+            if (useGhostscript)
+            {
+                bool hasRange = seg.LocalStart > 0 && seg.LocalEnd > 0;
+                var rangeSuffix = hasRange ? $"_p{seg.LocalStart}-{seg.LocalEnd}" : "";
+                baseName = baseName + rangeSuffix + "_gs";
+            }
+        }
+        return Path.Combine(persistDir, baseName + ".mxl");
+    }
+
     public static async Task<string> RunAudiverisAsync(
         string audiverisPath,
         string pdfPath,
@@ -364,7 +418,9 @@ public static class MuseScoreExportService
         int endPage = 0,
         IProgress<string>? progress = null,
         CancellationToken ct = default,
-        int rotation = 0)
+        int rotation = 0,
+        string? persistDir = null,
+        string? songName = null)
     {
         if (!File.Exists(audiverisPath))
             throw new FileNotFoundException($"Audiveris not found at: {audiverisPath}");
@@ -560,6 +616,24 @@ public static class MuseScoreExportService
                 int reportedPages = processedSheetCount > 0 ? processedSheetCount : (hasRange ? endPage - startPage + 1 : 1);
                 double secsPerPage = reportedPages > 0 ? overallSw.Elapsed.TotalSeconds / reportedPages : overallSw.Elapsed.TotalSeconds;
                 progress?.Report($"Overall conversion: {overallSw.Elapsed:m\\:ss\\.f} for {reportedPages} page(s) — {secsPerPage:F1} sec/page");
+
+                // Persist a copy next to the source PDF so subsequent runs can skip conversion.
+                // Always store as .mxl so ComputeExpectedMxlPath can find it regardless of
+                // whether Audiveris chose .mxl, .musicxml, or .xml as its output extension.
+                if (!string.IsNullOrEmpty(persistDir))
+                {
+                    Directory.CreateDirectory(persistDir);
+                    // Use the human-readable song name when available, otherwise keep the
+                    // PDF-basename + page-range name that ComputeExpectedMxlPath predicts.
+                    var persistStem = !string.IsNullOrWhiteSpace(songName)
+                        ? SanitizeFileName(songName)
+                        : Path.GetFileNameWithoutExtension(found);
+                    var persistPath = Path.Combine(persistDir, persistStem + ".mxl");
+                    File.Copy(found, persistPath, overwrite: true);
+                    progress?.Report($"Saved output to: {persistPath}");
+                    return persistPath;
+                }
+
                 return found;
             }
         }

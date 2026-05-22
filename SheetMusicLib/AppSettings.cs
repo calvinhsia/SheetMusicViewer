@@ -403,6 +403,11 @@ public class AppSettings
     /// Even pages get right-edge padding; odd pages get left-edge padding. 0 = disabled.
     /// </summary>
     public int SpinePaddingPx { get; set; } = 0;
+    /// <summary>
+    /// When true, the converted MusicXML (.mxl) is saved next to the source PDF so that
+    /// a second launch with the same settings can skip the expensive Audiveris conversion.
+    /// </summary>
+    public bool PersistMxlNextToPdf { get; set; } = false;
 
     #endregion
 

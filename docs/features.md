@@ -30,6 +30,15 @@ Each piece can have a TOC listing individual songs/chapters with:
 
 The TOC is editable through the **Metadata** form and is stored in the `.bmk` JSON file.
 
+## Singles
+If you name a folder "PopSingles" or any name ending in "Singles", then the entire folder will be treated like a single book, with all the contained PDFs as individual pages.
+By default, the first PDF in alphabetical order, first page will be used as the Thumbnail for that book.
+For example, I may choose a composer, "JohnDoe". I can create a folder called "JohnDoeSingles" and put all individual PDFs from JohnDoe
+in that folder.
+I will then search the internet for a picture of John Doe or an image to represent the folder, paste it into Microsoft Word, resize it, add desired titling, then print to Microsoft PDF printer, 
+outputting "0Title.pdf" in that folder (early in alphabetical order). 
+
+
 ## Favorites / Bookmarks
 
 Mark any page as a favorite with an optional name. Favorites appear in a quick-access list and can be navigated directly.
