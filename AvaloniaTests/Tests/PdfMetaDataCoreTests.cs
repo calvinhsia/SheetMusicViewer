@@ -1518,4 +1518,78 @@ public class PdfMetaDataCoreTests : TestBase
             LogMessage($"  {metadata.TocEntries[i].SongName}: page {metadata.TocEntries[i].PageNo}");
         }
     }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task LoadAllPdfMetaDataFromDiskAsync_NewPdfWithManyPages_HasDefaultTocEntry()
+    {
+        // Regression test: a new PDF with >= 11 pages and no existing metadata
+        // used to produce "tableOfContents": [] because the parallel loader's
+        // guard was "TocEntries.Count == 0 && pageCount < 11".
+
+        // Arrange - create a 12-page PDF with no accompanying JSON
+        var pdfPath = Path.Combine(_tempFolder, "BigBook.pdf");
+        var multiPagePdf = TestHelpers.CreateTestPdf(12);
+        File.Copy(multiPagePdf, pdfPath);
+        File.Delete(multiPagePdf);
+
+        Assert.IsFalse(File.Exists(Path.ChangeExtension(pdfPath, ".json")),
+            "No JSON should exist before loading");
+
+        var provider = new PdfToImageDocumentProvider();
+
+        // Act
+        var (metadataList, _) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+            _tempFolder,
+            provider,
+            exceptionHandler: null,
+            useParallelLoading: true,
+            autoSaveNewMetadata: false);
+
+        // Assert
+        Assert.AreEqual(1, metadataList.Count, "Should find 1 book");
+        var metadata = metadataList[0];
+
+        Assert.AreEqual(12, metadata.VolumeInfoList[0].NPagesInThisVolume,
+            "Should have 12 pages");
+        Assert.IsTrue(metadata.TocEntries.Count > 0,
+            "A new PDF with >= 11 pages must still get a default TOC entry");
+        Assert.AreEqual("BigBook", metadata.TocEntries[0].SongName,
+            "Default TOC entry should use the PDF filename (without extension)");
+
+        LogMessage($"TocEntries.Count = {metadata.TocEntries.Count}, " +
+                   $"SongName = '{metadata.TocEntries[0].SongName}'");
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task ReadPdfMetaDataAsync_NewPdfWithNoMetadataFile_HasDefaultTocEntry()
+    {
+        // Regression test: CreateNewMetaDataAsync used to return a result with
+        // an empty TocEntries list, causing "tableOfContents": [] when saved.
+
+        // Arrange - a PDF with no .json or .bmk alongside it
+        var pdfPath = Path.Combine(_tempFolder, "NewSong.pdf");
+        var tempPdf = TestHelpers.CreateTestPdf(5);
+        File.Copy(tempPdf, pdfPath);
+        File.Delete(tempPdf);
+
+        var provider = new PdfToImageDocumentProvider();
+
+        // Act
+        var metadata = await PdfMetaDataCore.ReadPdfMetaDataAsync(
+            pdfPath,
+            isSingles: false,
+            pdfDocumentProvider: provider);
+
+        // Assert
+        Assert.IsNotNull(metadata, "Should return metadata");
+        Assert.IsTrue(metadata.TocEntries.Count > 0,
+            "A brand-new PDF with no metadata file must get a default TOC entry");
+        Assert.AreEqual("NewSong", metadata.TocEntries[0].SongName,
+            "Default TOC entry should use the PDF filename (without extension)");
+
+        LogMessage($"TocEntries.Count = {metadata.TocEntries.Count}, " +
+                   $"SongName = '{metadata.TocEntries[0].SongName}'");
+    }
 }
