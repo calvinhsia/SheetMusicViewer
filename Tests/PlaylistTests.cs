@@ -901,21 +901,23 @@ namespace Tests
             // Arrange
             var settings = AppSettings.Instance;
             settings.Playlists.Add(new Playlist { Name = "Existing" });
-            
+
             // Delete the roaming file if it exists
             var roamingPath = AppSettings.RoamingSettingsPath;
             if (roamingPath != null && File.Exists(roamingPath))
             {
                 File.Delete(roamingPath);
             }
-            
+
             // Act - Should not throw
             settings.ReloadRoaming();
-            
-            // Assert - Settings should be unchanged
-            Assert.AreEqual(1, settings.Playlists.Count);
-            Assert.AreEqual("Existing", settings.Playlists[0].Name);
-            AddLogEntry("ReloadRoaming handles missing file gracefully");
+
+            // Assert - When the file is missing, in-memory playlists are cleared.
+            // This is intentional: a missing userdata.json means the folder has no
+            // saved playlists, so stale in-memory data from a previous folder must not persist.
+            Assert.AreEqual(0, settings.Playlists.Count,
+                "Playlists should be cleared when userdata.json is missing");
+            AddLogEntry("ReloadRoaming handles missing file gracefully - clears in-memory playlists");
         }
         
         [TestMethod]
