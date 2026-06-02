@@ -403,6 +403,11 @@ public class AppSettings
     /// Even pages get right-edge padding; odd pages get left-edge padding. 0 = disabled.
     /// </summary>
     public int SpinePaddingPx { get; set; } = 0;
+    /// <summary>
+    /// When true, the converted MusicXML (.mxl) is saved next to the source PDF so that
+    /// a second launch with the same settings can skip the expensive Audiveris conversion.
+    /// </summary>
+    public bool PersistMxlNextToPdf { get; set; } = false;
 
     #endregion
 
@@ -488,7 +493,7 @@ public class AppSettings
             {
                 var fileInfo = new FileInfo(roamingPath);
                 Logger.LogInfo($"LoadRoamingFromMusicFolder: File exists, LastWrite={fileInfo.LastWriteTime:yyyy-MM-dd HH:mm:ss.fff}");
-                
+
                 var json = File.ReadAllText(roamingPath);
                 Logger.LogInfo($"LoadRoamingFromMusicFolder: Read {json.Length} chars from {roamingPath}");
                 var roamingSettings = JsonSerializer.Deserialize<RoamingSettings>(json, JsonOptions);
@@ -496,7 +501,7 @@ public class AppSettings
                 {
                     var loadedCount = roamingSettings.Playlists?.Count ?? 0;
                     Logger.LogInfo($"LoadRoamingFromMusicFolder: Loaded {loadedCount} playlists from file, replacing {currentPlaylistCount} in-memory playlists");
-                    
+
                     Playlists = roamingSettings.Playlists ?? new List<Playlist>();
                     LastSelectedPlaylist = roamingSettings.LastSelectedPlaylist;
                     Logger.LogInfo($"LoadRoamingFromMusicFolder: Now have {Playlists.Count} playlists, LastSelected={LastSelectedPlaylist}");
@@ -508,7 +513,11 @@ public class AppSettings
             }
             else
             {
+                // No userdata.json in this folder yet - clear any playlists from the previous folder
+                // so they don't leak into this folder's session.
                 Logger.LogWarning($"LoadRoamingFromMusicFolder: File does not exist: {roamingPath}");
+                Playlists = new List<Playlist>();
+                LastSelectedPlaylist = null;
             }
         }
         catch (Exception ex)

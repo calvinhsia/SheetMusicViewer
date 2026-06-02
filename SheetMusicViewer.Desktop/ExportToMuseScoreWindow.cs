@@ -45,6 +45,11 @@ public class ExportToMuseScoreWindow : Window
     private Button _btnCancel = null!;
     private Button _btnClose = null!;
 
+    // persist-output UI
+    private CheckBox _chkPersistNextToPdf = null!;
+    private TextBlock _txtPersistPath = null!;
+    private TextBlock _txtCacheStatus = null!;
+
     private CancellationTokenSource? _cts;
 
     private record SongItem(string DisplayName, int StartPage, int EndPage)
@@ -63,6 +68,7 @@ public class ExportToMuseScoreWindow : Window
         MinWidth = 520;
         MinHeight = 720;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        ShowInTaskbar = false;
         CanResize = true;
 
         BuildUI();
@@ -94,6 +100,7 @@ public class ExportToMuseScoreWindow : Window
                 new RowDefinition(GridLength.Auto),  // title
                 new RowDefinition(GridLength.Auto),  // source section
                 new RowDefinition(GridLength.Auto),  // tool paths section
+                new RowDefinition(GridLength.Auto),  // persist / cache section
                 new RowDefinition(new GridLength(1, GridUnitType.Star)), // progress area
                 new RowDefinition(GridLength.Auto)   // buttons
             }
@@ -131,7 +138,7 @@ public class ExportToMuseScoreWindow : Window
             GroupName = "ExportRange",
             IsChecked = toc.Count > 0
         };
-        _rbCurrentSong.IsCheckedChanged += (_, _) => UpdateSongControlsEnabled();
+        _rbCurrentSong.IsCheckedChanged += (_, _) => { UpdateSongControlsEnabled(); UpdateCacheStatus(); };
         sourcePanel.Children.Add(_rbCurrentSong);
 
         // Song chooser combo
@@ -139,6 +146,7 @@ public class ExportToMuseScoreWindow : Window
         songRow.Children.Add(new TextBlock { Text = "Song:", VerticalAlignment = VerticalAlignment.Center, Width = 50 });
         _cmbSong = new ComboBox { Width = 380 };
         PopulateSongCombo(toc, totalPages);
+        _cmbSong.SelectionChanged += (_, _) => UpdateCacheStatus();
         songRow.Children.Add(_cmbSong);
         sourcePanel.Children.Add(songRow);
 
@@ -149,7 +157,7 @@ public class ExportToMuseScoreWindow : Window
             GroupName = "ExportRange",
             IsChecked = toc.Count == 0
         };
-        _rbFullPdf.IsCheckedChanged += (_, _) => UpdateSongControlsEnabled();
+        _rbFullPdf.IsCheckedChanged += (_, _) => { UpdateSongControlsEnabled(); UpdateCacheStatus(); };
         sourcePanel.Children.Add(_rbFullPdf);
 
         // --- Custom range radio ---
@@ -158,7 +166,7 @@ public class ExportToMuseScoreWindow : Window
             Content = "Custom page range:",
             GroupName = "ExportRange"
         };
-        _rbCustomRange.IsCheckedChanged += (_, _) => UpdateSongControlsEnabled();
+        _rbCustomRange.IsCheckedChanged += (_, _) => { UpdateSongControlsEnabled(); UpdateCacheStatus(); };
         sourcePanel.Children.Add(_rbCustomRange);
 
         var rangeRow = new StackPanel
@@ -170,9 +178,11 @@ public class ExportToMuseScoreWindow : Window
         };
         rangeRow.Children.Add(new TextBlock { Text = "From page:", VerticalAlignment = VerticalAlignment.Center, Width = 80 });
         _nudStartPage = new NumericUpDown { Value = 1, Minimum = 1, Maximum = totalPages, Width = 120, FormatString = "0" };
+        _nudStartPage.ValueChanged += (_, _) => UpdateCacheStatus();
         rangeRow.Children.Add(_nudStartPage);
         rangeRow.Children.Add(new TextBlock { Text = "to", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0) });
         _nudEndPage = new NumericUpDown { Value = totalPages, Minimum = 1, Maximum = totalPages, Width = 120, FormatString = "0" };
+        _nudEndPage.ValueChanged += (_, _) => UpdateCacheStatus();
         rangeRow.Children.Add(_nudEndPage);
         rangeRow.Children.Add(new TextBlock { Text = $"(1–{totalPages})", VerticalAlignment = VerticalAlignment.Center, Foreground = Brushes.Gray, FontSize = 11 });
         sourcePanel.Children.Add(rangeRow);
@@ -245,9 +255,41 @@ public class ExportToMuseScoreWindow : Window
 
         mainGrid.Children.Add(toolPanel);
 
+        // === Persist / Cache Section ===
+        var persistPanel = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 8) };
+        Grid.SetRow(persistPanel, 3);
+
+        _chkPersistNextToPdf = new CheckBox
+        {
+            Content = "Save output next to source PDF (enables skip-if-unchanged)",
+            IsChecked = AppSettings.Instance.PersistMxlNextToPdf,
+            FontSize = 12
+        };
+        _chkPersistNextToPdf.IsCheckedChanged += (_, _) => UpdateCacheStatus();
+        persistPanel.Children.Add(_chkPersistNextToPdf);
+
+        _txtPersistPath = new TextBlock
+        {
+            FontSize = 11,
+            Foreground = Brushes.Gray,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(22, 0, 0, 0)
+        };
+        persistPanel.Children.Add(_txtPersistPath);
+
+        _txtCacheStatus = new TextBlock
+        {
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(22, 0, 0, 0)
+        };
+        persistPanel.Children.Add(_txtCacheStatus);
+
+        mainGrid.Children.Add(persistPanel);
+
         // === Progress Area ===
         var progressPanel = new DockPanel { LastChildFill = true };
-        Grid.SetRow(progressPanel, 3);
+        Grid.SetRow(progressPanel, 4);
 
         _progressBar = new ProgressBar
         {
@@ -292,7 +334,7 @@ public class ExportToMuseScoreWindow : Window
             Spacing = 10,
             Margin = new Thickness(0, 10, 0, 0)
         };
-        Grid.SetRow(buttonPanel, 4);
+        Grid.SetRow(buttonPanel, 5);
 
         _btnCancel = new Button { Content = "Cancel Conversion", Width = 140, IsVisible = false };
         _btnCancel.Click += (_, _) => { _cts?.Cancel(); _btnCancel.IsVisible = false; };
@@ -313,6 +355,7 @@ public class ExportToMuseScoreWindow : Window
         // Select the current song by default if TOC is available
         SelectCurrentSong(toc, totalPages);
         UpdateSongControlsEnabled();
+        UpdateCacheStatus();
     }
 
     private void PopulateSongCombo(List<TOCEntry> toc, int totalPages)
@@ -372,6 +415,68 @@ public class ExportToMuseScoreWindow : Window
         _cmbSong.IsEnabled = _rbCurrentSong.IsChecked == true;
         _customRangeRow.IsEnabled = isCustom;
         _customRangeRow.Opacity = isCustom ? 1.0 : 0.45;
+    }
+
+    private (int startPage, int endPage) GetEffectiveRange()
+    {
+        var totalPages = _pdfMetaData.NumPagesInSet;
+        if (_rbCurrentSong.IsChecked == true && _cmbSong.SelectedItem is SongItem song)
+            return (song.StartPage, song.EndPage);
+        if (_rbCustomRange.IsChecked == true)
+            return ((int)(_nudStartPage.Value ?? 1), (int)(_nudEndPage.Value ?? totalPages));
+        return (1, totalPages);
+    }
+
+    /// <summary>Returns the selected song's display name when "Current song" is active, otherwise null.</summary>
+    private string? GetSelectedSongName() =>
+        _rbCurrentSong.IsChecked == true && _cmbSong.SelectedItem is SongItem s ? s.DisplayName : null;
+
+    private string? GetPersistDir()
+    {
+        if (_chkPersistNextToPdf?.IsChecked != true) return null;
+        var pdfPath = _pdfMetaData.GetFullPathFileFromVolno(0);
+        if (string.IsNullOrEmpty(pdfPath)) return null;
+        return System.IO.Path.GetDirectoryName(pdfPath);
+    }
+
+    private void UpdateCacheStatus()
+    {
+        if (_txtPersistPath == null || _txtCacheStatus == null) return;
+
+        var persistDir = GetPersistDir();
+        if (persistDir == null)
+        {
+            _txtPersistPath.Text = "";
+            _txtCacheStatus.Text = "";
+            _btnExport.Content = "▶  Export & Open";
+            return;
+        }
+
+        var (startPage, endPage) = GetEffectiveRange();
+        bool useGs = _chkUseGhostscript.IsChecked == true;
+        // Use 0/0 to mean "all pages" (full PDF radio), matching RunAudiverisAsync convention
+        int bookStart = (_rbFullPdf.IsChecked == true) ? 0 : startPage;
+        int bookEnd   = (_rbFullPdf.IsChecked == true) ? 0 : endPage;
+        var expectedPath = MuseScoreExportService.ComputeExpectedMxlPath(_pdfMetaData, bookStart, bookEnd, useGs, persistDir, GetSelectedSongName());
+
+        _txtPersistPath.Text = expectedPath ?? "(spans multiple volumes — no cache)";
+
+        if (expectedPath != null && System.IO.File.Exists(expectedPath))
+        {
+            var age = DateTime.Now - System.IO.File.GetLastWriteTime(expectedPath);
+            var ageStr = age.TotalDays >= 1 ? $"{(int)age.TotalDays}d ago" :
+                         age.TotalHours >= 1 ? $"{(int)age.TotalHours}h ago" :
+                         $"{(int)age.TotalMinutes}m ago";
+            _txtCacheStatus.Foreground = Brushes.Green;
+            _txtCacheStatus.Text = $"✔ Cached ({ageStr}) — conversion will be skipped";
+            _btnExport.Content = "▶  Open in MuseScore";
+        }
+        else
+        {
+            _txtCacheStatus.Foreground = Brushes.Gray;
+            _txtCacheStatus.Text = expectedPath != null ? "No cached file — conversion will run" : "Multi-volume range — cache not supported";
+            _btnExport.Content = "▶  Export & Open";
+        }
     }
 
     private Control CreatePathRow(string label, ref TextBox textBoxField, string currentValue,
@@ -500,6 +605,7 @@ public class ExportToMuseScoreWindow : Window
         AppSettings.Instance.GhostscriptPath = _txtGhostscriptPath.Text?.Trim() ?? "";
         AppSettings.Instance.UseGhostscript = _chkUseGhostscript.IsChecked == true;
         AppSettings.Instance.SpinePaddingPx = (int)(_nudSpinePadding.Value ?? 0);
+        AppSettings.Instance.PersistMxlNextToPdf = _chkPersistNextToPdf.IsChecked == true;
         AppSettings.Instance.Save();
 
         // Determine page range
@@ -535,6 +641,28 @@ public class ExportToMuseScoreWindow : Window
             return;
         }
 
+        // Check for cached output — skip conversion if unchanged
+        var persistDir = GetPersistDir();
+        if (persistDir != null)
+        {
+            bool useGs = _chkUseGhostscript.IsChecked == true;
+            int bookStart = (startPage == 1 && endPage == totalPages) ? 0 : startPage;
+            int bookEnd   = (startPage == 1 && endPage == totalPages) ? 0 : endPage;
+            var songName = GetSelectedSongName();
+            var cachedPath = MuseScoreExportService.ComputeExpectedMxlPath(_pdfMetaData, bookStart, bookEnd, useGs, persistDir, songName);
+            if (cachedPath != null && System.IO.File.Exists(cachedPath))
+            {
+                var bpmQuick = (int)(_nudTempo.Value ?? 120);
+                SetStatus($"Using cached output: {cachedPath}");
+                SetStatus($"Setting playback tempo to {bpmQuick} BPM…");
+                MuseScoreExportService.SetTempoInMusicXml(cachedPath, bpmQuick, new Progress<string>(msg => SetStatus(msg)));
+                SetStatus("Launching MuseScore…");
+                MuseScoreExportService.LaunchMuseScore(museScorePath, cachedPath);
+                SetStatus("MuseScore launched. You can close this dialog.");
+                return;
+            }
+        }
+
         // Update UI for running state
         _btnExport.IsEnabled = false;
         _btnCancel.IsVisible = true;
@@ -559,7 +687,9 @@ public class ExportToMuseScoreWindow : Window
                 audiverisPath, _pdfMetaData,
                 isFullSet ? 0 : startPage,
                 isFullSet ? 0 : endPage,
-                progress, _cts.Token);
+                progress, _cts.Token,
+                persistDir,
+                GetSelectedSongName());
 
             SetStatus($"Conversion complete: {outputFile}");
 
@@ -575,6 +705,7 @@ public class ExportToMuseScoreWindow : Window
             MuseScoreExportService.LaunchMuseScore(museScorePath, outputFile);
 
             SetStatus("MuseScore launched. You can close this dialog.");
+            UpdateCacheStatus();
         }
         catch (OperationCanceledException)
         {
@@ -592,6 +723,7 @@ public class ExportToMuseScoreWindow : Window
             _progressBar.IsVisible = false;
             _cts?.Dispose();
             _cts = null;
+            UpdateCacheStatus();
         }
     }
 }

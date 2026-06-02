@@ -901,21 +901,23 @@ namespace Tests
             // Arrange
             var settings = AppSettings.Instance;
             settings.Playlists.Add(new Playlist { Name = "Existing" });
-            
+
             // Delete the roaming file if it exists
             var roamingPath = AppSettings.RoamingSettingsPath;
             if (roamingPath != null && File.Exists(roamingPath))
             {
                 File.Delete(roamingPath);
             }
-            
+
             // Act - Should not throw
             settings.ReloadRoaming();
-            
-            // Assert - Settings should be unchanged
-            Assert.AreEqual(1, settings.Playlists.Count);
-            Assert.AreEqual("Existing", settings.Playlists[0].Name);
-            AddLogEntry("ReloadRoaming handles missing file gracefully");
+
+            // Assert - When the file is missing, in-memory playlists are cleared.
+            // This is intentional: a missing userdata.json means the folder has no
+            // saved playlists, so stale in-memory data from a previous folder must not persist.
+            Assert.AreEqual(0, settings.Playlists.Count,
+                "Playlists should be cleared when userdata.json is missing");
+            AddLogEntry("ReloadRoaming handles missing file gracefully - clears in-memory playlists");
         }
         
         [TestMethod]
@@ -1822,8 +1824,101 @@ namespace Tests
             Assert.IsTrue(visibleProps.Any(p => p.Name == "VisibleProp2"));
             Assert.IsTrue(hiddenProps.Any(p => p.Name == "_HiddenProp1"));
             Assert.IsTrue(hiddenProps.Any(p => p.Name == "_HiddenProp2"));
-            
+
             AddLogEntry("Underscore prefix convention for hidden properties works correctly");
+        }
+
+        #endregion
+
+        #region Root Folder Isolation Tests
+
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void SwitchingRootFolder_ClearsPreviousFolderPlaylists_WhenNewFolderHasNoUserData()
+        {
+            // Arrange - set up folder1 with a playlist saved to it
+            var folder1 = Path.Combine(Path.GetTempPath(), $"PlaylistTests_Folder1_{Guid.NewGuid()}");
+            var folder2 = Path.Combine(Path.GetTempPath(), $"PlaylistTests_Folder2_{Guid.NewGuid()}");
+            Directory.CreateDirectory(folder1);
+            Directory.CreateDirectory(folder2);
+
+            try
+            {
+                AppSettings.ResetForTesting(_testSettingsPath);
+                AppSettings.SetMusicRootFolder(folder1);
+
+                var settings = AppSettings.Instance;
+                settings.Playlists.Add(new Playlist { Name = "Folder1Playlist" });
+                settings.SaveRoaming();
+
+                // Verify folder1 playlist was saved
+                Assert.AreEqual(1, settings.Playlists.Count, "Folder1 should have 1 playlist");
+
+                // Act - switch to folder2 which has no userdata.json
+                AppSettings.SetMusicRootFolder(folder2);
+
+                // Assert - playlists from folder1 must NOT bleed into folder2
+                Assert.AreEqual(0, AppSettings.Instance.Playlists.Count,
+                    "Switching to a folder with no userdata.json should clear playlists from the previous folder");
+                Assert.IsNull(AppSettings.Instance.LastSelectedPlaylist,
+                    "LastSelectedPlaylist should be cleared when switching to a folder with no userdata.json");
+            }
+            finally
+            {
+                try { Directory.Delete(folder1, recursive: true); } catch { }
+                try { Directory.Delete(folder2, recursive: true); } catch { }
+            }
+        }
+
+        [TestMethod]
+        [TestCategory("Unit")]
+        public void SwitchingRootFolder_LoadsCorrectPlaylists_ForEachFolder()
+        {
+            // Arrange - two folders each with their own playlists
+            var folder1 = Path.Combine(Path.GetTempPath(), $"PlaylistTests_Folder1_{Guid.NewGuid()}");
+            var folder2 = Path.Combine(Path.GetTempPath(), $"PlaylistTests_Folder2_{Guid.NewGuid()}");
+            Directory.CreateDirectory(folder1);
+            Directory.CreateDirectory(folder2);
+
+            try
+            {
+                // Save playlists for folder1
+                AppSettings.ResetForTesting(_testSettingsPath);
+                AppSettings.SetMusicRootFolder(folder1);
+                AppSettings.Instance.Playlists.Add(new Playlist { Name = "Folder1_PlaylistA" });
+                AppSettings.Instance.Playlists.Add(new Playlist { Name = "Folder1_PlaylistB" });
+                AppSettings.Instance.SaveRoaming();
+
+                // Save playlists for folder2
+                AppSettings.SetMusicRootFolder(folder2);
+                Assert.AreEqual(0, AppSettings.Instance.Playlists.Count,
+                    "Should start clean when switching to folder2 (no userdata yet)");
+                AppSettings.Instance.Playlists.Add(new Playlist { Name = "Folder2_PlaylistX" });
+                AppSettings.Instance.SaveRoaming();
+
+                // Act - switch back to folder1
+                AppSettings.SetMusicRootFolder(folder1);
+
+                // Assert - should see folder1's playlists again
+                Assert.AreEqual(2, AppSettings.Instance.Playlists.Count,
+                    "Switching back to folder1 should load folder1's 2 playlists");
+                Assert.IsTrue(AppSettings.Instance.Playlists.Any(p => p.Name == "Folder1_PlaylistA"));
+                Assert.IsTrue(AppSettings.Instance.Playlists.Any(p => p.Name == "Folder1_PlaylistB"));
+
+                // Act - switch to folder2
+                AppSettings.SetMusicRootFolder(folder2);
+
+                // Assert - should see folder2's playlists, not folder1's
+                Assert.AreEqual(1, AppSettings.Instance.Playlists.Count,
+                    "Switching to folder2 should load folder2's 1 playlist");
+                Assert.AreEqual("Folder2_PlaylistX", AppSettings.Instance.Playlists[0].Name,
+                    "Should see folder2's playlist, not folder1's");
+            }
+            finally
+            {
+                try { Directory.Delete(folder1, recursive: true); } catch { }
+                try { Directory.Delete(folder2, recursive: true); } catch { }
+            }
         }
 
         #endregion

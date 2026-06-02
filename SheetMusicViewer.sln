@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.3.11222.16
@@ -14,6 +14,18 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		img\Ophelia.png = img\Ophelia.png
 		README.md = README.md
 	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
+ProjectSection(SolutionItems) = preProject
+docs\architecture.md = docs\architecture.md
+docs\bmk-json-format.md = docs\bmk-json-format.md
+docs\development.md = docs\development.md
+docs\features.md = docs\features.md
+docs\metronome.md = docs\metronome.md
+docs\Migration-WPF-to-Avalonia.md = docs\Migration-WPF-to-Avalonia.md
+docs\musescore-export.md = docs\musescore-export.md
+docs\README.md = docs\README.md
+EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WpfApp", "WpfApp\WpfApp.csproj", "{D25AE10D-12AF-42C8-948C-4A25994B50BE}"
 EndProject
@@ -184,7 +196,6 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{D25AE10D-12AF-42C8-948C-4A25994B50BE} = {0B0AC1D6-0AD1-434D-AC16-CCDDFC3092E7}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C2970F6E-C89F-4559-8E3B-8443119FCB2E}
