@@ -3,7 +3,9 @@
 PDF Sheet Music Viewer by Calvin Hsia 2019
 
 Allows users to view downloaded or scanned Sheet Music in PDF format to play on a musical instrument, such as a piano.
-Also can export PDF music to MuseScore so you can edit music notation  or hear your music being played.
+Also can export PDF music to MuseScore so you can edit music notation or hear your music being played, perhaps via MIDI
+I have a Mio from iConnectivity driving my PianoDisc on my Steinway grand. I plug in the Mio to my laptop, and my sheetmusic
+can play my piano.
 
 **Runs on:** Windows 10/11, macOS, and Linux  
 **Updated 2025:** Migrated from WPF to Avalonia UI for cross-platform support.
@@ -20,7 +22,7 @@ Also can export PDF music to MuseScore so you can edit music notation  or hear y
 * Table of Contents with search by composer, title, etc.
 * Remembers your last viewed page for each book
 * **Built-in Metronome** — drift-corrected, floating overlay, configurable BPM/accent/sound
-* **MuseScore Export** — Hear your music: convert any PDF page range to an editable/playable MuseScore file via Audiveris OMR
+* **MuseScore Export** — Hear your music: convert any PDF page range to an editable/playable MuseScore file via Audiveris OMR. Open the result in MuseScore Studio and export MIDI to any device.
 
 ---
 
@@ -353,7 +355,7 @@ I really love Ragtime. There's something so binary about it: powers of 2, 16 mea
 
 ---
 
-📧 **Contact:** calvin_hsia@alum.mit.edu  
+📧 **Contact:** calvin_hsia@live.com  
 🌐 **Website:** [calvinhsia.com](http://calvinhsia.com)
 
 

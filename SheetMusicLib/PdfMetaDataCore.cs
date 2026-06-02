@@ -1315,6 +1315,11 @@ namespace SheetMusicLib
                 Rotation = 0
             });
 
+            if (!isSingles)
+            {
+                result.TocEntries.Add(new TOCEntry { SongName = Path.GetFileNameWithoutExtension(fullPathPdfFileOrSinglesFolder) });
+            }
+
             return result;
         }
 
@@ -1627,7 +1632,7 @@ namespace SheetMusicLib
                             }
                         }
 
-                        if (metadata.TocEntries.Count == 0 && metadata.VolumeInfoList.Sum(v => v.NPagesInThisVolume) < 11)
+                        if (metadata.TocEntries.Count == 0)
                         {
                             metadata.TocEntries.Add(new TOCEntry { SongName = Path.GetFileNameWithoutExtension(pdfFile) });
                         }

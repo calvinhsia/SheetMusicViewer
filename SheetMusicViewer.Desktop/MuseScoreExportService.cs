@@ -289,7 +289,9 @@ public static class MuseScoreExportService
         int bookStart = 0,
         int bookEnd = 0,
         IProgress<string>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? persistDir = null,
+        string? songName = null)
     {
         var segments = ResolveVolumeSegments(pdfMetaData, bookStart, bookEnd);
 
@@ -300,7 +302,7 @@ public static class MuseScoreExportService
         if (segments.Count == 1)
         {
             var s = segments[0];
-            return await RunAudiverisAsync(audiverisPath, s.PdfPath, s.LocalStart, s.LocalEnd, progress, ct, s.Rotation);
+            return await RunAudiverisAsync(audiverisPath, s.PdfPath, s.LocalStart, s.LocalEnd, progress, ct, s.Rotation, persistDir, songName);
         }
 
         // Multiple volumes — use Ghostscript to concatenate all volume PDFs (or page slices)
@@ -357,6 +359,58 @@ public static class MuseScoreExportService
     ///   Pass 2 — batch export the patched .omr; this skips re-transcription and exports cleanly.
     /// startPage/endPage: 1-based inclusive within the single PDF; pass 0 for both to process all pages.
     /// </summary>
+    /// <summary>
+    /// Strips characters that are illegal in Windows file names, and trims the result.
+    /// </summary>
+    public static string SanitizeFileName(string name)
+    {
+        var invalid = System.IO.Path.GetInvalidFileNameChars();
+        var sb = new System.Text.StringBuilder(name.Length);
+        foreach (var c in name)
+            sb.Append(Array.IndexOf(invalid, c) >= 0 ? '_' : c);
+        return sb.ToString().Trim().TrimEnd('.');
+    }
+
+    /// <summary>
+    /// Returns the path where a persisted MusicXML export would be placed, or <c>null</c>
+    /// when the range spans multiple volumes (no single deterministic filename).
+    /// Resolves book-page numbers to per-volume local page numbers the same way
+    /// <see cref="RunAudiverisAsync(string,PdfMetaDataReadResult,int,int,IProgress{string},CancellationToken,string)"/> does,
+    /// so the predicted filename always matches the file that will actually be written.
+    /// When <paramref name="songName"/> is supplied it is used as the filename instead of
+    /// the PDF basename + page-range suffix, giving a human-readable cache file name.
+    /// </summary>
+    public static string? ComputeExpectedMxlPath(
+        PdfMetaDataReadResult pdfMetaData,
+        int bookStart,
+        int bookEnd,
+        bool useGhostscript,
+        string persistDir,
+        string? songName = null)
+    {
+        var segments = ResolveVolumeSegments(pdfMetaData, bookStart, bookEnd);
+        // Multi-volume spans produce a combined temp file — no deterministic persist path.
+        if (segments.Count != 1) return null;
+
+        string baseName;
+        if (!string.IsNullOrWhiteSpace(songName))
+        {
+            baseName = SanitizeFileName(songName);
+        }
+        else
+        {
+            var seg = segments[0];
+            baseName = Path.GetFileNameWithoutExtension(seg.PdfPath);
+            if (useGhostscript)
+            {
+                bool hasRange = seg.LocalStart > 0 && seg.LocalEnd > 0;
+                var rangeSuffix = hasRange ? $"_p{seg.LocalStart}-{seg.LocalEnd}" : "";
+                baseName = baseName + rangeSuffix + "_gs";
+            }
+        }
+        return Path.Combine(persistDir, baseName + ".mxl");
+    }
+
     public static async Task<string> RunAudiverisAsync(
         string audiverisPath,
         string pdfPath,
@@ -364,7 +418,9 @@ public static class MuseScoreExportService
         int endPage = 0,
         IProgress<string>? progress = null,
         CancellationToken ct = default,
-        int rotation = 0)
+        int rotation = 0,
+        string? persistDir = null,
+        string? songName = null)
     {
         if (!File.Exists(audiverisPath))
             throw new FileNotFoundException($"Audiveris not found at: {audiverisPath}");
@@ -376,6 +432,9 @@ public static class MuseScoreExportService
 
         var baseName = Path.GetFileNameWithoutExtension(pdfPath);
         var omrFile = Path.Combine(outputDir, baseName + ".omr");
+
+        // Overall stopwatch — covers all steps (GS, pass 1, patch, pass 2, tempo inject).
+        var overallSw = Stopwatch.StartNew();
 
         // Record time just before we start so the output-file search can
         // reject stale files from previous runs of different PDFs.
@@ -422,6 +481,14 @@ public static class MuseScoreExportService
         // PAGE is the final step (after RHYTHMS) that creates the Score object.
         // Exit code is ignored: Audiveris exits 1 when rhythm warnings occur but
         // still writes a fully-populated .omr with all sheet data.
+        // Log the page dimensions of the file being fed to Audiveris so the user can
+        // diagnose issues such as spine-padding making pages appear blank.
+        var pdfPageSize = TryReadPdfFirstPageSize(pdfPath);
+        if (pdfPageSize.HasValue)
+            progress?.Report($"Input to Audiveris: {Path.GetFileName(pdfPath)}  page size = {pdfPageSize.Value.Width:F1} × {pdfPageSize.Value.Height:F1} pts  ({pdfPageSize.Value.Width / 72.0:F2}" + $" × {pdfPageSize.Value.Height / 72.0:F2} in)");
+        else
+            progress?.Report($"Input to Audiveris: {Path.GetFileName(pdfPath)}  (page size unavailable)");
+
         progress?.Report($"Pass 1: Transcribing with Audiveris{rangeLabel} (this may take several minutes)…");
         await RunAudiverisProcessAsync(audiverisPath, args =>
         {
@@ -544,6 +611,29 @@ public static class MuseScoreExportService
             if (found != null)
             {
                 ValidateMusicXmlHasNotes(found);
+                overallSw.Stop();
+                // Use processedSheetCount as the best page count available.
+                int reportedPages = processedSheetCount > 0 ? processedSheetCount : (hasRange ? endPage - startPage + 1 : 1);
+                double secsPerPage = reportedPages > 0 ? overallSw.Elapsed.TotalSeconds / reportedPages : overallSw.Elapsed.TotalSeconds;
+                progress?.Report($"Overall conversion: {overallSw.Elapsed:m\\:ss\\.f} for {reportedPages} page(s) — {secsPerPage:F1} sec/page");
+
+                // Persist a copy next to the source PDF so subsequent runs can skip conversion.
+                // Always store as .mxl so ComputeExpectedMxlPath can find it regardless of
+                // whether Audiveris chose .mxl, .musicxml, or .xml as its output extension.
+                if (!string.IsNullOrEmpty(persistDir))
+                {
+                    Directory.CreateDirectory(persistDir);
+                    // Use the human-readable song name when available, otherwise keep the
+                    // PDF-basename + page-range name that ComputeExpectedMxlPath predicts.
+                    var persistStem = !string.IsNullOrWhiteSpace(songName)
+                        ? SanitizeFileName(songName)
+                        : Path.GetFileNameWithoutExtension(found);
+                    var persistPath = Path.Combine(persistDir, persistStem + ".mxl");
+                    File.Copy(found, persistPath, overwrite: true);
+                    progress?.Report($"Saved output to: {persistPath}");
+                    return persistPath;
+                }
+
                 return found;
             }
         }
@@ -590,10 +680,15 @@ public static class MuseScoreExportService
         try
         {
             using var zip = ZipFile.OpenRead(omrPath);
+            var sheetRegex = new System.Text.RegularExpressions.Regex(
+                @"^sheet#(\d+)/",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             return zip.Entries
-                .Count(e => System.Text.RegularExpressions.Regex.IsMatch(
-                    e.FullName, @"^sheet#\d+/",
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase));
+                .Select(e => sheetRegex.Match(e.FullName))
+                .Where(m => m.Success)
+                .Select(m => m.Groups[1].Value)
+                .Distinct()
+                .Count();
         }
         catch { return 0; }
     }
@@ -956,37 +1051,43 @@ public static class MuseScoreExportService
             {
                 // Add white padding on the spine-side edge of each page to compensate for
                 // gutter clipping from book-feeder scans.
-                //   Even pages → right edge clipped → pad right  (translate left by 0, expand width right)
-                //   Odd  pages → left  edge clipped → pad left   (translate right, expand width left)
-                // We install a BeginPage procedure that:
-                //   1. Queries the current page number (via /PageCount or page counter).
-                //   2. Reads the current MediaBox.
-                //   3. Enlarges it by spinePaddingPx on the appropriate side.
-                //   4. Sets the new MediaBox so the extra white space appears in the output.
-                // Note: page numbers here are 1-based within the output (after -dFirstPage slicing).
+                //   Even pages → right edge clipped → pad right  (content stays at x=0, white extends right)
+                //   Odd  pages → left  edge clipped → pad left   (translate content right by SpinePad)
+                //
+                // KEY: We must NOT call setpagedevice inside a BeginPage callback — doing so
+                // re-triggers BeginPage recursively causing /execstackoverflow.
+                // Instead, set the widened media size upfront via GS command-line flags so
+                // BeginPage only needs a translate for odd pages.
+                var pageSize = TryReadPdfFirstPageSize(pdfPath);
+                float origW = pageSize.HasValue ? pageSize.Value.Width  : 595f;
+                float origH = pageSize.HasValue ? pageSize.Value.Height : 842f;
+                float newW  = origW + spinePaddingPx;
+
+                // Tell GS the output canvas is wider than the source pages.
+                // -dFIXEDMEDIA prevents GS from resizing the canvas per page.
+                psi.ArgumentList.Add($"-dDEVICEWIDTHPOINTS={newW:F4}");
+                psi.ArgumentList.Add($"-dDEVICEHEIGHTPOINTS={origH:F4}");
+                psi.ArgumentList.Add("-dFIXEDMEDIA");
+
+                // BeginPage: for odd pages (right-hand page, gutter on left), shift content
+                // right by SpinePad so whitespace appears on the left (binding) edge.
+                // For even pages (left-hand, gutter on right) no translate needed — the
+                // wider canvas already leaves white on the right.
+                // PageCount in pdfwrite is 1-based at BeginPage time (already incremented),
+                // so use it directly without adding 1.
                 ps.Append(
                     $"/SpinePad {spinePaddingPx} def " +
-                    $"/origBeginPage /BeginPage where {{ pop /BeginPage load }} {{ {{ }} }} ifelse def " +
                     $"<< /BeginPage {{ " +
-                    $"  origBeginPage exec " +
-                    $"  currentpagedevice /PageCount known {{ " +
-                    $"    currentpagedevice /PageCount get 1 add " +  // 1-based page index
-                    $"  }} {{ 1 }} ifelse " +
-                    $"  2 mod 0 eq " + // true = even page → pad right; false = odd → pad left
-                    $"  {{ " + // even page: extend right edge
-                    $"    currentpagedevice /PageSize get aload pop " + // w h
-                    $"    SpinePad add " +                              // w h+pad  (width stays, height arg unused here)
-                    $"    exch SpinePad add exch " +                   // (w+pad) h+pad
-                    $"    2 array astore /PageSize exch << /PageSize 3 -1 roll >> setpagedevice " +
-                    $"  }} {{ " + // odd page: translate right and extend left
-                    $"    currentpagedevice /PageSize get aload pop " +
-                    $"    SpinePad add exch SpinePad add exch " +
-                    $"    2 array astore /PageSize exch << /PageSize 3 -1 roll >> setpagedevice " +
-                    $"    SpinePad 0 translate " +
-                    $"  }} ifelse " +
+                    $"  currentpagedevice /PageCount known " +
+                    $"    {{ currentpagedevice /PageCount get }} " +
+                    $"    {{ 1 }} " +
+                    $"  ifelse " +
+                    $"  2 mod 1 eq " + // true = odd page (right-hand) → shift content right
+                    $"  {{ SpinePad 0 translate }} " +
+                    $"  if " +
                     $"}} >> setpagedevice ");
 
-                progress?.Report($"Spine padding enabled: {spinePaddingPx} px on gutter edge per page.");
+                progress?.Report($"Spine padding enabled: {spinePaddingPx} pts on gutter edge per page (canvas widened from {origW:F0} to {newW:F0} pts).");
             }
 
             psi.ArgumentList.Add("-c");
@@ -1024,6 +1125,9 @@ public static class MuseScoreExportService
         if (proc.ExitCode != 0 || !File.Exists(normalisedPath))
         {
             progress?.Report($"\u26a0 Ghostscript normalisation failed (exit {proc.ExitCode}) \u2014 proceeding with original PDF.");
+            var errText = errLines.ToString().Trim();
+            if (!string.IsNullOrEmpty(errText))
+                progress?.Report($"[GS stderr] {errText}");
             Logger.LogInfo($"[GS] stderr: {errLines}");
             return pdfPath;
         }
@@ -1032,6 +1136,49 @@ public static class MuseScoreExportService
         var normKb = new FileInfo(normalisedPath).Length / 1024;
         progress?.Report($"PDF normalised: {origKb} KB \u2192 {normKb} KB (_gs.pdf, {(hasPageRange ? $"pages {firstPage}\u2013{lastPage}" : "all pages")})");
         return normalisedPath;
+    }
+
+    /// <summary>
+    /// Reads the MediaBox of the first page from a PDF file without any external library.
+    /// Returns width and height in PDF points (1/72 inch). Returns null if parsing fails.
+    /// </summary>
+    private static (float Width, float Height)? TryReadPdfFirstPageSize(string pdfPath)
+    {
+        try
+        {
+            // Read up to 128 KB — enough to find the first /MediaBox and /Rotate in most PDFs.
+            const int maxBytes = 131072;
+            using var fs = new FileStream(pdfPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            int readLen = (int)Math.Min(fs.Length, maxBytes);
+            var buf = new byte[readLen];
+            _ = fs.Read(buf, 0, readLen);
+            var text = System.Text.Encoding.Latin1.GetString(buf);
+
+            // Match /MediaBox [ llx lly urx ury ]
+            var m = System.Text.RegularExpressions.Regex.Match(
+                text,
+                @"/MediaBox\s*\[\s*([\d.+-]+)\s+([\d.+-]+)\s+([\d.+-]+)\s+([\d.+-]+)\s*\]");
+            if (!m.Success) return null;
+
+            float llx = float.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+            float lly = float.Parse(m.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
+            float urx = float.Parse(m.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture);
+            float ury = float.Parse(m.Groups[4].Value, System.Globalization.CultureInfo.InvariantCulture);
+            float rawW = Math.Abs(urx - llx);
+            float rawH = Math.Abs(ury - lly);
+
+            // /Rotate 90 or 270 means the page is displayed with width and height swapped.
+            // Only 90 and 270 swap dimensions; 0 and 180 do not.
+            var rotMatch = System.Text.RegularExpressions.Regex.Match(text, @"/Rotate\s+(\d+)");
+            int rotate = rotMatch.Success ? int.Parse(rotMatch.Groups[1].Value) : 0;
+            rotate = ((rotate % 360) + 360) % 360; // normalise to 0-359
+            bool swapAxes = rotate == 90 || rotate == 270;
+            return swapAxes ? (rawH, rawW) : (rawW, rawH);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static async Task RunAudiverisProcessAsync(
@@ -1074,11 +1221,43 @@ public static class MuseScoreExportService
 
         using var process = new Process { StartInfo = psi };
         var errorLines = new System.Text.StringBuilder();
+        var sw = Stopwatch.StartNew();
+
+        // Audiveris log format: "LEVEL  [BookName#N]  ClassName lineNum | message"
+        // Each sheet gets its own thread name like [BookName#1], [BookName#2], etc.
+        // We detect sheet transitions by watching for a new #N in the bracket.
+        var bracketSheetRegex = new System.Text.RegularExpressions.Regex(
+            @"\[.*?#(\d+)\]",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        int lastSheetSeen = 0;
+        int pagesCompleted = 0;
+        var sheetStartTimes = new System.Collections.Generic.Dictionary<int, TimeSpan>();
 
         process.OutputDataReceived += (_, e) =>
         {
             if (e.Data == null) return;
-            // Filter to significant lines to keep the log readable
+
+            // Detect sheet number from bracket before trimming
+            var bracketMatch = bracketSheetRegex.Match(e.Data);
+            if (bracketMatch.Success && int.TryParse(bracketMatch.Groups[1].Value, out int sheetNum))
+            {
+                if (sheetNum != lastSheetSeen)
+                {
+                    // A new sheet has started processing
+                    if (lastSheetSeen > 0 && sheetStartTimes.TryGetValue(lastSheetSeen, out var start))
+                    {
+                        // Previous sheet just finished (new sheet starting = previous done)
+                        var sheetElapsed = sw.Elapsed - start;
+                        pagesCompleted++;
+                        progress?.Report($"  ✓ Sheet #{lastSheetSeen} done in {sheetElapsed.TotalSeconds:F1}s — {pagesCompleted} page(s) total, {sw.Elapsed:m\\:ss} elapsed");
+                    }
+                    lastSheetSeen = sheetNum;
+                    sheetStartTimes[sheetNum] = sw.Elapsed;
+                    progress?.Report($"  → Sheet #{sheetNum} started [{sw.Elapsed:m\\:ss} elapsed]");
+                }
+            }
+
             if (e.Data.Contains("INFO") || e.Data.Contains("WARN") || e.Data.Contains("ERROR"))
             {
                 var trimmed = System.Text.RegularExpressions.Regex.Replace(e.Data, @"^\S+\s+\[\S*\]\s+\S+\s+\|\s*", "").Trim();
@@ -1101,7 +1280,30 @@ public static class MuseScoreExportService
         {
             while (!process.WaitForExit(200))
                 ct.ThrowIfCancellationRequested();
+            // Call no-arg WaitForExit to flush all pending OutputDataReceived callbacks
+            // before we report the summary (avoids the summary appearing before the last lines).
+            process.WaitForExit();
         }, ct);
+
+        sw.Stop();
+
+        // Count the last sheet if it was never followed by a new one
+        if (lastSheetSeen > 0 && sheetStartTimes.TryGetValue(lastSheetSeen, out var lastStart))
+        {
+            var sheetElapsed = sw.Elapsed - lastStart;
+            pagesCompleted++;
+            progress?.Report($"  ✓ Sheet #{lastSheetSeen} done in {sheetElapsed.TotalSeconds:F1}s");
+        }
+
+        if (pagesCompleted > 0)
+        {
+            var pps = sw.Elapsed.TotalSeconds > 0 ? pagesCompleted / sw.Elapsed.TotalSeconds : 0;
+            progress?.Report($"Pass complete — {pagesCompleted} page(s) in {sw.Elapsed:m\\:ss\\.f} ({pps:F2} pages/sec)");
+        }
+        else
+        {
+            progress?.Report($"Pass complete — {sw.Elapsed:m\\:ss\\.f} elapsed");
+        }
 
         if (!ignoreExitCode && process.ExitCode != 0)
         {
