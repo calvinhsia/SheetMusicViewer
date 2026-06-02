@@ -355,7 +355,7 @@ I really love Ragtime. There's something so binary about it: powers of 2, 16 mea
 
 ---
 
-📧 **Contact:** calvin_hsia@alum.mit.edu  
+📧 **Contact:** calvin_hsia@live.com  
 🌐 **Website:** [calvinhsia.com](http://calvinhsia.com)
 
 
