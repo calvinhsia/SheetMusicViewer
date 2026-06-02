@@ -3,7 +3,9 @@
 PDF Sheet Music Viewer by Calvin Hsia 2019
 
 Allows users to view downloaded or scanned Sheet Music in PDF format to play on a musical instrument, such as a piano.
-Also can export PDF music to MuseScore so you can edit music notation  or hear your music being played.
+Also can export PDF music to MuseScore so you can edit music notation or hear your music being played, perhaps via MIDI
+I have a Mio from iConnectivity driving my PianoDisc on my Steinway grand. I plug in the Mio to my laptop, and my sheetmusic
+can play my piano.
 
 **Runs on:** Windows 10/11, macOS, and Linux  
 **Updated 2025:** Migrated from WPF to Avalonia UI for cross-platform support.
