@@ -380,6 +380,50 @@ public static class MuseScoreExportService
     /// When <paramref name="songName"/> is supplied it is used as the filename instead of
     /// the PDF basename + page-range suffix, giving a human-readable cache file name.
     /// </summary>
+    /// <summary>
+    /// Finds an existing cached .mxl file for the given book-page range.
+    /// First checks the exact path returned by <see cref="ComputeExpectedMxlPath"/>.
+    /// If that file does not exist, scans <paramref name="persistDir"/> for any .mxl
+    /// whose stem starts with the PDF basename — this handles the case where the file
+    /// was originally saved with a song-name suffix on a different machine.
+    /// Returns <c>null</c> when no match is found or when the range spans multiple volumes.
+    /// </summary>
+    public static string? FindCachedMxlPath(
+        PdfMetaDataReadResult pdfMetaData,
+        int bookStart,
+        int bookEnd,
+        bool useGhostscript,
+        string persistDir,
+        string? songName = null)
+    {
+        // Try the exact computed path first
+        var exact = ComputeExpectedMxlPath(pdfMetaData, bookStart, bookEnd, useGhostscript, persistDir, songName);
+        if (exact != null && File.Exists(exact))
+            return exact;
+
+        // Fallback: scan the persist directory for any .mxl whose stem starts with the PDF basename.
+        // This finds files saved under a different song-name suffix (e.g. saved on another machine
+        // where the TOC composer field or radio-button state produced a different display name).
+        var segments = ResolveVolumeSegments(pdfMetaData, bookStart, bookEnd);
+        if (segments.Count != 1) return null; // multi-volume: can't reliably match
+
+        var pdfBaseName = Path.GetFileNameWithoutExtension(segments[0].PdfPath);
+        if (!Directory.Exists(persistDir)) return null;
+
+        // Prefer the most recently written match so we return the freshest conversion.
+        var candidate = Directory.EnumerateFiles(persistDir, "*.mxl")
+            .Where(f =>
+            {
+                var stem = Path.GetFileNameWithoutExtension(f);
+                // Must start with the PDF basename (case-insensitive) to belong to this PDF.
+                return stem.StartsWith(pdfBaseName, StringComparison.OrdinalIgnoreCase);
+            })
+            .OrderByDescending(File.GetLastWriteTime)
+            .FirstOrDefault();
+
+        return candidate; // null if nothing found
+    }
+
     public static string? ComputeExpectedMxlPath(
         PdfMetaDataReadResult pdfMetaData,
         int bookStart,
@@ -392,15 +436,19 @@ public static class MuseScoreExportService
         // Multi-volume spans produce a combined temp file — no deterministic persist path.
         if (segments.Count != 1) return null;
 
+        var seg = segments[0];
+        var pdfBaseName = Path.GetFileNameWithoutExtension(pdfMetaData.JsonFilePath);
+
+        // For a book-song (songName supplied), combine: "{pdfBaseName} - {songName}"
+        // For a single (no songName) or full-PDF / custom-range: just the PDF basename.
         string baseName;
         if (!string.IsNullOrWhiteSpace(songName))
         {
-            baseName = SanitizeFileName(songName);
+            baseName = SanitizeFileName($"{songName} - {pdfBaseName}");
         }
         else
         {
-            var seg = segments[0];
-            baseName = Path.GetFileNameWithoutExtension(seg.PdfPath);
+            baseName = pdfBaseName;
             if (useGhostscript)
             {
                 bool hasRange = seg.LocalStart > 0 && seg.LocalEnd > 0;
@@ -623,10 +671,16 @@ public static class MuseScoreExportService
                 if (!string.IsNullOrEmpty(persistDir))
                 {
                     Directory.CreateDirectory(persistDir);
-                    // Use the human-readable song name when available, otherwise keep the
-                    // PDF-basename + page-range name that ComputeExpectedMxlPath predicts.
+                    // For a book-song use "{pdfBaseName} - {songName}" so each song gets its own
+                    // cache file. For a single PDF (no songName) keep the Audiveris output stem
+                    // which equals the PDF basename, ensuring a stable cross-machine cache key.
+                    // Strip _gs suffix that GS normalization adds so the cache key
+                    // is always the original PDF basename (stable across machines).
+                    var rawBaseName = Path.GetFileNameWithoutExtension(pdfPath);
+                    if (rawBaseName.EndsWith("_gs", StringComparison.OrdinalIgnoreCase))
+                        rawBaseName = rawBaseName[..^3];
                     var persistStem = !string.IsNullOrWhiteSpace(songName)
-                        ? SanitizeFileName(songName)
+                        ? SanitizeFileName($"{rawBaseName} - {songName}")
                         : Path.GetFileNameWithoutExtension(found);
                     var persistPath = Path.Combine(persistDir, persistStem + ".mxl");
                     File.Copy(found, persistPath, overwrite: true);
