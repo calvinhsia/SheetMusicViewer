@@ -18,6 +18,37 @@ namespace SheetMusicViewer.Desktop;
 public static class MuseScoreExportService
 {
     /// <summary>
+    /// CP1252 (Windows ANSI) encoding used by <see cref="SanitizeFileName"/> and <see cref="IsZipSafe"/>.
+    /// Windows built-in "Compressed (zipped) Folders" encodes filenames in the system ANSI codepage
+    /// (CP1252 on en-US Windows). Any character without a true CP1252 mapping triggers the
+    /// "cannot be compressed" error dialog. CP437 (OEM) is the wrong criterion — characters such as
+    /// Γ (U+0393) are genuine CP437 chars but have no CP1252 mapping and are correctly rejected here.
+    /// On Linux/macOS ZIP tools use UTF-8 for filenames, so this field is null on those platforms
+    /// and the CP1252 check is skipped entirely — only Windows-illegal filename chars are sanitized.
+    /// </summary>
+    private static readonly System.Text.Encoding? Cp1252 = CreateCp1252();
+    private static System.Text.Encoding? CreateCp1252()
+    {
+        if (!System.OperatingSystem.IsWindows()) return null;
+        System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+        return System.Text.Encoding.GetEncoding(1252,
+            encoderFallback: new System.Text.EncoderExceptionFallback(),
+            decoderFallback: new System.Text.DecoderReplacementFallback());
+    }
+
+    /// <summary>
+    /// Returns <c>true</c> if every character in <paramref name="name"/> is safe for use in
+    /// a compressed (zipped) folder on the current platform.
+    /// On Windows this requires a true CP1252 mapping (the codepage Windows ZIP uses for filenames).
+    /// On Linux/macOS ZIP tools use UTF-8, so all characters are safe and this always returns true.
+    /// </summary>
+    public static bool IsZipSafe(string name)
+    {
+        if (Cp1252 is null) return true;   // Linux/macOS: UTF-8 ZIP, all chars valid
+        try { Cp1252.GetByteCount(name); return true; }
+        catch (System.Text.EncoderFallbackException) { return false; }
+    }
+    /// <summary>
     /// Default candidate paths for the Audiveris executable (Windows, macOS, Linux).
     /// </summary>
     public static IReadOnlyList<string> AudiverisDefaultPaths { get; } = BuildAudiverisPaths();
@@ -360,14 +391,54 @@ public static class MuseScoreExportService
     /// startPage/endPage: 1-based inclusive within the single PDF; pass 0 for both to process all pages.
     /// </summary>
     /// <summary>
-    /// Strips characters that are illegal in Windows file names, and trims the result.
+    /// Strips characters that are illegal in Windows file names and replaces any character
+    /// that cannot be encoded in CP1252 (Windows ANSI codepage) with an ASCII equivalent or '_'.
+    /// Windows built-in "Compressed (zipped) Folders" rejects any filename whose characters
+    /// have no true CP1252 mapping, triggering the "cannot be compressed" error dialog.
+    /// Well-known typographic characters are mapped to their closest ASCII equivalents;
+    /// everything else that fails CP1252 encoding falls back to '_'.
     /// </summary>
     public static string SanitizeFileName(string name)
     {
-        var invalid = System.IO.Path.GetInvalidFileNameChars();
-        var sb = new System.Text.StringBuilder(name.Length);
-        foreach (var c in name)
-            sb.Append(Array.IndexOf(invalid, c) >= 0 ? '_' : c);
+        // Step 1: map well-known typographic Unicode punctuation to close ASCII equivalents.
+        // This gives human-readable results (e.g. en-dash → hyphen) rather than underscores.
+        var normalized = name
+            .Replace('\u2013', '-')   // en dash –
+            .Replace('\u2014', '-')   // em dash —
+            .Replace('\u2015', '-')   // horizontal bar ―
+            .Replace('\u2018', '\'')  // left single quotation mark '
+            .Replace('\u2019', '\'')  // right single quotation mark '
+            .Replace('\u201A', '\'')  // single low-9 quotation mark ‚
+            .Replace('\u201B', '\'')  // single high-reversed-9 quotation mark ‛
+            .Replace('\u201C', '\'')  // left double quotation mark " (also illegal filename char)
+            .Replace('\u201D', '\'')  // right double quotation mark "
+            .Replace('\u201E', '\'')  // double low-9 quotation mark „
+            .Replace('\u2026', '_')   // horizontal ellipsis …
+            .Replace('\u00AB', '-')   // left-pointing double angle quotation «
+            .Replace('\u00BB', '-');  // right-pointing double angle quotation »
+
+        // Step 2: replace any Windows-illegal filename char with '_'.
+        var invalidFileName = System.IO.Path.GetInvalidFileNameChars();
+
+        // Step 3: on Windows, replace any remaining character that has no true CP1252 mapping
+        // with '_'. CP1252 is the Windows ANSI codepage that Windows "Compressed Folders" uses.
+        // On Linux/macOS ZIP tools use UTF-8, so all Unicode characters are valid; Cp1252 is null
+        // on those platforms and this step is skipped — only the illegal-filename check above applies.
+        var sb = new System.Text.StringBuilder(normalized.Length);
+        foreach (var c in normalized)
+        {
+            if (Array.IndexOf(invalidFileName, c) >= 0)
+            {
+                sb.Append('_');
+                continue;
+            }
+            if (Cp1252 is not null)
+            {
+                try { Cp1252.GetByteCount(c.ToString()); }
+                catch (System.Text.EncoderFallbackException) { sb.Append('_'); continue; }
+            }
+            sb.Append(c);
+        }
         return sb.ToString().Trim().TrimEnd('.');
     }
 
@@ -680,8 +751,9 @@ public static class MuseScoreExportService
                     if (rawBaseName.EndsWith("_gs", StringComparison.OrdinalIgnoreCase))
                         rawBaseName = rawBaseName[..^3];
                     var persistStem = !string.IsNullOrWhiteSpace(songName)
-                        ? SanitizeFileName($"{rawBaseName} - {songName}")
+                        ? $"{rawBaseName} - {songName}"
                         : Path.GetFileNameWithoutExtension(found);
+                    persistStem = SanitizeFileName(persistStem);
                     var persistPath = Path.Combine(persistDir, persistStem + ".mxl");
                     File.Copy(found, persistPath, overwrite: true);
                     progress?.Report($"Saved output to: {persistPath}");
