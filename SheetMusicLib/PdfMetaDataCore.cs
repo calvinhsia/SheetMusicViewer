@@ -333,6 +333,13 @@ namespace SheetMusicLib
         /// </summary>
         public string GetBookName(string rootFolder = null)
         {
+            if (this.IsSinglesFolder)
+            {
+                // return the path without extension, relative to root if possible
+                return !string.IsNullOrEmpty(rootFolder) && FullPathFile.StartsWith(rootFolder)
+                    ? FullPathFile[(rootFolder.Length + 1)..].Replace(".pdf", string.Empty)
+                    : Path.GetFileNameWithoutExtension(FullPathFile);
+            }
             var name = GetFullPathFileFromVolno(0, MakeRelative: true, rootFolder: rootFolder);
             return name ?? Path.GetFileNameWithoutExtension(FullPathFile);
         }
