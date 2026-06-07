@@ -1284,16 +1284,32 @@ public class ChooseMusicWindow : Window
             return;
         }
         
-        // Build query data from playlist entries - include index for move operations
-        var playlistData = _currentPlaylist.Entries.Select((entry, index) => new
+        // Build query data from playlist entries - resolve display info from _pdfMetadata at runtime
+        var playlistData = _currentPlaylist.Entries.Select((entry, index) =>
         {
-            entry.SongName,
-            Page = entry.PageNo,
-            entry.Composer,
-            entry.BookName,
-            entry.Notes,
-            _Index = index,
-            _Entry = entry
+            var metadata = _pdfMetadata.FirstOrDefault(p => p.GetBookName(_rootFolder) == entry.BookName);
+            TOCEntry? tocEntry;
+            if (entry.IsSinglesEntry)
+            {
+                // For singles folders, SongName (PDF basename) is the stable key
+                tocEntry = metadata?.TocEntries.FirstOrDefault(t => t.SongName == entry.SongName);
+            }
+            else
+            {
+                tocEntry = metadata?.TocEntries.FirstOrDefault(t => t.PageNo == entry.PageNo)
+                    ?? metadata?.TocEntries.Where(t => t.PageNo <= entry.PageNo).OrderByDescending(t => t.PageNo).FirstOrDefault();
+            }
+            int resolvedPage = tocEntry?.PageNo ?? entry.PageNo;
+            return new
+            {
+                SongName = tocEntry?.SongName ?? entry.SongName,
+                Page = resolvedPage,
+                Composer = tocEntry?.Composer ?? string.Empty,
+                entry.BookName,
+                Notes = tocEntry?.Notes ?? string.Empty,
+                _Index = index,
+                _Entry = entry
+            };
         }).ToList();
         
         // Create or recreate the BrowseControl
@@ -1483,11 +1499,11 @@ public class ChooseMusicWindow : Window
                 {
                     var entry = new PlaylistEntry
                     {
-                        SongName = tup.Item2.SongName ?? string.Empty,
-                        Composer = tup.Item2.Composer ?? string.Empty,
                         PageNo = tup.Item2.PageNo,
                         BookName = tup.Item1.GetBookName(_rootFolder),
-                        Notes = tup.Item2.Notes ?? string.Empty
+                        // For singles folders the TOCEntry.SongName is the PDF basename and is
+                        // the stable identifier (page offsets shift when singles are added/removed).
+                        SongName = tup.Item1.IsSinglesFolder ? (tup.Item2.SongName ?? string.Empty) : string.Empty
                     };
                     _currentPlaylist.Entries.Add(entry);
                 }
@@ -1588,18 +1604,31 @@ public class ChooseMusicWindow : Window
     private bool TryNavigateToPlaylistEntry(object? selectedItem)
     {
         if (selectedItem == null) return false;
-        
+
         var entryProp = selectedItem.GetType().GetProperty("_Entry");
         if (entryProp == null) return false;
-        
+
         var entry = entryProp.GetValue(selectedItem) as PlaylistEntry;
         if (entry == null) return false;
-        
+
         var metadata = _pdfMetadata.FirstOrDefault(p => p.GetBookName(_rootFolder) == entry.BookName);
         if (metadata == null) return false;
-        
+
+        int pageNo;
+        if (entry.IsSinglesEntry)
+        {
+            // Resolve current page offset from SongName (PDF basename) — stable across folder changes
+            var tocEntry = metadata.TocEntries.FirstOrDefault(t => t.SongName == entry.SongName);
+            if (tocEntry == null) return false;
+            pageNo = tocEntry.PageNo;
+        }
+        else
+        {
+            pageNo = entry.PageNo;
+        }
+
         ChosenPdfMetaData = metadata;
-        ChosenPageNo = entry.PageNo;
+        ChosenPageNo = pageNo;
         Close();
         return true;
     }

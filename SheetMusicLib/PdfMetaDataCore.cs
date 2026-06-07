@@ -351,6 +351,10 @@ namespace SheetMusicLib
         /// Path to the JSON metadata file (used by Avalonia/Desktop app)
         /// </summary>
         public string JsonFilePath => System.IO.Path.ChangeExtension(FullPathFile, ".json");
+        public override string ToString()
+        {
+            return$"{GetBookName()}";
+        }
     }
 
     /// <summary>

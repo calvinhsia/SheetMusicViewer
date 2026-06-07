@@ -146,43 +146,45 @@ namespace SheetMusicLib
     }
 
     /// <summary>
-    /// Entry in a playlist, referencing a song from a PDF book
+    /// Entry in a playlist, referencing a song from a PDF book.
+    /// Only stores the identity fields needed to locate the song;
+    /// display information (Composer, Notes) is resolved at runtime
+    /// from the corresponding PdfMetaData.
+    ///
+    /// For regular multi-song PDFs: <see cref="BookName"/> + <see cref="PageNo"/> is the key.
+    /// For singles folders: <see cref="BookName"/> + <see cref="SongName"/> is the key
+    /// (<see cref="SongName"/> is the PDF basename without extension).  PageNo is unstable
+    /// for singles because adding a new file shifts all subsequent page offsets.
     /// </summary>
     [Serializable]
     public class PlaylistEntry
     {
         /// <summary>
-        /// The song name from TOC
-        /// </summary>
-        public string SongName { get; set; } = string.Empty;
-        
-        /// <summary>
-        /// The composer from TOC
-        /// </summary>
-        public string Composer { get; set; } = string.Empty;
-        
-        /// <summary>
-        /// The page number in the book
-        /// </summary>
-        public int PageNo { get; set; }
-        
-        /// <summary>
-        /// The book name (relative path from root folder)
+        /// The book name (relative path from root folder) — uniquely identifies the PDF book
+        /// or singles folder.
         /// </summary>
         public string BookName { get; set; } = string.Empty;
-        
+
         /// <summary>
-        /// Optional notes
+        /// The page number in the book — used as the key for regular (non-singles) PDFs.
+        /// For singles-folder entries this holds the last-known page offset and is updated
+        /// on load, but <see cref="SongName"/> is the authoritative key.
         /// </summary>
-        public string Notes { get; set; } = string.Empty;
+        public int PageNo { get; set; }
+
+        /// <summary>
+        /// For singles-folder entries: the PDF basename without extension (e.g. "Maple Leaf Rag").
+        /// This is stable even when new singles are added to the folder.
+        /// Empty for regular multi-song PDF entries.
+        /// </summary>
+        public string SongName { get; set; } = string.Empty;
+
+        /// <summary>True when this entry was added from a singles folder.</summary>
+        public bool IsSinglesEntry => !string.IsNullOrEmpty(SongName);
 
         public override string ToString()
         {
-            var parts = new List<string>();
-            if (!string.IsNullOrEmpty(SongName)) parts.Add(SongName);
-            if (!string.IsNullOrEmpty(Composer)) parts.Add(Composer);
-            parts.Add($"p.{PageNo}");
-            return string.Join(" - ", parts);
+            return IsSinglesEntry ? $"{BookName} / {SongName}" : $"{BookName} p.{PageNo}";
         }
     }
 
