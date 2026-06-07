@@ -408,7 +408,7 @@ public class ExportToMuseScoreWindow : Window
 
             var display = string.IsNullOrWhiteSpace(entry.SongName)
                 ? $"Sheet {startSheet}"
-                : entry.SongName + (string.IsNullOrWhiteSpace(entry.Composer) ? "" : $" \u2013 {entry.Composer}");
+                : entry.SongName + (string.IsNullOrWhiteSpace(entry.Composer) ? "" : $" - {entry.Composer}");
 
             _cmbSong.Items.Add(new SongItem(display, entry.SongName ?? $"Sheet {startSheet}", startSheet, endSheet));
         }
