@@ -49,10 +49,7 @@ namespace Tests
             var entry = new PlaylistEntry();
 
             // Assert
-            Assert.AreEqual(string.Empty, entry.SongName);
-            Assert.AreEqual(string.Empty, entry.Composer);
             Assert.AreEqual(string.Empty, entry.BookName);
-            Assert.AreEqual(string.Empty, entry.Notes);
             Assert.AreEqual(0, entry.PageNo);
             AddLogEntry("PlaylistEntry default values verified");
         }
@@ -64,8 +61,7 @@ namespace Tests
             // Arrange
             var entry = new PlaylistEntry
             {
-                SongName = "Moonlight Sonata",
-                Composer = "Beethoven",
+                BookName = "Classical Favorites",
                 PageNo = 42
             };
 
@@ -73,8 +69,7 @@ namespace Tests
             var result = entry.ToString();
 
             // Assert
-            Assert.IsTrue(result.Contains("Moonlight Sonata"));
-            Assert.IsTrue(result.Contains("Beethoven"));
+            Assert.IsTrue(result.Contains("Classical Favorites"));
             Assert.IsTrue(result.Contains("42"));
             AddLogEntry($"PlaylistEntry.ToString(): {result}");
         }
@@ -83,10 +78,9 @@ namespace Tests
         [TestCategory("Unit")]
         public void PlaylistEntry_ToString_WithOnlySongName_FormatsCorrectly()
         {
-            // Arrange
+            // Arrange - PageNo only (BookName not set)
             var entry = new PlaylistEntry
             {
-                SongName = "Test Song",
                 PageNo = 10
             };
 
@@ -94,9 +88,8 @@ namespace Tests
             var result = entry.ToString();
 
             // Assert
-            Assert.IsTrue(result.Contains("Test Song"));
             Assert.IsTrue(result.Contains("10"));
-            AddLogEntry($"PlaylistEntry.ToString() with only song name: {result}");
+            AddLogEntry($"PlaylistEntry.ToString() with only page: {result}");
         }
 
         [TestMethod]
@@ -107,18 +100,12 @@ namespace Tests
             var entry = new PlaylistEntry();
 
             // Act
-            entry.SongName = "Test Song";
-            entry.Composer = "Test Composer";
             entry.PageNo = 123;
             entry.BookName = "Test Book";
-            entry.Notes = "Test Notes";
 
             // Assert
-            Assert.AreEqual("Test Song", entry.SongName);
-            Assert.AreEqual("Test Composer", entry.Composer);
             Assert.AreEqual(123, entry.PageNo);
             Assert.AreEqual("Test Book", entry.BookName);
-            Assert.AreEqual("Test Notes", entry.Notes);
             AddLogEntry("PlaylistEntry properties can be set correctly");
         }
 
@@ -189,9 +176,9 @@ namespace Tests
         {
             // Arrange
             var playlist = new Playlist { Name = "My Favorites" };
-            playlist.Entries.Add(new PlaylistEntry { SongName = "Song 1" });
-            playlist.Entries.Add(new PlaylistEntry { SongName = "Song 2" });
-            playlist.Entries.Add(new PlaylistEntry { SongName = "Song 3" });
+            playlist.Entries.Add(new PlaylistEntry { PageNo = 1 });
+            playlist.Entries.Add(new PlaylistEntry { PageNo = 2 });
+            playlist.Entries.Add(new PlaylistEntry { PageNo = 3 });
 
             // Act
             var result = playlist.ToString();
@@ -208,7 +195,7 @@ namespace Tests
         {
             // Arrange
             var playlist = new Playlist();
-            var entry = new PlaylistEntry { SongName = "Test Song", PageNo = 1 };
+            var entry = new PlaylistEntry { PageNo = 1 };
 
             // Act
             playlist.Entries.Add(entry);
@@ -225,8 +212,8 @@ namespace Tests
         {
             // Arrange
             var playlist = new Playlist();
-            var entry1 = new PlaylistEntry { SongName = "Song 1" };
-            var entry2 = new PlaylistEntry { SongName = "Song 2" };
+            var entry1 = new PlaylistEntry { PageNo = 1 };
+            var entry2 = new PlaylistEntry { PageNo = 2 };
             playlist.Entries.Add(entry1);
             playlist.Entries.Add(entry2);
 
@@ -245,9 +232,9 @@ namespace Tests
         {
             // Arrange
             var playlist = new Playlist();
-            var entry1 = new PlaylistEntry { SongName = "Song 1" };
-            var entry2 = new PlaylistEntry { SongName = "Song 2" };
-            var entry3 = new PlaylistEntry { SongName = "Song 3" };
+            var entry1 = new PlaylistEntry { PageNo = 1 };
+            var entry2 = new PlaylistEntry { PageNo = 2 };
+            var entry3 = new PlaylistEntry { PageNo = 3 };
             playlist.Entries.Add(entry1);
             playlist.Entries.Add(entry2);
             playlist.Entries.Add(entry3);
@@ -269,9 +256,9 @@ namespace Tests
         {
             // Arrange
             var playlist = new Playlist();
-            var entry1 = new PlaylistEntry { SongName = "Song 1" };
-            var entry2 = new PlaylistEntry { SongName = "Song 2" };
-            var entry3 = new PlaylistEntry { SongName = "Song 3" };
+            var entry1 = new PlaylistEntry { PageNo = 1 };
+            var entry2 = new PlaylistEntry { PageNo = 2 };
+            var entry3 = new PlaylistEntry { PageNo = 3 };
             playlist.Entries.Add(entry1);
             playlist.Entries.Add(entry2);
             playlist.Entries.Add(entry3);
@@ -311,7 +298,7 @@ namespace Tests
             // Arrange
             var settings = AppSettings.Instance;
             var playlist = new Playlist { Name = "Test Playlist" };
-            playlist.Entries.Add(new PlaylistEntry { SongName = "Song 1", PageNo = 10, BookName = "Book 1" });
+            playlist.Entries.Add(new PlaylistEntry { PageNo = 10, BookName = "Book 1" });
 
             // Act
             settings.Playlists.Add(playlist);
@@ -332,16 +319,11 @@ namespace Tests
             var playlist = new Playlist { Name = "Persisted Playlist" };
             playlist.Entries.Add(new PlaylistEntry 
             { 
-                SongName = "Moonlight Sonata", 
-                Composer = "Beethoven",
                 PageNo = 42, 
-                BookName = "Classical Favorites",
-                Notes = "Beautiful piece"
+                BookName = "Classical Favorites"
             });
             playlist.Entries.Add(new PlaylistEntry 
             { 
-                SongName = "Clair de Lune", 
-                Composer = "Debussy",
                 PageNo = 15, 
                 BookName = "French Impressionists"
             });
@@ -357,12 +339,10 @@ namespace Tests
             Assert.AreEqual(1, reloadedSettings.Playlists.Count);
             Assert.AreEqual("Persisted Playlist", reloadedSettings.Playlists[0].Name);
             Assert.AreEqual(2, reloadedSettings.Playlists[0].Entries.Count);
-            Assert.AreEqual("Moonlight Sonata", reloadedSettings.Playlists[0].Entries[0].SongName);
-            Assert.AreEqual("Beethoven", reloadedSettings.Playlists[0].Entries[0].Composer);
             Assert.AreEqual(42, reloadedSettings.Playlists[0].Entries[0].PageNo);
             Assert.AreEqual("Classical Favorites", reloadedSettings.Playlists[0].Entries[0].BookName);
-            Assert.AreEqual("Beautiful piece", reloadedSettings.Playlists[0].Entries[0].Notes);
-            Assert.AreEqual("Clair de Lune", reloadedSettings.Playlists[0].Entries[1].SongName);
+            Assert.AreEqual(15, reloadedSettings.Playlists[0].Entries[1].PageNo);
+            Assert.AreEqual("French Impressionists", reloadedSettings.Playlists[0].Entries[1].BookName);
             Assert.AreEqual("Persisted Playlist", reloadedSettings.LastSelectedPlaylist);
             AddLogEntry("Playlists persisted and reloaded correctly");
         }
@@ -375,11 +355,11 @@ namespace Tests
             var settings = AppSettings.Instance;
             
             var playlist1 = new Playlist { Name = "Classical" };
-            playlist1.Entries.Add(new PlaylistEntry { SongName = "Symphony No. 5", PageNo = 1 });
-            
+            playlist1.Entries.Add(new PlaylistEntry { PageNo = 1 });
+
             var playlist2 = new Playlist { Name = "Jazz" };
-            playlist2.Entries.Add(new PlaylistEntry { SongName = "Take Five", PageNo = 1 });
-            playlist2.Entries.Add(new PlaylistEntry { SongName = "So What", PageNo = 10 });
+            playlist2.Entries.Add(new PlaylistEntry { PageNo = 1 });
+            playlist2.Entries.Add(new PlaylistEntry { PageNo = 10 });
             
             var playlist3 = new Playlist { Name = "Rock" };
             
@@ -504,20 +484,20 @@ namespace Tests
             // Arrange
             var settings = AppSettings.Instance;
             var playlist = new Playlist { Name = "Music Folder Test" };
-            playlist.Entries.Add(new PlaylistEntry { SongName = "Test Song", PageNo = 1 });
+            playlist.Entries.Add(new PlaylistEntry { PageNo = 1, BookName = "TestBook" });
             settings.Playlists.Add(playlist);
-            
+
             // Act
             settings.Save();
-            
+
             // Assert - Roaming file should exist in music folder
             var roamingPath = AppSettings.RoamingSettingsPath;
             Assert.IsNotNull(roamingPath);
             Assert.IsTrue(File.Exists(roamingPath), $"Roaming file should exist at {roamingPath}");
-            
+
             var roamingContent = File.ReadAllText(roamingPath);
             Assert.IsTrue(roamingContent.Contains("Music Folder Test"), "Roaming file should contain playlist");
-            Assert.IsTrue(roamingContent.Contains("Test Song"), "Roaming file should contain playlist entry");
+            Assert.IsTrue(roamingContent.Contains("TestBook"), "Roaming file should contain playlist entry");
             AddLogEntry("Playlists saved to music folder correctly");
         }
         
@@ -599,7 +579,7 @@ namespace Tests
 
             // Assert
             Assert.AreEqual(1, playlist.Entries.Count);
-            Assert.AreEqual(string.Empty, playlist.Entries[0].SongName);
+            Assert.AreEqual(string.Empty, playlist.Entries[0].BookName);
             AddLogEntry("Playlist can contain entries with default values");
         }
 
@@ -609,7 +589,7 @@ namespace Tests
         {
             // Arrange
             var playlist = new Playlist();
-            var entry = new PlaylistEntry { SongName = "Same Song", PageNo = 10 };
+            var entry = new PlaylistEntry { PageNo = 10 };
 
             // Act - Add the same entry twice
             playlist.Entries.Add(entry);
@@ -634,11 +614,8 @@ namespace Tests
             {
                 playlist.Entries.Add(new PlaylistEntry
                 {
-                    SongName = $"Song {i}",
-                    Composer = $"Composer {i}",
                     PageNo = i,
-                    BookName = $"Book {i % 10}",
-                    Notes = $"Notes for song {i}"
+                    BookName = $"Book {i % 10}"
                 });
             }
             settings.Playlists.Add(playlist);
@@ -651,7 +628,8 @@ namespace Tests
             // Assert
             Assert.AreEqual(1, reloadedSettings.Playlists.Count);
             Assert.AreEqual(1000, reloadedSettings.Playlists[0].Entries.Count);
-            Assert.AreEqual("Song 500", reloadedSettings.Playlists[0].Entries[500].SongName);
+            Assert.AreEqual(500, reloadedSettings.Playlists[0].Entries[500].PageNo);
+            Assert.AreEqual($"Book {500 % 10}", reloadedSettings.Playlists[0].Entries[500].BookName);
             AddLogEntry("Large playlist with 1000 entries persisted correctly");
         }
 
@@ -666,7 +644,7 @@ namespace Tests
             // Arrange - Create initial playlist and save
             var settings = AppSettings.Instance;
             var playlist = new Playlist { Name = "Original Playlist" };
-            playlist.Entries.Add(new PlaylistEntry { SongName = "Original Song", PageNo = 1 });
+            playlist.Entries.Add(new PlaylistEntry { BookName = "OriginalBook", PageNo = 1 });
             settings.Playlists.Add(playlist);
             settings.Save();
             
@@ -681,8 +659,8 @@ namespace Tests
                     {
                         "Name": "Synced Playlist",
                         "Entries": [
-                            { "SongName": "Synced Song 1", "PageNo": 10, "Composer": "", "BookName": "", "Notes": "" },
-                            { "SongName": "Synced Song 2", "PageNo": 20, "Composer": "", "BookName": "", "Notes": "" }
+                            { "PageNo": 10, "BookName": "Book A" },
+                            { "PageNo": 20, "BookName": "Book B" }
                         ]
                     }
                 ],
@@ -690,16 +668,18 @@ namespace Tests
             }
             """;
             File.WriteAllText(roamingPath!, externalJson);
-            
+
             // Act - Reload roaming settings
             settings.ReloadRoaming();
-            
+
             // Assert - Should have picked up the external changes
             Assert.AreEqual(1, settings.Playlists.Count);
             Assert.AreEqual("Synced Playlist", settings.Playlists[0].Name);
             Assert.AreEqual(2, settings.Playlists[0].Entries.Count);
-            Assert.AreEqual("Synced Song 1", settings.Playlists[0].Entries[0].SongName);
-            Assert.AreEqual("Synced Song 2", settings.Playlists[0].Entries[1].SongName);
+            Assert.AreEqual(10, settings.Playlists[0].Entries[0].PageNo);
+            Assert.AreEqual("Book A", settings.Playlists[0].Entries[0].BookName);
+            Assert.AreEqual(20, settings.Playlists[0].Entries[1].PageNo);
+            Assert.AreEqual("Book B", settings.Playlists[0].Entries[1].BookName);
             Assert.AreEqual("Synced Playlist", settings.LastSelectedPlaylist);
             AddLogEntry("ReloadRoaming picked up external changes correctly");
         }
@@ -721,19 +701,13 @@ namespace Tests
             var playlist = new Playlist { Name = "My Favorites" };
             playlist.Entries.Add(new PlaylistEntry 
             { 
-                SongName = "Song 1", 
-                Composer = "Composer 1", 
                 PageNo = 10, 
-                BookName = "Book A", 
-                Notes = "" 
+                BookName = "Book A" 
             });
             playlist.Entries.Add(new PlaylistEntry 
             { 
-                SongName = "Song 2", 
-                Composer = "Composer 2", 
                 PageNo = 20, 
-                BookName = "Book B", 
-                Notes = "" 
+                BookName = "Book B" 
             });
             settings.Playlists.Add(playlist);
             settings.LastSelectedPlaylist = "My Favorites";
@@ -756,9 +730,9 @@ namespace Tests
                         "CreatedDate": "2024-01-01T00:00:00",
                         "ModifiedDate": "2024-01-02T00:00:00",
                         "Entries": [
-                            { "SongName": "Song 1", "PageNo": 10, "Composer": "Composer 1", "BookName": "Book A", "Notes": "" },
-                            { "SongName": "Song 2", "PageNo": 20, "Composer": "Composer 2", "BookName": "Book B", "Notes": "" },
-                            { "SongName": "Song 3 - Added on other machine", "PageNo": 30, "Composer": "Composer 3", "BookName": "Book C", "Notes": "Added via OneDrive sync" }
+                            { "PageNo": 10, "BookName": "Book A" },
+                            { "PageNo": 20, "BookName": "Book B" },
+                            { "PageNo": 30, "BookName": "Book C" }
                         ]
                     }
                 ],
@@ -766,21 +740,22 @@ namespace Tests
             }
             """;
             File.WriteAllText(roamingPath!, externalJson);
-            
+
             // Act - User clicks Refresh, which calls ReloadRoaming()
             settings.ReloadRoaming();
-            
+
             // Assert - Should now have 3 songs in the playlist
             Assert.AreEqual(1, settings.Playlists.Count, "Should still have 1 playlist");
             Assert.AreEqual("My Favorites", settings.Playlists[0].Name, "Playlist name should be preserved");
             Assert.AreEqual(3, settings.Playlists[0].Entries.Count, "Should now have 3 entries after refresh");
-            
+
             // Verify all entries are present
-            Assert.AreEqual("Song 1", settings.Playlists[0].Entries[0].SongName);
-            Assert.AreEqual("Song 2", settings.Playlists[0].Entries[1].SongName);
-            Assert.AreEqual("Song 3 - Added on other machine", settings.Playlists[0].Entries[2].SongName);
-            Assert.AreEqual("Added via OneDrive sync", settings.Playlists[0].Entries[2].Notes);
-            
+            Assert.AreEqual(10, settings.Playlists[0].Entries[0].PageNo);
+            Assert.AreEqual("Book A", settings.Playlists[0].Entries[0].BookName);
+            Assert.AreEqual(20, settings.Playlists[0].Entries[1].PageNo);
+            Assert.AreEqual(30, settings.Playlists[0].Entries[2].PageNo);
+            Assert.AreEqual("Book C", settings.Playlists[0].Entries[2].BookName);
+
             AddLogEntry("ReloadRoaming correctly picks up new song added to playlist from another machine");
         }
         
@@ -812,26 +787,27 @@ namespace Tests
                     { "Name": "Playlist 1", "Entries": [] },
                     { "Name": "Playlist 2", "Entries": [] },
                     { "Name": "Playlist 3 - From other machine", "Entries": [
-                        { "SongName": "New Song", "PageNo": 1, "Composer": "", "BookName": "", "Notes": "" }
+                        { "PageNo": 1, "BookName": "Book X" }
                     ] }
                 ],
                 "LastSelectedPlaylist": "Playlist 3 - From other machine"
             }
             """;
             File.WriteAllText(roamingPath!, externalJson);
-            
+
             // Act
             settings.ReloadRoaming();
-            
+
             // Assert
             Assert.AreEqual(3, settings.Playlists.Count, "Should now have 3 playlists");
             Assert.AreEqual("Playlist 1", settings.Playlists[0].Name);
             Assert.AreEqual("Playlist 2", settings.Playlists[1].Name);
             Assert.AreEqual("Playlist 3 - From other machine", settings.Playlists[2].Name);
             Assert.AreEqual(1, settings.Playlists[2].Entries.Count);
-            Assert.AreEqual("New Song", settings.Playlists[2].Entries[0].SongName);
+            Assert.AreEqual(1, settings.Playlists[2].Entries[0].PageNo);
+            Assert.AreEqual("Book X", settings.Playlists[2].Entries[0].BookName);
             Assert.AreEqual("Playlist 3 - From other machine", settings.LastSelectedPlaylist);
-            
+
             AddLogEntry("ReloadRoaming correctly picks up new playlist from another machine");
         }
 
@@ -927,15 +903,15 @@ namespace Tests
             // Arrange
             var settings = AppSettings.Instance;
             var playlist = new Playlist { Name = "Test" };
-            playlist.Entries.Add(new PlaylistEntry { SongName = "Song 1", PageNo = 1 });
+            playlist.Entries.Add(new PlaylistEntry { PageNo = 1, BookName = "Book 1" });
             settings.Playlists.Add(playlist);
             settings.Save();
-            
+
             // Act - Call ReloadRoaming multiple times
             settings.ReloadRoaming();
             settings.ReloadRoaming();
             settings.ReloadRoaming();
-            
+
             // Assert - Should still have the same data
             Assert.AreEqual(1, settings.Playlists.Count);
             Assert.AreEqual("Test", settings.Playlists[0].Name);
@@ -1444,9 +1420,9 @@ namespace Tests
         {
             // Arrange
             var playlist = new Playlist();
-            playlist.Entries.Add(new PlaylistEntry { SongName = "First" });
-            playlist.Entries.Add(new PlaylistEntry { SongName = "Second" });
-            
+            playlist.Entries.Add(new PlaylistEntry { BookName = "First", PageNo = 1 });
+            playlist.Entries.Add(new PlaylistEntry { BookName = "Second", PageNo = 2 });
+
             // Act - Try to move first item up (selectedIndex = 0)
             int selectedIndex = 0;
             if (selectedIndex > 0)
@@ -1457,8 +1433,8 @@ namespace Tests
             }
             
             // Assert - Order should be unchanged
-            Assert.AreEqual("First", playlist.Entries[0].SongName);
-            Assert.AreEqual("Second", playlist.Entries[1].SongName);
+            Assert.AreEqual("First", playlist.Entries[0].BookName);
+            Assert.AreEqual("Second", playlist.Entries[1].BookName);
             AddLogEntry("Moving first item up correctly does nothing");
         }
         
@@ -1468,8 +1444,8 @@ namespace Tests
         {
             // Arrange
             var playlist = new Playlist();
-            playlist.Entries.Add(new PlaylistEntry { SongName = "First" });
-            playlist.Entries.Add(new PlaylistEntry { SongName = "Last" });
+            playlist.Entries.Add(new PlaylistEntry { BookName = "First", PageNo = 1 });
+            playlist.Entries.Add(new PlaylistEntry { BookName = "Last", PageNo = 2 });
             
             // Act - Try to move last item down (selectedIndex = 1, count = 2)
             int selectedIndex = 1;
@@ -1481,8 +1457,8 @@ namespace Tests
             }
             
             // Assert - Order should be unchanged
-            Assert.AreEqual("First", playlist.Entries[0].SongName);
-            Assert.AreEqual("Last", playlist.Entries[1].SongName);
+            Assert.AreEqual("First", playlist.Entries[0].BookName);
+            Assert.AreEqual("Last", playlist.Entries[1].BookName);
             AddLogEntry("Moving last item down correctly does nothing");
         }
         
@@ -1492,10 +1468,10 @@ namespace Tests
         {
             // Arrange
             var playlist = new Playlist();
-            playlist.Entries.Add(new PlaylistEntry { SongName = "First" });
-            playlist.Entries.Add(new PlaylistEntry { SongName = "Middle" });
-            playlist.Entries.Add(new PlaylistEntry { SongName = "Last" });
-            
+            playlist.Entries.Add(new PlaylistEntry { BookName = "First", PageNo = 1 });
+            playlist.Entries.Add(new PlaylistEntry { BookName = "Middle", PageNo = 2 });
+            playlist.Entries.Add(new PlaylistEntry { BookName = "Last", PageNo = 3 });
+
             // Act - Move middle item up (selectedIndex = 1)
             int selectedIndex = 1;
             if (selectedIndex > 0)
@@ -1504,11 +1480,11 @@ namespace Tests
                 playlist.Entries.RemoveAt(selectedIndex);
                 playlist.Entries.Insert(selectedIndex - 1, entry);
             }
-            
+
             // Assert - Middle should now be first
-            Assert.AreEqual("Middle", playlist.Entries[0].SongName);
-            Assert.AreEqual("First", playlist.Entries[1].SongName);
-            Assert.AreEqual("Last", playlist.Entries[2].SongName);
+            Assert.AreEqual("Middle", playlist.Entries[0].BookName);
+            Assert.AreEqual("First", playlist.Entries[1].BookName);
+            Assert.AreEqual("Last", playlist.Entries[2].BookName);
             AddLogEntry("Moving middle item up works correctly");
         }
         
@@ -1518,10 +1494,10 @@ namespace Tests
         {
             // Arrange
             var playlist = new Playlist();
-            playlist.Entries.Add(new PlaylistEntry { SongName = "First" });
-            playlist.Entries.Add(new PlaylistEntry { SongName = "Middle" });
-            playlist.Entries.Add(new PlaylistEntry { SongName = "Last" });
-            
+            playlist.Entries.Add(new PlaylistEntry { BookName = "First", PageNo = 1 });
+            playlist.Entries.Add(new PlaylistEntry { BookName = "Middle", PageNo = 2 });
+            playlist.Entries.Add(new PlaylistEntry { BookName = "Last", PageNo = 3 });
+
             // Act - Move middle item down (selectedIndex = 1)
             int selectedIndex = 1;
             if (selectedIndex >= 0 && selectedIndex < playlist.Entries.Count - 1)
@@ -1530,11 +1506,11 @@ namespace Tests
                 playlist.Entries.RemoveAt(selectedIndex);
                 playlist.Entries.Insert(selectedIndex + 1, entry);
             }
-            
+
             // Assert - Middle should now be last
-            Assert.AreEqual("First", playlist.Entries[0].SongName);
-            Assert.AreEqual("Last", playlist.Entries[1].SongName);
-            Assert.AreEqual("Middle", playlist.Entries[2].SongName);
+            Assert.AreEqual("First", playlist.Entries[0].BookName);
+            Assert.AreEqual("Last", playlist.Entries[1].BookName);
+            Assert.AreEqual("Middle", playlist.Entries[2].BookName);
             AddLogEntry("Moving middle item down works correctly");
         }
         
@@ -1547,15 +1523,15 @@ namespace Tests
             
             // Arrange
             var playlist = new Playlist();
-            playlist.Entries.Add(new PlaylistEntry { SongName = "A" });
-            playlist.Entries.Add(new PlaylistEntry { SongName = "B" });
-            playlist.Entries.Add(new PlaylistEntry { SongName = "C" });
-            playlist.Entries.Add(new PlaylistEntry { SongName = "Target" }); // Index 3, will move to 0
-            
+            playlist.Entries.Add(new PlaylistEntry { BookName = "A", PageNo = 1 });
+            playlist.Entries.Add(new PlaylistEntry { BookName = "B", PageNo = 2 });
+            playlist.Entries.Add(new PlaylistEntry { BookName = "C", PageNo = 3 });
+            playlist.Entries.Add(new PlaylistEntry { BookName = "Target", PageNo = 4 }); // Index 3, will move to 0
+
             // Act - Simulate clicking "Move Up" 3 times
             // Each time, the item moves up one position and stays selected at its new index
             int selectedIndex = 3;
-            
+
             // Move 1: 3 -> 2
             if (selectedIndex > 0)
             {
@@ -1565,8 +1541,8 @@ namespace Tests
                 selectedIndex = selectedIndex - 1; // Re-select at new position
             }
             Assert.AreEqual(2, selectedIndex);
-            Assert.AreEqual("Target", playlist.Entries[2].SongName);
-            
+            Assert.AreEqual("Target", playlist.Entries[2].BookName);
+
             // Move 2: 2 -> 1
             if (selectedIndex > 0)
             {
@@ -1576,8 +1552,8 @@ namespace Tests
                 selectedIndex = selectedIndex - 1;
             }
             Assert.AreEqual(1, selectedIndex);
-            Assert.AreEqual("Target", playlist.Entries[1].SongName);
-            
+            Assert.AreEqual("Target", playlist.Entries[1].BookName);
+
             // Move 3: 1 -> 0
             if (selectedIndex > 0)
             {
@@ -1587,8 +1563,8 @@ namespace Tests
                 selectedIndex = selectedIndex - 1;
             }
             Assert.AreEqual(0, selectedIndex);
-            Assert.AreEqual("Target", playlist.Entries[0].SongName);
-            
+            Assert.AreEqual("Target", playlist.Entries[0].BookName);
+
             // Move 4: At top, should do nothing
             int oldIndex = selectedIndex;
             if (selectedIndex > 0)
@@ -1599,12 +1575,12 @@ namespace Tests
                 selectedIndex = selectedIndex - 1;
             }
             Assert.AreEqual(oldIndex, selectedIndex, "Should not change when already at top");
-            
+
             // Assert final order
-            Assert.AreEqual("Target", playlist.Entries[0].SongName);
-            Assert.AreEqual("A", playlist.Entries[1].SongName);
-            Assert.AreEqual("B", playlist.Entries[2].SongName);
-            Assert.AreEqual("C", playlist.Entries[3].SongName);
+            Assert.AreEqual("Target", playlist.Entries[0].BookName);
+            Assert.AreEqual("A", playlist.Entries[1].BookName);
+            Assert.AreEqual("B", playlist.Entries[2].BookName);
+            Assert.AreEqual("C", playlist.Entries[3].BookName);
             AddLogEntry("Consecutive Move Up operations correctly move item to top");
         }
         
@@ -1617,10 +1593,10 @@ namespace Tests
             
             // Arrange
             var playlist = new Playlist();
-            playlist.Entries.Add(new PlaylistEntry { SongName = "Target" }); // Index 0, will move to 3
-            playlist.Entries.Add(new PlaylistEntry { SongName = "A" });
-            playlist.Entries.Add(new PlaylistEntry { SongName = "B" });
-            playlist.Entries.Add(new PlaylistEntry { SongName = "C" });
+            playlist.Entries.Add(new PlaylistEntry { BookName = "Target", PageNo = 1 }); // Index 0, will move to 3
+            playlist.Entries.Add(new PlaylistEntry { BookName = "A", PageNo = 2 });
+            playlist.Entries.Add(new PlaylistEntry { BookName = "B", PageNo = 3 });
+            playlist.Entries.Add(new PlaylistEntry { BookName = "C", PageNo = 4 });
             
             // Act - Simulate clicking "Move Down" 3 times
             int selectedIndex = 0;
@@ -1667,10 +1643,10 @@ namespace Tests
             Assert.AreEqual(oldIndex, selectedIndex, "Should not change when already at bottom");
             
             // Assert final order
-            Assert.AreEqual("A", playlist.Entries[0].SongName);
-            Assert.AreEqual("B", playlist.Entries[1].SongName);
-            Assert.AreEqual("C", playlist.Entries[2].SongName);
-            Assert.AreEqual("Target", playlist.Entries[3].SongName);
+            Assert.AreEqual("A", playlist.Entries[0].BookName);
+            Assert.AreEqual("B", playlist.Entries[1].BookName);
+            Assert.AreEqual("C", playlist.Entries[2].BookName);
+            Assert.AreEqual("Target", playlist.Entries[3].BookName);
             AddLogEntry("Consecutive Move Down operations correctly move item to bottom");
         }
         
@@ -1684,41 +1660,29 @@ namespace Tests
             var playlist = new Playlist();
             playlist.Entries.Add(new PlaylistEntry 
             { 
-                SongName = "Song1", 
-                Composer = "Composer1", 
                 PageNo = 10, 
-                BookName = "Book1", 
-                Notes = "Notes1" 
+                BookName = "Book1" 
             });
             playlist.Entries.Add(new PlaylistEntry 
             { 
-                SongName = "Song2", 
-                Composer = "Composer2", 
                 PageNo = 20, 
-                BookName = "Book2", 
-                Notes = "Notes2" 
+                BookName = "Book2" 
             });
-            
+
             // Act - Move second item up
             var entry = playlist.Entries[1];
             playlist.Entries.RemoveAt(1);
             playlist.Entries.Insert(0, entry);
-            
+
             // Assert - Data should be intact
             var movedEntry = playlist.Entries[0];
-            Assert.AreEqual("Song2", movedEntry.SongName);
-            Assert.AreEqual("Composer2", movedEntry.Composer);
             Assert.AreEqual(20, movedEntry.PageNo);
             Assert.AreEqual("Book2", movedEntry.BookName);
-            Assert.AreEqual("Notes2", movedEntry.Notes);
-            
+
             var otherEntry = playlist.Entries[1];
-            Assert.AreEqual("Song1", otherEntry.SongName);
-            Assert.AreEqual("Composer1", otherEntry.Composer);
             Assert.AreEqual(10, otherEntry.PageNo);
             Assert.AreEqual("Book1", otherEntry.BookName);
-            Assert.AreEqual("Notes1", otherEntry.Notes);
-            
+
             AddLogEntry("Move operations preserve all entry data");
         }
         
@@ -1730,8 +1694,8 @@ namespace Tests
             
             // Arrange
             var playlist = new Playlist { Name = "Test" };
-            playlist.Entries.Add(new PlaylistEntry { SongName = "A" });
-            playlist.Entries.Add(new PlaylistEntry { SongName = "B" });
+            playlist.Entries.Add(new PlaylistEntry { BookName = "A", PageNo = 1 });
+            playlist.Entries.Add(new PlaylistEntry { BookName = "B", PageNo = 2 });
             var originalModified = playlist.ModifiedDate;
             
             // Wait a tiny bit to ensure time difference
@@ -1762,37 +1726,37 @@ namespace Tests
             // Arrange - Simulate the anonymous type used in playlist entries
             var entries = new List<PlaylistEntry>
             {
-                new PlaylistEntry { SongName = "Song0" },
-                new PlaylistEntry { SongName = "Song1" },
-                new PlaylistEntry { SongName = "Song2" }
+                new PlaylistEntry { BookName = "Book0", PageNo = 0 },
+                new PlaylistEntry { BookName = "Book1", PageNo = 1 },
+                new PlaylistEntry { BookName = "Book2", PageNo = 2 }
             };
-            
+
             var playlistData = entries.Select((entry, index) => new
             {
-                entry.SongName,
+                entry.BookName,
                 Page = entry.PageNo,
                 _Index = index,
                 _Entry = entry
             }).ToList();
-            
+
             // Act - Extract index from each item
             for (int i = 0; i < playlistData.Count; i++)
             {
                 var item = playlistData[i];
                 var indexProp = item.GetType().GetProperty("_Index");
                 Assert.IsNotNull(indexProp, $"Item {i} should have _Index property");
-                
+
                 var extractedIndex = (int)indexProp.GetValue(item)!;
                 Assert.AreEqual(i, extractedIndex, $"Extracted index should match for item {i}");
-                
+
                 var entryProp = item.GetType().GetProperty("_Entry");
                 Assert.IsNotNull(entryProp, $"Item {i} should have _Entry property");
-                
+
                 var extractedEntry = entryProp.GetValue(item) as PlaylistEntry;
                 Assert.IsNotNull(extractedEntry, $"Extracted entry should not be null for item {i}");
-                Assert.AreEqual($"Song{i}", extractedEntry.SongName);
+                Assert.AreEqual($"Book{i}", extractedEntry.BookName);
             }
-            
+
             AddLogEntry("Index extraction from anonymous type works correctly");
         }
         
