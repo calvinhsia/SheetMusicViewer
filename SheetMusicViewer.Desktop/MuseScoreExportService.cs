@@ -418,7 +418,18 @@ public static class MuseScoreExportService
             .Replace('\u00BB', '-');  // right-pointing double angle quotation »
 
         // Step 2: replace any Windows-illegal filename char with '_'.
-        var invalidFileName = System.IO.Path.GetInvalidFileNameChars();
+        // Use a hardcoded set rather than Path.GetInvalidFileNameChars() because on Linux/macOS
+        // that method only returns {'\0', '/'}, missing the Windows-specific chars (: * ? " < > | \ etc.).
+        // Generated .mxl files may be synced to Windows via OneDrive, so filenames must be valid
+        // on Windows regardless of which platform produces them.
+        var invalidFileName = new HashSet<char>
+        {
+            '\0', '/', '\\', ':', '*', '?', '"', '<', '>', '|',
+            '\x01', '\x02', '\x03', '\x04', '\x05', '\x06', '\x07', '\x08',
+            '\x09', '\x0A', '\x0B', '\x0C', '\x0D', '\x0E', '\x0F', '\x10',
+            '\x11', '\x12', '\x13', '\x14', '\x15', '\x16', '\x17', '\x18',
+            '\x19', '\x1A', '\x1B', '\x1C', '\x1D', '\x1E', '\x1F'
+        };
 
         // Step 3: on Windows, replace any remaining character that has no true CP1252 mapping
         // with '_'. CP1252 is the Windows ANSI codepage that Windows "Compressed Folders" uses.
@@ -427,7 +438,7 @@ public static class MuseScoreExportService
         var sb = new System.Text.StringBuilder(normalized.Length);
         foreach (var c in normalized)
         {
-            if (Array.IndexOf(invalidFileName, c) >= 0)
+            if (invalidFileName.Contains(c))
             {
                 sb.Append('_');
                 continue;
