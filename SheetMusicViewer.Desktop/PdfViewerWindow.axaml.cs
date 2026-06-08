@@ -109,6 +109,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         _show2Pages = settings.Show2Pages;
         _rootMusicFolder = settings.RootFolderMRU.FirstOrDefault() ?? string.Empty;
 
+        // Allow command-line override of the root music folder
+        if (!string.IsNullOrEmpty(CommandLineOptions.Current.RootFolder))
+        {
+            _rootMusicFolder = CommandLineOptions.Current.RootFolder;
+        }
+
         DataContext = this;
         
         Trace.WriteLine($"PdfViewerWindow constructor: WindowMaximized={settings.WindowMaximized} from {AppSettings.SettingsPath}");
