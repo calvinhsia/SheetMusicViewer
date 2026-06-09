@@ -270,7 +270,6 @@ namespace SheetMusicViewer
                     {
                         json.InkStrokes[pageNo] = new JsonInkStrokes
                         {
-                            PageNo = pageNo,
                             CanvasWidth = portableStrokes.CanvasWidth,
                             CanvasHeight = portableStrokes.CanvasHeight,
                             Strokes = portableStrokes.Strokes
