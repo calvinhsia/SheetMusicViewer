@@ -1592,4 +1592,204 @@ public class PdfMetaDataCoreTests : TestBase
         LogMessage($"TocEntries.Count = {metadata.TocEntries.Count}, " +
                    $"SongName = '{metadata.TocEntries[0].SongName}'");
     }
+
+    // ---------------------------------------------------------------------------
+    // Helpers for Favorites / InkStrokes remapping tests
+    // ---------------------------------------------------------------------------
+
+    /// <summary>
+    /// A lightweight IPdfDocumentProvider backed by a dictionary of filename -> page count.
+    /// Falls back to 1 for any unknown filename so tests don't need real PDFs.
+    /// </summary>
+    private sealed class DictionaryPdfDocumentProvider : IPdfDocumentProvider
+    {
+        private readonly Dictionary<string, int> _pageCounts;
+
+        public DictionaryPdfDocumentProvider(Dictionary<string, int> pageCounts)
+        {
+            _pageCounts = pageCounts;
+        }
+
+        public Task<int> GetPageCountAsync(string pdfFilePath)
+        {
+            var key = Path.GetFileName(pdfFilePath);
+            return Task.FromResult(_pageCounts.TryGetValue(key, out var n) ? n : 1);
+        }
+    }
+
+    // ---------------------------------------------------------------------------
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task LoadSinglesFolderAsync_WhenPdfInserted_RemapsFavoritesAndInkStrokes()
+    {
+        // Scenario: The JSON was saved with two songs:
+        //   Song_A.pdf  4 pages  (abs pages 0-3)   Favorite on page 2
+        //   Song_C.pdf  3 pages  (abs pages 4-6)   InkStroke on page 5
+        //
+        // The user inserts Song_B.pdf (2 pages) between them on disk.
+        // After reload Song_B sorts between A and C:
+        //   Song_A.pdf  4 pages  (abs pages 0-3)   -> Favorite stays on page 2
+        //   Song_B.pdf  2 pages  (abs pages 4-5)   [new, no annotations]
+        //   Song_C.pdf  3 pages  (abs pages 6-8)   -> InkStroke moves from 5 to 5+2=7
+
+        // Arrange – create the singles folder with all three PDFs present on disk
+        var singlesFolder = Path.Combine(_tempFolder, "RemapInsertSingles");
+        Directory.CreateDirectory(singlesFolder);
+
+        // Create placeholder PDF files (content irrelevant; page counts come from the provider)
+        File.WriteAllText(Path.Combine(singlesFolder, "Song_A.pdf"), "placeholder");
+        File.WriteAllText(Path.Combine(singlesFolder, "Song_B.pdf"), "placeholder");
+        File.WriteAllText(Path.Combine(singlesFolder, "Song_C.pdf"), "placeholder");
+
+        // JSON was saved BEFORE Song_B was added, so it lists only A and C
+        var jsonFile = Path.ChangeExtension(singlesFolder, "json");
+        var jsonContent = """
+            {
+              "version": 1,
+              "lastWrite": "2025-01-01T00:00:00",
+              "lastPageNo": 0,
+              "volumes": [
+                { "fileName": "Song_A.pdf", "pageCount": 4 },
+                { "fileName": "Song_C.pdf", "pageCount": 3 }
+              ],
+              "tableOfContents": [
+                { "songName": "Song_A", "pageNo": 0 },
+                { "songName": "Song_C", "pageNo": 4 }
+              ],
+              "favorites": [
+                { "pageNo": 2, "name": "FavA" }
+              ],
+              "inkStrokes": {
+                "5": { "pageNo": 5, "canvasWidth": 800, "canvasHeight": 600, "strokes": [] }
+              }
+            }
+            """;
+        await File.WriteAllTextAsync(jsonFile, jsonContent);
+
+        var provider = new DictionaryPdfDocumentProvider(new Dictionary<string, int>
+        {
+            { "Song_A.pdf", 4 },
+            { "Song_B.pdf", 2 },
+            { "Song_C.pdf", 3 }
+        });
+
+        // Act
+        var (metadataList, _) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+            _tempFolder,
+            provider,
+            exceptionHandler: null,
+            useParallelLoading: false);
+
+        // Assert
+        Assert.AreEqual(1, metadataList.Count, "Should find 1 Singles folder");
+        var md = metadataList[0];
+
+        Assert.AreEqual(3, md.VolumeInfoList.Count, "Should have 3 volumes after insert");
+
+        // TOC order: A(0), B(4), C(6)
+        Assert.AreEqual("Song_A", md.TocEntries[0].SongName); Assert.AreEqual(0, md.TocEntries[0].PageNo);
+        Assert.AreEqual("Song_B", md.TocEntries[1].SongName); Assert.AreEqual(4, md.TocEntries[1].PageNo);
+        Assert.AreEqual("Song_C", md.TocEntries[2].SongName); Assert.AreEqual(6, md.TocEntries[2].PageNo);
+
+        // Favorite was on page 2 (inside Song_A which didn't move) – must stay on page 2
+        Assert.AreEqual(1, md.Favorites.Count, "Favorite should survive");
+        Assert.AreEqual(2, md.Favorites[0].Pageno, "Favorite page should be unchanged (still in Song_A)");
+        Assert.AreEqual("FavA", md.Favorites[0].FavoriteName);
+
+        // InkStroke was on page 5 (Song_C, offset 1 within volume).
+        // Song_C new start = 6 → remapped to 6 + 1 = 7
+        Assert.AreEqual(1, md.InkStrokes.Count, "InkStroke should survive");
+        Assert.AreEqual(7, md.InkStrokes[0].Pageno, "InkStroke should be remapped from 5 to 7");
+
+        LogMessage($"Insert remap verified: Favorite={md.Favorites[0].Pageno}, InkStroke={md.InkStrokes[0].Pageno}");
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task LoadSinglesFolderAsync_WhenPdfDeleted_DropsAnnotationsInDeletedVolume_RemapsRest()
+    {
+        // Scenario: The JSON was saved with three songs:
+        //   Song_A.pdf  2 pages  (abs pages 0-1)   Favorite on page 1
+        //   Song_B.pdf  3 pages  (abs pages 2-4)   Favorite on page 3, InkStroke on page 4
+        //   Song_C.pdf  2 pages  (abs pages 5-6)   InkStroke on page 6
+        //
+        // The user deletes Song_B.pdf from disk.
+        // After reload:
+        //   Song_A.pdf  2 pages  (abs pages 0-1)   -> Favorite stays on page 1
+        //   Song_C.pdf  2 pages  (abs pages 2-3)   -> InkStroke moves from 6 to 2+1=3
+        //   Favorite page 3 (Song_B) and InkStroke page 4 (Song_B) are dropped
+
+        // Arrange
+        var singlesFolder = Path.Combine(_tempFolder, "RemapDeleteSingles");
+        Directory.CreateDirectory(singlesFolder);
+
+        // Only Song_A and Song_C remain on disk
+        File.WriteAllText(Path.Combine(singlesFolder, "Song_A.pdf"), "placeholder");
+        File.WriteAllText(Path.Combine(singlesFolder, "Song_C.pdf"), "placeholder");
+
+        var jsonFile = Path.ChangeExtension(singlesFolder, "json");
+        var jsonContent = """
+            {
+              "version": 1,
+              "lastWrite": "2025-01-01T00:00:00",
+              "lastPageNo": 0,
+              "volumes": [
+                { "fileName": "Song_A.pdf", "pageCount": 2 },
+                { "fileName": "Song_B.pdf", "pageCount": 3 },
+                { "fileName": "Song_C.pdf", "pageCount": 2 }
+              ],
+              "tableOfContents": [
+                { "songName": "Song_A", "pageNo": 0 },
+                { "songName": "Song_B", "pageNo": 2 },
+                { "songName": "Song_C", "pageNo": 5 }
+              ],
+              "favorites": [
+                { "pageNo": 1, "name": "FavA" },
+                { "pageNo": 3, "name": "FavB" }
+              ],
+              "inkStrokes": {
+                "4": { "pageNo": 4, "canvasWidth": 800, "canvasHeight": 600, "strokes": [] },
+                "6": { "pageNo": 6, "canvasWidth": 800, "canvasHeight": 600, "strokes": [] }
+              }
+            }
+            """;
+        await File.WriteAllTextAsync(jsonFile, jsonContent);
+
+        var provider = new DictionaryPdfDocumentProvider(new Dictionary<string, int>
+        {
+            { "Song_A.pdf", 2 },
+            { "Song_C.pdf", 2 }
+        });
+
+        // Act
+        var (metadataList, _) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+            _tempFolder,
+            provider,
+            exceptionHandler: null,
+            useParallelLoading: false);
+
+        // Assert
+        Assert.AreEqual(1, metadataList.Count, "Should find 1 Singles folder");
+        var md = metadataList[0];
+
+        Assert.AreEqual(2, md.VolumeInfoList.Count, "Should have 2 volumes after deletion");
+
+        // TOC: A(0), C(2)
+        Assert.AreEqual("Song_A", md.TocEntries[0].SongName); Assert.AreEqual(0, md.TocEntries[0].PageNo);
+        Assert.AreEqual("Song_C", md.TocEntries[1].SongName); Assert.AreEqual(2, md.TocEntries[1].PageNo);
+
+        // FavA (page 1, Song_A offset 1) -> Song_A new start 0 -> stays on page 1
+        // FavB (page 3, Song_B) -> deleted volume -> dropped
+        Assert.AreEqual(1, md.Favorites.Count, "Only 1 favorite should survive (FavB dropped)");
+        Assert.AreEqual(1, md.Favorites[0].Pageno, "FavA should remain on page 1");
+        Assert.AreEqual("FavA", md.Favorites[0].FavoriteName);
+
+        // InkStroke page 4 (Song_B) -> deleted volume -> dropped
+        // InkStroke page 6 (Song_C, offset 1) -> Song_C new start 2 -> remapped to 2+1=3
+        Assert.AreEqual(1, md.InkStrokes.Count, "Only 1 inkstroke should survive (Song_B one dropped)");
+        Assert.AreEqual(3, md.InkStrokes[0].Pageno, "InkStroke from Song_C should be remapped to page 3");
+
+        LogMessage($"Delete remap verified: Favorite={md.Favorites[0].Pageno}, InkStroke={md.InkStrokes[0].Pageno}");
+    }
 }

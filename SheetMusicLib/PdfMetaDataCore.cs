@@ -897,6 +897,18 @@ namespace SheetMusicLib
             {
                 curmetadata.IsDirty = true;
 
+                // Snapshot old cumulative page starts (filename.lower -> old page start)
+                // so we can remap Favorites and InkStrokes after the volume list changes.
+                var oldPageStart = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                {
+                    int oldStart = 0;
+                    foreach (var vol in curmetadata.VolumeInfoList)
+                    {
+                        oldPageStart[vol.FileNameVolume] = oldStart;
+                        oldStart += vol.NPagesInThisVolume;
+                    }
+                }
+
                 // Remove deleted volumes
                 curmetadata.VolumeInfoList.RemoveAll(v =>
                     sortedListDeletedSingles.Contains(v.FileNameVolume.ToLower()));
@@ -941,6 +953,107 @@ namespace SheetMusicLib
                         PageNo = singlesPageNo
                     });
                     singlesPageNo += vol.NPagesInThisVolume;
+                }
+
+                // Remap Favorites and InkStrokes to reflect inserted/deleted PDFs.
+                // Build a map: filename.lower -> new page start (after re-sort).
+                var newPageStart = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                {
+                    int newStart = 0;
+                    foreach (var vol in curmetadata.VolumeInfoList)
+                    {
+                        newPageStart[vol.FileNameVolume] = newStart;
+                        newStart += vol.NPagesInThisVolume;
+                    }
+                }
+
+                // Helper: given an old absolute page number, return the remapped page number,
+                // or -1 if it belonged to a deleted volume.
+                int RemapPageNo(int oldAbsPageNo)
+                {
+                    // Find which old volume this page belonged to
+                    foreach (var vol in oldPageStart)
+                    {
+                        var fileName = vol.Key;
+                        var start = vol.Value;
+                        // We need the old page count for this volume to determine range.
+                        // Because the volume still exists (it was in the JSON), its page count
+                        // is either still in VolumeInfoList or was in the original list.
+                        int oldPageCount;
+                        var surviving = curmetadata.VolumeInfoList
+                            .FirstOrDefault(v => string.Equals(v.FileNameVolume, fileName, StringComparison.OrdinalIgnoreCase));
+                        if (surviving != null)
+                        {
+                            oldPageCount = surviving.NPagesInThisVolume;
+                        }
+                        else
+                        {
+                            // Volume was deleted – use total pages estimated from TOC gap or skip
+                            // We can't know the old page count precisely after removal; treat any
+                            // page in the gap between this start and the next old start as deleted.
+                            // Find the next start to determine the range.
+                            int nextStart = int.MaxValue;
+                            foreach (var other in oldPageStart)
+                            {
+                                if (other.Value > start && other.Value < nextStart)
+                                    nextStart = other.Value;
+                            }
+                            oldPageCount = nextStart == int.MaxValue ? int.MaxValue : nextStart - start;
+                        }
+
+                        if (oldAbsPageNo >= start && oldAbsPageNo < start + oldPageCount)
+                        {
+                            // This page belongs to this volume
+                            if (!newPageStart.TryGetValue(fileName, out int newStart))
+                                return -1; // Volume was deleted
+                            int offsetWithinVol = oldAbsPageNo - start;
+                            return newStart + offsetWithinVol;
+                        }
+                    }
+                    return -1; // Not found
+                }
+
+                // Remap Favorites, discarding any that fell in a deleted volume
+                if (curmetadata.Favorites.Count > 0)
+                {
+                    var remappedFavs = new List<Favorite>();
+                    foreach (var fav in curmetadata.Favorites)
+                    {
+                        int remapped = RemapPageNo(fav.Pageno);
+                        if (remapped >= 0)
+                        {
+                            remappedFavs.Add(new Favorite { Pageno = remapped, FavoriteName = fav.FavoriteName });
+                        }
+                        else
+                        {
+                            Debug.WriteLine($"PdfMetaDataCore: Dropping Favorite '{fav.FavoriteName}' page {fav.Pageno} (volume deleted)");
+                        }
+                    }
+                    curmetadata.Favorites = remappedFavs;
+                }
+
+                // Remap InkStrokes, discarding any that fell in a deleted volume
+                if (curmetadata.InkStrokes.Count > 0)
+                {
+                    var remappedInk = new List<InkStrokeClass>();
+                    foreach (var ink in curmetadata.InkStrokes)
+                    {
+                        int remapped = RemapPageNo(ink.Pageno);
+                        if (remapped >= 0)
+                        {
+                            remappedInk.Add(new InkStrokeClass
+                            {
+                                Pageno = remapped,
+                                InkStrokeDimension = ink.InkStrokeDimension,
+                                StrokeData = ink.StrokeData
+                            });
+                        }
+                        else
+                        {
+                            Debug.WriteLine($"PdfMetaDataCore: Dropping InkStroke page {ink.Pageno} (volume deleted)");
+                        }
+                    }
+                    curmetadata.InkStrokes = remappedInk;
                 }
             }
 

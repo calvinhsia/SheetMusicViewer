@@ -89,9 +89,6 @@ namespace SheetMusicLib
 
     public class JsonInkStrokes
     {
-        [JsonPropertyName("pageNo")]
-        public int PageNo { get; set; }
-
         [JsonPropertyName("canvasWidth")]
         public double CanvasWidth { get; set; }
 
