@@ -126,6 +126,19 @@
                     <DataGridTextColumn Header="Page" Binding="{Binding PageNo}" Width="60" x:DataType="local:TocEntryViewModel"/>
                     <DataGridTextColumn Header="Fav" Binding="{Binding FavDisplay}" Width="50" IsReadOnly="True" x:DataType="local:TocEntryViewModel"/>
                     <DataGridTextColumn Header="🔗" Binding="{Binding LinkDisplay}" Width="40" IsReadOnly="True" x:DataType="local:TocEntryViewModel"/>
+                    <DataGridTemplateColumn Header="🎵" Width="40" IsReadOnly="True" x:DataType="local:TocEntryViewModel">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TocEntryViewModel">
+                                <Button Content="🎵"
+                                        Command="{Binding OpenInMuseScoreCommand}"
+                                        IsVisible="{Binding HasCachedMxl}"
+                                        Padding="2"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        ToolTip.Tip="Open cached MXL in MuseScore"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                     <DataGridTemplateColumn Header="SongName" Width="250" x:DataType="local:TocEntryViewModel">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate x:DataType="local:TocEntryViewModel">
