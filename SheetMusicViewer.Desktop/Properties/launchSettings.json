@@ -2,7 +2,7 @@
   "profiles": {
     "SheetMusicViewer.Desktop": {
       "commandName": "Project",
-      "commandLineArgs": "--root\r\nc:\\SheetMusicTest"
+      "commandLineArgs": "--xroot\r\nc:\\SheetMusicTest"
     }
   }
 }
