@@ -428,9 +428,46 @@ public partial class MetaDataFormViewModel : ObservableObject
 
         // Load TOC entries
         TocEntries.Clear();
-        foreach (var toc in data.TocEntries.OrderBy(t => t.PageNo))
+        var orderedToc = data.TocEntries.OrderBy(t => t.PageNo).ToList();
+        int totalPages = data.NumPagesInSet;
+        int tocOffset = data.PageNumberOffset;
+
+        // Determine the persist directory for cached MXL files (mirrors ExportToMuseScoreWindow logic)
+        string? mxlPersistDir = null;
+        if (AppSettings.Instance.PersistMxlNextToPdf)
         {
-            TocEntries.Add(new TocEntryViewModel(toc, favoritePages.Contains(toc.PageNo)));
+            var pdfPath = data.GetFullPathFileFromVolno(0);
+            if (!string.IsNullOrEmpty(pdfPath))
+                mxlPersistDir = Path.GetDirectoryName(pdfPath);
+        }
+
+        for (int i = 0; i < orderedToc.Count; i++)
+        {
+            var toc = orderedToc[i];
+            var entry = new TocEntryViewModel(toc, favoritePages.Contains(toc.PageNo));
+
+            if (mxlPersistDir != null)
+            {
+                int startSheet = toc.PageNo - tocOffset + 1;
+                int endSheet = (i + 1 < orderedToc.Count)
+                    ? orderedToc[i + 1].PageNo - tocOffset
+                    : totalPages;
+                endSheet = Math.Max(startSheet, endSheet);
+
+                // Use song name for multi-song books (same logic as ExportToMuseScoreWindow)
+                string? songName = orderedToc.Count > 1 ? toc.SongName : null;
+
+                // Try non-Ghostscript first, then Ghostscript
+                entry.CachedMxlPath = MuseScoreExportService.FindCachedMxlPath(
+                    data, startSheet, endSheet, false, mxlPersistDir, songName);
+                if (entry.CachedMxlPath == null)
+                {
+                    entry.CachedMxlPath = MuseScoreExportService.FindCachedMxlPath(
+                        data, startSheet, endSheet, true, mxlPersistDir, songName);
+                }
+            }
+
+            TocEntries.Add(entry);
         }
 
         // Load volume info display
@@ -727,6 +764,35 @@ public partial class TocEntryViewModel : ObservableObject
     /// Whether this entry has a link
     /// </summary>
     public bool HasLink => !string.IsNullOrEmpty(Link);
+
+    /// <summary>
+    /// Path to the cached .mxl file for this song, or null if none exists.
+    /// Set during ViewModel initialization.
+    /// </summary>
+    public string? CachedMxlPath { get; set; }
+
+    /// <summary>
+    /// True when a cached .mxl file exists for this song.
+    /// </summary>
+    public bool HasCachedMxl => !string.IsNullOrEmpty(CachedMxlPath);
+
+    [RelayCommand]
+    private void OpenInMuseScore()
+    {
+        if (string.IsNullOrEmpty(CachedMxlPath)) return;
+        var museScorePath = AppSettings.Instance.MuseScorePath;
+        if (string.IsNullOrEmpty(museScorePath))
+            museScorePath = MuseScoreExportService.AutoDetectMuseScore();
+        if (string.IsNullOrEmpty(museScorePath)) return;
+        try
+        {
+            MuseScoreExportService.LaunchMuseScore(museScorePath, CachedMxlPath);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to launch MuseScore: {ex.Message}");
+        }
+    }
 
     public TocEntryViewModel()
     {
