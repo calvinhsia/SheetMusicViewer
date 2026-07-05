@@ -407,7 +407,7 @@ public class AppSettings
     /// When true, the converted MusicXML (.mxl) is saved next to the source PDF so that
     /// a second launch with the same settings can skip the expensive Audiveris conversion.
     /// </summary>
-    public bool PersistMxlNextToPdf { get; set; } = false;
+    public bool PersistMxlNextToPdf { get; set; } = true;
 
     #endregion
 

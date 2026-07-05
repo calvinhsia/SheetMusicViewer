@@ -123,10 +123,51 @@
                       SelectionMode="Single"
                       DoubleTapped="TocDataGrid_DoubleTapped">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="Page" Binding="{Binding PageNo}" Width="60" x:DataType="local:TocEntryViewModel"/>
-                    <DataGridTextColumn Header="Fav" Binding="{Binding FavDisplay}" Width="50" IsReadOnly="True" x:DataType="local:TocEntryViewModel"/>
-                    <DataGridTextColumn Header="🔗" Binding="{Binding LinkDisplay}" Width="40" IsReadOnly="True" x:DataType="local:TocEntryViewModel"/>
-                    <DataGridTemplateColumn Header="SongName" Width="250" x:DataType="local:TocEntryViewModel">
+                    <DataGridTextColumn Binding="{Binding PageNo}" Width="75" x:DataType="local:TocEntryViewModel">
+                        <DataGridTextColumn.Header>
+                            <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="Page number in the book (uses PageNumberOffset)">
+                                <TextBlock Text="Page"/>
+                            </Border>
+                        </DataGridTextColumn.Header>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Binding="{Binding FavDisplay}" Width="65" IsReadOnly="True" x:DataType="local:TocEntryViewModel">
+                        <DataGridTextColumn.Header>
+                            <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="★ — this song is marked as a favorite">
+                                <TextBlock Text="Fav"/>
+                            </Border>
+                        </DataGridTextColumn.Header>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Binding="{Binding LinkDisplay}" Width="65" IsReadOnly="True" x:DataType="local:TocEntryViewModel">
+                        <DataGridTextColumn.Header>
+                            <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="🔗 — this song has a linked URL (e.g. YouTube). Double-click to open.">
+                                <TextBlock Text="Lnk"/>
+                            </Border>
+                        </DataGridTextColumn.Header>
+                    </DataGridTextColumn>
+                    <DataGridTemplateColumn Width="65" IsReadOnly="True" x:DataType="local:TocEntryViewModel">
+                        <DataGridTemplateColumn.Header>
+                            <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="🎵 — a cached MusicXML (.mxl) file exists for this song. Click to open in MuseScore.">
+                                <TextBlock Text="MXL"/>
+                            </Border>
+                        </DataGridTemplateColumn.Header>
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TocEntryViewModel">
+                                <Button Content="🎵"
+                                        Command="{Binding OpenInMuseScoreCommand}"
+                                        IsVisible="{Binding HasCachedMxl}"
+                                        Padding="2"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        ToolTip.Tip="Open cached MXL in MuseScore"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn Width="500" x:DataType="local:TocEntryViewModel">
+                        <DataGridTemplateColumn.Header>
+                            <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="Song title — double-click a row to navigate to that page">
+                                <TextBlock Text="SongName"/>
+                            </Border>
+                        </DataGridTemplateColumn.Header>
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate x:DataType="local:TocEntryViewModel">
                                 <TextBlock Text="{Binding SongName}" VerticalAlignment="Center" Margin="2,0"/>
@@ -139,9 +180,27 @@
                             </DataTemplate>
                         </DataGridTemplateColumn.CellEditingTemplate>
                     </DataGridTemplateColumn>
-                    <DataGridTextColumn Header="Composer" Binding="{Binding Composer}" Width="200" x:DataType="local:TocEntryViewModel"/>
-                    <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="100" x:DataType="local:TocEntryViewModel"/>
-                    <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*" x:DataType="local:TocEntryViewModel"/>
+                    <DataGridTextColumn Binding="{Binding Composer}" Width="200" x:DataType="local:TocEntryViewModel">
+                        <DataGridTextColumn.Header>
+                            <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="Composer name">
+                                <TextBlock Text="Composer"/>
+                            </Border>
+                        </DataGridTextColumn.Header>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Binding="{Binding Date}" Width="100" x:DataType="local:TocEntryViewModel">
+                        <DataGridTextColumn.Header>
+                            <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="Composition or publication date">
+                                <TextBlock Text="Date"/>
+                            </Border>
+                        </DataGridTextColumn.Header>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Binding="{Binding Notes}" Width="*" x:DataType="local:TocEntryViewModel">
+                        <DataGridTextColumn.Header>
+                            <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="Additional notes about this song">
+                                <TextBlock Text="Notes"/>
+                            </Border>
+                        </DataGridTextColumn.Header>
+                    </DataGridTextColumn>
                 </DataGrid.Columns>
             </DataGrid>
 
@@ -165,8 +224,20 @@
                           SelectionMode="Single"
                           DoubleTapped="FavoritesDataGrid_DoubleTapped">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Page" Binding="{Binding PageNo}" Width="60" x:DataType="local:FavoriteViewModel"/>
-                        <DataGridTextColumn Header="Desc" Binding="{Binding Description}" Width="*" x:DataType="local:FavoriteViewModel"/>
+                        <DataGridTextColumn Binding="{Binding PageNo}" Width="60" x:DataType="local:FavoriteViewModel">
+                            <DataGridTextColumn.Header>
+                                <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="Page number of the favorite">
+                                    <TextBlock Text="Page"/>
+                                </Border>
+                            </DataGridTextColumn.Header>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Binding="{Binding Description}" Width="*" x:DataType="local:FavoriteViewModel">
+                            <DataGridTextColumn.Header>
+                                <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="Song title at this page — double-click to navigate there">
+                                    <TextBlock Text="Desc"/>
+                                </Border>
+                            </DataGridTextColumn.Header>
+                        </DataGridTextColumn>
                     </DataGrid.Columns>
                 </DataGrid>
             </Grid>

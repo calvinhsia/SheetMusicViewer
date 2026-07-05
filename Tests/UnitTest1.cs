@@ -1058,5 +1058,83 @@ xmlns:l=""clr-namespace:{this.GetType().Namespace};assembly={System.IO.Path.GetF
 
             });
         }
+
+        /// <summary>
+        /// Walks the entire sheet music folder tree and reports any file or directory names
+        /// that Windows "Compressed (zipped) Folders" would reject.
+        /// Windows ZIP encodes filenames using the system ANSI codepage (CP1252 on en-US Windows).
+        /// Any character without a true CP1252 mapping triggers the error dialog:
+        ///   "'file' cannot be compressed because it includes characters that cannot be
+        ///    used in a compressed folder, such as Γ."
+        ///
+        /// Note: CP437 (OEM/DOS) is the WRONG criterion. Characters like Γ (U+0393) are genuine
+        /// CP437 characters (byte 0xE2, true round-trip) so a CP437 check silently passes them.
+        /// But Γ has no CP1252 mapping and Windows ZIP correctly rejects it.
+        ///
+        /// The correct test is: does CP1252 encoding with EncoderExceptionFallback throw?
+        /// This catches all characters Windows ZIP rejects, on any platform.
+        ///
+        /// Run this test manually to find problematic names before zipping/archiving.
+        /// </summary>
+        [TestMethod]
+        [TestCategory("Manual")]
+        public void FindFilesWithIllegalCompressedFolderChars()
+        {
+            var rootFolder = GetSheetMusicFolder();
+            Assert.IsTrue(Directory.Exists(rootFolder), $"Sheet music folder not found: {rootFolder}");
+
+            // Windows built-in ZIP (Compressed Folders) uses CP1252 (Windows ANSI codepage) for
+            // filenames. Any character without a true CP1252 mapping triggers the error dialog.
+            // Note: on .NET Core/.NET 5+ legacy codepages require registering the provider first.
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+            var cp1252 = System.Text.Encoding.GetEncoding(1252,
+                encoderFallback: new System.Text.EncoderExceptionFallback(),
+                decoderFallback: new System.Text.DecoderReplacementFallback());
+
+            bool IsZipSafe(string name)
+            {
+                try { cp1252.GetByteCount(name); return true; }
+                catch (System.Text.EncoderFallbackException) { return false; }
+            }
+
+            // Returns the characters in 'name' that have no true CP1252 mapping.
+            List<char> GetBadChars(string name) =>
+                name.Where(c => { try { cp1252.GetByteCount(c.ToString()); return false; } catch { return true; } })
+                    .Distinct().ToList();
+
+            var violations = new List<string>();
+            AddLogEntry($"Scanning folder: {rootFolder}");
+
+            foreach (var dirPath in Directory.EnumerateDirectories(rootFolder, "*", SearchOption.AllDirectories))
+            {
+                var dirName = Path.GetFileName(dirPath);
+                if (!IsZipSafe(dirName))
+                {
+                    var badChars = GetBadChars(dirName);
+                    var charDescriptions = string.Join(", ", badChars.Select(c => $"U+{(int)c:X4} '{c}'"));
+                    var msg = $"DIR : {dirPath}  [{charDescriptions}]";
+                    violations.Add(msg);
+                    AddLogEntry(msg);
+                }
+            }
+
+            foreach (var filePath in Directory.EnumerateFiles(rootFolder, "*", SearchOption.AllDirectories))
+            {
+                var fileName = Path.GetFileName(filePath);
+                if (!IsZipSafe(fileName))
+                {
+                    var badChars = GetBadChars(fileName);
+                    var charDescriptions = string.Join(", ", badChars.Select(c => $"U+{(int)c:X4} '{c}'"));
+                    var msg = $"FILE: {filePath}  [{charDescriptions}]";
+                    violations.Add(msg);
+                    AddLogEntry(msg);
+                }
+            }
+
+            AddLogEntry($"Scan complete. {violations.Count} violation(s) found.");
+
+            Assert.AreEqual(0, violations.Count,
+                $"{violations.Count} file/directory name(s) contain characters illegal for Windows compressed folders. ");
+        }
     }
 }

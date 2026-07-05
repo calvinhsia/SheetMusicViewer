@@ -33,16 +33,16 @@ public class ChooseMusicWindow : Window
     private RadioButton _rbtnByDate;
     private RadioButton _rbtnByFolder;
     private RadioButton _rbtnByNumPages;
-    
+
     // Favorites tab
     private ListBox _favoritesListBox;
     private TextBlock _favoritesStatus;
-    
+
     // Query tab - uses BrowseControl
     private BrowseControl? _queryBrowseControl;
     private Grid _queryTabGrid;
     private string _queryFilterText = string.Empty; // Persist filter text within app instance
-    
+
     // Playlist tab
     private ComboBox _playlistComboBox;
     private BrowseControl? _playlistEntriesBrowseControl;
@@ -53,50 +53,50 @@ public class ChooseMusicWindow : Window
 
     private List<PdfMetaDataReadResult> _pdfMetadata;
     private string _rootFolder;
-    
+
     // Cache for book items (bitmap + metadata)
     private List<BookItemCache> _bookItemCache = new();
     private bool _isLoading = false;
-    
+
     // Favorites data source
     private List<FavoriteItem> _allFavoriteItems = new();
-    
+
     // Flag to prevent recursive selection change
     private bool _enableCboSelectionChange = true;
-    
+
     // Flag to prevent re-entrancy in tab selection
     private bool _isHandlingTabChange = false;
-    
+
     // Flag to prevent re-entrancy when refreshing playlist combo
     private bool _isRefreshingPlaylistCombo = false;
-    
+
     // Shared double-tap helper for consistent detection across all item types
     private readonly DoubleTapHelper _doubleTapHelper = new();
 
     private const int ThumbnailWidth = 150;
     private const int ThumbnailHeight = 225;
     private const string NewFolderDialogString = "New...";
-    
+
     /// <summary>
     /// If true, skip cloud-only files instead of triggering download.
     /// </summary>
     public bool SkipCloudOnlyFiles { get; set; } = false;
-    
+
     /// <summary>
     /// The selected PDF metadata (set when user clicks OK)
     /// </summary>
     public PdfMetaDataReadResult? ChosenPdfMetaData { get; private set; }
-    
+
     /// <summary>
     /// The selected page number (for favorites/query selection)
     /// </summary>
     public int ChosenPageNo { get; private set; }
-    
+
     /// <summary>
     /// The current root folder (may have changed if user selected a new folder)
     /// </summary>
     public string CurrentRootFolder => _rootFolder;
-    
+
     /// <summary>
     /// The current PDF metadata list (may have changed if user selected a new folder)
     /// </summary>
@@ -111,7 +111,7 @@ public class ChooseMusicWindow : Window
         public int NumFavs { get; set; }
         public Bitmap? Bitmap => Metadata?.GetCachedThumbnail<Bitmap>();
     }
-    
+
     private class FavoriteItem
     {
         public PdfMetaDataReadResult Metadata { get; set; } = null!;
@@ -130,19 +130,19 @@ public class ChooseMusicWindow : Window
     {
         _pdfMetadata = pdfMetadata ?? new List<PdfMetaDataReadResult>();
         _rootFolder = rootFolder ?? string.Empty;
-        
+
         // Load setting from AppSettings
         SkipCloudOnlyFiles = AppSettings.Instance.UserOptions.SkipCloudOnlyFiles;
-        
+
         Title = "Choose Music";
         ShowInTaskbar = false; // Don't show separate taskbar icon
-        
+
         // Restore window size/position from settings
         var settings = AppSettings.Instance;
-        
+
         Width = settings.ChooseWindowWidth > 0 ? settings.ChooseWindowWidth : 900;
         Height = settings.ChooseWindowHeight > 0 ? settings.ChooseWindowHeight : 700;
-        
+
         if (settings.ChooseWindowLeft >= 0 && settings.ChooseWindowTop >= 0)
         {
             WindowStartupLocation = WindowStartupLocation.Manual;
@@ -152,17 +152,17 @@ public class ChooseMusicWindow : Window
         {
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
         }
-        
+
         // Note: WindowState is set in Opened event because setting it in constructor 
         // doesn't work reliably in Avalonia
-        
+
         BuildUI();
-        
+
         this.Opened += OnWindowOpened;
         this.Closing += OnWindowClosing;
         this.KeyDown += OnKeyDown;
     }
-    
+
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Escape)
@@ -170,14 +170,14 @@ public class ChooseMusicWindow : Window
             e.Handled = true;
             Close();
         }
-        
+
         // F5 to refresh
         if (e.Key == Key.F5)
         {
             OnRefreshClick(sender, new Avalonia.Interactivity.RoutedEventArgs());
             e.Handled = true;
         }
-        
+
         // Handle Alt+key combinations for tab navigation (mnemonics)
         if (e.KeyModifiers == KeyModifiers.Alt)
         {
@@ -214,7 +214,7 @@ public class ChooseMusicWindow : Window
         {
             WindowState = WindowState.Maximized;
         }
-        
+
         // Restore last selected tab
         var lastTab = AppSettings.Instance.ChooseQueryTab;
         _tabControl.SelectedIndex = lastTab switch
@@ -224,7 +224,7 @@ public class ChooseMusicWindow : Window
             "_Playlists" => 3,
             _ => 0 // "_Books" or default
         };
-        
+
         // If no root folder and only "New..." is in the list, automatically show folder picker
         if (string.IsNullOrEmpty(_rootFolder) || !Directory.Exists(_rootFolder))
         {
@@ -234,12 +234,12 @@ public class ChooseMusicWindow : Window
         {
             // Ensure music root folder is set for roaming settings (playlists)
             AppSettings.SetMusicRootFolder(_rootFolder);
-            
+
             if (_pdfMetadata.Count > 0)
-        {
-            await LoadBooksAsync();
-        }
-        else
+            {
+                await LoadBooksAsync();
+            }
+            else
             {
                 await FillBooksTabAsync();
             }
@@ -249,17 +249,17 @@ public class ChooseMusicWindow : Window
     private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
     {
         // Cleanup file watcher subscription if we're on Playlists tab
-        if (_tabControl.SelectedItem is TabItem selectedTab && 
+        if (_tabControl.SelectedItem is TabItem selectedTab &&
             selectedTab.Header?.ToString() == "_Playlists")
         {
             AppSettings.UserDataFileChanged -= OnUserDataFileChanged;
             AppSettings.DisableUserDataFileWatcher();
         }
-        
+
         // Save window state
         var settings = AppSettings.Instance;
         settings.ChooseWindowMaximized = WindowState == WindowState.Maximized;
-        
+
         // Only save position/size if not maximized
         if (WindowState != WindowState.Maximized)
         {
@@ -268,35 +268,35 @@ public class ChooseMusicWindow : Window
             settings.ChooseWindowLeft = Position.X;
             settings.ChooseWindowTop = Position.Y;
         }
-        
+
         // Save selected tab
         if (_tabControl.SelectedItem is TabItem selectedTabForSave)
         {
             settings.ChooseQueryTab = selectedTabForSave.Header?.ToString() ?? "_Books";
         }
-        
+
         // Save last selected playlist
         if (_currentPlaylist != null)
         {
             settings.LastSelectedPlaylist = _currentPlaylist.Name;
         }
-        
+
         settings.Save();
     }
-    
+
     private void BuildUI()
     {
         var grid = new Grid();
         grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
         grid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star)));
-        
+
         _tabControl = new TabControl
         {
             Background = Brushes.Transparent // Let window background show through
         };
         Grid.SetRow(_tabControl, 0);
         Grid.SetRowSpan(_tabControl, 2);
-        
+
         // Style for tab headers - use theme-aware colors
         var tabItemStyle = new Style(x => x.OfType<TabItem>());
         tabItemStyle.Setters.Add(new Setter(TabItem.FontSizeProperty, 12.0));
@@ -305,111 +305,111 @@ public class ChooseMusicWindow : Window
         tabItemStyle.Setters.Add(new Setter(TabItem.BorderThicknessProperty, new Thickness(1, 1, 1, 0)));
         tabItemStyle.Setters.Add(new Setter(TabItem.CornerRadiusProperty, new CornerRadius(4, 4, 0, 0)));
         _tabControl.Styles.Add(tabItemStyle);
-        
+
         // Style for selected tab - make it stand out
         var selectedTabStyle = new Style(x => x.OfType<TabItem>().Class(":selected"));
         selectedTabStyle.Setters.Add(new Setter(TabItem.FontWeightProperty, FontWeight.SemiBold));
         _tabControl.Styles.Add(selectedTabStyle);
-        
+
         // Books tab
         var booksTab = new TabItem { Header = "_Books" };
         booksTab.Content = BuildBooksTabContent();
         _tabControl.Items.Add(booksTab);
-        
+
         // Query tab (moved to 2nd position)
         var queryTab = new TabItem { Header = "_Query" };
         queryTab.Content = BuildQueryTabContent();
         _tabControl.Items.Add(queryTab);
-        
+
         // Favorites tab
         var favTab = new TabItem { Header = "Fa_vorites" };
         favTab.Content = BuildFavoritesTabContent();
         _tabControl.Items.Add(favTab);
-        
+
         // Playlist tab
         var playlistTab = new TabItem { Header = "_Playlists" };
         playlistTab.Content = BuildPlaylistTabContent();
         _tabControl.Items.Add(playlistTab);
-        
+
         _tabControl.SelectionChanged += OnTabSelectionChanged;
-        
+
         grid.Children.Add(_tabControl);
-        
+
         // Top bar
-        var topBar = new StackPanel 
-        { 
-            Orientation = Orientation.Horizontal, 
+        var topBar = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 5, 10, 5)
         };
         Grid.SetRow(topBar, 0);
-        
+
         _tbxTotals = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0) };
         topBar.Children.Add(_tbxTotals);
-        
-        topBar.Children.Add(new Label 
-        { 
-            Content = "Music Folder:", 
+
+        topBar.Children.Add(new Label
+        {
+            Content = "Music Folder:",
             VerticalAlignment = VerticalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(20, 0, 0, 0) 
+            Margin = new Thickness(20, 0, 0, 0)
         });
-        _cboRootFolder = new ComboBox 
-        { 
-            Width = 300, 
+        _cboRootFolder = new ComboBox
+        {
+            Width = 300,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(10, 0, 10, 0) 
+            Margin = new Thickness(10, 0, 10, 0)
         };
         PopulateRootFolderComboBox();
         _cboRootFolder.SelectionChanged += OnRootFolderSelectionChanged;
         _cboRootFolder.DropDownOpened += OnRootFolderDropDownOpened;
         topBar.Children.Add(_cboRootFolder);
-        
-        var btnRefresh = new Button 
-        { 
-            Content = "⟳ Refresh", 
+
+        var btnRefresh = new Button
+        {
+            Content = "⟳ Refresh",
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 0, 0),
             [ToolTip.TipProperty] = "Rescan music folder and reload playlists (F5)"
         };
         btnRefresh.Click += OnRefreshClick;
         topBar.Children.Add(btnRefresh);
-        
-        var btnCancel = new Button 
-        { 
-            Content = "Cancel", 
+
+        var btnCancel = new Button
+        {
+            Content = "Cancel",
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(10, 0, 0, 0) 
+            Margin = new Thickness(10, 0, 0, 0)
         };
         btnCancel.Click += (s, e) => Close();
         topBar.Children.Add(btnCancel);
-        
-        var btnOk = new Button 
-        { 
-            Content = "_OK", 
-            Width = 50, 
+
+        var btnOk = new Button
+        {
+            Content = "_OK",
+            Width = 50,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(10, 0, 10, 0) 
+            Margin = new Thickness(10, 0, 10, 0)
         };
         btnOk.Click += BtnOk_Click;
         topBar.Children.Add(btnOk);
-        
+
         grid.Children.Add(topBar);
-        
+
         Content = grid;
     }
-    
+
     private void PopulateRootFolderComboBox()
     {
         _enableCboSelectionChange = false;
         _cboRootFolder.Items.Clear();
-        
+
         if (!string.IsNullOrEmpty(_rootFolder))
         {
             _cboRootFolder.Items.Add(new ComboBoxItem { Content = _rootFolder });
         }
-        
+
         var settings = AppSettings.Instance;
         foreach (var folder in settings.RootFolderMRU)
         {
@@ -418,16 +418,16 @@ public class ChooseMusicWindow : Window
                 _cboRootFolder.Items.Add(new ComboBoxItem { Content = folder });
             }
         }
-        
+
         _cboRootFolder.Items.Add(new ComboBoxItem { Content = NewFolderDialogString });
-        
+
         if (_cboRootFolder.Items.Count > 0)
         {
             _cboRootFolder.SelectedIndex = 0;
         }
         _enableCboSelectionChange = true;
     }
-    
+
     private void OnRootFolderDropDownOpened(object? sender, EventArgs e)
     {
         // If only "New..." is in the combo box, automatically show folder picker
@@ -437,16 +437,16 @@ public class ChooseMusicWindow : Window
             _ = ShowFolderPickerAsync();
         }
     }
-    
+
     private async void OnRootFolderSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (!_enableCboSelectionChange)
             return;
-            
+
         if (_cboRootFolder.SelectedItem is ComboBoxItem selectedItem)
         {
             var path = selectedItem.Content?.ToString();
-            
+
             if (path == NewFolderDialogString)
             {
                 await ShowFolderPickerAsync();
@@ -457,31 +457,31 @@ public class ChooseMusicWindow : Window
             }
         }
     }
-    
+
     private async void OnRefreshClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (string.IsNullOrEmpty(_rootFolder) || !Directory.Exists(_rootFolder))
         {
             return;
         }
-        
+
         // Reload roaming settings (playlists) in case OneDrive synced changes from another machine
         Logger.LogInfo($"OnRefreshClick: Calling ReloadRoaming() to pick up synced playlists");
         AppSettings.Instance.ReloadRoaming();
         Logger.LogInfo($"OnRefreshClick: ReloadRoaming() completed, playlist count={AppSettings.Instance.Playlists.Count}");
-        
+
         // If we're on the Playlists tab, refresh the playlist UI
-        if (_tabControl.SelectedItem is TabItem selectedTab && 
+        if (_tabControl.SelectedItem is TabItem selectedTab &&
             selectedTab.Header?.ToString() == "_Playlists" &&
             _playlistSongsBrowseControl != null)
         {
             RefreshPlaylistUIFromSettings();
         }
-        
+
         // Re-use the existing folder change logic which clears caches and reloads
         await ChangeRootFolderAsync(_rootFolder);
     }
-    
+
     private async Task ShowFolderPickerAsync()
     {
         var topLevel = TopLevel.GetTopLevel(this);
@@ -500,7 +500,7 @@ public class ChooseMusicWindow : Window
             }
             return;
         }
-        
+
         IStorageFolder? startLocation = null;
         if (!string.IsNullOrEmpty(_rootFolder) && Directory.Exists(_rootFolder))
         {
@@ -510,14 +510,14 @@ public class ChooseMusicWindow : Window
             }
             catch { }
         }
-        
+
         var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
             Title = "Choose a root folder with PDF music files",
             AllowMultiple = false,
             SuggestedStartLocation = startLocation
         });
-        
+
         if (folders.Count > 0)
         {
             var selectedPath = folders[0].TryGetLocalPath();
@@ -527,14 +527,14 @@ public class ChooseMusicWindow : Window
                 var settings = AppSettings.Instance;
                 settings.AddToMRU(selectedPath);
                 settings.Save();
-                
+
                 // Re-populate combo box and change to new folder
                 PopulateRootFolderComboBox();
                 await ChangeRootFolderAsync(selectedPath);
                 return;
             }
         }
-        
+
         // User cancelled - if we have a valid folder to fall back to, use it; otherwise close
         _enableCboSelectionChange = false;
         if (!string.IsNullOrEmpty(_rootFolder) && Directory.Exists(_rootFolder))
@@ -567,22 +567,22 @@ public class ChooseMusicWindow : Window
             Close();
         }
     }
-    
+
     private async Task ChangeRootFolderAsync(string newRootFolder)
     {
         if (!Directory.Exists(newRootFolder))
         {
             return;
         }
-        
+
         _rootFolder = newRootFolder;
-        
+
         // Update settings - this also sets the music root folder for roaming settings
         var settings = AppSettings.Instance;
         settings.AddToMRU(newRootFolder);
         AppSettings.SetMusicRootFolder(newRootFolder); // Load playlists from this folder
         settings.Save();
-        
+
         // Clear cached data
         _bookItemCache.Clear();
         _allFavoriteItems.Clear();
@@ -590,17 +590,17 @@ public class ChooseMusicWindow : Window
         _playlistSongsBrowseControl = null;
         _lbBooks.ItemsSource = null;
         _favoritesListBox.ItemsSource = null;
-        
+
         _tbxTotals.Text = "Loading...";
-        
+
         try
         {
             var provider = new PdfToImageDocumentProvider();
             (_pdfMetadata, _) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
-                newRootFolder, 
+                newRootFolder,
                 provider,
                 useParallelLoading: true);
-            
+
             await LoadBooksAsync();
         }
         catch (Exception ex)
@@ -609,7 +609,7 @@ public class ChooseMusicWindow : Window
             Logger.LogException("Failed to load PDF metadata from folder", ex);
         }
     }
-    
+
     private Control BuildBooksTabContent()
     {
         var booksGrid = new Grid
@@ -618,34 +618,34 @@ public class ChooseMusicWindow : Window
         };
         booksGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
         booksGrid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star)));
-        
+
         var filterPanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(5) };
-        
+
         _rbtnByDate = new RadioButton { Content = "ByDate", GroupName = "Sort", IsChecked = true, Margin = new Thickness(20, 5, 0, 0) };
         _rbtnByDate.IsCheckedChanged += OnSortChanged;
         filterPanel.Children.Add(_rbtnByDate);
-        
+
         _rbtnByFolder = new RadioButton { Content = "ByFolder", GroupName = "Sort", Margin = new Thickness(20, 5, 0, 0) };
         _rbtnByFolder.IsCheckedChanged += OnSortChanged;
         filterPanel.Children.Add(_rbtnByFolder);
-        
+
         _rbtnByNumPages = new RadioButton { Content = "ByNumPages", GroupName = "Sort", Margin = new Thickness(20, 5, 0, 0) };
         _rbtnByNumPages.IsCheckedChanged += OnSortChanged;
         filterPanel.Children.Add(_rbtnByNumPages);
-        
+
         filterPanel.Children.Add(new Label { Content = "Filter", Margin = new Thickness(20, 0, 0, 0) });
         _tbxFilter = new TextBox { Width = 150, Margin = new Thickness(5, 0, 0, 0) };
         _tbxFilter.TextChanged += OnFilterChanged;
         filterPanel.Children.Add(_tbxFilter);
-        
+
         Grid.SetRow(filterPanel, 0);
         booksGrid.Children.Add(filterPanel);
-        
+
         _lbBooks = new ListBox
         {
             Background = Brushes.Transparent // Let theme background show through
         };
-        
+
         // Style ListBoxItem to have transparent background (for dark mode support)
         var listBoxItemStyle = new Style(x => x.OfType<ListBoxItem>());
         listBoxItemStyle.Setters.Add(new Setter(ListBoxItem.PaddingProperty, new Thickness(0)));
@@ -653,7 +653,7 @@ public class ChooseMusicWindow : Window
         listBoxItemStyle.Setters.Add(new Setter(ListBoxItem.MinHeightProperty, 0.0));
         listBoxItemStyle.Setters.Add(new Setter(ListBoxItem.BackgroundProperty, Brushes.Transparent));
         _lbBooks.Styles.Add(listBoxItemStyle);
-        
+
         var wrapPanelFactory = new FuncTemplate<Panel?>(() => new WrapPanel
         {
             Orientation = Orientation.Horizontal,
@@ -662,200 +662,200 @@ public class ChooseMusicWindow : Window
         _lbBooks.ItemsPanel = wrapPanelFactory;
         // Note: DoubleTapped is now handled on individual items in CreateBookItemControl
         // to ensure selection is set before processing
-        
-        var scrollViewer = new ScrollViewer 
-        { 
+
+        var scrollViewer = new ScrollViewer
+        {
             HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
             Background = Brushes.Transparent, // Let theme background show through
             Content = _lbBooks
         };
-        
+
         Grid.SetRow(scrollViewer, 1);
         booksGrid.Children.Add(scrollViewer);
-        
+
         return booksGrid;
     }
-    
+
     private Control BuildFavoritesTabContent()
     {
         var favGrid = new Grid();
         favGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
         favGrid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star)));
-        
+
         _favoritesStatus = new TextBlock { Margin = new Thickness(10, 5, 10, 5) };
         Grid.SetRow(_favoritesStatus, 0);
         favGrid.Children.Add(_favoritesStatus);
-        
+
         _favoritesListBox = new ListBox();
         // Note: DoubleTapped is now handled on individual items in RefreshFavoritesDisplay
         // to ensure selection is set before processing
-        
+
         Grid.SetRow(_favoritesListBox, 1);
         favGrid.Children.Add(_favoritesListBox);
-        
+
         return favGrid;
     }
-    
+
     private Control BuildQueryTabContent()
     {
         _queryTabGrid = new Grid();
         _queryTabGrid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star)));
-        
-        var placeholder = new TextBlock 
-        { 
-            Text = "Select this tab to load query data...", 
+
+        var placeholder = new TextBlock
+        {
+            Text = "Select this tab to load query data...",
             Margin = new Thickness(20),
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center
         };
         _queryTabGrid.Children.Add(placeholder);
-        
+
         return _queryTabGrid;
     }
-    
+
     private Control BuildPlaylistTabContent()
     {
         _playlistTabGrid = new Grid();
         _playlistTabGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto)); // Toolbar
         _playlistTabGrid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star))); // Content
-        
+
         // Toolbar with playlist selector and buttons
-        var toolbar = new StackPanel 
-        { 
-            Orientation = Orientation.Horizontal, 
+        var toolbar = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
             Margin = new Thickness(5),
             Spacing = 10
         };
         Grid.SetRow(toolbar, 0);
-        
+
         toolbar.Children.Add(new Label { Content = "Playlist:", VerticalAlignment = VerticalAlignment.Center });
-        
+
         _playlistComboBox = new ComboBox { Width = 200, VerticalAlignment = VerticalAlignment.Center };
         _playlistComboBox.SelectionChanged += OnPlaylistSelectionChanged;
         toolbar.Children.Add(_playlistComboBox);
-        
+
         var btnNew = new Button { Content = "New", Margin = new Thickness(5, 0, 0, 0) };
         btnNew.Click += OnNewPlaylistClick;
         toolbar.Children.Add(btnNew);
-        
+
         var btnRename = new Button { Content = "Rename", Margin = new Thickness(5, 0, 0, 0) };
         btnRename.Click += OnRenamePlaylistClick;
         toolbar.Children.Add(btnRename);
-        
+
         var btnDelete = new Button { Content = "Delete", Margin = new Thickness(5, 0, 0, 0) };
         btnDelete.Click += OnDeletePlaylistClick;
         toolbar.Children.Add(btnDelete);
-        
-        _playlistStatus = new TextBlock 
-        { 
-            VerticalAlignment = VerticalAlignment.Center, 
-            Margin = new Thickness(20, 0, 0, 0) 
+
+        _playlistStatus = new TextBlock
+        {
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(20, 0, 0, 0)
         };
         toolbar.Children.Add(_playlistStatus);
-        
+
         _playlistTabGrid.Children.Add(toolbar);
-        
+
         // Split view: songs browser on left, playlist entries on right
         var splitGrid = new Grid();
         splitGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star))); // Song browser
         splitGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto)); // Buttons
         splitGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star))); // Playlist entries
         Grid.SetRow(splitGrid, 1);
-        
+
         // Left side: All songs browser (placeholder until loaded)
-        var songsBrowserPlaceholder = new TextBlock 
-        { 
-            Text = "Loading songs...", 
+        var songsBrowserPlaceholder = new TextBlock
+        {
+            Text = "Loading songs...",
             Margin = new Thickness(20),
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center
         };
         Grid.SetColumn(songsBrowserPlaceholder, 0);
         splitGrid.Children.Add(songsBrowserPlaceholder);
-        
+
         // Middle: Add/Remove buttons
-        var buttonPanel = new StackPanel 
-        { 
-            Orientation = Orientation.Vertical, 
+        var buttonPanel = new StackPanel
+        {
+            Orientation = Orientation.Vertical,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(5)
         };
         Grid.SetColumn(buttonPanel, 1);
-        
-        var btnAddToPlaylist = new Button 
-        { 
-            Content = "Copy →", 
-            Width = 80, 
+
+        var btnAddToPlaylist = new Button
+        {
+            Content = "Copy →",
+            Width = 80,
             Margin = new Thickness(0, 5, 0, 5),
             HorizontalContentAlignment = HorizontalAlignment.Center,
             [ToolTip.TipProperty] = "Copy selected song(s) to playlist"
         };
         btnAddToPlaylist.Click += OnAddToPlaylistClick;
         buttonPanel.Children.Add(btnAddToPlaylist);
-        
-        var btnRemoveFromPlaylist = new Button 
-        { 
-            Content = "← Delete", 
-            Width = 80, 
+
+        var btnRemoveFromPlaylist = new Button
+        {
+            Content = "← Delete",
+            Width = 80,
             Margin = new Thickness(0, 5, 0, 5),
             HorizontalContentAlignment = HorizontalAlignment.Center,
             [ToolTip.TipProperty] = "Remove selected song(s) from playlist"
         };
         btnRemoveFromPlaylist.Click += OnRemoveFromPlaylistClick;
         buttonPanel.Children.Add(btnRemoveFromPlaylist);
-        
-        var btnMoveUp = new Button 
-        { 
-            Content = "↑ Up", 
-            Width = 80, 
+
+        var btnMoveUp = new Button
+        {
+            Content = "↑ Up",
+            Width = 80,
             Margin = new Thickness(0, 15, 0, 5),
             HorizontalContentAlignment = HorizontalAlignment.Center
         };
         btnMoveUp.Click += OnMoveUpClick;
         buttonPanel.Children.Add(btnMoveUp);
-        
-        var btnMoveDown = new Button 
-        { 
-            Content = "↓ Down", 
-            Width = 80, 
+
+        var btnMoveDown = new Button
+        {
+            Content = "↓ Down",
+            Width = 80,
             Margin = new Thickness(0, 5, 0, 5),
             HorizontalContentAlignment = HorizontalAlignment.Center
         };
         btnMoveDown.Click += OnMoveDownClick;
         buttonPanel.Children.Add(btnMoveDown);
-        
+
         splitGrid.Children.Add(buttonPanel);
-        
+
         // Right side: Playlist entries (placeholder until loaded)
-        var playlistEntriesPlaceholder = new TextBlock 
-        { 
-            Text = "Select a playlist...", 
+        var playlistEntriesPlaceholder = new TextBlock
+        {
+            Text = "Select a playlist...",
             Margin = new Thickness(20),
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center
         };
         Grid.SetColumn(playlistEntriesPlaceholder, 2);
         splitGrid.Children.Add(playlistEntriesPlaceholder);
-        
+
         _playlistTabGrid.Children.Add(splitGrid);
-        
+
         return _playlistTabGrid;
     }
-    
+
     private void OnTabSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         // Prevent re-entrancy - setting combo box selection can trigger this again
         if (_isHandlingTabChange) return;
-        
+
         // Only handle tab selection changes, not child control changes
         // The AddedItems should contain a TabItem if this is a tab change
         if (e.AddedItems.Count == 0 || e.AddedItems[0] is not TabItem)
         {
             return;
         }
-        
+
         _isHandlingTabChange = true;
-        
+
         try
         {
             // Check what tab we're leaving (to disable watcher if leaving Playlists)
@@ -870,11 +870,11 @@ public class ChooseMusicWindow : Window
                     AppSettings.UserDataFileChanged -= OnUserDataFileChanged;
                 }
             }
-            
+
             if (_tabControl.SelectedItem is TabItem selectedTab)
             {
                 var header = selectedTab.Header?.ToString() ?? "";
-                
+
                 if (header == "Fa_vorites" && _allFavoriteItems.Count == 0)
                 {
                     // Save Query filter before switching
@@ -913,16 +913,16 @@ public class ChooseMusicWindow : Window
                     {
                         _queryFilterText = _queryBrowseControl.GetFilterText();
                     }
-                    
+
                     // Entering Playlists tab - enable file watcher for auto-refresh
                     AppSettings.UserDataFileChanged += OnUserDataFileChanged;
                     AppSettings.EnableUserDataFileWatcher();
-                    
+
                     // Reload playlists from disk in case OneDrive synced changes while we were away
                     Logger.LogInfo($"OnTabSelectionChanged: Switching to Playlists tab, calling ReloadRoaming()");
                     AppSettings.Instance.ReloadRoaming();
                     Logger.LogInfo($"OnTabSelectionChanged: ReloadRoaming() completed, playlist count={AppSettings.Instance.Playlists.Count}");
-                    
+
                     if (_playlistSongsBrowseControl == null)
                     {
                         FillPlaylistTab();
@@ -932,7 +932,7 @@ public class ChooseMusicWindow : Window
                         // Refresh the playlist combo and entries with reloaded data
                         RefreshPlaylistUIFromSettings();
                     }
-                    
+
                     // Focus the filter textbox when Playlist tab is activated
                     _playlistSongsBrowseControl?.FocusFilter();
                 }
@@ -943,7 +943,7 @@ public class ChooseMusicWindow : Window
             _isHandlingTabChange = false;
         }
     }
-    
+
     /// <summary>
     /// Handle automatic refresh when userdata.json file changes externally (e.g., OneDrive sync).
     /// Only called when the Playlists tab is visible (file watcher is enabled).
@@ -956,13 +956,13 @@ public class ChooseMusicWindow : Window
             try
             {
                 Logger.LogInfo("OnUserDataFileChanged: External file change detected, auto-refreshing playlists");
-                
+
                 // Reload playlists from disk
                 AppSettings.Instance.ReloadRoaming();
-                
+
                 // Refresh the UI
                 RefreshPlaylistUIFromSettings();
-                
+
                 // Update status to indicate auto-refresh
                 _playlistStatus.Text = $"{_currentPlaylist?.Entries.Count ?? 0} song(s) (synced)";
             }
@@ -972,7 +972,7 @@ public class ChooseMusicWindow : Window
             }
         });
     }
-    
+
     /// <summary>
     /// Refresh the playlist UI (combo box and entries) from AppSettings.
     /// Called when playlists are reloaded from disk.
@@ -980,7 +980,7 @@ public class ChooseMusicWindow : Window
     private void RefreshPlaylistUIFromSettings()
     {
         var previousPlaylistName = _currentPlaylist?.Name;
-        
+
         _isRefreshingPlaylistCombo = true;
         try
         {
@@ -989,7 +989,7 @@ public class ChooseMusicWindow : Window
             {
                 _playlistComboBox.Items.Add(new ComboBoxItem { Content = playlist.Name, Tag = playlist });
             }
-            
+
             // Try to re-select the same playlist
             var settings = AppSettings.Instance;
             if (!string.IsNullOrEmpty(previousPlaylistName) && settings.Playlists.Any(p => p.Name == previousPlaylistName))
@@ -1021,23 +1021,23 @@ public class ChooseMusicWindow : Window
         {
             _isRefreshingPlaylistCombo = false;
         }
-        
+
         RefreshPlaylistEntries();
     }
-    
+
     private void FillFavoritesTab()
     {
         if (_pdfMetadata.Count == 0) return;
-            
+
         _allFavoriteItems.Clear();
-        
+
         foreach (var pdfMetaData in _pdfMetadata.OrderBy(p => p.GetBookName(_rootFolder)))
         {
             foreach (var fav in pdfMetaData.Favorites)
             {
                 var description = GetDescription(pdfMetaData, fav.Pageno);
                 var thumbnail = pdfMetaData.GetCachedThumbnail<Bitmap>();
-                
+
                 _allFavoriteItems.Add(new FavoriteItem
                 {
                     Metadata = pdfMetaData,
@@ -1049,28 +1049,28 @@ public class ChooseMusicWindow : Window
                 });
             }
         }
-        
+
         RefreshFavoritesDisplay();
     }
-    
+
     private void RefreshFavoritesDisplay()
     {
         var items = new List<Control>();
-        
+
         foreach (var favItem in _allFavoriteItems)
         {
             var sp = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(5), Tag = favItem };
-            
+
             if (favItem.Thumbnail != null)
             {
                 sp.Children.Add(new Image { Source = favItem.Thumbnail, Height = 60, Width = 40, Margin = new Thickness(0, 0, 10, 0) });
             }
-            
+
             var textPanel = new StackPanel { Orientation = Orientation.Vertical, VerticalAlignment = VerticalAlignment.Center };
             textPanel.Children.Add(new TextBlock { Text = favItem.Description, FontWeight = FontWeight.Bold });
             textPanel.Children.Add(new TextBlock { Text = $"Page {favItem.PageNo} - {favItem.BookName}", Foreground = Brushes.Gray, FontSize = 11 });
             sp.Children.Add(textPanel);
-            
+
             // Use shared DoubleTapHelper for more reliable double-tap detection
             sp.PointerPressed += (sender, e) =>
             {
@@ -1086,18 +1086,18 @@ public class ChooseMusicWindow : Window
                     }
                 }
             };
-            
+
             items.Add(sp);
         }
-        
+
         _favoritesListBox.ItemsSource = items;
         _favoritesStatus.Text = $"# Favorites = {_allFavoriteItems.Count}";
     }
-    
+
     private void FillQueryTab()
     {
         if (_pdfMetadata.Count == 0) return;
-        
+
         var uberToc = new List<Tuple<PdfMetaDataReadResult, TOCEntry>>();
         foreach (var pdfMetaDataItem in _pdfMetadata)
         {
@@ -1126,7 +1126,7 @@ public class ChooseMusicWindow : Window
 
         _queryBrowseControl = new BrowseControl(query, colWidths: new[] { 250, 50, 40, 150, 80, 40, 300, 200, 150 }, rowHeight: BrowseControl.TouchRowHeight);
         _queryBrowseControl.ListView.DoubleTapped += (s, e) => BtnOk_Click(s, e);
-        
+
         // Add context menu option to view the selected song
         _queryBrowseControl.AddContextMenuItem(
             "View Song",
@@ -1138,16 +1138,16 @@ public class ChooseMusicWindow : Window
                     TryNavigateToTocEntry(selectedItems[0]);
                 }
             });
-        
+
         _queryTabGrid.Children.Clear();
         Grid.SetRow(_queryBrowseControl, 0);
         _queryTabGrid.Children.Add(_queryBrowseControl);
     }
-    
+
     private void FillPlaylistTab()
     {
         if (_pdfMetadata.Count == 0) return;
-        
+
         // Build the songs browser (same data as Query tab)
         var uberToc = new List<Tuple<PdfMetaDataReadResult, TOCEntry>>();
         foreach (var pdfMetaDataItem in _pdfMetadata)
@@ -1173,11 +1173,11 @@ public class ChooseMusicWindow : Window
                         _Tup = tup
                     };
 
-        _playlistSongsBrowseControl = new BrowseControl(query, colWidths: new[] { 250, 50, 150, 80, 40, 300, 200 }, rowHeight:BrowseControl.TouchRowHeight);
-        
+        _playlistSongsBrowseControl = new BrowseControl(query, colWidths: new[] { 250, 50, 150, 80, 40, 300, 200 }, rowHeight: BrowseControl.TouchRowHeight);
+
         // Double-click on left side adds to playlist
         _playlistSongsBrowseControl.ListView.DoubleTapped += (s, e) => OnAddToPlaylistClick(s, e);
-        
+
         // Add context menu option to view the selected song
         _playlistSongsBrowseControl.AddContextMenuItem(
             "View Song",
@@ -1189,21 +1189,21 @@ public class ChooseMusicWindow : Window
                     TryNavigateToTocEntry(selectedItems[0]);
                 }
             });
-        
+
         // Replace placeholder with the browse control
         var splitGrid = (Grid)_playlistTabGrid.Children[1];
-        
+
         // Remove the placeholder
         var placeholder = splitGrid.Children.FirstOrDefault(c => Grid.GetColumn(c) == 0);
         if (placeholder != null)
         {
             splitGrid.Children.Remove(placeholder);
         }
-        
+
         // Add the browse control
         Grid.SetColumn(_playlistSongsBrowseControl, 0);
         splitGrid.Children.Add(_playlistSongsBrowseControl);
-        
+
         // Load playlists and select - all under protection to prevent selection change events
         _isRefreshingPlaylistCombo = true;
         try
@@ -1213,10 +1213,10 @@ public class ChooseMusicWindow : Window
             {
                 _playlistComboBox.Items.Add(new ComboBoxItem { Content = playlist.Name, Tag = playlist });
             }
-            
+
             var settings = AppSettings.Instance;
             var lastPlaylist = settings.LastSelectedPlaylist;
-            
+
             if (!string.IsNullOrEmpty(lastPlaylist) && settings.Playlists.Any(p => p.Name == lastPlaylist))
             {
                 _currentPlaylist = settings.Playlists.First(p => p.Name == lastPlaylist);
@@ -1236,15 +1236,15 @@ public class ChooseMusicWindow : Window
         {
             _isRefreshingPlaylistCombo = false;
         }
-        
+
         RefreshPlaylistEntries();
     }
-    
+
     private void RefreshPlaylistComboBox()
     {
         if (_isRefreshingPlaylistCombo) return;
         _isRefreshingPlaylistCombo = true;
-        
+
         try
         {
             _playlistComboBox.Items.Clear();
@@ -1258,7 +1258,7 @@ public class ChooseMusicWindow : Window
             _isRefreshingPlaylistCombo = false;
         }
     }
-    
+
     private void RefreshPlaylistEntries()
     {
         if (_currentPlaylist == null)
@@ -1270,9 +1270,9 @@ public class ChooseMusicWindow : Window
             if (existingControl is BrowseControl)
             {
                 splitGrid.Children.Remove(existingControl);
-                var placeholder = new TextBlock 
-                { 
-                    Text = "Select a playlist...", 
+                var placeholder = new TextBlock
+                {
+                    Text = "Select a playlist...",
                     Margin = new Thickness(20),
                     VerticalAlignment = VerticalAlignment.Center,
                     HorizontalAlignment = HorizontalAlignment.Center
@@ -1283,28 +1283,51 @@ public class ChooseMusicWindow : Window
             _playlistEntriesBrowseControl = null;
             return;
         }
-        
-        // Build query data from playlist entries - include index for move operations
-        var playlistData = _currentPlaylist.Entries.Select((entry, index) => new
+
+        // Build query data from playlist entries - resolve display info from _pdfMetadata at runtime
+        var playlistData = _currentPlaylist.Entries.Select((entry, index) =>
         {
-            entry.SongName,
-            Page = entry.PageNo,
-            entry.Composer,
-            entry.BookName,
-            entry.Notes,
-            _Index = index,
-            _Entry = entry
+            var metadata = _pdfMetadata.FirstOrDefault(p =>
+            {
+                var bookName = p.GetBookName(_rootFolder);
+                // Made a change: for singles. GetBookName used to return the name of the first PDF in the book, like "Pop\PopSingles\0Title"
+                // changed it to return the more frienldly name of the singles folder. "Pop\PopSingles"
+                // so use "StartsWith" so older playlists with bookname as first PDF will still match, but new playlists with bookname as folder will also match
+                return bookName == entry.BookName || (p.IsSinglesFolder && entry.IsSinglesEntry && entry.BookName.StartsWith(bookName));
+            });
+            TOCEntry? tocEntry;
+            if (entry.IsSinglesEntry)
+            {
+                // For singles folders, SongName (PDF basename) is the stable key
+                tocEntry = metadata?.TocEntries.FirstOrDefault(t => t.SongName == entry.SongName);
+            }
+            else
+            {
+                tocEntry = metadata?.TocEntries.FirstOrDefault(t => t.PageNo == entry.PageNo)
+                    ?? metadata?.TocEntries.Where(t => t.PageNo <= entry.PageNo).OrderByDescending(t => t.PageNo).FirstOrDefault();
+            }
+            int resolvedPage = tocEntry?.PageNo ?? entry.PageNo;
+            return new
+            {
+                SongName = tocEntry?.SongName ?? entry.SongName,
+                Page = resolvedPage,
+                Composer = tocEntry?.Composer ?? string.Empty,
+                entry.BookName,
+                Notes = tocEntry?.Notes ?? string.Empty,
+                _Index = index,
+                _Entry = entry
+            };
         }).ToList();
-        
+
         // Create or recreate the BrowseControl
         _playlistEntriesBrowseControl = new BrowseControl(
-            playlistData, 
-            colWidths: new[] { 250, 50, 150, 300, 200 }, 
+            playlistData,
+            colWidths: new[] { 250, 50, 150, 300, 200 },
             rowHeight: BrowseControl.TouchRowHeight);
-        
+
         // Double-click views the song
         _playlistEntriesBrowseControl.ListView.DoubleTapped += OnPlaylistEntryDoubleTapped;
-        
+
         // Add context menu option to view the selected song
         _playlistEntriesBrowseControl.AddContextMenuItem(
             "View Song",
@@ -1316,7 +1339,7 @@ public class ChooseMusicWindow : Window
                     TryNavigateToPlaylistEntry(selectedItems[0]);
                 }
             });
-        
+
         // Replace existing control in the split grid
         var splitGridRef = (Grid)_playlistTabGrid.Children[1];
         var existing = splitGridRef.Children.FirstOrDefault(c => Grid.GetColumn(c) == 2);
@@ -1324,13 +1347,13 @@ public class ChooseMusicWindow : Window
         {
             splitGridRef.Children.Remove(existing);
         }
-        
+
         Grid.SetColumn(_playlistEntriesBrowseControl, 2);
         splitGridRef.Children.Add(_playlistEntriesBrowseControl);
-        
+
         _playlistStatus.Text = $"{_currentPlaylist.Entries.Count} song(s)";
     }
-    
+
     private void OnPlaylistSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         // Ignore selection changes during refresh
@@ -1338,28 +1361,28 @@ public class ChooseMusicWindow : Window
         {
             return;
         }
-        
+
         try
         {
             // Validate selected index is in range
             var selectedIndex = _playlistComboBox.SelectedIndex;
             var itemsCount = _playlistComboBox.Items.Count;
-            
+
             if (selectedIndex < 0 || selectedIndex >= itemsCount)
             {
                 return;
             }
-            
+
             if (_playlistComboBox.SelectedItem is ComboBoxItem item && item.Tag is Playlist playlist)
             {
                 // Use the playlist object directly from the Tag - don't look it up from AppSettings
                 // because that can trigger a reload which causes Avalonia timing issues
                 _currentPlaylist = playlist;
-                
+
                 // Clear both filters when playlist changes
                 _playlistSongsBrowseControl?.ClearFilter();
                 _playlistEntriesBrowseControl?.ClearFilter();
-                
+
                 RefreshPlaylistEntries();
             }
         }
@@ -1373,12 +1396,12 @@ public class ChooseMusicWindow : Window
             Logger.LogWarning($"OnPlaylistSelectionChanged: Unexpected exception: {ex.Message}");
         }
     }
-    
+
     private async void OnNewPlaylistClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         var name = await ShowInputDialogAsync("New Playlist", "Enter playlist name:", "New Playlist");
         if (string.IsNullOrWhiteSpace(name)) return;
-        
+
         // Ensure unique name
         var baseName = name;
         var counter = 1;
@@ -1386,19 +1409,19 @@ public class ChooseMusicWindow : Window
         {
             name = $"{baseName} ({counter++})";
         }
-        
+
         var newPlaylist = new Playlist { Name = name };
         Logger.LogInfo($"OnNewPlaylistClick: Adding playlist '{name}', current count={AppSettings.Instance.Playlists.Count}");
         AppSettings.Instance.Playlists.Add(newPlaylist);
         Logger.LogInfo($"OnNewPlaylistClick: After add, count={AppSettings.Instance.Playlists.Count}, calling Save()");
         AppSettings.Instance.Save();
         Logger.LogInfo($"OnNewPlaylistClick: Save() completed");
-        
+
         // Set current playlist before refreshing combo to avoid selection issues
         _currentPlaylist = newPlaylist;
-        
+
         RefreshPlaylistComboBox();
-        
+
         // Select the new playlist (with bounds check)
         for (int i = 0; i < _playlistComboBox.Items.Count; i++)
         {
@@ -1408,17 +1431,17 @@ public class ChooseMusicWindow : Window
                 break;
             }
         }
-        
+
         RefreshPlaylistEntries();
     }
-    
+
     private async void OnRenamePlaylistClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_currentPlaylist == null) return;
-        
+
         var newName = await ShowInputDialogAsync("Rename Playlist", "Enter new name:", _currentPlaylist.Name);
         if (string.IsNullOrWhiteSpace(newName) || newName == _currentPlaylist.Name) return;
-        
+
         // Ensure unique name
         var baseName = newName;
         var counter = 1;
@@ -1426,14 +1449,14 @@ public class ChooseMusicWindow : Window
         {
             newName = $"{baseName} ({counter++})";
         }
-        
+
         _currentPlaylist.Name = newName;
         _currentPlaylist.ModifiedDate = DateTime.Now;
         AppSettings.Instance.LastSelectedPlaylist = newName;
         AppSettings.Instance.Save();
-        
+
         RefreshPlaylistComboBox();
-        
+
         // Re-select the renamed playlist (with bounds check)
         for (int i = 0; i < _playlistComboBox.Items.Count; i++)
         {
@@ -1444,35 +1467,35 @@ public class ChooseMusicWindow : Window
             }
         }
     }
-    
+
     private async void OnDeletePlaylistClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_currentPlaylist == null) return;
-        
+
         var confirm = await ShowConfirmDialogAsync("Delete Playlist", $"Delete playlist '{_currentPlaylist.Name}'?");
         if (!confirm) return;
-        
+
         AppSettings.Instance.Playlists.Remove(_currentPlaylist);
         AppSettings.Instance.Save();
-        
+
         _currentPlaylist = AppSettings.Instance.Playlists.FirstOrDefault();
         RefreshPlaylistComboBox();
-        
+
         if (_playlistComboBox.Items.Count > 0)
         {
             _playlistComboBox.SelectedIndex = 0;
         }
-        
+
         RefreshPlaylistEntries();
     }
-    
+
     private void OnAddToPlaylistClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_currentPlaylist == null || _playlistSongsBrowseControl == null) return;
-        
+
         var selectedItems = _playlistSongsBrowseControl.ListView.SelectedItems?.Cast<object>().ToList();
         if (selectedItems == null || selectedItems.Count == 0) return;
-        
+
         foreach (var selectedItem in selectedItems)
         {
             var tupProp = selectedItem.GetType().GetProperty("_Tup");
@@ -1483,29 +1506,29 @@ public class ChooseMusicWindow : Window
                 {
                     var entry = new PlaylistEntry
                     {
-                        SongName = tup.Item2.SongName ?? string.Empty,
-                        Composer = tup.Item2.Composer ?? string.Empty,
                         PageNo = tup.Item2.PageNo,
                         BookName = tup.Item1.GetBookName(_rootFolder),
-                        Notes = tup.Item2.Notes ?? string.Empty
+                        // For singles folders the TOCEntry.SongName is the PDF basename and is
+                        // the stable identifier (page offsets shift when singles are added/removed).
+                        SongName = tup.Item1.IsSinglesFolder ? (tup.Item2.SongName ?? string.Empty) : string.Empty
                     };
                     _currentPlaylist.Entries.Add(entry);
                 }
             }
         }
-        
+
         _currentPlaylist.ModifiedDate = DateTime.Now;
         AppSettings.Instance.Save();
         RefreshPlaylistEntries();
     }
-    
+
     private void OnRemoveFromPlaylistClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_currentPlaylist == null || _playlistEntriesBrowseControl == null) return;
-        
+
         var selectedItems = _playlistEntriesBrowseControl.ListView.SelectedItems?.Cast<object>().ToList();
         if (selectedItems == null && selectedItems.Count == 0) return;
-        
+
         // Get the entries to remove
         var entriesToRemove = new List<PlaylistEntry>();
         foreach (var item in selectedItems)
@@ -1520,67 +1543,67 @@ public class ChooseMusicWindow : Window
                 }
             }
         }
-        
+
         foreach (var entry in entriesToRemove)
         {
             _currentPlaylist.Entries.Remove(entry);
         }
-        
+
         _currentPlaylist.ModifiedDate = DateTime.Now;
         AppSettings.Instance.Save();
         RefreshPlaylistEntries();
     }
-    
+
     private void OnMoveUpClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_currentPlaylist == null || _playlistEntriesBrowseControl == null) return;
-        
+
         var selectedItem = _playlistEntriesBrowseControl.ListView.SelectedItem;
         if (selectedItem == null) return;
-        
+
         var indexProp = selectedItem.GetType().GetProperty("_Index");
         if (indexProp == null) return;
-        
+
         var selectedIndex = (int)indexProp.GetValue(selectedItem)!;
         if (selectedIndex <= 0) return;
-        
+
         var entry = _currentPlaylist.Entries[selectedIndex];
         _currentPlaylist.Entries.RemoveAt(selectedIndex);
         _currentPlaylist.Entries.Insert(selectedIndex - 1, entry);
-        
+
         _currentPlaylist.ModifiedDate = DateTime.Now;
         AppSettings.Instance.Save();
         RefreshPlaylistEntries();
-        
+
         // Re-select the moved item at its new position
         _playlistEntriesBrowseControl.ListView.SetSelectedIndex(selectedIndex - 1);
     }
-    
+
     private void OnMoveDownClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_currentPlaylist == null || _playlistEntriesBrowseControl == null) return;
-        
+
         var selectedItem = _playlistEntriesBrowseControl.ListView.SelectedItem;
         if (selectedItem == null) return;
-        
+
         var indexProp = selectedItem.GetType().GetProperty("_Index");
         if (indexProp == null) return;
-        
+
         var selectedIndex = (int)indexProp.GetValue(selectedItem)!;
         if (selectedIndex < 0 || selectedIndex >= _currentPlaylist.Entries.Count - 1) return;
-        
+
         var entry = _currentPlaylist.Entries[selectedIndex];
         _currentPlaylist.Entries.RemoveAt(selectedIndex);
         _currentPlaylist.Entries.Insert(selectedIndex + 1, entry);
-        
+
         _currentPlaylist.ModifiedDate = DateTime.Now;
         AppSettings.Instance.Save();
         RefreshPlaylistEntries();
-        
+
         // Re-select the moved item at its new position
         _playlistEntriesBrowseControl.ListView.SetSelectedIndex(selectedIndex + 1);
     }
-    
+
     /// <summary>
     /// Extracts the PlaylistEntry from a BrowseControl selected item and navigates to it.
     /// Returns true if successful.
@@ -1588,22 +1611,35 @@ public class ChooseMusicWindow : Window
     private bool TryNavigateToPlaylistEntry(object? selectedItem)
     {
         if (selectedItem == null) return false;
-        
+
         var entryProp = selectedItem.GetType().GetProperty("_Entry");
         if (entryProp == null) return false;
-        
+
         var entry = entryProp.GetValue(selectedItem) as PlaylistEntry;
         if (entry == null) return false;
-        
+
         var metadata = _pdfMetadata.FirstOrDefault(p => p.GetBookName(_rootFolder) == entry.BookName);
         if (metadata == null) return false;
-        
+
+        int pageNo;
+        if (entry.IsSinglesEntry)
+        {
+            // Resolve current page offset from SongName (PDF basename) — stable across folder changes
+            var tocEntry = metadata.TocEntries.FirstOrDefault(t => t.SongName == entry.SongName);
+            if (tocEntry == null) return false;
+            pageNo = tocEntry.PageNo;
+        }
+        else
+        {
+            pageNo = entry.PageNo;
+        }
+
         ChosenPdfMetaData = metadata;
-        ChosenPageNo = entry.PageNo;
+        ChosenPageNo = pageNo;
         Close();
         return true;
     }
-    
+
     /// <summary>
     /// Extracts the tuple from a BrowseControl selected item (Query/Playlist songs) and navigates to it.
     /// Returns true if successful.
@@ -1611,24 +1647,24 @@ public class ChooseMusicWindow : Window
     private bool TryNavigateToTocEntry(object? selectedItem)
     {
         if (selectedItem == null) return false;
-        
+
         var tupProp = selectedItem.GetType().GetProperty("_Tup");
         if (tupProp == null) return false;
-        
+
         var tup = tupProp.GetValue(selectedItem) as Tuple<PdfMetaDataReadResult, TOCEntry>;
         if (tup == null) return false;
-        
+
         ChosenPdfMetaData = tup.Item1;
         ChosenPageNo = tup.Item2.PageNo;
         Close();
         return true;
     }
-    
+
     private void OnPlaylistEntryDoubleTapped(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         TryNavigateToPlaylistEntry(_playlistEntriesBrowseControl?.ListView?.SelectedItem);
     }
-    
+
     private async Task<string?> ShowInputDialogAsync(string title, string prompt, string defaultValue = "")
     {
         var dialog = new Window
@@ -1640,44 +1676,44 @@ public class ChooseMusicWindow : Window
             CanResize = false,
             ShowInTaskbar = false
         };
-        
+
         var result = defaultValue;
-        
+
         var grid = new Grid { Margin = new Thickness(15) };
         grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
         grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
         grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-        
+
         var label = new TextBlock { Text = prompt };
         Grid.SetRow(label, 0);
         grid.Children.Add(label);
-        
+
         var textBox = new TextBox { Text = defaultValue, Margin = new Thickness(0, 10, 0, 10) };
         Grid.SetRow(textBox, 1);
         grid.Children.Add(textBox);
-        
+
         var buttonPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
         Grid.SetRow(buttonPanel, 2);
-        
+
         var okButton = new Button { Content = "OK", Width = 75, Margin = new Thickness(0, 0, 10, 0) };
-        okButton.Click += (s, e) => 
+        okButton.Click += (s, e) =>
         {
             result = textBox.Text;
             dialog.Close();
         };
         buttonPanel.Children.Add(okButton);
-        
+
         var cancelButton = new Button { Content = "Cancel", Width = 75 };
-        cancelButton.Click += (s, e) => 
+        cancelButton.Click += (s, e) =>
         {
             result = null;
             dialog.Close();
         };
         buttonPanel.Children.Add(cancelButton);
-        
+
         grid.Children.Add(buttonPanel);
         dialog.Content = grid;
-        
+
         // Handle Enter and Escape keys
         dialog.KeyDown += (s, e) =>
         {
@@ -1694,18 +1730,18 @@ public class ChooseMusicWindow : Window
                 e.Handled = true;
             }
         };
-        
+
         // Focus the textbox and select all text when dialog opens
         dialog.Opened += (s, e) =>
         {
             textBox.Focus();
             textBox.SelectAll();
         };
-        
+
         await dialog.ShowDialog(this);
         return result;
     }
-    
+
     private async Task<bool> ShowConfirmDialogAsync(string title, string message)
     {
         var dialog = new Window
@@ -1717,43 +1753,43 @@ public class ChooseMusicWindow : Window
             CanResize = false,
             ShowInTaskbar = false
         };
-        
+
         var confirmed = false;
-        
+
         var grid = new Grid { Margin = new Thickness(15) };
         grid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star)));
         grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-        
+
         var label = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap };
         Grid.SetRow(label, 0);
         grid.Children.Add(label);
-        
+
         var buttonPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
         Grid.SetRow(buttonPanel, 1);
-        
+
         var yesButton = new Button { Content = "Yes", Width = 75, Margin = new Thickness(0, 10, 10, 0) };
-        yesButton.Click += (s, e) => 
+        yesButton.Click += (s, e) =>
         {
             confirmed = true;
             dialog.Close();
         };
         buttonPanel.Children.Add(yesButton);
-        
+
         var noButton = new Button { Content = "No", Width = 75, Margin = new Thickness(0, 10, 0, 0) };
         noButton.Click += (s, e) => dialog.Close();
         buttonPanel.Children.Add(noButton);
-        
+
         grid.Children.Add(buttonPanel);
         dialog.Content = grid;
-        
+
         await dialog.ShowDialog(this);
         return confirmed;
     }
-    
+
     private string GetDescription(PdfMetaDataReadResult metadata, int pageNo)
     {
         var tocEntry = metadata.TocEntries.FirstOrDefault(t => t.PageNo == pageNo);
-        
+
         if (tocEntry == null)
         {
             tocEntry = metadata.TocEntries
@@ -1761,7 +1797,7 @@ public class ChooseMusicWindow : Window
                 .OrderByDescending(t => t.PageNo)
                 .FirstOrDefault();
         }
-        
+
         if (tocEntry != null)
         {
             var parts = new List<string>();
@@ -1770,7 +1806,7 @@ public class ChooseMusicWindow : Window
             if (!string.IsNullOrEmpty(tocEntry.Date)) parts.Add(tocEntry.Date);
             return string.Join(" - ", parts);
         }
-        
+
         return metadata.GetBookName(_rootFolder);
     }
 
@@ -1810,26 +1846,26 @@ public class ChooseMusicWindow : Window
     {
         _isLoading = true;
         _bookItemCache.Clear();
-        
+
         var random = new Random(42);
         int index = 0;
         int totalSongs = 0;
         int totalPages = 0;
         int totalFavs = 0;
-        
+
         var sortedMetadata = GetSortedMetadata().ToList();
-        
+
         foreach (var pdfMetaData in sortedMetadata)
         {
             var bookName = pdfMetaData.GetBookName(_rootFolder);
             var numSongs = pdfMetaData.TocEntries.Count;
             var numPages = pdfMetaData.VolumeInfoList.Sum(v => v.NPagesInThisVolume);
             var numFavs = pdfMetaData.Favorites.Count;
-            
+
             totalSongs += numSongs;
             totalPages += numPages;
             totalFavs += numFavs;
-            
+
             var localIndex = index;
             var localBookName = bookName;
             try
@@ -1852,7 +1888,7 @@ public class ChooseMusicWindow : Window
                 Logger.LogWarning($"Failed to get PDF thumbnail for {bookName}: {ex.Message}");
                 pdfMetaData.ThumbnailCache = GenerateBookCoverBitmap(ThumbnailWidth, ThumbnailHeight, random, bookName, index);
             }
-            
+
             _bookItemCache.Add(new BookItemCache
             {
                 Metadata = pdfMetaData,
@@ -1861,16 +1897,16 @@ public class ChooseMusicWindow : Window
                 NumPages = numPages,
                 NumFavs = numFavs
             });
-            
+
             if (index % 10 == 9)
             {
                 UpdateBooksDisplayDuringLoad(totalSongs, totalPages, totalFavs);
                 await Task.Delay(10);
             }
-            
+
             index++;
         }
-        
+
         _isLoading = false;
         RefreshBooksDisplay();
     }
@@ -1878,20 +1914,20 @@ public class ChooseMusicWindow : Window
     private void UpdateBooksDisplayDuringLoad(int totalSongs, int totalPages, int totalFavs)
     {
         var filterText = _tbxFilter?.Text?.Trim() ?? string.Empty;
-        
+
         IEnumerable<BookItemCache> displayItems = _bookItemCache;
         if (!string.IsNullOrEmpty(filterText))
         {
             displayItems = displayItems.Where(item =>
                 item.BookName.Contains(filterText, StringComparison.OrdinalIgnoreCase));
         }
-        
+
         var items = new List<Control>();
         foreach (var cacheItem in displayItems)
         {
             items.Add(CreateBookItemControl(cacheItem));
         }
-        
+
         _lbBooks.ItemsSource = items;
         _tbxTotals.Text = $"#Books = {_bookItemCache.Count} #Songs = {totalSongs:n0} #Pages = {totalPages:n0} #Fav={totalFavs:n0}";
     }
@@ -1899,7 +1935,7 @@ public class ChooseMusicWindow : Window
     private Control CreateBookItemControl(BookItemCache cacheItem)
     {
         var sp = new StackPanel { Orientation = Orientation.Vertical, Width = 150, Tag = cacheItem };
-        
+
         var img = new Image
         {
             Source = cacheItem.Bitmap,
@@ -1908,7 +1944,7 @@ public class ChooseMusicWindow : Window
             Stretch = Stretch.UniformToFill
         };
         sp.Children.Add(img);
-        
+
         sp.Children.Add(new TextBlock
         {
             Text = cacheItem.BookName,
@@ -1916,14 +1952,14 @@ public class ChooseMusicWindow : Window
             MaxWidth = 150,
             FontSize = 11
         });
-        
+
         sp.Children.Add(new TextBlock
         {
             Text = $"#Sngs={cacheItem.NumSongs} Pg={cacheItem.NumPages} Fav={cacheItem.NumFavs}",
             FontSize = 10,
             Foreground = Brushes.Gray
         });
-        
+
         // Use shared DoubleTapHelper for more reliable double-tap detection
         sp.PointerPressed += (sender, e) =>
         {
@@ -1939,21 +1975,21 @@ public class ChooseMusicWindow : Window
                 }
             }
         };
-        
+
         return sp;
     }
-    
+
     private void RefreshBooksDisplay()
     {
         var filterText = _tbxFilter?.Text?.Trim() ?? string.Empty;
-        
+
         IEnumerable<BookItemCache> filteredItems = _bookItemCache;
         if (!string.IsNullOrEmpty(filterText))
         {
             filteredItems = filteredItems.Where(item =>
                 item.BookName.Contains(filterText, StringComparison.OrdinalIgnoreCase));
         }
-        
+
         IEnumerable<BookItemCache> sortedItems;
         if (_rbtnByFolder?.IsChecked == true)
         {
@@ -1967,21 +2003,21 @@ public class ChooseMusicWindow : Window
         {
             sortedItems = filteredItems.OrderByDescending(item => item.Metadata.LastWriteTime);
         }
-        
+
         var items = new List<Control>();
         int totalSongs = 0;
         int totalPages = 0;
         int totalFavs = 0;
-        
+
         foreach (var cacheItem in sortedItems)
         {
             totalSongs += cacheItem.NumSongs;
             totalPages += cacheItem.NumPages;
             totalFavs += cacheItem.NumFavs;
-            
+
             items.Add(CreateBookItemControl(cacheItem));
         }
-        
+
         _lbBooks.ItemsSource = items;
         _tbxTotals.Text = $"#Books = {items.Count} #Songs = {totalSongs:n0} #Pages = {totalPages:n0} #Fav={totalFavs:n0}";
     }
@@ -2005,29 +2041,29 @@ public class ChooseMusicWindow : Window
             // Users can control which PDF is used as the cover by renaming it to sort first.
             var firstVolume = pdfMetaData.VolumeInfoList[0];
             var pdfPath = pdfMetaData.GetFullPathFileFromVolno(0);
-            
+
             if (string.IsNullOrEmpty(pdfPath) || !File.Exists(pdfPath))
             {
                 throw new FileNotFoundException($"PDF file not found: {pdfPath}");
             }
-            
+
             if (SkipCloudOnlyFiles)
             {
                 var fileInfo = new FileInfo(pdfPath);
                 const FileAttributes RecallOnDataAccess = (FileAttributes)0x00400000;
                 const FileAttributes RecallOnOpen = (FileAttributes)0x00040000;
-                
+
                 var attrs = fileInfo.Attributes;
                 bool isCloudOnly = (attrs & RecallOnDataAccess) == RecallOnDataAccess ||
                                    (attrs & RecallOnOpen) == RecallOnOpen ||
                                    (attrs & FileAttributes.Offline) == FileAttributes.Offline;
-                
+
                 if (isCloudOnly)
                 {
                     throw new IOException($"Cloud-only file, skipping: {pdfPath}");
                 }
             }
-            
+
             var rotation = firstVolume.Rotation;
             var pdfRotation = rotation switch
             {
@@ -2036,18 +2072,18 @@ public class ChooseMusicWindow : Window
                 3 => PdfRotation.Rotate270,
                 _ => PdfRotation.Rotate0
             };
-            
+
             using var pdfStream = File.OpenRead(pdfPath);
             using var skBitmap = Conversion.ToImage(pdfStream, page: (Index)0, options: new PDFtoImage.RenderOptions(
-                Width: ThumbnailWidth, 
+                Width: ThumbnailWidth,
                 Height: ThumbnailHeight,
                 Rotation: pdfRotation));
-            
+
             using var data = skBitmap.Encode(SKEncodedImageFormat.Png, 100);
             using var stream = new MemoryStream();
             data.SaveTo(stream);
             stream.Seek(0, SeekOrigin.Begin);
-            
+
             return new Bitmap(stream);
         });
     }
@@ -2057,27 +2093,27 @@ public class ChooseMusicWindow : Window
         // Demo mode
         var random = new Random(42);
         var items = new List<Control>();
-        
+
         var bookNames = new[]
         {
             "Classical Piano Vol 1", "Jazz Standards", "Pop Hits 2020", "Rock Classics",
             "Broadway Favorites", "Country Gold", "Blues Collection", "Folk Songs"
         };
-        
+
         for (int i = 0; i < 20; i++)
         {
             var bookName = bookNames[i % bookNames.Length];
             var bitmap = GenerateBookCoverBitmap(ThumbnailWidth, ThumbnailHeight, random, bookName, i);
-            
+
             var sp = new StackPanel { Orientation = Orientation.Vertical, Width = 150 };
-            
+
             sp.Children.Add(new Image { Source = bitmap, Width = ThumbnailWidth, Height = ThumbnailHeight, Stretch = Stretch.UniformToFill });
             sp.Children.Add(new TextBlock { Text = bookName, TextWrapping = TextWrapping.Wrap, MaxWidth = 150, FontSize = 11 });
             sp.Children.Add(new TextBlock { Text = $"#Sngs={random.Next(10, 100)} Pg={random.Next(20, 500)}", FontSize = 10, Foreground = Brushes.Gray });
-            
+
             items.Add(sp);
         }
-        
+
         _lbBooks.ItemsSource = items;
         _tbxTotals.Text = $"#Books = {items.Count} (demo mode)";
     }
@@ -2087,43 +2123,43 @@ public class ChooseMusicWindow : Window
         using var surface = SKSurface.Create(new SKImageInfo(width, height));
         var canvas = surface.Canvas;
         canvas.Clear(SKColors.White);
-        
+
         var color1 = SKColor.FromHsv(random.Next(360), random.Next(60, 100), random.Next(70, 100));
         var color2 = SKColor.FromHsv((random.Next(360) + 180) % 360, random.Next(60, 100), random.Next(40, 70));
-        
+
         using var shader = SKShader.CreateLinearGradient(
             new SKPoint(0, 0),
             new SKPoint(width, height),
             new[] { color1, color2 },
             SKShaderTileMode.Clamp);
-        
+
         using var paint = new SKPaint { Shader = shader, IsAntialias = true };
         canvas.DrawRect(0, 0, width, height, paint);
-        
+
         using var font = new SKFont(SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold), 14);
         using var textPaint = new SKPaint
         {
             Color = SKColors.White,
             IsAntialias = true
         };
-        
+
         canvas.DrawText(title, width / 2f, height - 30, SKTextAlign.Center, font, textPaint);
-        
+
         using var image = surface.Snapshot();
         using var data = image.Encode(SKEncodedImageFormat.Png, 100);
         using var stream = new MemoryStream();
         data.SaveTo(stream);
         stream.Seek(0, SeekOrigin.Begin);
-        
+
         return new Bitmap(stream);
     }
-    
+
     private void BtnOk_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_tabControl.SelectedItem is TabItem selectedTab)
         {
             var header = selectedTab.Header?.ToString() ?? "";
-            
+
             switch (header)
             {
                 case "_Books":
@@ -2133,7 +2169,7 @@ public class ChooseMusicWindow : Window
                         ChosenPageNo = cache.Metadata.LastPageNo;
                     }
                     break;
-                    
+
                 case "Fa_vorites":
                     if (_favoritesListBox.SelectedItem is StackPanel favSp && favSp.Tag is FavoriteItem favItem)
                     {
@@ -2141,19 +2177,19 @@ public class ChooseMusicWindow : Window
                         ChosenPageNo = favItem.PageNo;
                     }
                     break;
-                    
+
                 case "_Query":
                     if (TryNavigateToTocEntry(_queryBrowseControl?.ListView?.SelectedItem))
                         return; // Already closed
                     break;
-                    
+
                 case "_Playlists":
                     if (TryNavigateToPlaylistEntry(_playlistEntriesBrowseControl?.ListView?.SelectedItem))
                         return; // Already closed
                     break;
             }
         }
-        
+
         Close();
     }
 }
@@ -2171,17 +2207,17 @@ public class PdfToImageDocumentProvider : IPdfDocumentProvider
                 var fileInfo = new FileInfo(pdfFilePath);
                 const FileAttributes RecallOnDataAccess = (FileAttributes)0x00400000;
                 const FileAttributes RecallOnOpen = (FileAttributes)0x00040000;
-                
+
                 var attrs = fileInfo.Attributes;
                 bool isCloudOnly = (attrs & RecallOnDataAccess) == RecallOnDataAccess ||
                                    (attrs & RecallOnOpen) == RecallOnOpen ||
                                    (attrs & FileAttributes.Offline) == FileAttributes.Offline;
-                
+
                 if (isCloudOnly)
                 {
                     return 0;
                 }
-                
+
                 // Use byte array overload to avoid base64 detection issues
                 var pdfBytes = File.ReadAllBytes(pdfFilePath);
                 return Conversion.GetPageCount(pdfBytes);
