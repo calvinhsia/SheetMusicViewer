@@ -49,10 +49,12 @@ public class ExportToMuseScoreWindow : Window
     private CheckBox _chkPersistNextToPdf = null!;
     private TextBlock _txtPersistPath = null!;
     private TextBlock _txtCacheStatus = null!;
+    private Button _btnDeleteCachedFile = null!;
+    private string? _cachedMxlPath;
 
     private CancellationTokenSource? _cts;
 
-    private record SongItem(string DisplayName, int StartPage, int EndPage)
+    private record SongItem(string DisplayName, string SongName, int StartPage, int EndPage)
     {
         public override string ToString() => $"{DisplayName}  (pp. {StartPage}–{EndPage})";
     }
@@ -265,7 +267,12 @@ public class ExportToMuseScoreWindow : Window
             IsChecked = AppSettings.Instance.PersistMxlNextToPdf,
             FontSize = 12
         };
-        _chkPersistNextToPdf.IsCheckedChanged += (_, _) => UpdateCacheStatus();
+        _chkPersistNextToPdf.IsCheckedChanged += (_, _) =>
+        {
+            AppSettings.Instance.PersistMxlNextToPdf = _chkPersistNextToPdf.IsChecked == true;
+            AppSettings.Instance.Save();
+            UpdateCacheStatus();
+        };
         persistPanel.Children.Add(_chkPersistNextToPdf);
 
         _txtPersistPath = new TextBlock
@@ -281,9 +288,30 @@ public class ExportToMuseScoreWindow : Window
         {
             FontSize = 11,
             TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        _btnDeleteCachedFile = new Button
+        {
+            Content = "🗑 Delete cached file",
+            FontSize = 11,
+            Padding = new Thickness(6, 2),
+            IsVisible = false
+        };
+        _btnDeleteCachedFile.Click += (_, _) =>
+        {
+            if (_cachedMxlPath != null && System.IO.File.Exists(_cachedMxlPath))
+                System.IO.File.Delete(_cachedMxlPath);
+            UpdateCacheStatus();
+        };
+        var cacheStatusRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 10,
             Margin = new Thickness(22, 0, 0, 0)
         };
-        persistPanel.Children.Add(_txtCacheStatus);
+        cacheStatusRow.Children.Add(_txtCacheStatus);
+        cacheStatusRow.Children.Add(_btnDeleteCachedFile);
+        persistPanel.Children.Add(cacheStatusRow);
 
         mainGrid.Children.Add(persistPanel);
 
@@ -380,9 +408,9 @@ public class ExportToMuseScoreWindow : Window
 
             var display = string.IsNullOrWhiteSpace(entry.SongName)
                 ? $"Sheet {startSheet}"
-                : entry.SongName + (string.IsNullOrWhiteSpace(entry.Composer) ? "" : $" \u2013 {entry.Composer}");
+                : entry.SongName + (string.IsNullOrWhiteSpace(entry.Composer) ? "" : $" - {entry.Composer}");
 
-            _cmbSong.Items.Add(new SongItem(display, startSheet, endSheet));
+            _cmbSong.Items.Add(new SongItem(display, entry.SongName ?? $"Sheet {startSheet}", startSheet, endSheet));
         }
 
         if (_cmbSong.ItemCount > 0)
@@ -427,9 +455,14 @@ public class ExportToMuseScoreWindow : Window
         return (1, totalPages);
     }
 
-    /// <summary>Returns the selected song's display name when "Current song" is active, otherwise null.</summary>
+    /// <summary>Returns the raw song name (no composer) when "Current song" is active AND the book
+    /// contains multiple songs (i.e. this is a song-book, not a single-song PDF). Returns null for
+    /// singles and for the Entire PDF / Custom Range selections — in those cases the PDF basename alone
+    /// is the canonical cache key.</summary>
     private string? GetSelectedSongName() =>
-        _rbCurrentSong.IsChecked == true && _cmbSong.SelectedItem is SongItem s ? s.DisplayName : null;
+        _rbCurrentSong.IsChecked == true && _cmbSong.SelectedItem is SongItem s && _cmbSong.ItemCount > 1
+            ? s.SongName
+            : null;
 
     private string? GetPersistDir()
     {
@@ -441,7 +474,7 @@ public class ExportToMuseScoreWindow : Window
 
     private void UpdateCacheStatus()
     {
-        if (_txtPersistPath == null || _txtCacheStatus == null) return;
+        if (_txtPersistPath == null || _txtCacheStatus == null || _btnDeleteCachedFile == null) return;
 
         var persistDir = GetPersistDir();
         if (persistDir == null)
@@ -449,6 +482,8 @@ public class ExportToMuseScoreWindow : Window
             _txtPersistPath.Text = "";
             _txtCacheStatus.Text = "";
             _btnExport.Content = "▶  Export & Open";
+            _cachedMxlPath = null;
+            _btnDeleteCachedFile.IsVisible = false;
             return;
         }
 
@@ -457,16 +492,23 @@ public class ExportToMuseScoreWindow : Window
         // Use 0/0 to mean "all pages" (full PDF radio), matching RunAudiverisAsync convention
         int bookStart = (_rbFullPdf.IsChecked == true) ? 0 : startPage;
         int bookEnd   = (_rbFullPdf.IsChecked == true) ? 0 : endPage;
-        var expectedPath = MuseScoreExportService.ComputeExpectedMxlPath(_pdfMetaData, bookStart, bookEnd, useGs, persistDir, GetSelectedSongName());
+        var songName = GetSelectedSongName();
+        var expectedPath = MuseScoreExportService.ComputeExpectedMxlPath(_pdfMetaData, bookStart, bookEnd, useGs, persistDir, songName);
+        var cachedPath   = MuseScoreExportService.FindCachedMxlPath(_pdfMetaData, bookStart, bookEnd, useGs, persistDir, songName);
 
-        _txtPersistPath.Text = expectedPath ?? "(spans multiple volumes — no cache)";
+        _txtPersistPath.Text = expectedPath ?? cachedPath ?? "(spans multiple volumes — no cache)";
 
-        if (expectedPath != null && System.IO.File.Exists(expectedPath))
+        _cachedMxlPath = cachedPath;
+        _btnDeleteCachedFile.IsVisible = cachedPath != null;
+
+        if (cachedPath != null)
         {
-            var age = DateTime.Now - System.IO.File.GetLastWriteTime(expectedPath);
+            var age = DateTime.Now - System.IO.File.GetLastWriteTime(cachedPath);
             var ageStr = age.TotalDays >= 1 ? $"{(int)age.TotalDays}d ago" :
                          age.TotalHours >= 1 ? $"{(int)age.TotalHours}h ago" :
                          $"{(int)age.TotalMinutes}m ago";
+            // Show the actual cached file name (may differ from expectedPath on other machines)
+            _txtPersistPath.Text = cachedPath;
             _txtCacheStatus.Foreground = Brushes.Green;
             _txtCacheStatus.Text = $"✔ Cached ({ageStr}) — conversion will be skipped";
             _btnExport.Content = "▶  Open in MuseScore";
@@ -649,8 +691,8 @@ public class ExportToMuseScoreWindow : Window
             int bookStart = (startPage == 1 && endPage == totalPages) ? 0 : startPage;
             int bookEnd   = (startPage == 1 && endPage == totalPages) ? 0 : endPage;
             var songName = GetSelectedSongName();
-            var cachedPath = MuseScoreExportService.ComputeExpectedMxlPath(_pdfMetaData, bookStart, bookEnd, useGs, persistDir, songName);
-            if (cachedPath != null && System.IO.File.Exists(cachedPath))
+            var cachedPath = MuseScoreExportService.FindCachedMxlPath(_pdfMetaData, bookStart, bookEnd, useGs, persistDir, songName);
+            if (cachedPath != null)
             {
                 var bpmQuick = (int)(_nudTempo.Value ?? 120);
                 SetStatus($"Using cached output: {cachedPath}");

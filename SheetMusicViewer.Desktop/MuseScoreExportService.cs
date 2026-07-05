@@ -18,6 +18,37 @@ namespace SheetMusicViewer.Desktop;
 public static class MuseScoreExportService
 {
     /// <summary>
+    /// CP1252 (Windows ANSI) encoding used by <see cref="SanitizeFileName"/> and <see cref="IsZipSafe"/>.
+    /// Windows built-in "Compressed (zipped) Folders" encodes filenames in the system ANSI codepage
+    /// (CP1252 on en-US Windows). Any character without a true CP1252 mapping triggers the
+    /// "cannot be compressed" error dialog. CP437 (OEM) is the wrong criterion — characters such as
+    /// Γ (U+0393) are genuine CP437 chars but have no CP1252 mapping and are correctly rejected here.
+    /// On Linux/macOS ZIP tools use UTF-8 for filenames, so this field is null on those platforms
+    /// and the CP1252 check is skipped entirely — only Windows-illegal filename chars are sanitized.
+    /// </summary>
+    private static readonly System.Text.Encoding? Cp1252 = CreateCp1252();
+    private static System.Text.Encoding? CreateCp1252()
+    {
+        if (!System.OperatingSystem.IsWindows()) return null;
+        System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+        return System.Text.Encoding.GetEncoding(1252,
+            encoderFallback: new System.Text.EncoderExceptionFallback(),
+            decoderFallback: new System.Text.DecoderReplacementFallback());
+    }
+
+    /// <summary>
+    /// Returns <c>true</c> if every character in <paramref name="name"/> is safe for use in
+    /// a compressed (zipped) folder on the current platform.
+    /// On Windows this requires a true CP1252 mapping (the codepage Windows ZIP uses for filenames).
+    /// On Linux/macOS ZIP tools use UTF-8, so all characters are safe and this always returns true.
+    /// </summary>
+    public static bool IsZipSafe(string name)
+    {
+        if (Cp1252 is null) return true;   // Linux/macOS: UTF-8 ZIP, all chars valid
+        try { Cp1252.GetByteCount(name); return true; }
+        catch (System.Text.EncoderFallbackException) { return false; }
+    }
+    /// <summary>
     /// Default candidate paths for the Audiveris executable (Windows, macOS, Linux).
     /// </summary>
     public static IReadOnlyList<string> AudiverisDefaultPaths { get; } = BuildAudiverisPaths();
@@ -360,14 +391,65 @@ public static class MuseScoreExportService
     /// startPage/endPage: 1-based inclusive within the single PDF; pass 0 for both to process all pages.
     /// </summary>
     /// <summary>
-    /// Strips characters that are illegal in Windows file names, and trims the result.
+    /// Strips characters that are illegal in Windows file names and replaces any character
+    /// that cannot be encoded in CP1252 (Windows ANSI codepage) with an ASCII equivalent or '_'.
+    /// Windows built-in "Compressed (zipped) Folders" rejects any filename whose characters
+    /// have no true CP1252 mapping, triggering the "cannot be compressed" error dialog.
+    /// Well-known typographic characters are mapped to their closest ASCII equivalents;
+    /// everything else that fails CP1252 encoding falls back to '_'.
     /// </summary>
     public static string SanitizeFileName(string name)
     {
-        var invalid = System.IO.Path.GetInvalidFileNameChars();
-        var sb = new System.Text.StringBuilder(name.Length);
-        foreach (var c in name)
-            sb.Append(Array.IndexOf(invalid, c) >= 0 ? '_' : c);
+        // Step 1: map well-known typographic Unicode punctuation to close ASCII equivalents.
+        // This gives human-readable results (e.g. en-dash → hyphen) rather than underscores.
+        var normalized = name
+            .Replace('\u2013', '-')   // en dash –
+            .Replace('\u2014', '-')   // em dash —
+            .Replace('\u2015', '-')   // horizontal bar ―
+            .Replace('\u2018', '\'')  // left single quotation mark '
+            .Replace('\u2019', '\'')  // right single quotation mark '
+            .Replace('\u201A', '\'')  // single low-9 quotation mark ‚
+            .Replace('\u201B', '\'')  // single high-reversed-9 quotation mark ‛
+            .Replace('\u201C', '\'')  // left double quotation mark " (also illegal filename char)
+            .Replace('\u201D', '\'')  // right double quotation mark "
+            .Replace('\u201E', '\'')  // double low-9 quotation mark „
+            .Replace('\u2026', '_')   // horizontal ellipsis …
+            .Replace('\u00AB', '-')   // left-pointing double angle quotation «
+            .Replace('\u00BB', '-');  // right-pointing double angle quotation »
+
+        // Step 2: replace any Windows-illegal filename char with '_'.
+        // Use a hardcoded set rather than Path.GetInvalidFileNameChars() because on Linux/macOS
+        // that method only returns {'\0', '/'}, missing the Windows-specific chars (: * ? " < > | \ etc.).
+        // Generated .mxl files may be synced to Windows via OneDrive, so filenames must be valid
+        // on Windows regardless of which platform produces them.
+        var invalidFileName = new HashSet<char>
+        {
+            '\0', '/', '\\', ':', '*', '?', '"', '<', '>', '|',
+            '\x01', '\x02', '\x03', '\x04', '\x05', '\x06', '\x07', '\x08',
+            '\x09', '\x0A', '\x0B', '\x0C', '\x0D', '\x0E', '\x0F', '\x10',
+            '\x11', '\x12', '\x13', '\x14', '\x15', '\x16', '\x17', '\x18',
+            '\x19', '\x1A', '\x1B', '\x1C', '\x1D', '\x1E', '\x1F'
+        };
+
+        // Step 3: on Windows, replace any remaining character that has no true CP1252 mapping
+        // with '_'. CP1252 is the Windows ANSI codepage that Windows "Compressed Folders" uses.
+        // On Linux/macOS ZIP tools use UTF-8, so all Unicode characters are valid; Cp1252 is null
+        // on those platforms and this step is skipped — only the illegal-filename check above applies.
+        var sb = new System.Text.StringBuilder(normalized.Length);
+        foreach (var c in normalized)
+        {
+            if (invalidFileName.Contains(c))
+            {
+                sb.Append('_');
+                continue;
+            }
+            if (Cp1252 is not null)
+            {
+                try { Cp1252.GetByteCount(c.ToString()); }
+                catch (System.Text.EncoderFallbackException) { sb.Append('_'); continue; }
+            }
+            sb.Append(c);
+        }
         return sb.ToString().Trim().TrimEnd('.');
     }
 
@@ -380,6 +462,50 @@ public static class MuseScoreExportService
     /// When <paramref name="songName"/> is supplied it is used as the filename instead of
     /// the PDF basename + page-range suffix, giving a human-readable cache file name.
     /// </summary>
+    /// <summary>
+    /// Finds an existing cached .mxl file for the given book-page range.
+    /// First checks the exact path returned by <see cref="ComputeExpectedMxlPath"/>.
+    /// If that file does not exist, scans <paramref name="persistDir"/> for any .mxl
+    /// whose stem starts with the PDF basename — this handles the case where the file
+    /// was originally saved with a song-name suffix on a different machine.
+    /// Returns <c>null</c> when no match is found or when the range spans multiple volumes.
+    /// </summary>
+    public static string? FindCachedMxlPath(
+        PdfMetaDataReadResult pdfMetaData,
+        int bookStart,
+        int bookEnd,
+        bool useGhostscript,
+        string persistDir,
+        string? songName = null)
+    {
+        // Try the exact computed path first
+        var exact = ComputeExpectedMxlPath(pdfMetaData, bookStart, bookEnd, useGhostscript, persistDir, songName);
+        if (exact != null && File.Exists(exact))
+            return exact;
+
+        // Fallback: scan the persist directory for any .mxl whose stem starts with the PDF basename.
+        // This finds files saved under a different song-name suffix (e.g. saved on another machine
+        // where the TOC composer field or radio-button state produced a different display name).
+        var segments = ResolveVolumeSegments(pdfMetaData, bookStart, bookEnd);
+        if (segments.Count != 1) return null; // multi-volume: can't reliably match
+
+        var pdfBaseName = Path.GetFileNameWithoutExtension(segments[0].PdfPath);
+        if (!Directory.Exists(persistDir)) return null;
+
+        // Prefer the most recently written match so we return the freshest conversion.
+        var candidate = Directory.EnumerateFiles(persistDir, "*.mxl")
+            .Where(f =>
+            {
+                var stem = Path.GetFileNameWithoutExtension(f);
+                // Must start with the PDF basename (case-insensitive) to belong to this PDF.
+                return stem.StartsWith(pdfBaseName, StringComparison.OrdinalIgnoreCase);
+            })
+            .OrderByDescending(File.GetLastWriteTime)
+            .FirstOrDefault();
+
+        return candidate; // null if nothing found
+    }
+
     public static string? ComputeExpectedMxlPath(
         PdfMetaDataReadResult pdfMetaData,
         int bookStart,
@@ -392,15 +518,19 @@ public static class MuseScoreExportService
         // Multi-volume spans produce a combined temp file — no deterministic persist path.
         if (segments.Count != 1) return null;
 
+        var seg = segments[0];
+        var pdfBaseName = Path.GetFileNameWithoutExtension(pdfMetaData.JsonFilePath);
+
+        // For a book-song (songName supplied), combine: "{pdfBaseName} - {songName}"
+        // For a single (no songName) or full-PDF / custom-range: just the PDF basename.
         string baseName;
         if (!string.IsNullOrWhiteSpace(songName))
         {
-            baseName = SanitizeFileName(songName);
+            baseName = SanitizeFileName($"{songName} - {pdfBaseName}");
         }
         else
         {
-            var seg = segments[0];
-            baseName = Path.GetFileNameWithoutExtension(seg.PdfPath);
+            baseName = pdfBaseName;
             if (useGhostscript)
             {
                 bool hasRange = seg.LocalStart > 0 && seg.LocalEnd > 0;
@@ -623,11 +753,18 @@ public static class MuseScoreExportService
                 if (!string.IsNullOrEmpty(persistDir))
                 {
                     Directory.CreateDirectory(persistDir);
-                    // Use the human-readable song name when available, otherwise keep the
-                    // PDF-basename + page-range name that ComputeExpectedMxlPath predicts.
+                    // For a book-song use "{pdfBaseName} - {songName}" so each song gets its own
+                    // cache file. For a single PDF (no songName) keep the Audiveris output stem
+                    // which equals the PDF basename, ensuring a stable cross-machine cache key.
+                    // Strip _gs suffix that GS normalization adds so the cache key
+                    // is always the original PDF basename (stable across machines).
+                    var rawBaseName = Path.GetFileNameWithoutExtension(pdfPath);
+                    if (rawBaseName.EndsWith("_gs", StringComparison.OrdinalIgnoreCase))
+                        rawBaseName = rawBaseName[..^3];
                     var persistStem = !string.IsNullOrWhiteSpace(songName)
-                        ? SanitizeFileName(songName)
+                        ? $"{rawBaseName} - {songName}"
                         : Path.GetFileNameWithoutExtension(found);
+                    persistStem = SanitizeFileName(persistStem);
                     var persistPath = Path.Combine(persistDir, persistStem + ".mxl");
                     File.Copy(found, persistPath, overwrite: true);
                     progress?.Report($"Saved output to: {persistPath}");

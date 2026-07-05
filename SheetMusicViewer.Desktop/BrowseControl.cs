@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.VisualTree;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -62,24 +63,8 @@ public class BrowseControl : DockPanel
             DockPanel.SetDock(_listFilter, Dock.Top);
 
             ListView = new ListBoxBrowseView(query, this);
-            
-            var listContainer = new DockPanel
-            {
-                LastChildFill = true,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Stretch
-            };
+            this.Children.Add(ListView);
 
-            if (ListView.HeaderGrid != null)
-            {
-                listContainer.Children.Add(ListView.HeaderGrid);
-                DockPanel.SetDock(ListView.HeaderGrid, Dock.Top);
-            }
-            
-            listContainer.Children.Add(ListView);
-            
-            this.Children.Add(listContainer);
-            
             _listFilter.SetBrowseList(ListView);
             
             Debug.WriteLine($"BrowseControl: Created with virtualization and column resizing support");
@@ -340,8 +325,6 @@ public class ListBoxBrowseView : UserControl
         {
             minWidth += col.Width > 0 ? col.Width : 150;
         }
-        _headerGrid.MinWidth = minWidth;
-
         foreach (var col in _columns)
         {
             var colDef = new ColumnDefinition();
@@ -407,7 +390,8 @@ public class ListBoxBrowseView : UserControl
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
             SelectionMode = SelectionMode.Multiple,
-            ItemsSource = _filteredItems
+            ItemsSource = _filteredItems,
+            BorderThickness = new Thickness(0)  // Remove border to keep columns aligned with header
         };
         
         // Reduce ListBoxItem padding/margin to minimize vertical spacing - use theme-aware colors
@@ -438,11 +422,18 @@ public class ListBoxBrowseView : UserControl
 
         // Use Loaded event to customize containers after they're created
         _listBox.Loaded += OnListBoxLoaded;
-        
+
         // ALSO subscribe to LayoutUpdated for additional detection of container changes
         _listBox.LayoutUpdated += OnListBoxLayoutUpdated;
 
-        this.Content = _listBox;
+        // Place header and listbox together in a shared DockPanel so they always
+        // have identical width bounds, keeping columns perfectly aligned.
+        var innerPanel = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(_headerGrid, Dock.Top);
+        innerPanel.Children.Add(_headerGrid);
+        innerPanel.Children.Add(_listBox);
+
+        this.Content = innerPanel;
         
         Debug.WriteLine($"ListBoxBrowseView: Visual structure created with ListBox virtualization and resizable columns");
     }
@@ -457,14 +448,14 @@ public class ListBoxBrowseView : UserControl
     {
         _isResizing = false;
         Debug.WriteLine("Column resize completed - regenerating visible items");
-        
+
         // Regenerate all visible item grids with new column widths
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             RecustomizeVisibleContainers();
         }, Avalonia.Threading.DispatcherPriority.Background);
     }
-    
+
     private void OnListBoxLoaded(object? sender, RoutedEventArgs e)
     {
         try
