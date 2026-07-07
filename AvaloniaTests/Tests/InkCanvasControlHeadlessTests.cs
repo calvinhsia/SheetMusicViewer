@@ -30,6 +30,8 @@ public class InkCanvasControlTests : TestBase
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             Assert.Inconclusive("InkCanvasControl tests are Windows-only due to Avalonia headless platform limitations");
 
+        AvaloniaUIThreadFixture.EnsureInitialized();
+
         if (AvaloniaUIThreadFixture.InitializationFailed)
             Assert.Inconclusive($"Avalonia headless initialization failed: {AvaloniaUIThreadFixture.InitializationError}");
 
