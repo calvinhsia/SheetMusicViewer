@@ -605,45 +605,6 @@ public class BrowseControlTests : TestBase
         });
     }
 
-    //public class LinkBrowseCustomField : IBrowseCustomField
-    //{
-    //    public override Control? GetControl()
-    //    {
-    //        return null;
-    //    }
-    //    public Action<object> ActionOnClick { get; set; } = delegate { };
-    //    public LinkBrowseCustomField(string url, Action<object> actionOnClick)
-    //    {
-    //        ActionOnClick = actionOnClick;
-    //    }
-    //}
-    //public class FavBrowseCustomField : IBrowseCustomField
-    //{
-    //    public override Control? GetControl()
-    //    {
-    //        return new Button { Content = "Fav" };
-    //    }
-    //    public Action<object> ActionOnClick { get; set; } = delegate { };
-    //    public FavBrowseCustomField(string icon, Action<object> actionOnClick)
-    //    {
-    //        ActionOnClick = actionOnClick;
-    //        ActionOnClick = actionOnClick;
-    //    }
-    //}
-    //public class MxlBrowseCustomField : IBrowseCustomField
-    //{
-    //    public override Control? GetControl()
-    //    {
-    //        return new Button { Content = "Mxl" };
-    //    }
-    //    public Action<object> ActionOnClick { get; set; } = delegate { };
-    //    public MxlBrowseCustomField(string icon, Action<object> actionOnClick)
-    //    {
-    //        ActionOnClick = actionOnClick;
-    //        ActionOnClick = actionOnClick;
-    //    }
-    //}
-
     [TestMethod]
     [TestCategory("Manual")]
     public async Task TestListBoxBrowseControlWithCustomField()
@@ -683,28 +644,21 @@ public class BrowseControlTests : TestBase
                                     var fileInfo = File.Exists(pdfFilePath) ? new FileInfo(pdfFilePath) : null;
                                     var mxlFilePath = Path.ChangeExtension(pdfFilePath, ".mxl");
                                     var mxlExists = File.Exists(mxlFilePath);
-                                    if (mxlExists)
+                                    var btn = new Button
                                     {
-                                        return new TextBlock { Text = "Mxl" };
-                                    }
-                                    else
+                                        Content = mxlExists ? "Mxl" : "NoMxl",
+                                        Padding = new Thickness(2, 0),
+                                        BorderThickness = new Thickness(0),
+                                        Background = Brushes.Transparent,
+                                        Foreground = Brushes.Green,
+                                        Cursor = new Cursor(StandardCursorType.Hand),
+                                        FontSize = 11
+                                    };
+                                    btn.Click += (s, e) =>
                                     {
-                                        var btn = new Button
-                                        {
-                                            Content = "Mxl",
-                                            Padding = new Thickness(2, 0),
-                                            BorderThickness = new Thickness(0),
-                                            Background = Brushes.Transparent,
-                                            Foreground = Brushes.Green,
-                                            Cursor = new Cursor(StandardCursorType.Hand),
-                                            FontSize = 11
-                                        };
-                                        btn.Click += (s, e) =>
-                                        {
-                                            Trace.WriteLine($"Clicked Mxl for {entry.SongName}: {entry.PageNo}");
-                                        };
-                                        return btn;
-                                    }
+                                        Trace.WriteLine($"Clicked Mxl for {entry.SongName}: {entry.PageNo}");
+                                    };
+                                    return btn;
                                 }),
                                 Fav = new BrowseField<PdfMetaDataReadResult, TOCEntry>(pdfMetaDataItem, tentry, (data, entry) =>
                                 {
