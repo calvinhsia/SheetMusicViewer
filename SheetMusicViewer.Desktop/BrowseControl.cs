@@ -39,20 +39,43 @@ public class BrowseControl : DockPanel
     /// </summary>
     public const int TouchRowHeight = 32;
 
-    public class IBrowseCustomField
+    /// <summary>
+    /// Non-generic interface so the renderer can call CreateControl() without knowing T and U.
+    /// </summary>
+    public interface IBrowseCustomField
     {
-        public virtual Control? GetControl() { return null; }
-        public virtual Action<object> ActionOnClick { get; set; } = null!;
+        Control? CreateControl();
     }
-    public class BrowseField<T,U>
+
+    /// <summary>
+    /// Typed extension that also exposes the bound data and entry objects.
+    /// </summary>
+    public interface IBrowseCustomField<T, U> : IBrowseCustomField
     {
-        public BrowseField(T data, Func<Control> getControl, int width = 120)
+        T Data { get; }
+        U Entry { get; }
+    }
+
+    /// <summary>
+    /// Inline custom-field: supply a factory lambda <c>(data, entry) =&gt; Control</c>
+    /// and the renderer will call it to produce the cell control.
+    /// </summary>
+    public class BrowseField<T, U> : IBrowseCustomField<T, U>
+    {
+        private readonly Func<T, U, Control> _getControlFunc;
+
+        public BrowseField(T data, U entry, Func<T, U, Control> getControl)
         {
             Data = data;
-            GetControl = getControl;
+            Entry = entry;
+            _getControlFunc = getControl;
         }
+
         public T Data { get; }
-        public Func<Control> GetControl { get; }
+        public U Entry { get; }
+
+        /// <summary>Invokes the factory to produce the cell control.</summary>
+        public Control? CreateControl() => _getControlFunc(Data, Entry);
     }
     /// <summary>
     /// Creates a new BrowseControl with filterable, sortable list display.
@@ -669,19 +692,14 @@ public class ListBoxBrowseView : UserControl
                 if (prop != null)
                 {
                     var value = prop.GetValue(item);
-                    // if the value is of type BrowseField<T,U>
-                    if (value != null && value.GetType().IsGenericType && value.GetType().GetGenericTypeDefinition() == typeof(BrowseControl.BrowseField<,>))
+                    // if the value implements IBrowseCustomField, let it produce its own cell control
+                    if (value is BrowseControl.IBrowseCustomField customField)
                     {
-                        // Use the GetControl function to get the control for this cell
-                        var getControlMethod = value.GetType().GetProperty("GetControl")?.GetValue(value) as Func<Control>;
-                        if (getControlMethod != null)
+                        var control = customField.CreateControl();
+                        if (control != null)
                         {
-                            var control = getControlMethod();
-                            if (control is Control ctrl)
-                            {
-                                Grid.SetColumn(ctrl, i);
-                                grid.Children.Add(ctrl);
-                            }
+                            Grid.SetColumn(control, i);
+                            grid.Children.Add(control);
                         }
                     }
                     else

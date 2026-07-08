@@ -604,44 +604,44 @@ public class BrowseControlTests : TestBase
         });
     }
 
-    public class LinkBrowseCustomField : IBrowseCustomField
-    {
-        public override Control? GetControl()
-        {
-            return null;
-        }
-        public Action<object> ActionOnClick { get; set; } = delegate { };
-        public LinkBrowseCustomField(string url, Action<object> actionOnClick)
-        {
-            ActionOnClick = actionOnClick;
-        }
-    }
-    public class FavBrowseCustomField : IBrowseCustomField
-    {
-        public override Control? GetControl()
-        {
-            return new Button { Content = "Fav" };
-        }
-        public Action<object> ActionOnClick { get; set; } = delegate { };
-        public FavBrowseCustomField(string icon, Action<object> actionOnClick)
-        {
-            ActionOnClick = actionOnClick;
-            ActionOnClick = actionOnClick;
-        }
-    }
-    public class MxlBrowseCustomField : IBrowseCustomField
-    {
-        public override Control? GetControl()
-        {
-            return new Button { Content = "Mxl" };
-        }
-        public Action<object> ActionOnClick { get; set; } = delegate { };
-        public MxlBrowseCustomField(string icon, Action<object> actionOnClick)
-        {
-            ActionOnClick = actionOnClick;
-            ActionOnClick = actionOnClick;
-        }
-    }
+    //public class LinkBrowseCustomField : IBrowseCustomField
+    //{
+    //    public override Control? GetControl()
+    //    {
+    //        return null;
+    //    }
+    //    public Action<object> ActionOnClick { get; set; } = delegate { };
+    //    public LinkBrowseCustomField(string url, Action<object> actionOnClick)
+    //    {
+    //        ActionOnClick = actionOnClick;
+    //    }
+    //}
+    //public class FavBrowseCustomField : IBrowseCustomField
+    //{
+    //    public override Control? GetControl()
+    //    {
+    //        return new Button { Content = "Fav" };
+    //    }
+    //    public Action<object> ActionOnClick { get; set; } = delegate { };
+    //    public FavBrowseCustomField(string icon, Action<object> actionOnClick)
+    //    {
+    //        ActionOnClick = actionOnClick;
+    //        ActionOnClick = actionOnClick;
+    //    }
+    //}
+    //public class MxlBrowseCustomField : IBrowseCustomField
+    //{
+    //    public override Control? GetControl()
+    //    {
+    //        return new Button { Content = "Mxl" };
+    //    }
+    //    public Action<object> ActionOnClick { get; set; } = delegate { };
+    //    public MxlBrowseCustomField(string icon, Action<object> actionOnClick)
+    //    {
+    //        ActionOnClick = actionOnClick;
+    //        ActionOnClick = actionOnClick;
+    //    }
+    //}
 
     [TestMethod]
     [TestCategory("Manual")]
@@ -675,15 +675,28 @@ public class BrowseControlTests : TestBase
                                 Vol = pdfMetaDataItem.GetVolNumFromPageNum(tentry.PageNo),
                                 tentry.Composer,
                                 CompositionDate = tentry.Date,
-                                Fav = new BrowseField<PdfMetaDataReadResult, TOCEntry>(pdfMetaDataItem, () =>
+                                Fav = new BrowseField<PdfMetaDataReadResult, TOCEntry>(pdfMetaDataItem, tentry, (data, entry) =>
                                 {
                                     var tbox = new TextBlock()
                                     {
-                                        Text = pdfMetaDataItem.IsFavorite(tentry.PageNo) ? "★" : string.Empty
+                                        Text = data.IsFavorite(entry.PageNo) ? "★" : string.Empty
                                     };
                                     return tbox;
                                 }),
-                                //Fav = pdfMetaDataItem.IsFavorite(tentry.PageNo) ? "Fav" : string.Empty,
+                                ////Fav = pdfMetaDataItem.IsFavorite(tentry.PageNo) ? "Fav" : string.Empty,,
+                                //Link= new BrowseField<PdfMetaDataReadResult, TOCEntry>(pdfMetaDataItem, () =>
+                                //{
+                                //    if (pdfMetaDataItem.)
+                                //    var btn = new Button()
+                                //    {
+                                //        Content = "Link"
+                                //    };
+                                //    btn.Click += (s, e) =>
+                                //    {
+                                //        Trace.WriteLine($"Clicked Link for {tentry.SongName}");
+                                //    };
+                                //    return btn;
+                                //}),
                                 BookName = pdfMetaDataItem.GetBookName(folder),
                                 tentry.Notes,
                                 Acquisition = fileInfo?.LastWriteTime,
