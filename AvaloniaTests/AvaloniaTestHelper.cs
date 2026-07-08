@@ -32,7 +32,10 @@ public static class AvaloniaTestHelper
                 Trace.WriteLine($"UI thread error: {ex.Message}");
                 testCompleted.TrySetException(ex);
             }
-        });
+        })
+        { 
+            Name = "AvaloniaTestUIThread",
+        };
 
         TestApp.OnSetupWindow = async (app, lifetime) =>
         {

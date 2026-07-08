@@ -33,12 +33,27 @@ public class BrowseControl : DockPanel
     /// Default row height for normal density (good for mouse interaction)
     /// </summary>
     public const int DefaultRowHeight = 20;
-    
+
     /// <summary>
     /// Larger row height for touch/fat finger interaction
     /// </summary>
     public const int TouchRowHeight = 32;
 
+    public class IBrowseCustomField
+    {
+        public virtual Control? GetControl() { return null; }
+        public virtual Action<object> ActionOnClick { get; set; } = null!;
+    }
+    public class BrowseField<T,U>
+    {
+        public BrowseField(T data, Func<Control> getControl, int width = 120)
+        {
+            Data = data;
+            GetControl = getControl;
+        }
+        public T Data { get; }
+        public Func<Control> GetControl { get; }
+    }
     /// <summary>
     /// Creates a new BrowseControl with filterable, sortable list display.
     /// </summary>
@@ -53,11 +68,11 @@ public class BrowseControl : DockPanel
             _query = query;
             _colWidths = colWidths;
             _rowHeight = rowHeight > 0 ? rowHeight : DefaultRowHeight;
-            
+
             this.LastChildFill = true;
             this.HorizontalAlignment = HorizontalAlignment.Stretch;
             this.VerticalAlignment = VerticalAlignment.Stretch;
-            
+
             _listFilter = new ListBoxListFilter(null!, filterOnLeft);
             this.Children.Add(_listFilter);
             DockPanel.SetDock(_listFilter, Dock.Top);
@@ -66,7 +81,7 @@ public class BrowseControl : DockPanel
             this.Children.Add(ListView);
 
             _listFilter.SetBrowseList(ListView);
-            
+
             Debug.WriteLine($"BrowseControl: Created with virtualization and column resizing support");
         }
         catch (Exception ex)
@@ -176,9 +191,9 @@ internal class ListBoxListFilter : DockPanel
 
     private void BuildUI()
     {
-        var spFilter = new StackPanel 
-        { 
-            Orientation = Orientation.Horizontal, 
+        var spFilter = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
             HorizontalAlignment = _filterOnLeft ? HorizontalAlignment.Left : HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center,
             Spacing = 5,
@@ -186,8 +201,8 @@ internal class ListBoxListFilter : DockPanel
         };
         _txtStatus.VerticalAlignment = VerticalAlignment.Center;
         spFilter.Children.Add(_txtStatus);
-        spFilter.Children.Add(new Label 
-        { 
+        spFilter.Children.Add(new Label
+        {
             Content = "StringFilter",
             VerticalAlignment = VerticalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
@@ -265,13 +280,13 @@ public class ListBoxBrowseView : UserControl
             _listBox.SelectedIndex = index;
         }
     }
-    
+
     public ListBoxBrowseView(IEnumerable query, BrowseControl browseControl)
     {
         this._colWidths = browseControl._colWidths;
         this._rowHeight = browseControl._rowHeight;
         this._originalQuery = query;
-        
+
         // Optimize: Materialize once and use constructor for batch initialization
         var itemsList = query.Cast<object>().ToList();
         _allItems = new ObservableCollection<object>(itemsList);
@@ -280,14 +295,32 @@ public class ListBoxBrowseView : UserControl
         // Analyze query type to build column info
         var ienum = query.GetType().GetInterface(typeof(IEnumerable<>).FullName!);
         var itemType = ienum!.GetGenericArguments()[0];
-        
+
         var members = itemType.GetProperties();
         int colIndex = 0;
-        
+
         foreach (var prop in members)
         {
             if (prop.Name.StartsWith("_"))
                 continue;
+
+            //if (prop.PropertyType.IsGenericType && prop.PropertyType.GetGenericTypeDefinition() == typeof(BrowseControl.BrowseField<>))
+            //{
+            //    // For BrowseField<T>, 
+            //    var bField = prop.GetValue()
+
+
+            //    var sampleValue = prop.GetValue(Activator.CreateInstance(itemType)!) as dynamic;
+            //    if (sampleValue != null)
+            //    {
+            //        _columns.Add(new ListBoxColumnInfo
+            //        {
+            //            HeaderText = sampleValue.Header,
+            //            BindingPath = prop.Name,
+            //            Width = sampleValue.Width > 0 ? sampleValue.Width : DefaultColumnWidth
+            //        });
+            //    }
+            //}
 
             int width = DefaultColumnWidth; // Use default width
             if (_colWidths != null && colIndex < _colWidths.Length)
@@ -301,12 +334,12 @@ public class ListBoxBrowseView : UserControl
                 BindingPath = prop.Name,
                 Width = width
             });
-            
+
             colIndex++;
         }
 
         BuildVisualStructure();
-        
+
         Debug.WriteLine($"ListBoxBrowseView: Created with {_columns.Count} columns, {_filteredItems.Count} items");
     }
 
@@ -338,7 +371,7 @@ public class ListBoxBrowseView : UserControl
             }
             _headerGrid.ColumnDefinitions.Add(colDef);
         }
-        
+
         // Add an extra dummy column at the end to allow the last column to resize
         _headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
@@ -358,13 +391,13 @@ public class ListBoxBrowseView : UserControl
                 FontWeight = FontWeight.Normal,
                 [ToolTip.TipProperty] = col.HeaderText
             };
-            
+
             var columnIndex = i;
             headerButton.Click += (s, e) => OnHeaderClick(columnIndex);
-            
+
             Grid.SetColumn(headerButton, i);
             _headerGrid.Children.Add(headerButton);
-            
+
             // Add GridSplitter at the right edge of every column (including the last one)
             var splitter = new GridSplitter
             {
@@ -375,10 +408,10 @@ public class ListBoxBrowseView : UserControl
                 HorizontalAlignment = HorizontalAlignment.Right,
                 Cursor = new Cursor(StandardCursorType.SizeWestEast)
             };
-            
+
             Grid.SetColumn(splitter, i);
             _headerGrid.Children.Add(splitter);
-            
+
             // Subscribe to drag events to trigger item grid regeneration
             splitter.DragStarted += OnSplitterDragStarted;
             splitter.DragCompleted += OnSplitterDragCompleted;
@@ -393,7 +426,7 @@ public class ListBoxBrowseView : UserControl
             ItemsSource = _filteredItems,
             BorderThickness = new Thickness(0)  // Remove border to keep columns aligned with header
         };
-        
+
         // Reduce ListBoxItem padding/margin to minimize vertical spacing - use theme-aware colors
         var itemStyle = new Style(x => x.OfType<ListBoxItem>());
         itemStyle.Setters.Add(new Setter(ListBoxItem.PaddingProperty, new Thickness(0)));
@@ -404,19 +437,19 @@ public class ListBoxBrowseView : UserControl
 
         // Create and attach context menu
         var contextMenu = new ContextMenu();
-        
+
         var copyMenuItem = new MenuItem { Header = "Copy" };
         copyMenuItem.Click += OnCopyClick;
         contextMenu.Items.Add(copyMenuItem);
-        
+
         var exportCsvMenuItem = new MenuItem { Header = "Export to CSV" };
         exportCsvMenuItem.Click += OnExportCsvClick;
         contextMenu.Items.Add(exportCsvMenuItem);
-        
+
         var exportTxtMenuItem = new MenuItem { Header = "Export to Notepad" };
         exportTxtMenuItem.Click += OnExportTxtClick;
         contextMenu.Items.Add(exportTxtMenuItem);
-        
+
         _listBox.ContextMenu = contextMenu;
         Debug.WriteLine($"ListBoxBrowseView: Context menu created with {contextMenu.Items.Count} items");
 
@@ -434,16 +467,16 @@ public class ListBoxBrowseView : UserControl
         innerPanel.Children.Add(_listBox);
 
         this.Content = innerPanel;
-        
+
         Debug.WriteLine($"ListBoxBrowseView: Visual structure created with ListBox virtualization and resizable columns");
     }
-    
+
     private void OnSplitterDragStarted(object? sender, VectorEventArgs e)
     {
         _isResizing = true;
         Debug.WriteLine("Column resize started");
     }
-    
+
     private void OnSplitterDragCompleted(object? sender, VectorEventArgs e)
     {
         _isResizing = false;
@@ -461,14 +494,14 @@ public class ListBoxBrowseView : UserControl
         try
         {
             Debug.WriteLine("OnListBoxLoaded: ListBox loaded, customizing visible containers");
-            
+
             Debug.WriteLine($"  ItemsSource has {_filteredItems.Count} items");
-            
+
             var presenter = _listBox.Presenter;
             var panel = presenter?.Panel;
             Debug.WriteLine($"  Panel type: {panel?.GetType().Name ?? "NULL"}");
             Debug.WriteLine($"  Panel children count: {panel?.Children.Count ?? 0}");
-            
+
             int customizedCount = 0;
             for (int i = 0; i < _filteredItems.Count; i++)
             {
@@ -481,9 +514,9 @@ public class ListBoxBrowseView : UserControl
                     customizedCount++;
                 }
             }
-            
+
             Debug.WriteLine($"  ? Customized {customizedCount} visible containers");
-            
+
             // Subscribe to EffectiveViewportChanged for scrolling
             _listBox.EffectiveViewportChanged += OnEffectiveViewportChanged;
             Debug.WriteLine($"  ? Subscribed to EffectiveViewportChanged for dynamic customization");
@@ -494,7 +527,7 @@ public class ListBoxBrowseView : UserControl
             Debug.WriteLine($"  Stack: {ex.StackTrace}");
         }
     }
-    
+
     private void OnEffectiveViewportChanged(object? sender, EffectiveViewportChangedEventArgs e)
     {
         try
@@ -503,27 +536,27 @@ public class ListBoxBrowseView : UserControl
             var presenter = _listBox.Presenter;
             var panel = presenter?.Panel;
             var visibleIndices = new List<int>();
-            
+
             // Force re-customization of all visible containers
             int customizedCount = 0;
             int toStringCount = 0;
             int alreadyGridCount = 0;
-            
+
             for (int i = 0; i < _filteredItems.Count; i++)
             {
                 var container = _listBox.ContainerFromIndex(i) as ListBoxItem;
                 if (container != null)
                 {
                     visibleIndices.Add(i);
-                    
+
                     var item = _filteredItems[i];
-                    
+
                     // Log BEFORE setting Content
                     var contentBefore = container.Content;
                     var contentBeforeType = contentBefore?.GetType().Name ?? "NULL";
                     var isGridBefore = contentBefore is Grid;
                     var isToStringBefore = !isGridBefore && contentBefore != null;
-                    
+
                     if (isToStringBefore)
                     {
                         toStringCount++;
@@ -533,18 +566,18 @@ public class ListBoxBrowseView : UserControl
                     {
                         alreadyGridCount++;
                     }
-                    
+
                     // Create and set the new Grid
                     var grid = CreateItemGrid(item);
                     container.Content = grid;
-                    
+
                     // Log IMMEDIATELY AFTER setting Content
                     var contentAfter = container.Content;
                     var contentAfterType = contentAfter?.GetType().Name ?? "NULL";
                     var isSameReference = ReferenceEquals(contentAfter, grid);
-                    
+
                     customizedCount++;
-                    
+
                     // Detailed logging only for ToString cases
                     if (isToStringBefore)
                     {
@@ -552,13 +585,13 @@ public class ListBoxBrowseView : UserControl
                     }
                 }
             }
-            
+
             if (customizedCount > 0)
             {
-                var indicesStr = visibleIndices.Count <= 5 
+                var indicesStr = visibleIndices.Count <= 5
                     ? string.Join(", ", visibleIndices)
                     : $"{visibleIndices[0]}..{visibleIndices[visibleIndices.Count - 1]}";
-                    
+
                 Debug.WriteLine($"OnEffectiveViewportChanged: Visible indices [{indicesStr}], " +
                     $"Customized={customizedCount}, ToString={toStringCount}, AlreadyGrid={alreadyGridCount}");
             }
@@ -577,7 +610,7 @@ public class ListBoxBrowseView : UserControl
         try
         {
             int fixedCount = 0;
-            
+
             for (int i = 0; i < _filteredItems.Count; i++)
             {
                 var container = _listBox.ContainerFromIndex(i) as ListBoxItem;
@@ -585,7 +618,7 @@ public class ListBoxBrowseView : UserControl
                 {
                     var contentBefore = container.Content;
                     var isToStringBefore = contentBefore != null && !(contentBefore is Grid);
-                    
+
                     if (isToStringBefore)
                     {
                         var item = _filteredItems[i];
@@ -595,7 +628,7 @@ public class ListBoxBrowseView : UserControl
                     }
                 }
             }
-            
+
             // Only log when we actually fix containers (reduce noise)
             // Remove or comment out this line in production if desired
             // if (fixedCount > 0)
@@ -628,7 +661,7 @@ public class ListBoxBrowseView : UserControl
         for (int i = 0; i < _columns.Count; i++)
         {
             var col = _columns[i];
-            
+
             string cellText = string.Empty;
             try
             {
@@ -636,28 +669,46 @@ public class ListBoxBrowseView : UserControl
                 if (prop != null)
                 {
                     var value = prop.GetValue(item);
-                    cellText = FormatValue(value);
+                    // if the value is of type BrowseField<T,U>
+                    if (value != null && value.GetType().IsGenericType && value.GetType().GetGenericTypeDefinition() == typeof(BrowseControl.BrowseField<,>))
+                    {
+                        // Use the GetControl function to get the control for this cell
+                        var getControlMethod = value.GetType().GetProperty("GetControl")?.GetValue(value) as Func<Control>;
+                        if (getControlMethod != null)
+                        {
+                            var control = getControlMethod();
+                            if (control is Control ctrl)
+                            {
+                                Grid.SetColumn(ctrl, i);
+                                grid.Children.Add(ctrl);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        cellText = FormatValue(value);
+                        var textBlock = new TextBlock
+                        {
+                            Text = cellText,
+                            Padding = new Thickness(5, 0, 5, 0),
+                            Margin = new Thickness(0),
+                            VerticalAlignment = VerticalAlignment.Center,
+                            TextTrimming = TextTrimming.CharacterEllipsis,
+                            FontSize = 12
+                        };
+                        Grid.SetColumn(textBlock, i);
+                        grid.Children.Add(textBlock);
+                    }
                 }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error getting value for {col.BindingPath}: {ex.Message}");
             }
-            
-            var textBlock = new TextBlock
-            {
-                Text = cellText,
-                Padding = new Thickness(5, 0, 5, 0),
-                Margin = new Thickness(0),
-                VerticalAlignment = VerticalAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                FontSize = 12
-            };
 
-            Grid.SetColumn(textBlock, i);
-            grid.Children.Add(textBlock);
+
         }
-        
+
         // Note: The dummy column at the end (_headerGrid.ColumnDefinitions.Count - 1) is left empty
 
         return grid;
@@ -669,7 +720,7 @@ public class ListBoxBrowseView : UserControl
             return string.Empty;
 
         Type type = value.GetType();
-        
+
         if (type == typeof(string))
         {
             var str = value.ToString()!.Trim();
@@ -692,7 +743,7 @@ public class ListBoxBrowseView : UserControl
         {
             return ((double)value).ToString("n2");
         }
-        
+
         return value.ToString() ?? string.Empty;
     }
 
@@ -741,17 +792,17 @@ public class ListBoxBrowseView : UserControl
             var itemsToExport = _listBox.SelectedItems != null && _listBox.SelectedItems.Count > 0
                 ? _listBox.SelectedItems.Cast<object>()
                 : _filteredItems.Cast<object>();
-            
+
             var itemCount = itemsToExport.Count();
-            
+
             // Create temp file like the original WPF version
             var tmpFileName = System.IO.Path.GetTempFileName();
             var sb = new System.Text.StringBuilder();
-            
+
             // Add header row
             var headers = _columns.Select(c => c.HeaderText).ToList();
             sb.AppendLine(string.Join(",", headers.Select(h => $"\"{h}\"")));
-            
+
             // Add data rows
             foreach (var item in itemsToExport)
             {
@@ -771,9 +822,9 @@ public class ListBoxBrowseView : UserControl
             System.IO.File.WriteAllText(tmpFileName, sb.ToString(), System.Text.Encoding.UTF8);
             var filename = System.IO.Path.ChangeExtension(tmpFileName, "csv");
             System.IO.File.Move(tmpFileName, filename);
-            
+
             Debug.WriteLine($"OnExportCsvClick: Exported {itemCount} items to {filename}");
-            
+
             // Use shell execute to open with default .csv handler (like original)
             try
             {
@@ -801,17 +852,17 @@ public class ListBoxBrowseView : UserControl
             var itemsToExport = _listBox.SelectedItems != null && _listBox.SelectedItems.Count > 0
                 ? _listBox.SelectedItems.Cast<object>()
                 : _filteredItems.Cast<object>();
-            
+
             var itemCount = itemsToExport.Count();
-            
+
             // Create temp file like the original WPF version
             var tmpFileName = System.IO.Path.GetTempFileName();
             var sb = new System.Text.StringBuilder();
-            
+
             // Add header row
             var headers = _columns.Select(c => c.HeaderText).ToList();
             sb.AppendLine(string.Join("\t", headers));
-            
+
             // Add data rows
             foreach (var item in itemsToExport)
             {
@@ -830,9 +881,9 @@ public class ListBoxBrowseView : UserControl
             System.IO.File.WriteAllText(tmpFileName, sb.ToString(), new System.Text.UnicodeEncoding(bigEndian: false, byteOrderMark: true));
             var filename = System.IO.Path.ChangeExtension(tmpFileName, "txt");
             System.IO.File.Move(tmpFileName, filename);
-            
+
             Debug.WriteLine($"OnExportTxtClick: Exported {itemCount} items to {filename}");
-            
+
             // Use shell execute to open with default .txt handler (like original)
             try
             {
@@ -855,18 +906,18 @@ public class ListBoxBrowseView : UserControl
     private void OnHeaderClick(int columnIndex)
     {
         Debug.WriteLine($"Header clicked: column {columnIndex}");
-        
+
         if (columnIndex < 0 || columnIndex >= _columns.Count)
             return;
 
         var col = _columns[columnIndex];
-        
+
         bool ascending = true;
         if (_lastSortedColumnIndex == columnIndex)
         {
             ascending = !_lastSortAscending;
         }
-        
+
         _lastSortedColumnIndex = columnIndex;
         _lastSortAscending = ascending;
 
@@ -883,9 +934,9 @@ public class ListBoxBrowseView : UserControl
             {
                 _filteredItems.Add(item);
             }
-            
+
             Debug.WriteLine($"Sorted by {col.HeaderText} ({(ascending ? "ascending" : "descending")})");
-            
+
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
                 RecustomizeVisibleContainers();
@@ -902,7 +953,7 @@ public class ListBoxBrowseView : UserControl
         try
         {
             Debug.WriteLine($"RecustomizeVisibleContainers: Re-customizing after collection change");
-            
+
             int customizedCount = 0;
             for (int i = 0; i < _filteredItems.Count; i++)
             {
@@ -915,7 +966,7 @@ public class ListBoxBrowseView : UserControl
                     customizedCount++;
                 }
             }
-            
+
             Debug.WriteLine($"  ? Re-customized {customizedCount} visible containers after sort");
         }
         catch (Exception ex)
@@ -927,7 +978,7 @@ public class ListBoxBrowseView : UserControl
     public void ApplyFilter(string filterText)
     {
         _filteredItems.Clear();
-        
+
         if (string.IsNullOrEmpty(filterText))
         {
             foreach (var item in _allItems)
@@ -956,9 +1007,9 @@ public class ListBoxBrowseView : UserControl
                 }
             }
         }
-        
+
         Debug.WriteLine($"Filter applied: {_filteredItems.Count} items match '{filterText}'");
-        
+
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             RecustomizeVisibleContainers();
@@ -1024,7 +1075,7 @@ public class ListBoxBrowseView : UserControl
         }
 
         var menuItem = new MenuItem { Header = itemName };
-        
+
         if (!string.IsNullOrEmpty(tooltip))
         {
             ToolTip.SetTip(menuItem, tooltip);
@@ -1043,7 +1094,7 @@ public class ListBoxBrowseView : UserControl
 
                 var itemsList = selectedItems.Cast<object>().ToList();
                 action?.Invoke(itemsList);
-                
+
                 Debug.WriteLine($"{itemName}: Executed on {itemsList.Count} items");
             }
             catch (Exception ex)
