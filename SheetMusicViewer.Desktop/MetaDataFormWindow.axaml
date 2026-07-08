@@ -214,32 +214,7 @@
                 </Grid.RowDefinitions>
 
                 <TextBlock Grid.Row="0" Text="Favorites:" FontWeight="Bold" Margin="5,0,0,5"/>
-                <DataGrid Grid.Row="1"
-                          Name="FavoritesDataGrid"
-                          ItemsSource="{Binding Favorites}"
-                          GridLinesVisibility="All"
-                          CanUserReorderColumns="False"
-                          CanUserResizeColumns="True"
-                          IsReadOnly="True"
-                          SelectionMode="Single"
-                          DoubleTapped="FavoritesDataGrid_DoubleTapped">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Binding="{Binding PageNo}" Width="60" x:DataType="local:FavoriteViewModel">
-                            <DataGridTextColumn.Header>
-                                <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="Page number of the favorite">
-                                    <TextBlock Text="Page"/>
-                                </Border>
-                            </DataGridTextColumn.Header>
-                        </DataGridTextColumn>
-                        <DataGridTextColumn Binding="{Binding Description}" Width="*" x:DataType="local:FavoriteViewModel">
-                            <DataGridTextColumn.Header>
-                                <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="Song title at this page — double-click to navigate there">
-                                    <TextBlock Text="Desc"/>
-                                </Border>
-                            </DataGridTextColumn.Header>
-                        </DataGridTextColumn>
-                    </DataGrid.Columns>
-                </DataGrid>
+                <Grid Grid.Row="1" Name="FavoritesPanel"/>
             </Grid>
         </Grid>
     </Grid>

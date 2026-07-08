@@ -21,7 +21,7 @@ public partial class MetaDataFormWindow : Window
 {
     private MetaDataFormViewModel? _viewModel;
     private DataGrid? _tocDataGrid;
-    private DataGrid? _favoritesDataGrid;
+    private BrowseControl? _favoritesBrowseControl;
     private readonly DoubleTapHelper _doubleTapHelper = new();
     
     /// <summary>
@@ -48,18 +48,15 @@ public partial class MetaDataFormWindow : Window
         _viewModel = viewModel;
         DataContext = viewModel;
         _tocDataGrid = this.FindControl<DataGrid>("TocDataGrid");
-        _favoritesDataGrid = this.FindControl<DataGrid>("FavoritesDataGrid");
-        
-        // Wire up custom double-tap handling for better touch sensitivity
+
+        // Wire up custom double-tap handling for TOC grid
         if (_tocDataGrid != null)
         {
             _tocDataGrid.PointerPressed += TocDataGrid_PointerPressed;
         }
-        if (_favoritesDataGrid != null)
-        {
-            _favoritesDataGrid.PointerPressed += FavoritesDataGrid_PointerPressed;
-        }
-        
+
+        BuildFavoritesPanel(viewModel);
+
         viewModel.CloseAction = (saved) =>
         {
             WasSaved = saved;
@@ -224,21 +221,7 @@ public partial class MetaDataFormWindow : Window
         }
     }
     
-    private void FavoritesDataGrid_PointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (_doubleTapHelper.IsDoubleTap(sender, e))
-        {
-            if (_favoritesDataGrid?.SelectedItem is FavoriteViewModel fav)
-            {
-                PageNumberResult = fav.PageNo;
-                WasSaved = true;
-                Close();
-                e.Handled = true;
-            }
-        }
-    }
-    
-    // Keep the existing DoubleTapped handlers as fallback for mouse double-click
+    // Keep the existing DoubleTapped handler as fallback for mouse double-click
     private void TocDataGrid_DoubleTapped(object? sender, RoutedEventArgs e)
     {
         if (_viewModel?.SelectedItem != null)
@@ -248,16 +231,54 @@ public partial class MetaDataFormWindow : Window
             Close();
         }
     }
-    
-    private void FavoritesDataGrid_DoubleTapped(object? sender, RoutedEventArgs e)
+
+    private void BuildFavoritesPanel(MetaDataFormViewModel viewModel)
     {
-        var dataGrid = sender as DataGrid;
-        if (dataGrid?.SelectedItem is FavoriteViewModel fav)
+        var panel = this.FindControl<Grid>("FavoritesPanel");
+        if (panel == null) return;
+
+        var query = from fav in viewModel.Favorites
+                    select new
+                    {
+                        Page = fav.PageNo,
+                        fav.Description,
+                        _Fav = fav
+                    };
+
+        _favoritesBrowseControl = new BrowseControl(query,
+            colWidths: new[] { 60, 200 },
+            rowHeight: BrowseControl.TouchRowHeight);
+
+        _favoritesBrowseControl.ListView.DoubleTapped += (s, e) =>
         {
-            PageNumberResult = fav.PageNo;
-            WasSaved = true;
-            Close();
-        }
+            var selected = _favoritesBrowseControl.ListView.SelectedItem;
+            var favProp = selected?.GetType().GetProperty("_Fav");
+            if (favProp?.GetValue(selected) is FavoriteViewModel fav)
+            {
+                PageNumberResult = fav.PageNo;
+                WasSaved = true;
+                Close();
+            }
+        };
+
+        _favoritesBrowseControl.AddContextMenuItem(
+            "Navigate to Favorite",
+            "Navigate to this favorite page",
+            (selectedItems) =>
+            {
+                if (selectedItems.Count > 0)
+                {
+                    var favProp = selectedItems[0]?.GetType().GetProperty("_Fav");
+                    if (favProp?.GetValue(selectedItems[0]) is FavoriteViewModel fav)
+                    {
+                        PageNumberResult = fav.PageNo;
+                        WasSaved = true;
+                        Close();
+                    }
+                }
+            });
+
+        panel.Children.Add(_favoritesBrowseControl);
     }
 }
 
