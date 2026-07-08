@@ -374,37 +374,6 @@ public partial class MetaDataFormViewModel : ObservableObject
         _rootFolder = string.Empty;
     }
 
-    /// <summary>
-    /// Constructor for testing - loads metadata directly from a JSON file path
-    /// </summary>
-    public MetaDataFormViewModel(string jsonFilePath)
-    {
-        _rootFolder = Path.GetDirectoryName(jsonFilePath) ?? string.Empty;
-        Title = $"MetaData Editor - {Path.GetFileName(jsonFilePath)}";
-
-        // Load metadata from JSON file using the centralized reader
-        var pdfPath = Path.ChangeExtension(jsonFilePath, ".pdf");
-        var provider = new DummyPdfDocumentProvider(); // For testing only
-        
-        try
-        {
-            _pdfMetaData = PdfMetaDataCore.ReadPdfMetaDataAsync(
-                pdfPath,
-                isSingles: false,
-                provider,
-                preferJsonOverBmk: true).GetAwaiter().GetResult();
-            
-            if (_pdfMetaData != null)
-            {
-                InitializeFromPdfMetaData(_pdfMetaData, 0);
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Trace.WriteLine($"Error loading metadata: {ex.Message}");
-        }
-    }
-
     public MetaDataFormViewModel(PdfMetaDataReadResult pdfMetaData, string rootFolder, int currentPageNo = 0)
     {
         _pdfMetaData = pdfMetaData;
