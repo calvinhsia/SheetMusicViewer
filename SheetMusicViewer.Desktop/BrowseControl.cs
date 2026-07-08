@@ -733,6 +733,9 @@ public class ListBoxBrowseView : UserControl
         if (value == null)
             return string.Empty;
 
+        if (value is BrowseControl.IBrowseCustomField customField)
+            return customField.SortKey;
+
         Type type = value.GetType();
 
         if (type == typeof(string))
