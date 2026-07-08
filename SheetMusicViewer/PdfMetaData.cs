@@ -746,21 +746,16 @@ namespace SheetMusicViewer
             }
             Favorites.Clear(); // save memory
         }
+
         public void InitializeListPdfDocuments()
         {
             var pageNo = PageNumberOffset;
             for (int volNo = 0; volNo < lstVolInfo.Count; volNo++)
             {
-                var task = new Task<PdfDocument>((pg) =>// can't be async
-                {
-                    var pathPdfFileVol = GetFullPathFileFromPageNo((int)pg);
-                    var pdfDoc = GetPdfDocumentForFileAsync(pathPdfFileVol).GetAwaiter().GetResult();
-                    //PdfDocument pdfDoc = null;
-                    //pdfDoc = GetPdfDocumentAsync((int)pg).GetAwaiter().GetResult();
-                    return pdfDoc;
-                }, pageNo);
+                var capturedPageNo = pageNo;
+                lstVolInfo[volNo].TaskPdfDocument = new Lazy<Task<PdfDocument>>(
+                    () => GetPdfDocumentForFileAsync(GetFullPathFileFromPageNo(capturedPageNo)));
                 pageNo += lstVolInfo[volNo].NPagesInThisVolume;
-                lstVolInfo[volNo].TaskPdfDocument = task;
             }
         }
 
@@ -793,19 +788,7 @@ namespace SheetMusicViewer
             if (pageNo < MaxPageNum)
             {
                 var volno = GetVolNumFromPageNum(pageNo);
-                var pdfDocTask = lstVolInfo[volno].TaskPdfDocument;
-                if (pdfDocTask.Status == TaskStatus.Created)
-                {
-                    pdfDocTask.Start();
-                }
-                if (pdfDocTask.IsCompleted)
-                {
-                    pdfDoc = pdfDocTask.Result;
-                }
-                else
-                {
-                    pdfDoc = await pdfDocTask;
-                }
+                pdfDoc = await lstVolInfo[volno].TaskPdfDocument.Value.ConfigureAwait(false);
                 pdfPgNo = GetPdfVolPageNo(pageNo);
                 int GetPdfVolPageNo(int Pgno)
                 {
@@ -823,14 +806,8 @@ namespace SheetMusicViewer
 
         public static async Task<PdfDocument> GetPdfDocumentForFileAsync(string pathPdfFileVol)
         {
-            //    StorageFile f = await StorageFile.GetFileFromPathAsync(pathPdfFileVol);
-            //var pdfDoc = await PdfDocument.LoadFromFileAsync(f);
-            using var fstrm = await FileRandomAccessStream.OpenAsync(pathPdfFileVol, FileAccessMode.Read);
-            var pdfDoc = await PdfDocument.LoadFromStreamAsync(fstrm);
-            //if (pdfDoc.IsPasswordProtected)
-            //{
-            //    //    this.dpPage.Children.Add(new TextBlock() { Text = $"Password Protected {pathPdfFileVol}" });
-            //}
+            using var fstrm = await FileRandomAccessStream.OpenAsync(pathPdfFileVol, FileAccessMode.Read).AsTask().ConfigureAwait(false);
+            var pdfDoc = await PdfDocument.LoadFromStreamAsync(fstrm).AsTask().ConfigureAwait(false);
             return pdfDoc;
         }
 
@@ -1093,18 +1070,19 @@ namespace SheetMusicViewer
         }
     }
 
-    /// <summary>
-    /// WPF-specific PDF volume info with Task for async document loading
-    /// </summary>
-    [Serializable]
-    public class PdfVolumeInfo : PdfVolumeInfoBase
-    {
-        [XmlIgnore]
-        public Task<PdfDocument> TaskPdfDocument;
 
-        public override string ToString()
+        /// <summary>
+        /// WPF-specific PDF volume info with lazy async document loading
+        /// </summary>
+        [Serializable]
+        public class PdfVolumeInfo : PdfVolumeInfoBase
         {
-            return $"{FileNameVolume} #Pgs={NPagesInThisVolume,4} Rotation={(Rotation)Rotation}";
+            [XmlIgnore]
+            public Lazy<Task<PdfDocument>> TaskPdfDocument;
+
+            public override string ToString()
+            {
+                return $"{FileNameVolume} #Pgs={NPagesInThisVolume,4} Rotation={(Rotation)Rotation}";
+            }
         }
-    }
 }
