@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -654,7 +655,7 @@ public class BrowseControlTests : TestBase
             await Dispatcher.UIThread.InvokeAsync(async () =>
             {
 
-                var folder = Path.Combine(GetSheetMusicFolder(), "pop");
+                var folder = Path.Combine(GetSheetMusicFolder(), "Pop");
                 var pdfDocumentProvider = new AvaloniaPdfDocumentProvider();
                 var exceptionHandler = new TraceExceptionHandler(TestContext);
                 var (results, folders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
@@ -675,6 +676,36 @@ public class BrowseControlTests : TestBase
                                 Vol = pdfMetaDataItem.GetVolNumFromPageNum(tentry.PageNo),
                                 tentry.Composer,
                                 CompositionDate = tentry.Date,
+                                Mxl = new BrowseField<PdfMetaDataReadResult, TOCEntry>(pdfMetaDataItem, tentry, (data, entry) =>
+                                {
+                                    // see if the mxl file exists in the same folder as the pdf
+                                    var pdfFilePath = data.GetFullPathFileFromPageNo(entry.PageNo);
+                                    var fileInfo = File.Exists(pdfFilePath) ? new FileInfo(pdfFilePath) : null;
+                                    var mxlFilePath = Path.ChangeExtension(pdfFilePath, ".mxl");
+                                    var mxlExists = File.Exists(mxlFilePath);
+                                    if (mxlExists)
+                                    {
+                                        return new TextBlock { Text = "Mxl" };
+                                    }
+                                    else
+                                    {
+                                        var btn = new Button
+                                        {
+                                            Content = "Mxl",
+                                            Padding = new Thickness(2, 0),
+                                            BorderThickness = new Thickness(0),
+                                            Background = Brushes.Transparent,
+                                            Foreground = Brushes.Green,
+                                            Cursor = new Cursor(StandardCursorType.Hand),
+                                            FontSize = 11
+                                        };
+                                        btn.Click += (s, e) =>
+                                        {
+                                            Trace.WriteLine($"Clicked Mxl for {entry.SongName}: {entry.PageNo}");
+                                        };
+                                        return btn;
+                                    }
+                                }),
                                 Fav = new BrowseField<PdfMetaDataReadResult, TOCEntry>(pdfMetaDataItem, tentry, (data, entry) =>
                                 {
                                     var tbox = new TextBlock()
@@ -683,20 +714,27 @@ public class BrowseControlTests : TestBase
                                     };
                                     return tbox;
                                 }),
-                                ////Fav = pdfMetaDataItem.IsFavorite(tentry.PageNo) ? "Fav" : string.Empty,,
-                                //Link= new BrowseField<PdfMetaDataReadResult, TOCEntry>(pdfMetaDataItem, () =>
-                                //{
-                                //    if (pdfMetaDataItem.)
-                                //    var btn = new Button()
-                                //    {
-                                //        Content = "Link"
-                                //    };
-                                //    btn.Click += (s, e) =>
-                                //    {
-                                //        Trace.WriteLine($"Clicked Link for {tentry.SongName}");
-                                //    };
-                                //    return btn;
-                                //}),
+                                //Fav = pdfMetaDataItem.IsFavorite(tentry.PageNo) ? "Fav" : string.Empty,,
+                                Link = new BrowseField<PdfMetaDataReadResult, TOCEntry>(pdfMetaDataItem, tentry, (data, entry) =>
+                                {
+                                    if (string.IsNullOrEmpty(entry.Link))
+                                        return new TextBlock();
+                                    var btn = new Button
+                                    {
+                                        Content = entry.Link,
+                                        Padding = new Thickness(2, 0),
+                                        BorderThickness = new Thickness(0),
+                                        Background = Brushes.Transparent,
+                                        Foreground = Brushes.Blue,
+                                        Cursor = new Cursor(StandardCursorType.Hand),
+                                        FontSize = 11
+                                    };
+                                    btn.Click += (s, e) =>
+                                    {
+                                        Trace.WriteLine($"Clicked Link for {entry.SongName}: {entry.Link}");
+                                    };
+                                    return btn;
+                                }),
                                 BookName = pdfMetaDataItem.GetBookName(folder),
                                 tentry.Notes,
                                 Acquisition = fileInfo?.LastWriteTime,

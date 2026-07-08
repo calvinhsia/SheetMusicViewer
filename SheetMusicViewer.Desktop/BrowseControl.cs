@@ -685,27 +685,22 @@ public class ListBoxBrowseView : UserControl
         {
             var col = _columns[i];
 
-            string cellText = string.Empty;
             try
             {
                 var prop = TypeDescriptor.GetProperties(item)[col.BindingPath];
+                Control? control = null;
                 if (prop != null)
                 {
                     var value = prop.GetValue(item);
                     // if the value implements IBrowseCustomField, let it produce its own cell control
                     if (value is BrowseControl.IBrowseCustomField customField)
                     {
-                        var control = customField.CreateControl();
-                        if (control != null)
-                        {
-                            Grid.SetColumn(control, i);
-                            grid.Children.Add(control);
-                        }
+                        control = customField.CreateControl();
                     }
-                    else
+                    if (control == null)
                     {
-                        cellText = FormatValue(value);
-                        var textBlock = new TextBlock
+                        var cellText = FormatValue(value);
+                        control = new TextBlock
                         {
                             Text = cellText,
                             Padding = new Thickness(5, 0, 5, 0),
@@ -714,9 +709,9 @@ public class ListBoxBrowseView : UserControl
                             TextTrimming = TextTrimming.CharacterEllipsis,
                             FontSize = 12
                         };
-                        Grid.SetColumn(textBlock, i);
-                        grid.Children.Add(textBlock);
                     }
+                    Grid.SetColumn(control, i);
+                    grid.Children.Add(control);
                 }
             }
             catch (Exception ex)
