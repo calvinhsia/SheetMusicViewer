@@ -45,6 +45,7 @@ public class BrowseControl : DockPanel
     public interface IBrowseCustomField
     {
         Control? CreateControl();
+        string SortKey { get; set; }
     }
 
     /// <summary>
@@ -62,9 +63,9 @@ public class BrowseControl : DockPanel
     /// </summary>
     public class BrowseField<T, U> : IBrowseCustomField<T, U>
     {
-        private readonly Func<T, U, Control> _getControlFunc;
+        private readonly Func<BrowseField<T, U>, Control> _getControlFunc;
 
-        public BrowseField(T data, U entry, Func<T, U, Control> getControl)
+        public BrowseField(T data, U entry, Func<BrowseField<T, U>, Control> getControl)
         {
             Data = data;
             Entry = entry;
@@ -73,9 +74,11 @@ public class BrowseControl : DockPanel
 
         public T Data { get; }
         public U Entry { get; }
+        public string SortKey { get; set; } = string.Empty;
+
 
         /// <summary>Invokes the factory to produce the cell control.</summary>
-        public Control? CreateControl() => _getControlFunc(Data, Entry);
+        public Control? CreateControl() => _getControlFunc(this);
     }
     /// <summary>
     /// Creates a new BrowseControl with filterable, sortable list display.
@@ -718,8 +721,6 @@ public class ListBoxBrowseView : UserControl
             {
                 Debug.WriteLine($"Error getting value for {col.BindingPath}: {ex.Message}");
             }
-
-
         }
 
         // Note: The dummy column at the end (_headerGrid.ColumnDefinitions.Count - 1) is left empty
@@ -1041,7 +1042,10 @@ public class ListBoxBrowseView : UserControl
             var prop = TypeDescriptor.GetProperties(item)[propertyPath];
             if (prop != null)
             {
-                return prop.GetValue(item) ?? string.Empty;
+                var value = prop.GetValue(item);
+                if (value is BrowseControl.IBrowseCustomField customField)
+                    return customField.SortKey;
+                return value ?? string.Empty;
             }
         }
         catch (Exception ex)
