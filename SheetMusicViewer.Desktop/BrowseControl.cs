@@ -33,6 +33,7 @@ public class BrowseControl : DockPanel
     /// Default row height for normal density (good for mouse interaction)
     /// </summary>
     public const int DefaultRowHeight = 20;
+    public const int DefaultColumnWidth = 120; // Default width when colWidths not provided
 
     /// <summary>
     /// Larger row height for touch/fat finger interaction
@@ -75,7 +76,6 @@ public class BrowseControl : DockPanel
         public T Data { get; }
         public U Entry { get; }
         public string SortKey { get; set; } = string.Empty;
-
 
         /// <summary>Invokes the factory to produce the cell control.</summary>
         public Control? CreateControl() => _getControlFunc(this);
@@ -289,7 +289,6 @@ public class ListBoxBrowseView : UserControl
 #pragma warning disable CS0414 // Field is assigned but never used
     private bool _isResizing = false;
 #pragma warning restore CS0414
-    private const int DefaultColumnWidth = 120; // Default width when colWidths not provided
 
     public Grid HeaderGrid => _headerGrid;
     public IList SelectedItems => _listBox?.SelectedItems ?? new List<object>();
@@ -348,7 +347,7 @@ public class ListBoxBrowseView : UserControl
             //    }
             //}
 
-            int width = DefaultColumnWidth; // Use default width
+            int width = BrowseControl.DefaultColumnWidth; // Use default width
             if (_colWidths != null && colIndex < _colWidths.Length)
             {
                 width = _colWidths[colIndex];
@@ -764,6 +763,22 @@ public class ListBoxBrowseView : UserControl
         return value.ToString() ?? string.Empty;
     }
 
+    /// <summary>
+    /// Returns items to export, always in the current sort order from _filteredItems.
+    /// When a selection exists, only selected items are included but their order
+    /// follows _filteredItems, not the order in which they were selected.
+    /// </summary>
+    private IEnumerable<object> GetItemsInSortOrder()
+    {
+        var selected = _listBox.SelectedItems;
+        if (selected != null && selected.Count > 0)
+        {
+            var selectedSet = selected.Cast<object>().ToHashSet(ReferenceEqualityComparer.Instance);
+            return _filteredItems.Where(item => selectedSet.Contains(item));
+        }
+        return _filteredItems;
+    }
+
     private async void OnCopyClick(object? sender, RoutedEventArgs e)
     {
         try
@@ -776,7 +791,7 @@ public class ListBoxBrowseView : UserControl
             }
 
             var sb = new System.Text.StringBuilder();
-            foreach (var item in selectedItems)
+            foreach (var item in GetItemsInSortOrder())
             {
                 var props = TypeDescriptor.GetProperties(item);
                 var values = new List<string>();
@@ -805,11 +820,7 @@ public class ListBoxBrowseView : UserControl
     {
         try
         {
-            // Use selected items if any are selected, otherwise use all filtered items
-            var itemsToExport = _listBox.SelectedItems != null && _listBox.SelectedItems.Count > 0
-                ? _listBox.SelectedItems.Cast<object>()
-                : _filteredItems.Cast<object>();
-
+            var itemsToExport = GetItemsInSortOrder();
             var itemCount = itemsToExport.Count();
 
             // Create temp file like the original WPF version
@@ -865,11 +876,7 @@ public class ListBoxBrowseView : UserControl
     {
         try
         {
-            // Use selected items if any are selected, otherwise use all filtered items
-            var itemsToExport = _listBox.SelectedItems != null && _listBox.SelectedItems.Count > 0
-                ? _listBox.SelectedItems.Cast<object>()
-                : _filteredItems.Cast<object>();
-
+            var itemsToExport = GetItemsInSortOrder();
             var itemCount = itemsToExport.Count();
 
             // Create temp file like the original WPF version
