@@ -63,13 +63,13 @@ public class MetaDataFormTests : TestBase
             NPagesInThisVolume = 120
         });
 
-        metadata.TocEntries.Add(new TOCEntry { PageNo = 2,  SongName = "Fur Elise",             Composer = "Beethoven", Date = "1810" });
-        metadata.TocEntries.Add(new TOCEntry { PageNo = 6,  SongName = "Moonlight Sonata Mvt 1", Composer = "Beethoven", Date = "1801" });
-        metadata.TocEntries.Add(new TOCEntry { PageNo = 12, SongName = "Prelude in C",           Composer = "Bach",      Date = "1722" });
-        metadata.TocEntries.Add(new TOCEntry { PageNo = 16, SongName = "Gymnopedie No. 1",       Composer = "Satie",     Date = "1888" });
-        metadata.TocEntries.Add(new TOCEntry { PageNo = 20, SongName = "Clair de Lune",          Composer = "Debussy",   Date = "1905", Notes = "Suite bergamasque" });
+        metadata.TocEntries.Add(new TOCEntry { PageNo = 2, SongName = "Fur Elise", Composer = "Beethoven", Date = "1810" });
+        metadata.TocEntries.Add(new TOCEntry { PageNo = 6, SongName = "Moonlight Sonata Mvt 1", Composer = "Beethoven", Date = "1801", Link = "http:somesamplelink.com" });
+        metadata.TocEntries.Add(new TOCEntry { PageNo = 12, SongName = "Prelude in C", Composer = "Bach", Date = "1722" });
+        metadata.TocEntries.Add(new TOCEntry { PageNo = 16, SongName = "Gymnopedie No. 1", Composer = "Satie", Date = "1888" });
+        metadata.TocEntries.Add(new TOCEntry { PageNo = 20, SongName = "Clair de Lune", Composer = "Debussy", Date = "1905", Notes = "Suite bergamasque" });
 
-        metadata.Favorites.Add(new Favorite { Pageno = 6,  FavoriteName = "Moonlight Sonata" });
+        metadata.Favorites.Add(new Favorite { Pageno = 6, FavoriteName = "Moonlight Sonata" });
         metadata.Favorites.Add(new Favorite { Pageno = 20, FavoriteName = "Clair de Lune" });
 
         return metadata;
@@ -96,11 +96,11 @@ public class MetaDataFormTests : TestBase
         var viewModel = new MetaDataFormViewModel(metadata, _tempFolder);
 
         Assert.AreEqual(5, viewModel.TocEntries.Count, "Should load 5 TOC entries");
-        Assert.AreEqual("Fur Elise",          viewModel.TocEntries[0].SongName);
-        Assert.AreEqual("Beethoven",          viewModel.TocEntries[0].Composer);
-        Assert.AreEqual(2,                    viewModel.TocEntries[0].PageNo);
-        Assert.AreEqual("Clair de Lune",      viewModel.TocEntries[4].SongName);
-        Assert.AreEqual("Suite bergamasque",  viewModel.TocEntries[4].Notes);
+        Assert.AreEqual("Fur Elise", viewModel.TocEntries[0].SongName);
+        Assert.AreEqual("Beethoven", viewModel.TocEntries[0].Composer);
+        Assert.AreEqual(2, viewModel.TocEntries[0].PageNo);
+        Assert.AreEqual("Clair de Lune", viewModel.TocEntries[4].SongName);
+        Assert.AreEqual("Suite bergamasque", viewModel.TocEntries[4].Notes);
     }
 
     [TestMethod]
@@ -113,7 +113,7 @@ public class MetaDataFormTests : TestBase
         var viewModel = new MetaDataFormViewModel(metadata, _tempFolder);
 
         Assert.AreEqual(2, viewModel.Favorites.Count, "Should load 2 favorites");
-        Assert.AreEqual(6,  viewModel.Favorites[0].PageNo);
+        Assert.AreEqual(6, viewModel.Favorites[0].PageNo);
         Assert.AreEqual(20, viewModel.Favorites[1].PageNo);
     }
 
@@ -206,14 +206,14 @@ public class MetaDataFormTests : TestBase
         metadata.VolumeInfoList.Add(new PdfVolumeInfoBase { FileNameVolume = Path.GetFileName(pdfPath), NPagesInThisVolume = 30 });
         // Add entries deliberately out of order
         metadata.TocEntries.Add(new TOCEntry { PageNo = 15, SongName = "Second" });
-        metadata.TocEntries.Add(new TOCEntry { PageNo = 5,  SongName = "First" });
+        metadata.TocEntries.Add(new TOCEntry { PageNo = 5, SongName = "First" });
         metadata.TocEntries.Add(new TOCEntry { PageNo = 25, SongName = "Third" });
 
         var viewModel = new MetaDataFormViewModel(metadata, _tempFolder);
 
-        Assert.AreEqual("First",  viewModel.TocEntries[0].SongName, "TOC entries should be sorted by page number");
+        Assert.AreEqual("First", viewModel.TocEntries[0].SongName, "TOC entries should be sorted by page number");
         Assert.AreEqual("Second", viewModel.TocEntries[1].SongName);
-        Assert.AreEqual("Third",  viewModel.TocEntries[2].SongName);
+        Assert.AreEqual("Third", viewModel.TocEntries[2].SongName);
     }
 
     [TestMethod]
@@ -227,11 +227,11 @@ public class MetaDataFormTests : TestBase
 
         // Moonlight Sonata (page 6) is a favorite; Fur Elise (page 2) is not.
         var moonlight = viewModel.TocEntries.FirstOrDefault(e => e.PageNo == 6);
-        var furElise  = viewModel.TocEntries.FirstOrDefault(e => e.PageNo == 2);
+        var furElise = viewModel.TocEntries.FirstOrDefault(e => e.PageNo == 2);
         Assert.IsNotNull(moonlight);
-        Assert.IsTrue(moonlight.IsFavorite,   "Moonlight Sonata should be marked as favorite");
+        Assert.IsTrue(moonlight.IsFavorite, "Moonlight Sonata should be marked as favorite");
         Assert.IsNotNull(furElise);
-        Assert.IsFalse(furElise.IsFavorite,   "Fur Elise should not be marked as favorite");
+        Assert.IsFalse(furElise.IsFavorite, "Fur Elise should not be marked as favorite");
     }
 
     // ===== Integration Test =====
@@ -253,9 +253,9 @@ public class MetaDataFormTests : TestBase
 
         // Assert
         Assert.AreEqual(5, viewModel.TocEntries.Count, "TOC entry count should survive JSON round-trip");
-        Assert.AreEqual(2, viewModel.Favorites.Count,  "Favorites count should survive JSON round-trip");
+        Assert.AreEqual(2, viewModel.Favorites.Count, "Favorites count should survive JSON round-trip");
         Assert.AreEqual(2, viewModel.PageNumberOffset, "PageNumberOffset should survive JSON round-trip");
-        Assert.IsFalse(viewModel.IsDirty,              "ViewModel should not be dirty after clean load");
+        Assert.IsFalse(viewModel.IsDirty, "ViewModel should not be dirty after clean load");
     }
 
     // ===== Manual Tests (window UI) =====

@@ -678,14 +678,16 @@ public class BrowseControlTests : TestBase
                                         return new TextBlock();
                                     var btn = new Button
                                     {
-                                        Content = field.Entry.Link,
+                                        Content = "🔗",
                                         Padding = new Thickness(2, 0),
                                         BorderThickness = new Thickness(0),
                                         Background = Brushes.Transparent,
                                         Foreground = Brushes.Blue,
                                         Cursor = new Cursor(StandardCursorType.Hand),
-                                        FontSize = 11
+                                        FontSize = 11,
+                                        [ToolTip.TipProperty] = field.Entry.Link
                                     };
+
                                     btn.Click += (s, e) =>
                                     {
                                         Trace.WriteLine($"Clicked Link for {field.Entry.SongName}: {field.Entry.Link}");

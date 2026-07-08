@@ -949,6 +949,7 @@ public class ListBoxBrowseView : UserControl
 
         try
         {
+            // The BrowseField may not have been instantiated yet, so the sort may be wrong
             var sortedItems = ascending
                 ? _filteredItems.OrderBy(item => GetPropertyValue(item, col.BindingPath)).ToList()
                 : _filteredItems.OrderByDescending(item => GetPropertyValue(item, col.BindingPath)).ToList();
