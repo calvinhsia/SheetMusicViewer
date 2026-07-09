@@ -20,9 +20,9 @@ namespace SheetMusicViewer.Desktop;
 public partial class MetaDataFormWindow : Window
 {
     private MetaDataFormViewModel? _viewModel;
-    private DataGrid? _tocDataGrid;
+    private BrowseControl? _tocBrowseControl;
     private BrowseControl? _favoritesBrowseControl;
-    private readonly DoubleTapHelper _doubleTapHelper = new();
+    private bool _isUpdatingTocSelection;
     
     /// <summary>
     /// Page number to navigate to after closing (set when user double-clicks a TOC entry or favorite)
@@ -47,14 +47,8 @@ public partial class MetaDataFormWindow : Window
         
         _viewModel = viewModel;
         DataContext = viewModel;
-        _tocDataGrid = this.FindControl<DataGrid>("TocDataGrid");
 
-        // Wire up custom double-tap handling for TOC grid
-        if (_tocDataGrid != null)
-        {
-            _tocDataGrid.PointerPressed += TocDataGrid_PointerPressed;
-        }
-
+        BuildTocPanel(viewModel);
         BuildFavoritesPanel(viewModel);
 
         viewModel.CloseAction = (saved) =>
@@ -107,8 +101,6 @@ public partial class MetaDataFormWindow : Window
         if (e.Key == Key.Escape)
         {
             e.Handled = true;
-            // Commit any pending DataGrid edits before checking dirty state
-            _tocDataGrid?.CommitEdit();
             await TryCloseAsync();
         }
     }
@@ -206,29 +198,181 @@ public partial class MetaDataFormWindow : Window
     {
         AvaloniaXamlLoader.Load(this);
     }
-    
-    private void TocDataGrid_PointerPressed(object? sender, PointerPressedEventArgs e)
+
+    private void BuildTocPanel(MetaDataFormViewModel viewModel)
     {
-        if (_doubleTapHelper.IsDoubleTap(sender, e))
+        var panel = this.FindControl<Grid>("TocPanel");
+        if (panel == null) return;
+
+        _tocBrowseControl = BuildTocBrowseControl(viewModel);
+        panel.Children.Add(_tocBrowseControl);
+
+        // Keep ViewModel.SelectedItem in sync with BrowseControl selection
+        _tocBrowseControl.ListView.SelectionChanged += (s, e) => SyncTocSelectionToViewModel();
+
+        // Double-tap navigates to the page
+        _tocBrowseControl.ListView.DoubleTapped += (s, e) =>
         {
             if (_viewModel?.SelectedItem != null)
             {
                 PageNumberResult = _viewModel.SelectedItem.PageNo;
                 WasSaved = true;
                 Close();
-                e.Handled = true;
             }
+        };
+
+        // Rebuild BrowseControl when entries are added or removed (Add/Delete row)
+        viewModel.TocEntries.CollectionChanged += (s, e) =>
+        {
+            panel.Children.Clear();
+            _tocBrowseControl = BuildTocBrowseControl(viewModel);
+            _tocBrowseControl.ListView.SelectionChanged += (s2, e2) => SyncTocSelectionToViewModel();
+            _tocBrowseControl.ListView.DoubleTapped += (s2, e2) =>
+            {
+                if (_viewModel?.SelectedItem != null)
+                {
+                    PageNumberResult = _viewModel.SelectedItem.PageNo;
+                    WasSaved = true;
+                    Close();
+                }
+            };
+            panel.Children.Add(_tocBrowseControl);
+
+            // Re-select after rebuild
+            if (_viewModel?.SelectedItem != null)
+                SyncBrowseControlSelectionToTocEntry(_viewModel.SelectedItem);
+        };
+
+        // When ViewModel.SelectedItem changes (e.g. from AddRow), sync browse control selection
+        viewModel.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(MetaDataFormViewModel.SelectedItem) && _viewModel?.SelectedItem != null)
+                SyncBrowseControlSelectionToTocEntry(_viewModel.SelectedItem);
+        };
+
+        // Initial selection
+        if (viewModel.SelectedItem != null)
+            SyncBrowseControlSelectionToTocEntry(viewModel.SelectedItem);
+    }
+
+    private BrowseControl BuildTocBrowseControl(MetaDataFormViewModel viewModel)
+    {
+        var query = from toc in viewModel.TocEntries
+                    select new
+                    {
+                        Page = toc.PageNo,
+                        Fav = new BrowseControl.BrowseField<string, TocEntryViewModel>(
+                            toc.FavDisplay, toc, (field) =>
+                            {
+                                return new TextBlock
+                                {
+                                    Text = field.Data,
+                                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                                    FontSize = 12
+                                };
+                            }) { SortKey = toc.FavDisplay },
+                        Lnk = new BrowseControl.BrowseField<string, TocEntryViewModel>(
+                            toc.LinkDisplay, toc, (field) =>
+                            {
+                                var ctrl = string.IsNullOrEmpty(field.Entry.Link)
+                                    ? (Control)new TextBlock { Text = "" }
+                                    : new Button
+                                    {
+                                        Content = "🔗",
+                                        Padding = new Avalonia.Thickness(2),
+                                        Background = Avalonia.Media.Brushes.Transparent,
+                                        BorderThickness = new Avalonia.Thickness(0),
+                                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                                        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                                        [ToolTip.TipProperty] = field.Entry.Link ?? string.Empty
+                                    };
+                                if (ctrl is Button btn)
+                                    btn.Click += (s, e) => { if (!string.IsNullOrEmpty(field.Entry.Link)) OpenUrl(field.Entry.Link); };
+                                return ctrl;
+                            }) { SortKey = toc.LinkDisplay },
+                        Mxl = new BrowseControl.BrowseField<string, TocEntryViewModel>(
+                            toc.HasCachedMxl ? "🎵" : "", toc, (field) =>
+                            {
+                                if (!field.Entry.HasCachedMxl) return new TextBlock { Text = "" };
+                                var btn = new Button
+                                {
+                                    Content = "🎵",
+                                    Padding = new Avalonia.Thickness(2),
+                                    Background = Avalonia.Media.Brushes.Transparent,
+                                    BorderThickness = new Avalonia.Thickness(0),
+                                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                                    [ToolTip.TipProperty] = "Open cached MXL in MuseScore"
+                                };
+                                btn.Click += (s, e) => field.Entry.OpenInMuseScoreCommand.Execute(null);
+                                return btn;
+                            }) { SortKey = toc.HasCachedMxl ? "🎵" : "" },
+                        toc.SongName,
+                        toc.Composer,
+                        toc.Date,
+                        toc.Notes,
+                        _Toc = toc
+                    };
+
+        // Columns: Page=60, Fav=45, Lnk=45, Mxl=45, SongName=300, Composer=160, Date=80, Notes=*
+        return new BrowseControl(query,
+            colWidths: new[] { 60, 45, 45, 45, 300, 160, 80, 0 },
+            rowHeight: BrowseControl.DefaultRowHeight);
+    }
+
+    private void SyncTocSelectionToViewModel()
+    {
+        if (_isUpdatingTocSelection || _viewModel == null || _tocBrowseControl == null) return;
+        _isUpdatingTocSelection = true;
+        try
+        {
+            var selected = _tocBrowseControl.ListView.SelectedItem;
+            var tocProp = selected?.GetType().GetProperty("_Toc");
+            if (tocProp?.GetValue(selected) is TocEntryViewModel toc)
+                _viewModel.SelectedItem = toc;
+        }
+        finally
+        {
+            _isUpdatingTocSelection = false;
         }
     }
-    
-    // Keep the existing DoubleTapped handler as fallback for mouse double-click
-    private void TocDataGrid_DoubleTapped(object? sender, RoutedEventArgs e)
+
+    private void SyncBrowseControlSelectionToTocEntry(TocEntryViewModel target)
     {
-        if (_viewModel?.SelectedItem != null)
+        if (_isUpdatingTocSelection || _tocBrowseControl == null) return;
+        _isUpdatingTocSelection = true;
+        try
         {
-            PageNumberResult = _viewModel.SelectedItem.PageNo;
-            WasSaved = true;
-            Close();
+            _tocBrowseControl.ListView.SelectFirstMatch(item =>
+            {
+                var tocProp = item.GetType().GetProperty("_Toc");
+                return tocProp?.GetValue(item) is TocEntryViewModel t && t == target;
+            });
+        }
+        finally
+        {
+            _isUpdatingTocSelection = false;
+        }
+    }
+
+    // Static helper used by the Lnk column button
+    private static void OpenUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return;
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return;
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to open URL: {ex.Message}");
         }
     }
 

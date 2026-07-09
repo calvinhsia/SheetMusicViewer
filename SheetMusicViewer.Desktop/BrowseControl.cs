@@ -107,8 +107,6 @@ public class BrowseControl : DockPanel
             this.Children.Add(ListView);
 
             _listFilter.SetBrowseList(ListView);
-
-            Debug.WriteLine($"BrowseControl: Created with virtualization and column resizing support");
         }
         catch (Exception ex)
         {
@@ -296,6 +294,11 @@ public class ListBoxBrowseView : UserControl
     public object? SelectedItem => _listBox?.SelectedItem;
 
     /// <summary>
+    /// Raised when the user changes the selection in the list.
+    /// </summary>
+    public event EventHandler<SelectionChangedEventArgs>? SelectionChanged;
+
+    /// <summary>
     /// Sets the selected index of the underlying ListBox
     /// </summary>
     public void SetSelectedIndex(int index)
@@ -304,6 +307,24 @@ public class ListBoxBrowseView : UserControl
         {
             _listBox.SelectedIndex = index;
         }
+    }
+
+    /// <summary>
+    /// Selects the first item in the filtered list whose property matching <paramref name="predicate"/> returns true.
+    /// </summary>
+    public void SelectFirstMatch(Func<object, bool> predicate)
+    {
+        if (_listBox == null) return;
+        for (int i = 0; i < _filteredItems.Count; i++)
+        {
+            if (predicate(_filteredItems[i]))
+            {
+                _listBox.SelectedIndex = i;
+                _listBox.ScrollIntoView(_filteredItems[i]);
+                return;
+            }
+        }
+        _listBox.SelectedIndex = -1;
     }
 
     public ListBoxBrowseView(IEnumerable query, BrowseControl browseControl)
@@ -379,26 +400,39 @@ public class ListBoxBrowseView : UserControl
         };
 
         double minWidth = 0;
+        bool hasStarColumn = false;
         foreach (var col in _columns)
         {
             minWidth += col.Width > 0 ? col.Width : 150;
         }
-        foreach (var col in _columns)
+        for (int ci = 0; ci < _columns.Count; ci++)
         {
+            var col = _columns[ci];
             var colDef = new ColumnDefinition();
-            if (col.Width > 0)
+            bool isLast = ci == _columns.Count - 1;
+            if (col.Width <= 0)
             {
-                colDef.Width = new GridLength(col.Width);
+                // Caller explicitly requested a Star column
+                colDef.Width = new GridLength(1, GridUnitType.Star);
+                hasStarColumn = true;
+            }
+            else if (isLast && !hasStarColumn)
+            {
+                // All columns so far are fixed: promote the last one to Star so the
+                // header button (and the matching item cell) stretches to the right edge,
+                // eliminating the unstyled empty gap that a trailing filler column produces.
+                colDef.MinWidth = col.Width;
+                colDef.Width = new GridLength(1, GridUnitType.Star);
+                hasStarColumn = true;
             }
             else
             {
-                colDef.Width = new GridLength(1, GridUnitType.Star);
+                colDef.Width = new GridLength(col.Width);
             }
             _headerGrid.ColumnDefinitions.Add(colDef);
         }
 
-        // Add an extra dummy column at the end to allow the last column to resize
-        _headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        // No trailing filler column needed: the last column is already Star.
 
         for (int i = 0; i < _columns.Count; i++)
         {
@@ -449,16 +483,22 @@ public class ListBoxBrowseView : UserControl
             VerticalAlignment = VerticalAlignment.Stretch,
             SelectionMode = SelectionMode.Multiple,
             ItemsSource = _filteredItems,
-            BorderThickness = new Thickness(0)  // Remove border to keep columns aligned with header
+            BorderThickness = new Thickness(0)
         };
 
-        // Reduce ListBoxItem padding/margin to minimize vertical spacing - use theme-aware colors
+        // Reduce ListBoxItem padding/margin to minimize vertical spacing.
+        // HorizontalContentAlignment=Stretch is critical: without it the inner ContentPresenter
+        // does not stretch its child to fill the item width, so fixed-width item grids appear
+        // narrower than the ListBoxItem selection highlight.
         var itemStyle = new Style(x => x.OfType<ListBoxItem>());
         itemStyle.Setters.Add(new Setter(ListBoxItem.PaddingProperty, new Thickness(0)));
         itemStyle.Setters.Add(new Setter(ListBoxItem.MarginProperty, new Thickness(0)));
         itemStyle.Setters.Add(new Setter(ListBoxItem.MinHeightProperty, (double)_rowHeight));
         itemStyle.Setters.Add(new Setter(ListBoxItem.FontSizeProperty, 12.0));
+        itemStyle.Setters.Add(new Setter(ListBoxItem.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
         _listBox.Styles.Add(itemStyle);
+
+        _listBox.SelectionChanged += (s, e) => SelectionChanged?.Invoke(this, e);
 
         // Create and attach context menu
         var contextMenu = new ContextMenu();
@@ -476,7 +516,10 @@ public class ListBoxBrowseView : UserControl
         contextMenu.Items.Add(exportTxtMenuItem);
 
         _listBox.ContextMenu = contextMenu;
-        Debug.WriteLine($"ListBoxBrowseView: Context menu created with {contextMenu.Items.Count} items");
+
+        // Disable horizontal scroll as soon as the ListBox's control template is applied
+        // (fires before the first measure pass, so star-columns in items are never measured with infinite width).
+        _listBox.TemplateApplied += OnListBoxTemplateApplied;
 
         // Use Loaded event to customize containers after they're created
         _listBox.Loaded += OnListBoxLoaded;
@@ -493,63 +536,65 @@ public class ListBoxBrowseView : UserControl
 
         this.Content = innerPanel;
 
-        Debug.WriteLine($"ListBoxBrowseView: Visual structure created with ListBox virtualization and resizable columns");
+        // When the header re-lays-out (including first render), regenerate item grids
+        // using the header's actual pixel column widths so star columns match exactly.
+        _headerGrid.LayoutUpdated += OnHeaderGridLayoutUpdated;
+    }
+
+    private double _lastHeaderWidth = -1;
+
+    private void OnHeaderGridLayoutUpdated(object? sender, EventArgs e)
+    {
+        // Only act when the header width has actually changed and column ActualWidths are ready.
+        var totalActual = _headerGrid.ColumnDefinitions.Sum(c => c.ActualWidth);
+        if (totalActual < 1 || Math.Abs(totalActual - _lastHeaderWidth) < 0.5) return;
+        _lastHeaderWidth = totalActual;
+        RecustomizeVisibleContainers();
     }
 
     private void OnSplitterDragStarted(object? sender, VectorEventArgs e)
     {
         _isResizing = true;
-        Debug.WriteLine("Column resize started");
     }
 
     private void OnSplitterDragCompleted(object? sender, VectorEventArgs e)
     {
         _isResizing = false;
-        Debug.WriteLine("Column resize completed - regenerating visible items");
-
-        // Regenerate all visible item grids with new column widths
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             RecustomizeVisibleContainers();
         }, Avalonia.Threading.DispatcherPriority.Background);
     }
 
+    private void OnListBoxTemplateApplied(object? sender, Avalonia.Controls.Primitives.TemplateAppliedEventArgs e)
+    {
+        // Find the ListBox's internal ScrollViewer at template-apply time (before the first measure
+        // pass) and disable horizontal scrolling so Star columns in item grids are not measured
+        // against infinite width.
+        var sv = e.NameScope.Find<ScrollViewer>("PART_ScrollViewer")
+               ?? _listBox.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
+        if (sv != null)
+            sv.HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled;
+    }
+
     private void OnListBoxLoaded(object? sender, RoutedEventArgs e)
     {
         try
         {
-            Debug.WriteLine("OnListBoxLoaded: ListBox loaded, customizing visible containers");
-
-            Debug.WriteLine($"  ItemsSource has {_filteredItems.Count} items");
-
-            var presenter = _listBox.Presenter;
-            var panel = presenter?.Panel;
-            Debug.WriteLine($"  Panel type: {panel?.GetType().Name ?? "NULL"}");
-            Debug.WriteLine($"  Panel children count: {panel?.Children.Count ?? 0}");
-
-            int customizedCount = 0;
             for (int i = 0; i < _filteredItems.Count; i++)
             {
                 var container = _listBox.ContainerFromIndex(i) as ListBoxItem;
                 if (container != null)
                 {
-                    var item = _filteredItems[i];
-                    var grid = CreateItemGrid(item);
-                    container.Content = grid;
-                    customizedCount++;
+                    container.Content = CreateItemGrid(_filteredItems[i]);
                 }
             }
 
-            Debug.WriteLine($"  ? Customized {customizedCount} visible containers");
-
-            // Subscribe to EffectiveViewportChanged for scrolling
             _listBox.EffectiveViewportChanged += OnEffectiveViewportChanged;
-            Debug.WriteLine($"  ? Subscribed to EffectiveViewportChanged for dynamic customization");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"ERROR in OnListBoxLoaded: {ex.Message}");
-            Debug.WriteLine($"  Stack: {ex.StackTrace}");
+            Debug.WriteLine($"ERROR in OnListBoxLoaded: {ex.Message}\n{ex.StackTrace}");
         }
     }
 
@@ -557,109 +602,35 @@ public class ListBoxBrowseView : UserControl
     {
         try
         {
-            // Get info about what's actually visible
-            var presenter = _listBox.Presenter;
-            var panel = presenter?.Panel;
-            var visibleIndices = new List<int>();
-
-            // Force re-customization of all visible containers
-            int customizedCount = 0;
-            int toStringCount = 0;
-            int alreadyGridCount = 0;
-
             for (int i = 0; i < _filteredItems.Count; i++)
             {
                 var container = _listBox.ContainerFromIndex(i) as ListBoxItem;
                 if (container != null)
                 {
-                    visibleIndices.Add(i);
-
-                    var item = _filteredItems[i];
-
-                    // Log BEFORE setting Content
-                    var contentBefore = container.Content;
-                    var contentBeforeType = contentBefore?.GetType().Name ?? "NULL";
-                    var isGridBefore = contentBefore is Grid;
-                    var isToStringBefore = !isGridBefore && contentBefore != null;
-
-                    if (isToStringBefore)
-                    {
-                        toStringCount++;
-                        Debug.WriteLine($"  ?? Container {i}: WAS ToString ({contentBeforeType}), fixing now...");
-                    }
-                    else if (isGridBefore)
-                    {
-                        alreadyGridCount++;
-                    }
-
-                    // Create and set the new Grid
-                    var grid = CreateItemGrid(item);
+                    var grid = CreateItemGrid(_filteredItems[i]);
                     container.Content = grid;
-
-                    // Log IMMEDIATELY AFTER setting Content
-                    var contentAfter = container.Content;
-                    var contentAfterType = contentAfter?.GetType().Name ?? "NULL";
-                    var isSameReference = ReferenceEquals(contentAfter, grid);
-
-                    customizedCount++;
-
-                    // Detailed logging only for ToString cases
-                    if (isToStringBefore)
-                    {
-                        Debug.WriteLine($"       AFTER fix: {contentAfterType}, SameRef={isSameReference}");
-                    }
                 }
-            }
-
-            if (customizedCount > 0)
-            {
-                var indicesStr = visibleIndices.Count <= 5
-                    ? string.Join(", ", visibleIndices)
-                    : $"{visibleIndices[0]}..{visibleIndices[visibleIndices.Count - 1]}";
-
-                Debug.WriteLine($"OnEffectiveViewportChanged: Visible indices [{indicesStr}], " +
-                    $"Customized={customizedCount}, ToString={toStringCount}, AlreadyGrid={alreadyGridCount}");
             }
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"ERROR in OnEffectiveViewportChanged: {ex.Message}");
-            Debug.WriteLine($"  Stack: {ex.StackTrace}");
         }
     }
 
     private void OnListBoxLayoutUpdated(object? sender, EventArgs e)
     {
-        // This fires frequently during layout changes, including when new containers are virtualized
-        // We use it to catch newly created containers and convert them from ToString to Grid
         try
         {
-            int fixedCount = 0;
-
             for (int i = 0; i < _filteredItems.Count; i++)
             {
                 var container = _listBox.ContainerFromIndex(i) as ListBoxItem;
-                if (container != null)
+                if (container != null && !(container.Content is Grid))
                 {
-                    var contentBefore = container.Content;
-                    var isToStringBefore = contentBefore != null && !(contentBefore is Grid);
-
-                    if (isToStringBefore)
-                    {
-                        var item = _filteredItems[i];
-                        var grid = CreateItemGrid(item);
-                        container.Content = grid;
-                        fixedCount++;
-                    }
+                    var grid = CreateItemGrid(_filteredItems[i]);
+                    container.Content = grid;
                 }
             }
-
-            // Only log when we actually fix containers (reduce noise)
-            // Remove or comment out this line in production if desired
-            // if (fixedCount > 0)
-            // {
-            //     Debug.WriteLine($"OnListBoxLayoutUpdated: Fixed {fixedCount} containers");
-            // }
         }
         catch (Exception ex)
         {
@@ -677,10 +648,29 @@ public class ListBoxBrowseView : UserControl
             Margin = new Thickness(0)
         };
 
-        // Copy column definitions from header grid to ensure synchronization (including the dummy column at the end)
+        // Use the header's actual measured pixel widths for fixed columns so the item grid
+        // is always an exact match to the header. The last column is always Star (promoted
+        // in the header construction above), so leave it as Star in the item grid too —
+        // with horizontal scrolling disabled and the item grid stretching to fill the
+        // ListBoxItem, a Star column here resolves to the same remaining width as the header.
         foreach (var colDef in _headerGrid.ColumnDefinitions)
         {
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = colDef.Width });
+            ColumnDefinition itemCol;
+            if (colDef.Width.IsStar)
+            {
+                // Star column: copy min-width constraint and let it stretch naturally
+                itemCol = new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = colDef.MinWidth };
+            }
+            else if (colDef.ActualWidth > 0)
+            {
+                // Fixed column: pin to exact measured pixel width
+                itemCol = new ColumnDefinition { Width = new GridLength(colDef.ActualWidth) };
+            }
+            else
+            {
+                itemCol = new ColumnDefinition { Width = colDef.Width };
+            }
+            grid.ColumnDefinitions.Add(itemCol);
         }
 
         for (int i = 0; i < _columns.Count; i++)
@@ -721,8 +711,6 @@ public class ListBoxBrowseView : UserControl
                 Debug.WriteLine($"Error getting value for {col.BindingPath}: {ex.Message}");
             }
         }
-
-        // Note: The dummy column at the end (_headerGrid.ColumnDefinitions.Count - 1) is left empty
 
         return grid;
     }
@@ -977,22 +965,14 @@ public class ListBoxBrowseView : UserControl
     {
         try
         {
-            Debug.WriteLine($"RecustomizeVisibleContainers: Re-customizing after collection change");
-
-            int customizedCount = 0;
             for (int i = 0; i < _filteredItems.Count; i++)
             {
                 var container = _listBox.ContainerFromIndex(i) as ListBoxItem;
                 if (container != null)
                 {
-                    var item = _filteredItems[i];
-                    var grid = CreateItemGrid(item);
-                    container.Content = grid;
-                    customizedCount++;
+                    container.Content = CreateItemGrid(_filteredItems[i]);
                 }
             }
-
-            Debug.WriteLine($"  ? Re-customized {customizedCount} visible containers after sort");
         }
         catch (Exception ex)
         {
