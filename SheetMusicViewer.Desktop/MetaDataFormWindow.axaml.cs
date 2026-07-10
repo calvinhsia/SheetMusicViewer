@@ -1,8 +1,11 @@
-﻿using Avalonia.Controls;
+﻿using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -13,6 +16,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SheetMusicViewer.Desktop;
@@ -63,6 +67,12 @@ public partial class MetaDataFormWindow : Window
             Close();
         };
         viewModel.GetClipboardFunc = () => Clipboard;
+
+        viewModel.ShowOcrResultAction = (rawText, suggestedJson) =>
+        {
+            var win = new OcrResultWindow(rawText, suggestedJson);
+            win.Show(this);
+        };
     }
     
     private void ApplyWindowSettings()
@@ -498,6 +508,12 @@ public partial class MetaDataFormViewModel : ObservableObject
     public Action<int>? CloseWithPageAction { get; set; }
     public Func<IClipboard?>? GetClipboardFunc { get; set; }
 
+    /// <summary>
+    /// Called by the command to display OCR results; the View wires this to <see cref="OcrResultWindow"/>.
+    /// Parameters: (rawText, suggestedJson)
+    /// </summary>
+    public Action<string, string>? ShowOcrResultAction { get; set; }
+
     public string Title { get; }
 
     /// <summary>
@@ -805,6 +821,39 @@ public partial class MetaDataFormViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task ExtractTocFromOcrAsync()
+    {
+        if (_pdfMetaData == null) return;
+
+        var pdfPath = _pdfMetaData.GetFullPathFileFromVolno(0);
+        if (string.IsNullOrEmpty(pdfPath) || !File.Exists(pdfPath))
+            return;
+
+        int rotation = _pdfMetaData.VolumeInfoList.Count > 0
+            ? _pdfMetaData.VolumeInfoList[0].Rotation
+            : 0;
+
+        // Run on a background thread so the UI stays responsive
+        List<PdfPageOcrResult> results;
+        try
+        {
+            results = await Task.Run(() =>
+                PdfOcrService.ExtractAsync(pdfPath, rotation));
+        }
+        catch (Exception ex)
+        {
+            ShowOcrResultAction?.Invoke(
+                $"OCR failed: {ex.Message}",
+                string.Empty);
+            return;
+        }
+
+        var rawText      = PdfOcrService.FormatRawText(results);
+        var suggestedJson = PdfOcrService.FormatSuggestedJson(results);
+        ShowOcrResultAction?.Invoke(rawText, suggestedJson);
+    }
+
+    [RelayCommand]
     private void Cancel()
     {
         CloseAction?.Invoke(false);
@@ -977,3 +1026,112 @@ internal class DummyPdfDocumentProvider : IPdfDocumentProvider
         return Task.FromResult(1);
     }
 }
+
+/// <summary>
+/// A lightweight, code-only Avalonia window that displays OCR extraction results
+/// (raw text and a suggested JSON TOC) in two side-by-side scrollable TextBoxes.
+/// The user can read, select, and copy content freely.
+/// </summary>
+internal sealed class OcrResultWindow : Window
+{
+    public OcrResultWindow(string rawText, string suggestedJson)
+    {
+        Title  = "OCR Extraction Results";
+        Width  = 1100;
+        Height = 700;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+
+        // ── layout ─────────────────────────────────────────────────
+        // [header label row]
+        // [raw-text panel | suggested-json panel]   (50/50 split)
+        // [status / copy-all button row]
+
+        var rawBox = BuildTextBox(rawText);
+        var jsonBox = BuildTextBox(suggestedJson);
+
+        var btnCopyRaw = new Button
+        {
+            Content = "Copy Raw Text",
+            Margin  = new Thickness(0, 0, 6, 0)
+        };
+        btnCopyRaw.Click += async (_, _) =>
+            await (Clipboard?.SetTextAsync(rawText) ?? Task.CompletedTask);
+
+        var btnCopyJson = new Button { Content = "Copy Suggested JSON" };
+        btnCopyJson.Click += async (_, _) =>
+            await (Clipboard?.SetTextAsync(suggestedJson) ?? Task.CompletedTask);
+
+        var btnClose = new Button
+        {
+            Content = "Close",
+            Margin  = new Thickness(12, 0, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+        btnClose.Click += (_, _) => Close();
+
+        var buttonRow = new DockPanel { Margin = new Thickness(0, 6, 0, 0) };
+        DockPanel.SetDock(btnClose, Dock.Right);
+        buttonRow.Children.Add(btnClose);
+        buttonRow.Children.Add(new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Children    = { btnCopyRaw, btnCopyJson }
+        });
+
+        var rawPanel = new DockPanel();
+        rawPanel.Children.Add(new TextBlock
+        {
+            Text       = "Raw OCR text (one line per page)",
+            FontWeight = FontWeight.SemiBold,
+            Margin     = new Thickness(0, 0, 0, 4),
+            [DockPanel.DockProperty] = Dock.Top
+        });
+        rawPanel.Children.Add(rawBox);
+
+        var jsonPanel = new DockPanel { Margin = new Thickness(8, 0, 0, 0) };
+        jsonPanel.Children.Add(new TextBlock
+        {
+            Text       = "Suggested TOC JSON (review & edit)",
+            FontWeight = FontWeight.SemiBold,
+            Margin     = new Thickness(0, 0, 0, 4),
+            [DockPanel.DockProperty] = Dock.Top
+        });
+        jsonPanel.Children.Add(jsonBox);
+
+        var splitGrid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*, 0, *")
+        };
+        splitGrid.Children.Add(rawPanel);
+        Grid.SetColumn(rawPanel, 0);
+        splitGrid.Children.Add(new GridSplitter
+        {
+            Width               = 4,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Background          = Brushes.Gray
+        });
+        Grid.SetColumn(splitGrid.Children[1], 1);
+        splitGrid.Children.Add(jsonPanel);
+        Grid.SetColumn(jsonPanel, 2);
+
+        var root = new DockPanel { Margin = new Thickness(10) };
+        DockPanel.SetDock(buttonRow, Dock.Bottom);
+        root.Children.Add(buttonRow);
+        root.Children.Add(splitGrid);
+
+        Content = root;
+    }
+
+    private static TextBox BuildTextBox(string text) => new()
+    {
+        Text             = text,
+        IsReadOnly       = false,   // allow selection + copy
+        AcceptsReturn    = true,
+        TextWrapping     = TextWrapping.NoWrap,
+        FontFamily       = new FontFamily("Courier New,Consolas,monospace"),
+        FontSize         = 12,
+        [ScrollViewer.HorizontalScrollBarVisibilityProperty] = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+        [ScrollViewer.VerticalScrollBarVisibilityProperty]   = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto
+    };
+}
+

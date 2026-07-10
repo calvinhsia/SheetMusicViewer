@@ -22,6 +22,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.9" />
+    <PackageReference Include="Tesseract" Version="5.2.0" />
     <PackageReference Include="Tmds.DBus.Protocol" Version="0.21.3" />
     <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.9" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.9" />
@@ -36,4 +37,25 @@
     <PackageReference Include="PDFtoImage" Version="5.0.0" />
     <PackageReference Include="SkiaSharp" Version="3.116.1" />
   </ItemGroup>
+
+  <!-- Tesseract language data — see Desktop project for download notes -->
+  <PropertyGroup>
+    <TessdataDir Condition="'$(SolutionDir)' != '' And '$(SolutionDir)' != '*Undefined*'">$(SolutionDir)tessdata\</TessdataDir>
+    <TessdataDir Condition="'$(TessdataDir)' == ''">$(MSBuildProjectDirectory)\..\tessdata\</TessdataDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="$(TessdataDir)eng.traineddata"
+             CopyToOutputDirectory="PreserveNewest"
+             Link="tessdata\eng.traineddata"
+             Condition="Exists('$(TessdataDir)eng.traineddata')" />
+  </ItemGroup>
+
+  <!--
+    Download target intentionally omitted here: SheetMusicViewer.Desktop builds first
+    (it is a ProjectReference) and its DownloadTessdata target will have already
+    fetched the file before this project's build starts.
+    If you build AvaloniaTests in isolation, build Desktop once first.
+  -->
+
 </Project>

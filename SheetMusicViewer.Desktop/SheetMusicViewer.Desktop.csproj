@@ -206,6 +206,7 @@
   
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.9" />
+    <PackageReference Include="Tesseract" Version="5.2.0" />
     <PackageReference Include="Tmds.DBus.Protocol" Version="0.21.3" />
     <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.9" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.9" />
@@ -221,4 +222,35 @@
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.116.1" />
     <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="8.3.1.1" />
   </ItemGroup>
+
+  <!--
+    Tesseract language data — downloaded once to tessdata\ at the solution root and then
+    copied to every build output and publish layout automatically.
+    Works for: local dev builds, CI pipelines, dotnet publish.
+    The download only runs when the file is absent (idempotent / offline-safe after first run).
+  -->
+  <PropertyGroup>
+    <!-- Resolve tessdata folder whether building via solution or project directly -->
+    <TessdataDir Condition="'$(SolutionDir)' != '' And '$(SolutionDir)' != '*Undefined*'">$(SolutionDir)tessdata\</TessdataDir>
+    <TessdataDir Condition="'$(TessdataDir)' == ''">$(MSBuildProjectDirectory)\..\tessdata\</TessdataDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="$(TessdataDir)eng.traineddata"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest"
+             Link="tessdata\eng.traineddata"
+             Condition="Exists('$(TessdataDir)eng.traineddata')" />
+  </ItemGroup>
+
+  <Target Name="DownloadTessdata" BeforeTargets="BeforeBuild"
+          Condition="!Exists('$(TessdataDir)eng.traineddata')">
+    <Message Text="[Tesseract] Downloading eng.traineddata from tessdata_fast (~4 MB)…" Importance="High" />
+    <MakeDir Directories="$(TessdataDir)" />
+    <DownloadFile
+        SourceUrl="https://github.com/tesseract-ocr/tessdata_fast/raw/main/eng.traineddata"
+        DestinationFolder="$(TessdataDir)"
+        SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

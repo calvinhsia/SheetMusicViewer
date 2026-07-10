@@ -16,21 +16,51 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Top toolbar with buttons -->
-        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10" Spacing="10">
-            <TextBlock Text="PageNumberOffset:" VerticalAlignment="Center"/>
-            <TextBox Text="{Binding PageNumberOffset}" Width="50"/>
-            <Button Content="_Add Row" Command="{Binding AddRowCommand}"
-                    ToolTip.Tip="Add a new TOC entry"/>
-            <Button Content="_Delete Row" Command="{Binding DeleteRowCommand}"
-                    ToolTip.Tip="Delete the selected TOC entry"/>
-            <Button Content="_Import from Clipboard" Command="{Binding ImportCommand}" 
-                    ToolTip.Tip="Import TOC from clipboard tab separated values (PageNo, SongName, Composer, Date, Notes)"/>
-            <Button Content="_Export to Clipboard" Command="{Binding ExportCommand}"
-                    ToolTip.Tip="Export TOC to clipboard to paste to Excel"/>
-            <Button Content="_Cancel" Command="{Binding CancelCommand}"/>
-            <Button Content="_Save" Command="{Binding SaveCommand}"/>
-        </StackPanel>
+        <!-- Menu bar + right-aligned Save/Cancel toolbar -->
+        <DockPanel Grid.Row="0" Margin="0,0,0,6">
+
+            <!-- Menu (left) -->
+            <Menu DockPanel.Dock="Left" VerticalAlignment="Center">
+
+                <!-- Edit menu — TOC row operations -->
+                <MenuItem Header="_Edit">
+                    <MenuItem Header="_Add Row"
+                              Command="{Binding AddRowCommand}"
+                              ToolTip.Tip="Add a new TOC entry"/>
+                    <MenuItem Header="_Delete Row"
+                              Command="{Binding DeleteRowCommand}"
+                              ToolTip.Tip="Delete the selected TOC entry"/>
+                    <Separator/>
+                    <MenuItem Header="_Import from Clipboard"
+                              Command="{Binding ImportCommand}"
+                              ToolTip.Tip="Import TOC from clipboard (tab-separated: PageNo, SongName, Composer, Date, Notes)"/>
+                    <MenuItem Header="_Export to Clipboard"
+                              Command="{Binding ExportCommand}"
+                              ToolTip.Tip="Export TOC to clipboard for pasting into Excel"/>
+                </MenuItem>
+
+                <!-- Tools menu — OCR and other utilities -->
+                <MenuItem Header="_Tools">
+                    <MenuItem Header="E_xtract TOC from PDF (OCR)…"
+                              Command="{Binding ExtractTocFromOcrCommand}"
+                              ToolTip.Tip="Render each page, run Windows OCR on the top strip, and show raw text + suggested TOC JSON in a text window"/>
+                </MenuItem>
+
+            </Menu>
+
+            <!-- Right-aligned: PageNumberOffset + Cancel + Save -->
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                        HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="8">
+                <TextBlock Text="PageNumberOffset:" VerticalAlignment="Center"/>
+                <TextBox Text="{Binding PageNumberOffset}" Width="50"/>
+                <Button Content="_Cancel" Command="{Binding CancelCommand}"/>
+                <Button Content="_Save"   Command="{Binding SaveCommand}"/>
+            </StackPanel>
+
+            <!-- spacer so menu and toolbar don't overlap -->
+            <Border/>
+
+        </DockPanel>
 
         <!-- Header info panel -->
         <Grid Grid.Row="1" Margin="0,0,0,10">
