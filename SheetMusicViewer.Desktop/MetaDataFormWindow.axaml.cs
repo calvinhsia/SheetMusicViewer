@@ -271,21 +271,21 @@ public partial class MetaDataFormWindow : Window
                     select new
                     {
                         Page = toc.PageNo,
-                        Fav = new BrowseControl.BrowseField<string, TocEntryViewModel>(
-                            toc.FavDisplay, toc, (field) =>
+                        Fav = new BrowseControl.BrowseField<TocEntryViewModel>(
+                            toc, (field) =>
                             {
                                 return new TextBlock
                                 {
-                                    Text = field.Data,
+                                    Text = field.Data.FavDisplay,
                                     HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
                                     VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
                                     FontSize = 12
                                 };
                             }) { SortKey = toc.FavDisplay },
-                        Lnk = new BrowseControl.BrowseField<string, TocEntryViewModel>(
-                            toc.LinkDisplay, toc, (field) =>
+                        Lnk = new BrowseControl.BrowseField<TocEntryViewModel>(
+                            toc, (field) =>
                             {
-                                var ctrl = string.IsNullOrEmpty(field.Entry.Link)
+                                var ctrl = string.IsNullOrEmpty(field.Data.Link)
                                     ? (Control)new TextBlock { Text = "" }
                                     : new Button
                                     {
@@ -295,16 +295,16 @@ public partial class MetaDataFormWindow : Window
                                         BorderThickness = new Avalonia.Thickness(0),
                                         HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
                                         VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-                                        [ToolTip.TipProperty] = field.Entry.Link ?? string.Empty
+                                        [ToolTip.TipProperty] = field.Data.Link ?? string.Empty
                                     };
                                 if (ctrl is Button btn)
-                                    btn.Click += (s, e) => { if (!string.IsNullOrEmpty(field.Entry.Link)) OpenUrl(field.Entry.Link); };
+                                    btn.Click += (s, e) => { if (!string.IsNullOrEmpty(field.Data.Link)) OpenUrl(field.Data.Link); };
                                 return ctrl;
                             }) { SortKey = toc.LinkDisplay },
-                        Mxl = new BrowseControl.BrowseField<string, TocEntryViewModel>(
-                            toc.HasCachedMxl ? "🎵" : "", toc, (field) =>
+                        Mxl = new BrowseControl.BrowseField<TocEntryViewModel>(
+                            toc, (field) =>
                             {
-                                if (!field.Entry.HasCachedMxl) return new TextBlock { Text = "" };
+                                if (!field.Data.HasCachedMxl) return new TextBlock { Text = "" };
                                 var btn = new Button
                                 {
                                     Content = "🎵",
@@ -315,7 +315,7 @@ public partial class MetaDataFormWindow : Window
                                     VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
                                     [ToolTip.TipProperty] = "Open cached MXL in MuseScore"
                                 };
-                                btn.Click += (s, e) => field.Entry.OpenInMuseScoreCommand.Execute(null);
+                                btn.Click += (s, e) => field.Data.OpenInMuseScoreCommand.Execute(null);
                                 return btn;
                             }) { SortKey = toc.HasCachedMxl ? "🎵" : "" },
                         toc.SongName,

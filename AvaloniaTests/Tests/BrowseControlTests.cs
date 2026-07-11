@@ -637,10 +637,10 @@ public class BrowseControlTests : TestBase
                                 Vol = pdfMetaDataItem.GetVolNumFromPageNum(tentry.PageNo),
                                 tentry.Composer,
                                 CompositionDate = tentry.Date,
-                                Mxl = new BrowseField<PdfMetaDataReadResult, TOCEntry>(pdfMetaDataItem, tentry, (field) =>
+                                Mxl = new BrowseField<Tuple<PdfMetaDataReadResult, TOCEntry>>(Tuple.Create(pdfMetaDataItem, tentry), (field) =>
                                 {
                                     // see if the mxl file exists in the same folder as the pdf
-                                    var pdfFilePath = field.Data.GetFullPathFileFromPageNo(field.Entry.PageNo);
+                                    var pdfFilePath = field.Data.Item1.GetFullPathFileFromPageNo(field.Data.Item2.PageNo);
                                     var fileInfo = File.Exists(pdfFilePath) ? new FileInfo(pdfFilePath) : null;
                                     var mxlFilePath = Path.ChangeExtension(pdfFilePath, ".mxl");
                                     var mxlExists = File.Exists(mxlFilePath);
@@ -656,25 +656,25 @@ public class BrowseControlTests : TestBase
                                     };
                                     btn.Click += (s, e) =>
                                     {
-                                        Trace.WriteLine($"Clicked Mxl for {field.Entry.SongName}: {field.Entry.PageNo}");
+                                        Trace.WriteLine($"Clicked Mxl for {field.Data.Item2.SongName}: {field.Data.Item2.PageNo}");
                                     };
                                     field.SortKey = btn.Content.ToString() ?? string.Empty;
                                     return btn;
                                 }),
-                                Fav = new BrowseField<PdfMetaDataReadResult, TOCEntry>(pdfMetaDataItem, tentry, (field) =>
+                                Fav = new BrowseField<Tuple<PdfMetaDataReadResult, TOCEntry>>(Tuple.Create(pdfMetaDataItem, tentry), (field) =>
                                 {
                                     var tbox = new TextBlock()
                                     {
-                                        Text = field.Data.IsFavorite(field.Entry.PageNo) ? "★" : string.Empty
+                                        Text = field.Data.Item1.IsFavorite(field.Data.Item2.PageNo) ? "★" : string.Empty
                                     };
                                     field.SortKey = tbox.Text ?? string.Empty;
                                     return tbox;
                                 }),
                                 //Fav = pdfMetaDataItem.IsFavorite(tentry.PageNo) ? "Fav" : string.Empty,,
-                                Link = new BrowseField<PdfMetaDataReadResult, TOCEntry>(pdfMetaDataItem, tentry, (field) =>
+                                Link = new BrowseField<Tuple<PdfMetaDataReadResult, TOCEntry>>(Tuple.Create(pdfMetaDataItem, tentry), (field) =>
                                 {
-                                    field.SortKey = field.Entry.Link ?? string.Empty;
-                                    if (string.IsNullOrEmpty(field.Entry.Link))
+                                    field.SortKey = field.Data.Item2.Link ?? string.Empty;
+                                    if (string.IsNullOrEmpty(field.Data.Item2.Link))
                                         return new TextBlock();
                                     var btn = new Button
                                     {
@@ -685,12 +685,12 @@ public class BrowseControlTests : TestBase
                                         Foreground = Brushes.Blue,
                                         Cursor = new Cursor(StandardCursorType.Hand),
                                         FontSize = 11,
-                                        [ToolTip.TipProperty] = field.Entry.Link
+                                        [ToolTip.TipProperty] = field.Data.Item2.Link
                                     };
 
                                     btn.Click += (s, e) =>
                                     {
-                                        Trace.WriteLine($"Clicked Link for {field.Entry.SongName}: {field.Entry.Link}");
+                                        Trace.WriteLine($"Clicked Link for {field.Data.Item2.SongName}: {field.Data.Item2.Link}");
                                     };
                                     return btn;
                                 }),

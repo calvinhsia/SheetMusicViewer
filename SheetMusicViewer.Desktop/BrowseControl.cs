@@ -52,34 +52,32 @@ public class BrowseControl : DockPanel
     /// <summary>
     /// Typed extension that also exposes the bound data and entry objects.
     /// </summary>
-    public interface IBrowseCustomField<T, U> : IBrowseCustomField
+    public interface IBrowseCustomField<T> : IBrowseCustomField
     {
         T Data { get; }
-        U Entry { get; }
     }
 
     /// <summary>
     /// Inline custom-field: supply a factory lambda <c>(data, entry) =&gt; Control</c>
     /// and the renderer will call it to produce the cell control.
     /// </summary>
-    public class BrowseField<T, U> : IBrowseCustomField<T, U>
+    public class BrowseField<T> : IBrowseCustomField<T>
     {
-        private readonly Func<BrowseField<T, U>, Control> _getControlFunc;
+        private readonly Func<BrowseField<T>, Control> _getControlFunc;
 
-        public BrowseField(T data, U entry, Func<BrowseField<T, U>, Control> getControl)
+        public BrowseField(T data, Func<BrowseField<T>, Control> getControl)
         {
             Data = data;
-            Entry = entry;
             _getControlFunc = getControl;
         }
 
         public T Data { get; }
-        public U Entry { get; }
         public string SortKey { get; set; } = string.Empty;
 
         /// <summary>Invokes the factory to produce the cell control.</summary>
         public Control? CreateControl() => _getControlFunc(this);
     }
+
     /// <summary>
     /// Creates a new BrowseControl with filterable, sortable list display.
     /// </summary>

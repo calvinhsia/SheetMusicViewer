@@ -1049,7 +1049,7 @@ public class ChooseMusicWindow : Window
         var query = from favItem in _allFavoriteItems
                     select new
                     {
-                        Icon = new BrowseControl.BrowseField<FavoriteItem, Favorite>(favItem, favItem.Favorite, (field) =>
+                        Icon = new BrowseControl.BrowseField<FavoriteItem>(favItem, (field) =>
                         {
                             if (field.Data.Thumbnail == null)
                                 return new TextBlock();
