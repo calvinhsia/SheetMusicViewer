@@ -514,6 +514,20 @@ public partial class MetaDataFormViewModel : ObservableObject
     /// </summary>
     public Action<string, string>? ShowOcrResultAction { get; set; }
 
+    // -- OCR progress state --------------------------------------------------
+
+    [ObservableProperty]
+    private bool _isOcrRunning;
+
+    [ObservableProperty]
+    private int _ocrProgressPercent;   // 0-100
+
+    [ObservableProperty]
+    private string _ocrStatusText = string.Empty;
+
+    /// <summary>Cancels an in-progress OCR run.</summary>
+    private CancellationTokenSource? _ocrCts;
+
     public string Title { get; }
 
     /// <summary>
@@ -833,24 +847,51 @@ public partial class MetaDataFormViewModel : ObservableObject
             ? _pdfMetaData.VolumeInfoList[0].Rotation
             : 0;
 
-        // Run on a background thread so the UI stays responsive
+        _ocrCts = new CancellationTokenSource();
+        IsOcrRunning = true;
+        OcrProgressPercent = 0;
+        OcrStatusText = "Starting OCR…";
+
+        var progress = new Progress<(int Page, int Total)>(t =>
+        {
+            OcrProgressPercent = t.Total > 0 ? (int)(100.0 * t.Page / t.Total) : 0;
+            OcrStatusText = $"Scanning page {t.Page + 1} / {t.Total}…";
+        });
+
         List<PdfPageOcrResult> results;
         try
         {
-            results = await Task.Run(() =>
-                PdfOcrService.ExtractAsync(pdfPath, rotation));
+            results = await PdfOcrService.ExtractAsync(
+                pdfPath, rotation, progress, _ocrCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            OcrStatusText = "Cancelled.";
+            return;
         }
         catch (Exception ex)
         {
-            ShowOcrResultAction?.Invoke(
-                $"OCR failed: {ex.Message}",
-                string.Empty);
+            ShowOcrResultAction?.Invoke($"OCR failed: {ex.Message}", string.Empty);
             return;
         }
+        finally
+        {
+            IsOcrRunning = false;
+            _ocrCts.Dispose();
+            _ocrCts = null;
+        }
 
-        var rawText      = PdfOcrService.FormatRawText(results);
+        OcrStatusText = $"Done — {results.Count} pages.";
+        var rawText       = PdfOcrService.FormatRawText(results);
         var suggestedJson = PdfOcrService.FormatSuggestedJson(results);
         ShowOcrResultAction?.Invoke(rawText, suggestedJson);
+    }
+
+    [RelayCommand]
+    private void CancelOcr()
+    {
+        _ocrCts?.Cancel();
+        OcrStatusText = "Cancelling…";
     }
 
     [RelayCommand]

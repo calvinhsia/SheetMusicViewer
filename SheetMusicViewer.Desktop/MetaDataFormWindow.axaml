@@ -13,6 +13,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
@@ -62,8 +63,25 @@
 
         </DockPanel>
 
+        <!-- OCR progress bar — visible only while OCR is running -->
+        <Grid Grid.Row="1"
+              IsVisible="{Binding IsOcrRunning}"
+              Margin="0,0,0,4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" Orientation="Vertical" Spacing="2">
+                <TextBlock Text="{Binding OcrStatusText}" FontSize="12"/>
+                <ProgressBar Value="{Binding OcrProgressPercent}" Minimum="0" Maximum="100" Height="12"/>
+            </StackPanel>
+            <Button Grid.Column="1" Content="Cancel OCR" Margin="8,0,0,0"
+                    Command="{Binding CancelOcrCommand}"
+                    VerticalAlignment="Center"/>
+        </Grid>
+
         <!-- Header info panel -->
-        <Grid Grid.Row="1" Margin="0,0,0,10">
+        <Grid Grid.Row="2" Margin="0,0,0,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
@@ -133,7 +151,7 @@
         </Grid>
 
         <!-- Main content with TOC DataGrid and Favorites -->
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="3">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="3*"/>
                 <ColumnDefinition Width="5"/>
