@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Tesseract;
@@ -276,34 +277,68 @@ public static class PdfOcrService
         int skipFront = Math.Max(3, (int)Math.Ceiling(totalPages * 0.05));
         int skipBack  = Math.Max(1, (int)Math.Ceiling(totalPages * 0.02));
 
+        // ── Pass 1a: identify all pages that qualify as title pages (large-font) ──
+        // We collect the set of title-page indices first so the Op lookahead (pass 1b)
+        // doesn't cross into the next piece's pages.
+        var titlePageIndices = new HashSet<int>();
         foreach (var r in results)
         {
-            // Skip front-matter (covers, TOC pages) and back-matter (ads).
             if (r.PageIndex < skipFront || r.PageIndex >= totalPages - skipBack)
             {
-                logger?.Invoke($"[TOC] Page {r.PageIndex,3} SKIP (front/back matter)");
+                if (!string.IsNullOrWhiteSpace(r.LargeFontText))
+                    logger?.Invoke($"[TOC] Page {r.PageIndex,3} SKIP (front/back matter)");
                 continue;
             }
-
-            // Use the large-font words only — filters out small musical annotations.
-            // Only consider the FIRST line: the song title always appears on the first
-            // large-font line; subsequent lines are continuation score glyphs at the
-            // same height tier (brackets, clefs, ornaments) and should be ignored.
             var text = r.LargeFontText;
             if (string.IsNullOrWhiteSpace(text)) continue;
-
             var firstLine = text.Split('\n', StringSplitOptions.RemoveEmptyEntries)[0];
             var clean = CleanOcrText(firstLine);
-            string? rejectReason = TitleRejectReason(clean);
-            if (rejectReason is not null)
-            {
-                logger?.Invoke($"[TOC] Page {r.PageIndex,3} REJECT ({rejectReason}): {clean}");
-                continue;
-            }
-            var title = TrimToTitle(clean);
+            var reason = TitleRejectReason(clean);
+            if (reason is null)
+                titlePageIndices.Add(r.PageIndex);
+            else
+                logger?.Invoke($"[TOC] Page {r.PageIndex,3} REJECT ({reason}): {clean}");
+        }
+
+        // ── Pass 1b: build candidates from title pages, appending Op number ─────
+        foreach (var r in results)
+        {
+            if (!titlePageIndices.Contains(r.PageIndex)) continue;
+
+            var firstLine = r.LargeFontText.Split('\n', StringSplitOptions.RemoveEmptyEntries)[0];
+            var title = TrimToTitle(CleanOcrText(firstLine));
+
+            // Look for Op. on this page; if not found, check the immediately following
+            // page ONLY IF that page is not itself a title page (avoids borrowing the
+            // next piece's Op when both pages are title pages).
+            string? nextRaw = (r.PageIndex + 1 < results.Count && !titlePageIndices.Contains(r.PageIndex + 1))
+                ? results[r.PageIndex + 1].RawText
+                : null;
+            var op = ExtractOpNumber(r.RawText) ?? (nextRaw is not null ? ExtractOpNumber(nextRaw) : null);
+            if (op is not null) title = $"{title} — {op}";
+
             logger?.Invoke($"[TOC] Page {r.PageIndex,3} ACCEPT: {title}");
             candidates.Add((r.PageIndex + pageNumberOffset, title));
         }
+
+        // ── Pass 2: op-only pages (no large-font title, but raw OCR has Op number) ─
+        // Catches posthumous works labelled only by opus number, without a printed title.
+        // No lookahead here — we only use the current page's own raw text to avoid
+        // creating spurious entries one page before the real title page.
+        var coveredPages = new HashSet<int>(candidates.Select(c => c.Page - pageNumberOffset));
+        foreach (var r in results)
+        {
+            if (r.PageIndex < skipFront || r.PageIndex >= totalPages - skipBack) continue;
+            if (coveredPages.Contains(r.PageIndex)) continue;
+            var op = ExtractOpNumber(r.RawText);
+            if (op is not null)
+            {
+                logger?.Invoke($"[TOC] Page {r.PageIndex,3} ACCEPT (op-only): {op}");
+                candidates.Add((r.PageIndex + pageNumberOffset, op));
+                coveredPages.Add(r.PageIndex);
+            }
+        }
+        candidates.Sort((a, b) => a.Page.CompareTo(b.Page));
 
         var tocArray = new List<object>();
         foreach (var (page, name) in candidates)
@@ -590,6 +625,45 @@ public static class PdfOcrService
             return $"only {realWords}/{tokens.Length} real words ({ratio:P0})";
 
         return null;
+    }
+
+    // Matches "Op. 18", "Op. 34, No. 1", "Op. 64, No.2", "Op.69, No 1 (Posthumous)" etc.
+    // Tolerates OCR noise: spaces around the dot, comma before No.
+    private static readonly Regex _opNumberRegex = new(
+        @"Op[.\s]*\s*(\d+)(?:[,\s]+No[.\s]*\s*(\d+))?",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // Matches a standalone "No. N" label (e.g. "No.1", "No. 3") that may appear
+    // before or after the Op number in the raw OCR text.
+    private static readonly Regex _noNumberRegex = new(
+        @"\bNo[.\s]*\s*(\d+)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// Scans <paramref name="rawText"/> for the first Opus number pattern and returns a
+    /// normalised string like "Op. 18" or "Op. 34, No. 1", or <see langword="null"/> if none found.
+    /// The "No. N" part is gathered even when it appears <em>before</em> the "Op. N" label
+    /// in the raw text (common in engraved editions where number precedes the key heading).
+    /// </summary>
+    private static string? ExtractOpNumber(string rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText)) return null;
+        var m = _opNumberRegex.Match(rawText);
+        if (!m.Success) return null;
+        var op = $"Op. {m.Groups[1].Value}";
+        if (m.Groups[2].Success)
+        {
+            op += $", No. {m.Groups[2].Value}";
+        }
+        else
+        {
+            // "No. N" may appear before the Op. label (or well after without a comma).
+            // Scan the entire page text for a No. designation and attach it.
+            var noM = _noNumberRegex.Match(rawText);
+            if (noM.Success)
+                op += $", No. {noM.Groups[1].Value}";
+        }
+        return op;
     }
 
     private static int LetterCount(string text)
