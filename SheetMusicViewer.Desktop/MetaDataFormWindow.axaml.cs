@@ -843,7 +843,11 @@ public partial class MetaDataFormViewModel : ObservableObject
         if (string.IsNullOrEmpty(pdfPath) || !File.Exists(pdfPath))
             return;
 
-        int rotation = _pdfMetaData.VolumeInfoList.Count > 0
+        // Prefer the JSON sidecar so multi-volume sets are handled automatically.
+        var jsonSidecar = Path.ChangeExtension(pdfPath, ".json");
+        var extractPath = File.Exists(jsonSidecar) ? jsonSidecar : pdfPath;
+
+        int defaultRotation = _pdfMetaData.VolumeInfoList.Count > 0
             ? _pdfMetaData.VolumeInfoList[0].Rotation
             : 0;
 
@@ -855,14 +859,16 @@ public partial class MetaDataFormViewModel : ObservableObject
         var progress = new Progress<(int Page, int Total)>(t =>
         {
             OcrProgressPercent = t.Total > 0 ? (int)(100.0 * t.Page / t.Total) : 0;
-            OcrStatusText = $"Scanning page {t.Page + 1} / {t.Total}…";
+            OcrStatusText = t.Total > 0
+                ? $"Scanning page {t.Page + 1} / {t.Total}…"
+                : $"Scanning page {t.Page + 1}…";
         });
 
         List<PdfPageOcrResult> results;
         try
         {
             results = await PdfOcrService.ExtractAsync(
-                pdfPath, rotation, progress, _ocrCts.Token);
+                extractPath, defaultRotation, progress, _ocrCts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -883,7 +889,7 @@ public partial class MetaDataFormViewModel : ObservableObject
 
         OcrStatusText = $"Done — {results.Count} pages.";
         var rawText       = PdfOcrService.FormatRawText(results);
-        var suggestedJson = PdfOcrService.FormatSuggestedJson(results);
+        var suggestedJson = PdfOcrService.FormatSuggestedJson(results, PageNumberOffset);
         ShowOcrResultAction?.Invoke(rawText, suggestedJson);
     }
 

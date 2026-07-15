@@ -24,35 +24,19 @@ namespace AvaloniaTests.Tests;
 [TestCategory("Manual")]
 public class PdfOcrTocManualTests : TestBase
 {
-    // ---------------------------------------------------------------
-    //  Ad-hoc entry point — edit _pdfPath and _rotation then run
-    // ---------------------------------------------------------------
-
-    /// <summary>
-    /// Ad-hoc test: set <see cref="_pdfPath"/> and <see cref="_rotation"/> to point at
-    /// any scanned PDF, then run this test.  Output appears in the test output window.
-    /// rotation: 0 = normal, 1 = 90° CW, 2 = 180° (upside-down), 3 = 270° CW.
-    /// </summary>
-    [TestMethod]
-    public async Task ExtractTocFromAdhocPdf()
-    {
-        // ── Edit these two lines before running ──────────────────────
-        var pdfPath  = @"C:\Users\Calvi\OneDrive\SheetMusic\Classical\Chopin Complete Waltzes.pdf";
-        var rotation = 2;   // 0=normal 1=90CW 2=180 3=270CW
-        // ─────────────────────────────────────────────────────────────
-
-        await RunExtractionAsync(pdfPath, rotation);
-    }
-
-    // ---------------------------------------------------------------
-    //  Named / repeatable tests for specific books
-    // ---------------------------------------------------------------
 
     [TestMethod]
     public async Task ExtractToc_ChopinCompleteWaltzes()
     {
         const string pdf = @"C:\Users\Calvi\OneDrive\SheetMusic\Classical\Chopin Complete Waltzes.pdf";
-        await RunExtractionAsync(pdf, rotation: 2);
+        await RunExtractionAsync(pdf, defaultRotation: 2);
+    }
+
+    [TestMethod]
+    public async Task ExtractToc_MultiVolumePdf()
+    {
+        const string pdf = @"C:\Users\Calvi\OneDrive\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.json";
+        await RunExtractionAsync(pdf);
     }
 
     // ---------------------------------------------------------------
@@ -60,15 +44,16 @@ public class PdfOcrTocManualTests : TestBase
     // ---------------------------------------------------------------
 
     /// <summary>
-    /// Renders each page of <paramref name="pdfPath"/>, OCRs the top strip, and writes
+    /// Renders each page of <paramref name="pathOrJson"/>, OCRs it, and writes
     /// the raw text and a suggested TOC JSON to Trace output.
+    /// Pass a .json sidecar (or a PDF with a sibling .json) for multi-volume sets.
     /// </summary>
-    private static async Task RunExtractionAsync(string pdfPath, int rotation)
+    private async Task RunExtractionAsync(string pathOrJson, int defaultRotation = 0)
     {
-        if (!File.Exists(pdfPath))
-            Assert.Inconclusive($"PDF not found: {pdfPath}");
+        if (!File.Exists(pathOrJson))
+            Assert.Inconclusive($"File not found: {pathOrJson}");
 
-        Trace.WriteLine($"=== PdfOcrToc: {Path.GetFileName(pdfPath)}  rotation={rotation} ===");
+        Trace.WriteLine($"=== PdfOcrToc: {Path.GetFileName(pathOrJson)} ===");
         Trace.WriteLine(string.Empty);
 
         var sw = Stopwatch.StartNew();
@@ -79,25 +64,26 @@ public class PdfOcrTocManualTests : TestBase
             if (t.Page != lastReported)
             {
                 lastReported = t.Page;
-                Trace.WriteLine($"  [OCR] processing page {t.Page + 1} / {t.Total}…");
+                TestContext.WriteLine($"  [OCR] processing page {t.Page + 1} / {t.Total}…");
             }
         });
 
         List<PdfPageOcrResult> results =
-            await PdfOcrService.ExtractAsync(pdfPath, rotation, progressHandler);
+            await PdfOcrService.ExtractAsync(pathOrJson, defaultRotation, progressHandler,
+                logger: Console.WriteLine);
 
         sw.Stop();
         Trace.WriteLine($"Extraction complete in {sw.Elapsed.TotalSeconds:F1}s  ({results.Count} pages)");
         Trace.WriteLine(string.Empty);
 
+        // ── suggested JSON TOC (before raw text for visibility) ───────
+        var json = PdfOcrService.FormatSuggestedJson(results, logger: Console.WriteLine);
+        Trace.WriteLine(json);
+        Trace.WriteLine(string.Empty);
+
         // ── raw text ──────────────────────────────────────────────────
         var rawText = PdfOcrService.FormatRawText(results);
         Trace.WriteLine(rawText);
-        Trace.WriteLine(string.Empty);
-
-        // ── suggested JSON TOC ────────────────────────────────────────
-        var json = PdfOcrService.FormatSuggestedJson(results);
-        Trace.WriteLine(json);
 
         // Test passes if extraction ran without throwing.
         Assert.IsTrue(results.Count > 0, "Expected at least one page in the PDF.");

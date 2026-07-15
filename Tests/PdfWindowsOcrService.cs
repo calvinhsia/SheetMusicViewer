@@ -3,6 +3,7 @@ using SkiaSharp;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text;
 using System.Text.Json;
@@ -16,7 +17,7 @@ namespace Tests;
 /// <summary>
 /// Per-page OCR result produced by <see cref="PdfWindowsOcrService"/>.
 /// </summary>
-public sealed record PdfPageWinOcrResult(int PageIndex, string RawText);
+public sealed record PdfPageWinOcrResult(int PageIndex, string RawText, string VolumeFileName = "");
 
 /// <summary>
 /// Windows-only OCR service that mirrors <c>PdfOcrService</c> from
@@ -35,17 +36,36 @@ public static class PdfWindowsOcrService
     public const double TopStripFraction = 0.20;
 
     // -------------------------------------------------------------------------
+    // Volume spec (mirrors PdfOcrService)
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// One volume in a multi-volume PDF set.
+    /// <para><see cref="PageCount"/> is taken from the JSON sidecar when available
+    /// (<c>-1</c> = unknown, derive from PDF bytes at runtime).</para>
+    /// </summary>
+    private sealed record VolumeSpec(string PdfPath, int Rotation, int PageCount = -1);
+
+    // -------------------------------------------------------------------------
     // Main entry point
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Runs the Windows OCR pipeline for every page in <paramref name="pdfPath"/>.
-    /// Must be called from an MTA thread (the WinRT OCR engine is agile).
-    /// Reports progress via <paramref name="progress"/> as (currentPage, totalPages).
+    /// Runs the Windows OCR pipeline across one or more PDF volumes.
+    ///
+    /// <para>Multi-volume detection (checked in order):</para>
+    /// <list type="number">
+    ///   <item>If <paramref name="pathOrJson"/> ends with <c>.json</c>, load it directly.</item>
+    ///   <item>If a sibling <c>.json</c> exists next to a PDF, load that.</item>
+    ///   <item>Otherwise treat <paramref name="pathOrJson"/> as a single PDF.</item>
+    /// </list>
+    ///
+    /// <para>Each PDF is read into memory once; page counts come from the JSON sidecar
+    /// where available so no extra file I/O is needed just to count pages.</para>
     /// </summary>
     public static async Task<List<PdfPageWinOcrResult>> ExtractAsync(
-        string pdfPath,
-        int rotation,
+        string pathOrJson,
+        int defaultRotation = 0,
         IProgress<(int Page, int Total)>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -55,22 +75,83 @@ public static class PdfWindowsOcrService
                       "Windows OCR engine could not be created. " +
                       "Make sure the English OCR language pack is installed.");
 
-        int pageCount;
-        using (var s = File.OpenRead(pdfPath))
-            pageCount = Conversion.GetPageCount(s);
+        var volumes = ResolveVolumes(pathOrJson, defaultRotation);
 
-        var results = new List<PdfPageWinOcrResult>(pageCount);
+        // Use page counts from JSON sidecar where available — no PDF opens just to count.
+        int totalPages = volumes.All(v => v.PageCount >= 0)
+            ? volumes.Sum(v => v.PageCount)
+            : 0;
 
-        for (int i = 0; i < pageCount; i++)
+        var results = new List<PdfPageWinOcrResult>();
+
+        int globalIndex = 0;
+        foreach (var vol in volumes)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            progress?.Report((i, pageCount));
+            // Read each PDF once; wrap in MemoryStream per page (no extra allocation).
+            var pdfBytes = File.ReadAllBytes(vol.PdfPath);
+            int volPageCount = vol.PageCount >= 0
+                ? vol.PageCount
+                : Conversion.GetPageCount(new MemoryStream(pdfBytes));
 
-            var rawText = await OcrPageAsync(pdfPath, i, rotation, engine);
-            results.Add(new PdfPageWinOcrResult(i, rawText));
+            var volFileName = Path.GetFileName(vol.PdfPath);
+
+            for (int i = 0; i < volPageCount; i++, globalIndex++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                progress?.Report((globalIndex, totalPages));
+
+                var rawText = await OcrPageAsync(pdfBytes, i, vol.Rotation, engine);
+                results.Add(new PdfPageWinOcrResult(globalIndex, rawText, volFileName));
+            }
         }
 
         return results;
+    }
+
+    // -------------------------------------------------------------------------
+    // Volume resolution (mirrors PdfOcrService.ResolveVolumes)
+    // -------------------------------------------------------------------------
+
+    private static List<VolumeSpec> ResolveVolumes(string pathOrJson, int defaultRotation)
+    {
+        string? jsonPath = null;
+
+        if (pathOrJson.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            jsonPath = pathOrJson;
+        }
+        else
+        {
+            var sibling = Path.ChangeExtension(pathOrJson, ".json");
+            if (File.Exists(sibling))
+                jsonPath = sibling;
+        }
+
+        if (jsonPath != null && File.Exists(jsonPath))
+        {
+            var baseDir = Path.GetDirectoryName(jsonPath) ?? ".";
+            using var stream = File.OpenRead(jsonPath);
+            var bmk = JsonSerializer.Deserialize<SheetMusicLib.BmkJsonFormat>(stream);
+
+            if (bmk?.Volumes is { Count: > 0 } vols)
+            {
+                var list = new List<VolumeSpec>(vols.Count);
+                foreach (var v in vols)
+                {
+                    if (string.IsNullOrWhiteSpace(v.FileName)) continue;
+                    var fullPath = Path.IsPathRooted(v.FileName)
+                        ? v.FileName
+                        : Path.Combine(baseDir, v.FileName);
+                    if (File.Exists(fullPath))
+                        list.Add(new VolumeSpec(fullPath, v.Rotation, v.PageCount));
+                    else
+                        System.Diagnostics.Debug.WriteLine($"[WinOCR] Volume not found, skipping: {fullPath}");
+                }
+                if (list.Count > 0) return list;
+            }
+        }
+
+        return [new VolumeSpec(pathOrJson, defaultRotation)];
     }
 
     // -------------------------------------------------------------------------
@@ -81,9 +162,15 @@ public static class PdfWindowsOcrService
     {
         var sb = new StringBuilder();
         sb.AppendLine($"=== Windows OCR raw text — {results.Count} pages ===");
-        sb.AppendLine();
+        string lastVolume = string.Empty;
         foreach (var r in results)
         {
+            if (r.VolumeFileName != lastVolume)
+            {
+                lastVolume = r.VolumeFileName;
+                sb.AppendLine();
+                sb.AppendLine($"=== Volume: {lastVolume} ===");
+            }
             var preview = r.RawText.Replace("\r", "").Replace("\n", " ").Trim();
             if (preview.Length > 160) preview = preview[..160] + "…";
             sb.AppendLine($"Page {r.PageIndex,3}: {preview}");
@@ -91,7 +178,9 @@ public static class PdfWindowsOcrService
         return sb.ToString();
     }
 
-    public static string FormatSuggestedJson(IReadOnlyList<PdfPageWinOcrResult> results)
+    public static string FormatSuggestedJson(
+        IReadOnlyList<PdfPageWinOcrResult> results,
+        int pageNumberOffset = 0)
     {
         var candidates = new List<(int Page, string Name)>();
         foreach (var r in results)
@@ -100,7 +189,7 @@ public static class PdfWindowsOcrService
             if (string.IsNullOrWhiteSpace(clean)) continue;
 
             if (r.RawText.Length < 200 && HasEnoughLetters(clean))
-                candidates.Add((r.PageIndex, TrimToTitle(clean)));
+                candidates.Add((r.PageIndex + pageNumberOffset, TrimToTitle(clean)));
         }
 
         var tocArray = new List<object>();
@@ -108,7 +197,7 @@ public static class PdfWindowsOcrService
             tocArray.Add(new { songName = name, pageNo = page, composer = "" });
 
         var opts = new JsonSerializerOptions { WriteIndented = true };
-        return "=== Suggested TOC (review and edit) ===\n\n" +
+        return $"=== Suggested TOC (review and edit \u2014 PageNumberOffset={pageNumberOffset}) ===\n\n" +
                JsonSerializer.Serialize(tocArray, opts);
     }
 
@@ -117,10 +206,10 @@ public static class PdfWindowsOcrService
     // -------------------------------------------------------------------------
 
     private static async Task<string> OcrPageAsync(
-        string pdfPath, int pageIndex, int rotation, OcrEngine engine)
+        byte[] pdfBytes, int pageIndex, int rotation, OcrEngine engine)
     {
-        // 1. Render page to SKBitmap via PDFtoImage
-        using var pdfStream = File.OpenRead(pdfPath);
+        // 1. Render page to SKBitmap via PDFtoImage (no file I/O — bytes already loaded)
+        using var pdfStream = new MemoryStream(pdfBytes);
         using var raw = Conversion.ToImage(
             pdfStream,
             page: (Index)pageIndex,

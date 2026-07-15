@@ -53,7 +53,8 @@
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
                         HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="8">
                 <TextBlock Text="PageNumberOffset:" VerticalAlignment="Center"/>
-                <TextBox Text="{Binding PageNumberOffset}" Width="50"/>
+                <TextBox Text="{Binding PageNumberOffset}" Width="50"
+                         ToolTip.Tip="The PageNumberOffset setting maps between physical PDF pages and printed page numbers. The TOC uses printed page numbers, so this value is added to the raw OCR page index when generating the suggested TOC."/>
                 <Button Content="_Cancel" Command="{Binding CancelCommand}"/>
                 <Button Content="_Save"   Command="{Binding SaveCommand}"/>
             </StackPanel>
