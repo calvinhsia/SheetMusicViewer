@@ -234,7 +234,7 @@ public static class PdfOcrService
     public static string FormatRawText(IReadOnlyList<PdfPageOcrResult> results)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"=== OCR raw text — {results.Count} pages ===");
+        sb.AppendLine($"=== OCR raw text - {results.Count} pages ===");
         string lastVolume = string.Empty;
         foreach (var r in results)
         {
@@ -315,7 +315,7 @@ public static class PdfOcrService
                 ? results[r.PageIndex + 1].RawText
                 : null;
             var op = ExtractOpNumber(r.RawText) ?? (nextRaw is not null ? ExtractOpNumber(nextRaw) : null);
-            if (op is not null) title = $"{title} — {op}";
+            if (op is not null) title = $"{title} - {op}";
 
             logger?.Invoke($"[TOC] Page {r.PageIndex,3} ACCEPT: {title}");
             candidates.Add((r.PageIndex + pageNumberOffset, title));
@@ -345,7 +345,7 @@ public static class PdfOcrService
             tocArray.Add(new { songName = name, pageNo = page, composer = "" });
 
         var opts = new JsonSerializerOptions { WriteIndented = true };
-        return $"=== Suggested TOC (review and edit — PageNumberOffset={pageNumberOffset}) ===\n\n" +
+        return $"=== Suggested TOC (review and edit - PageNumberOffset={pageNumberOffset}) ===\n\n" +
                JsonSerializer.Serialize(tocArray, opts);
     }
 
@@ -562,7 +562,31 @@ public static class PdfOcrService
     }
 
     private static string CleanOcrText(string raw) =>
-        raw.Replace("\r", " ").Replace("\n", " ").Trim();
+        NormalizeUnicodePunctuation(raw.Replace("\r", " ").Replace("\n", " ").Trim());
+
+    // Replace common Unicode punctuation with plain ASCII equivalents so song titles
+    // never contain smart quotes, em/en dashes, ellipses, etc.
+    private static string NormalizeUnicodePunctuation(string s)
+    {
+        if (s.Length == 0) return s;
+        var sb = new System.Text.StringBuilder(s.Length);
+        foreach (char c in s)
+        {
+            sb.Append(c switch
+            {
+                '\u2013' or '\u2014' or '\u2015' => '-',   // en-dash, em-dash, horizontal bar
+                '\u2018' or '\u2019' or '\u201B' => '\'',  // left/right single quotation marks
+                '\u201C' or '\u201D' or '\u201F' => '"',   // left/right double quotation marks
+                '\u2026' => '.',                            // ellipsis -> single dot
+                '\u00AB' or '\u00BB' => '"',                // guillemets
+                '\u2039' or '\u203A' => '\'',               // single guillemets
+                '\u2022' or '\u00B7' or '\u2027' => '-',   // bullet, middle dot, hyphenation point
+                '\u00A0' or '\u202F' or '\u2009' => ' ',   // non-breaking / narrow spaces
+                _ => c
+            });
+        }
+        return sb.ToString();
+    }
 
     private static bool HasEnoughLetters(string text)
     {
