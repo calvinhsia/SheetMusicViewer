@@ -368,10 +368,7 @@ namespace SheetMusicViewer
                     strval = strval.ToString();
                     if (fCSV)
                     {
-                        if (strval.Contains(",") || strval.Contains(" "))
-                        {
-                            strval = "\"" + strval + "\"";
-                        }
+                        strval = "\"" + strval.Replace("\"", "\"\"") + "\"";
                     }
                     sb.Append(strval);
                 }

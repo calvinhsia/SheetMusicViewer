@@ -688,6 +688,67 @@ public partial class MetaDataFormViewModel : ObservableObject
         return string.Empty;
     }
 
+    /// <summary>
+    /// Wraps a CSV field value in double-quotes and escapes any embedded double-quotes per RFC 4180.
+    /// </summary>
+    private static string QuoteCsvField(string? value)
+    {
+        var s = value ?? string.Empty;
+        return $"\"{s.Replace("\"", "\"\"")}\""; 
+    }
+
+    /// <summary>
+    /// Parses a single CSV line into fields, respecting RFC 4180 quoting
+    /// (quoted fields may contain commas and escaped double-quotes).
+    /// </summary>
+    private static List<string> ParseCsvLine(string line)
+    {
+        var fields = new List<string>();
+        var sb = new StringBuilder();
+        bool inQuotes = false;
+        int i = 0;
+        while (i < line.Length)
+        {
+            char c = line[i];
+            if (inQuotes)
+            {
+                if (c == '"')
+                {
+                    if (i + 1 < line.Length && line[i + 1] == '"')
+                    {
+                        sb.Append('"'); // escaped double-quote
+                        i += 2;
+                        continue;
+                    }
+                    inQuotes = false;
+                }
+                else
+                {
+                    sb.Append(c);
+                }
+            }
+            else
+            {
+                if (c == '"')
+                {
+                    inQuotes = true;
+                }
+                else if (c == ',')
+                {
+                    fields.Add(sb.ToString());
+                    sb.Clear();
+                }
+                else
+                {
+                    sb.Append(c);
+                }
+            }
+            i++;
+        }
+        fields.Add(sb.ToString());
+        return fields;
+    }
+
     [RelayCommand]
     private async Task ImportAsync()
     {
@@ -703,17 +764,21 @@ public partial class MetaDataFormViewModel : ObservableObject
             var lines = clipText.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries);
             foreach (var line in lines)
             {
-                var parts = line.Trim().Split('\t');
+                // Support both CSV (comma) and TSV (tab) clipboard formats
+                List<string> parts = line.Contains('\t')
+                    ? [.. line.Split('\t')]
+                    : ParseCsvLine(line);
+
                 var entry = new TOCEntry();
 
-                if (parts.Length > 0 && int.TryParse(parts[0], out var pageNo))
+                if (parts.Count > 0 && int.TryParse(parts[0].Trim(), out var pageNo))
                 {
                     entry.PageNo = pageNo;
                 }
-                if (parts.Length > 1) entry.SongName = parts[1].Trim();
-                if (parts.Length > 2) entry.Composer = parts[2].Trim();
-                if (parts.Length > 3) entry.Date = parts[3].Trim();
-                if (parts.Length > 4) entry.Notes = parts[4].Trim();
+                if (parts.Count > 1) entry.SongName = parts[1].Trim();
+                if (parts.Count > 2) entry.Composer = parts[2].Trim();
+                if (parts.Count > 3) entry.Date = parts[3].Trim();
+                if (parts.Count > 4) entry.Notes = parts[4].Trim();
 
                 importedEntries.Add(new TocEntryViewModel(entry));
             }
@@ -739,7 +804,12 @@ public partial class MetaDataFormViewModel : ObservableObject
         var sb = new StringBuilder();
         foreach (var entry in TocEntries)
         {
-            sb.AppendLine($"{entry.PageNo}\t{entry.SongName}\t{entry.Composer}\t{entry.Date}\t{entry.Notes}");
+            sb.AppendLine(string.Join(",",
+                QuoteCsvField(entry.PageNo.ToString()),
+                QuoteCsvField(entry.SongName),
+                QuoteCsvField(entry.Composer),
+                QuoteCsvField(entry.Date),
+                QuoteCsvField(entry.Notes)));
         }
 
         await clipboard.SetTextAsync(sb.ToString());
