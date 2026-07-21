@@ -1902,7 +1902,10 @@ internal sealed class MxlMidiPlayer : IDisposable
 
                     int  midi       = Math.Clamp(note.MidiPitch, 0, 127);
                     long globalDivs = measure.GlobalOnsetDivisions + note.OnsetDivisions;
-                    string noteName = $"{note.Pitch}{note.Octave}{(string.IsNullOrEmpty(note.Accidental) ? "" : $"({note.Accidental})")}";
+                    // Build label from PitchAlter (authoritative, includes key-sig) rather than the
+                    // display Accidental (absent for key-sig-implied sharps/flats).
+                    string alterSuffix = note.PitchAlter switch { 1 => "#", 2 => "##", -1 => "b", -2 => "bb", _ => "" };
+                    string noteName = $"{note.Pitch}{alterSuffix}{note.Octave}";
 
                     // Use measureStartMs + local onset so GlobalOnsetDivisions mixing is avoided
                     long onsetMs = (long)(measureStartMs + note.OnsetDivisions * msPerDiv);
