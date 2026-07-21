@@ -658,7 +658,39 @@ public class MxlVisualizationManualTests : TestBase
         var playBtn = new Button { Content = "▶  Play",  Margin = new Thickness(4), Padding = new Thickness(8, 2) };
         var stopBtn = new Button { Content = "■  Stop",  Margin = new Thickness(4), Padding = new Thickness(8, 2), IsEnabled = false };
 
+        int totalMeasuresH = score.Parts.Max(p => p.Measures.Count);
+        var measureSlider  = new Slider
+        {
+            Minimum = 1, Maximum = Math.Max(1, totalMeasuresH),
+            Value   = 1,
+            Width   = 260,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            [ToolTip.TipProperty] = "Jump to measure (stop first)"
+        };
+        var measureLabel = new TextBlock
+        {
+            Text = $"M 1/{totalMeasuresH}",
+            Width = 72,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            FontSize = 12
+        };
+        measureSlider.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == Slider.ValueProperty)
+                measureLabel.Text = $"M {(int)measureSlider.Value}/{totalMeasuresH}";
+        };
+
         MxlMidiPlayer? player = null;
+        bool sliderDrivingH = false;
+
+        var logNotesChk = new CheckBox
+        {
+            Content = "Log notes",
+            IsChecked = false,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin = new Thickness(4, 0),
+            [ToolTip.TipProperty] = "Write every NoteOn to Trace while playing (check before pressing Play, or mid-song)"
+        };
 
         void SetStopped()
         {
@@ -673,13 +705,27 @@ public class MxlVisualizationManualTests : TestBase
         playBtn.Click += (_, _) =>
         {
             player?.Dispose();
-            player = new MxlMidiPlayer(score) { Bpm = bpmSlider.Value };
+            player = new MxlMidiPlayer(score)
+            {
+                Bpm          = bpmSlider.Value,
+                StartMeasure = (int)measureSlider.Value,
+                LogNotes     = logNotesChk.IsChecked == true,
+            };
+
+            // Allow toggling mid-playback
+            logNotesChk.IsCheckedChanged += (_, _) =>
+            {
+                if (player != null) player.LogNotes = logNotesChk.IsChecked == true;
+            };
 
             player.PositionChanged += (_, divs) => Dispatcher.UIThread.Post(() =>
             {
                 canvas.CurrentGlobalDivisions = divs;
                 int measureNo = score.Parts[0].Measures
                     .LastOrDefault(m => m.GlobalOnsetDivisions <= divs)?.Number ?? 1;
+                sliderDrivingH = true;
+                measureSlider.Value = measureNo;
+                sliderDrivingH = false;
                 statusBlock.Text = $"Playing ▶  measure {measureNo}  |  {bpmSlider.Value:F0} BPM";
             });
 
@@ -697,7 +743,7 @@ public class MxlVisualizationManualTests : TestBase
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
             Margin = new Thickness(4),
-            Children = { playBtn, stopBtn, bpmSlider, bpmLabel, statusBlock }
+            Children = { playBtn, stopBtn, bpmSlider, bpmLabel, measureSlider, measureLabel, logNotesChk, statusBlock }
         };
 
         var layout = new DockPanel();
@@ -752,19 +798,21 @@ public class MxlVisualizationManualTests : TestBase
                               $"(Staff1 bottom={lowestS1}, Staff2 top={highestS2} — " +
                               $"{(overlapRange > 0 ? "hands DO share pitch range, both colours should appear" : "hands occupy disjoint ranges — colour split only visible where ranges cross")})");
 
-            // Per-note dump of the first 5 measures so we can see exact onsets / visual-staff assignments
-            diagSb.AppendLine($"    --- Per-note dump: first 5 measures ---");
-            foreach (var m in p.Measures.Where(m => m.Number <= 5))
-            {
-                diagSb.AppendLine($"    Measure {m.Number,2}  (divs={m.Divisions} globalOnset={m.GlobalOnsetDivisions})");
-                foreach (var n in m.Notes)
-                {
-                    int vs = score.VisualStaff(p, n);
-                    string colour = vs == 1 ? "GREEN" : vs == 2 ? "BLUE " : "OTHER";
-                    diagSb.AppendLine($"      onset={n.OnsetDivisions,5} dur={n.Duration,5}  staff={n.Staff} visualStaff={vs} [{colour}]" +
-                                      $"  midi={n.MidiPitch,3}  {(n.IsRest ? "REST" : $"{n.Pitch}{n.Octave}")}  isChord={n.IsChord}");
-                }
-            }
+            // Per-note dump (first 5 measures) — commented out; re-enable to debug missing notes.
+            // To enable: change the measure range in the Where clause and uncomment below.
+            // diagSb.AppendLine($"    --- Per-note dump: measures M..N ---");
+            // int dumpFrom = 1, dumpTo = 5;   // ← edit range here
+            // foreach (var m in p.Measures.Where(m => m.Number >= dumpFrom && m.Number <= dumpTo))
+            // {
+            //     diagSb.AppendLine($"    Measure {m.Number,2}  (divs={m.Divisions} globalOnset={m.GlobalOnsetDivisions})");
+            //     foreach (var n in m.Notes)
+            //     {
+            //         int vs = score.VisualStaff(p, n);
+            //         string colour = vs == 1 ? "GREEN" : vs == 2 ? "BLUE " : "OTHER";
+            //         diagSb.AppendLine($"      onset={n.OnsetDivisions,5} dur={n.Duration,5}  staff={n.Staff} vs={vs} [{colour}]"
+            //                         + $"  midi={n.MidiPitch,3}  {(n.IsRest ? "REST" : $"{n.Pitch}{n.Octave}")}  chord={n.IsChord}");
+            //     }
+            // }
         }
         LogMessage(diagSb.ToString());
 
@@ -802,7 +850,39 @@ public class MxlVisualizationManualTests : TestBase
         var playBtn = new Button { Content = "▶  Play",  Margin = new Thickness(4), Padding = new Thickness(8, 2) };
         var stopBtn = new Button { Content = "■  Stop",  Margin = new Thickness(4), Padding = new Thickness(8, 2), IsEnabled = false };
 
+        int totalMeasuresV = score.Parts.Max(p => p.Measures.Count);
+        var measureSlider  = new Slider
+        {
+            Minimum = 1, Maximum = Math.Max(1, totalMeasuresV),
+            Value   = 1,
+            Width   = 260,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            [ToolTip.TipProperty] = "Jump to measure (stop first)"
+        };
+        var measureLabel = new TextBlock
+        {
+            Text = $"M 1/{totalMeasuresV}",
+            Width = 72,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            FontSize = 12
+        };
+        measureSlider.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == Slider.ValueProperty)
+                measureLabel.Text = $"M {(int)measureSlider.Value}/{totalMeasuresV}";
+        };
+
         MxlMidiPlayer? player = null;
+        bool sliderDrivingV = false;
+
+        var logNotesChk = new CheckBox
+        {
+            Content = "Log notes",
+            IsChecked = false,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin = new Thickness(4, 0),
+            [ToolTip.TipProperty] = "Write every NoteOn to Trace while playing (check before pressing Play, or mid-song)"
+        };
 
         void SetStopped()
         {
@@ -817,13 +897,27 @@ public class MxlVisualizationManualTests : TestBase
         playBtn.Click += (_, _) =>
         {
             player?.Dispose();
-            player = new MxlMidiPlayer(score) { Bpm = bpmSlider.Value };
+            player = new MxlMidiPlayer(score)
+            {
+                Bpm          = bpmSlider.Value,
+                StartMeasure = (int)measureSlider.Value,
+                LogNotes     = logNotesChk.IsChecked == true,
+            };
+
+            // Allow toggling mid-playback
+            logNotesChk.IsCheckedChanged += (_, _) =>
+            {
+                if (player != null) player.LogNotes = logNotesChk.IsChecked == true;
+            };
 
             player.PositionChanged += (_, divs) => Dispatcher.UIThread.Post(() =>
             {
                 canvas.CurrentGlobalDivisions = divs;
                 int measureNo = score.Parts[0].Measures
                     .LastOrDefault(m => m.GlobalOnsetDivisions <= divs)?.Number ?? 1;
+                sliderDrivingV = true;
+                measureSlider.Value = measureNo;
+                sliderDrivingV = false;
                 statusBlock.Text = $"Playing ▶  measure {measureNo}  |  {bpmSlider.Value:F0} BPM";
             });
 
@@ -841,7 +935,7 @@ public class MxlVisualizationManualTests : TestBase
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
             Margin = new Thickness(4),
-            Children = { playBtn, stopBtn, bpmSlider, bpmLabel, statusBlock }
+            Children = { playBtn, stopBtn, bpmSlider, bpmLabel, measureSlider, measureLabel, logNotesChk, statusBlock }
         };
 
         var layout = new DockPanel();
@@ -1106,12 +1200,19 @@ internal sealed class MxlScore
                     int onset = isChord ? lastCursor : cursor;
 
                     string pitch = string.Empty, octave = string.Empty, accidental = string.Empty;
+                    int pitchAlter = 0;
                     if (!isRest)
                     {
                         var pitchEl = noteEl.Element(ns + "pitch");
                         pitch      = pitchEl?.Element(ns + "step")?.Value ?? string.Empty;
                         octave     = pitchEl?.Element(ns + "octave")?.Value ?? string.Empty;
                         accidental = noteEl.Element(ns + "accidental")?.Value ?? string.Empty;
+                        // <alter> is the authoritative chromatic offset (includes key-sig sharps/flats).
+                        // Parse as double first (MusicXML allows 0.5 for quarter-tones) then round.
+                        if (double.TryParse(pitchEl?.Element(ns + "alter")?.Value,
+                                System.Globalization.NumberStyles.Any,
+                                System.Globalization.CultureInfo.InvariantCulture, out var alterD))
+                            pitchAlter = (int)Math.Round(alterD);
                     }
 
                     var note = new MxlNote
@@ -1121,6 +1222,7 @@ internal sealed class MxlScore
                         Pitch         = pitch,
                         Octave        = octave,
                         Accidental    = accidental,
+                        PitchAlter    = pitchAlter,
                         Duration      = dur,
                         OnsetDivisions= onset,
                         NoteType      = noteEl.Element(ns + "type")?.Value ?? string.Empty,
@@ -1648,7 +1750,8 @@ internal sealed class MxlNote
     public bool   IsChord         { get; set; }
     public string Pitch           { get; set; } = string.Empty;
     public string Octave          { get; set; } = string.Empty;
-    public string Accidental      { get; set; } = string.Empty;
+    public string Accidental      { get; set; } = string.Empty;  // display accidental (for labels only)
+    public int    PitchAlter      { get; set; }                  // chromatic offset from <pitch><alter> — correct for key sig
     public int    Duration        { get; set; }  // in divisions
     public int    OnsetDivisions  { get; set; }  // offset from start of measure, in divisions
     public string NoteType        { get; set; } = string.Empty;
@@ -1667,15 +1770,9 @@ internal sealed class MxlNote
                 "C" => 0, "D" => 2, "E" => 4, "F" => 5,
                 "G" => 7, "A" => 9, "B" => 11, _ => 0
             };
-            int alter = Accidental switch
-            {
-                "sharp" or "sharp-sharp" => 1,
-                "double-sharp"           => 2,
-                "flat"  or "flat-flat"   => -1,
-                "double-flat"            => -2,
-                _                        => 0
-            };
-            return int.TryParse(Octave, out var oct) ? 12 * (oct + 1) + step + alter : 0;
+            // PitchAlter comes from <pitch><alter> which includes key-signature sharps/flats.
+            // Accidental is only the *displayed* symbol and is absent for key-sig-implied alterations.
+            return int.TryParse(Octave, out var oct) ? 12 * (oct + 1) + step + PitchAlter : 0;
         }
     }
 }
@@ -1739,6 +1836,10 @@ internal sealed class MxlMidiPlayer : IDisposable
     private CancellationTokenSource? _cts;
 
     public double Bpm { get; set; } = 120.0;
+    /// <summary>Start playback from this measure number (1-based). Events before it are skipped.</summary>
+    public int StartMeasure { get; set; } = 1;
+    /// <summary>When true, every NoteOn is written to Trace with measure/pitch/staff detail.</summary>
+    public bool LogNotes { get; set; } = false;
 
     /// <summary>Fired on the playback thread with the current global-divisions offset.</summary>
     public event EventHandler<long>? PositionChanged;
@@ -1767,7 +1868,8 @@ internal sealed class MxlMidiPlayer : IDisposable
         }
     }
 
-    private record struct MidiEvent(long TimeMs, uint Message, long GlobalDivisions);
+    private record struct MidiEvent(long TimeMs, uint Message, long GlobalDivisions,
+        int MeasureNo = 0, string NoteName = "", int MidiNote = 0, int Staff = 0, int Voice = 0);
 
     private async Task PlayAsync(CancellationToken ct)
     {
@@ -1798,15 +1900,18 @@ internal sealed class MxlMidiPlayer : IDisposable
                 {
                     if (note.IsRest || note.MidiPitch == 0) continue;
 
-                    int  midi    = Math.Clamp(note.MidiPitch, 0, 127);
+                    int  midi       = Math.Clamp(note.MidiPitch, 0, 127);
                     long globalDivs = measure.GlobalOnsetDivisions + note.OnsetDivisions;
+                    string noteName = $"{note.Pitch}{note.Octave}{(string.IsNullOrEmpty(note.Accidental) ? "" : $"({note.Accidental})")}";
 
                     // Use measureStartMs + local onset so GlobalOnsetDivisions mixing is avoided
                     long onsetMs = (long)(measureStartMs + note.OnsetDivisions * msPerDiv);
                     long offMs   = onsetMs + Math.Max(30, (long)(note.Duration * msPerDiv) - 15);
 
-                    events.Add(new MidiEvent(onsetMs, NoteOn (ch, midi, 72), globalDivs));
-                    events.Add(new MidiEvent(offMs,   NoteOff(ch, midi),     globalDivs));
+                    events.Add(new MidiEvent(onsetMs, NoteOn(ch, midi, 72), globalDivs,
+                        MeasureNo: measure.Number, NoteName: noteName, MidiNote: midi,
+                        Staff: note.Staff, Voice: note.Voice));
+                    events.Add(new MidiEvent(offMs, NoteOff(ch, midi), globalDivs));
 
                     // Track the furthest non-chord note for measure duration
                     if (!note.IsChord)
@@ -1819,30 +1924,42 @@ internal sealed class MxlMidiPlayer : IDisposable
 
         events.Sort((a, b) => a.TimeMs.CompareTo(b.TimeMs));
 
-        // Dump the first 3 seconds of scheduled events so we can verify simultaneous notes
-        var dumpSb = new System.Text.StringBuilder();
-        dumpSb.AppendLine("MxlMidiPlayer — first 3000 ms of scheduled events:");
-        foreach (var ev in events.Where(e => e.TimeMs <= 3000))
+        // Seek: drop events before the requested start measure and shift timestamps
+        long seekDivs = 0;
+        long seekMs   = 0;
+        if (StartMeasure > 1 && _score.Parts.Count > 0)
         {
-            uint msg    = ev.Message;
-            int  status = (int)(msg & 0xFF);
-            int  ch     = status & 0x0F;
-            int  cmd    = status & 0xF0;
-            int  d1     = (int)((msg >> 8)  & 0xFF);
-            int  d2     = (int)((msg >> 16) & 0xFF);
-            string kind = cmd == 0x90 ? $"NoteOn  midi={d1,3} vel={d2}" :
-                          cmd == 0x80 ? $"NoteOff midi={d1,3}        " :
-                          cmd == 0xC0 ? $"ProgChg prog={d1,3}        " : $"Msg=0x{msg:X8}";
-            dumpSb.AppendLine($"  t={ev.TimeMs,6} ms  ch={ch}  {kind}  (globalDivs={ev.GlobalDivisions})");
+            var startMeasure = _score.Parts[0].Measures
+                .FirstOrDefault(m => m.Number >= StartMeasure);
+            if (startMeasure != null)
+            {
+                seekDivs = startMeasure.GlobalOnsetDivisions;
+                // Find the earliest NoteOn at/after that measure to determine the ms offset
+                var firstAfter = events.FirstOrDefault(e =>
+                    (e.Message & 0xF0) == 0x90 && e.GlobalDivisions >= seekDivs);
+                seekMs = firstAfter.TimeMs;
+            }
         }
-        System.Diagnostics.Trace.WriteLine(dumpSb.ToString());
+        var playEvents = events
+            .Where(e => e.TimeMs >= seekMs)
+            .Select(e => e with { TimeMs = e.TimeMs - seekMs })
+            .ToList();
 
-        var start       = DateTimeOffset.UtcNow;
-        long lastDivs   = -1;
+        // -- MIDI event dump (first 3 s) commented out — re-enable when debugging timing --
+        // var dumpSb = new System.Text.StringBuilder();
+        // dumpSb.AppendLine("MxlMidiPlayer — first 3000 ms:");
+        // foreach (var ev in playEvents.Where(e => e.TimeMs <= 3000)) { ... }
+        // System.Diagnostics.Trace.WriteLine(dumpSb.ToString());
+
+        var start     = DateTimeOffset.UtcNow;
+        long lastDivs = -1;
+
+        // Fire an immediate position update so the canvas/slider shows where we started
+        PositionChanged?.Invoke(this, seekDivs);
 
         try
         {
-            foreach (var ev in events)
+            foreach (var ev in playEvents)
             {
                 if (ct.IsCancellationRequested) return;
                 long elapsed = (long)(DateTimeOffset.UtcNow - start).TotalMilliseconds;
@@ -1851,6 +1968,11 @@ internal sealed class MxlMidiPlayer : IDisposable
                 if (ct.IsCancellationRequested) return;
 
                 midiOutShortMsg(_handle, ev.Message);
+
+                // Per-note logging (toggled via checkbox in the UI)
+                if (LogNotes && (ev.Message & 0xF0) == 0x90 && ev.MeasureNo > 0)
+                    System.Diagnostics.Trace.WriteLine(
+                        $"NOTE  m={ev.MeasureNo,4}  midi={ev.MidiNote,3}  {ev.NoteName,-8}  staff={ev.Staff}  voice={ev.Voice}  t={ev.TimeMs,7} ms");
 
                 if (ev.GlobalDivisions != lastDivs)
                 {
