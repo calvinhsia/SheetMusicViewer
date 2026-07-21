@@ -702,6 +702,12 @@ public class MxlVisualizationManualTests : TestBase
             stopBtn.IsEnabled = false;
         }
 
+        // Wire once — updates player.LogNotes whenever the checkbox is toggled (including mid-playback)
+        logNotesChk.IsCheckedChanged += (_, _) =>
+        {
+            if (player != null) player.LogNotes = logNotesChk.IsChecked == true;
+        };
+
         playBtn.Click += (_, _) =>
         {
             player?.Dispose();
@@ -710,12 +716,6 @@ public class MxlVisualizationManualTests : TestBase
                 Bpm          = bpmSlider.Value,
                 StartMeasure = (int)measureSlider.Value,
                 LogNotes     = logNotesChk.IsChecked == true,
-            };
-
-            // Allow toggling mid-playback
-            logNotesChk.IsCheckedChanged += (_, _) =>
-            {
-                if (player != null) player.LogNotes = logNotesChk.IsChecked == true;
             };
 
             player.PositionChanged += (_, divs) => Dispatcher.UIThread.Post(() =>
@@ -894,6 +894,12 @@ public class MxlVisualizationManualTests : TestBase
             stopBtn.IsEnabled = false;
         }
 
+        // Wire once — updates player.LogNotes whenever the checkbox is toggled (including mid-playback)
+        logNotesChk.IsCheckedChanged += (_, _) =>
+        {
+            if (player != null) player.LogNotes = logNotesChk.IsChecked == true;
+        };
+
         playBtn.Click += (_, _) =>
         {
             player?.Dispose();
@@ -902,12 +908,6 @@ public class MxlVisualizationManualTests : TestBase
                 Bpm          = bpmSlider.Value,
                 StartMeasure = (int)measureSlider.Value,
                 LogNotes     = logNotesChk.IsChecked == true,
-            };
-
-            // Allow toggling mid-playback
-            logNotesChk.IsCheckedChanged += (_, _) =>
-            {
-                if (player != null) player.LogNotes = logNotesChk.IsChecked == true;
             };
 
             player.PositionChanged += (_, divs) => Dispatcher.UIThread.Post(() =>
