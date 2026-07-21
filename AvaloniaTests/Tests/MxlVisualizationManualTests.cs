@@ -3,7 +3,9 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Primitives;
 using Avalonia.Media;
+using Avalonia.Threading;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SheetMusicViewer.Desktop;
 using System;
@@ -13,6 +15,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using static SheetMusicViewer.Desktop.BrowseControl;
@@ -182,6 +185,20 @@ public class MxlVisualizationManualTests : TestBase
         await ShowHarmonyTimelineWindowAsync(AdhocMxlPath, score);
     }
 
+    /// <summary>
+    /// Playable piano roll: shows the piano-roll grid and plays the score through the
+    /// Windows MIDI synthesizer simultaneously, with a red cursor that tracks playback.
+    /// Use the Play / Stop button and the BPM slider in the window.  Windows only.
+    /// </summary>
+    [TestMethod]
+    public async Task VisualizeAdhocMxl_PlayablePianoRoll()
+    {
+        if (!OperatingSystem.IsWindows())
+            Assert.Inconclusive("MIDI playback requires Windows (winmm.dll).");
+        var score = ParseMxl(AdhocMxlPath);
+        await ShowPlayablePianoRollWindowAsync(AdhocMxlPath, score);
+    }
+
     // -----------------------------------------------------------------------
     //  Run all visualizations in sequence
     //  A single Avalonia AppBuilder session is used; windows are chained so
@@ -208,6 +225,7 @@ public class MxlVisualizationManualTests : TestBase
                 () => BuildMeasureBrowserWindow(mxlPath, score),
                 () => BuildNotesBrowserWindow(mxlPath, score),
                 () => BuildPianoRollWindow(mxlPath, score),
+                () => BuildPlayablePianoRollWindow(mxlPath, score),
                 () => BuildRhythmDensityWindow(mxlPath, score),
                 () => BuildHandRangeWindow(mxlPath, score),
                 () => BuildHarmonyTimelineWindow(mxlPath, score),
@@ -552,6 +570,127 @@ public class MxlVisualizationManualTests : TestBase
             await Task.CompletedTask;
         });
 
+    private Window BuildPlayablePianoRollWindow(string mxlPath, MxlScore score)
+    {
+        LogMessage($"Playable piano roll: {score.TotalNotes} notes, default BPM={score.DefaultBpm}");
+
+        var canvas       = new PlayablePianoRollCanvas(score);
+        var scrollViewer = new ScrollViewer
+        {
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility   = ScrollBarVisibility.Auto,
+            Content = canvas
+        };
+
+        // Auto-scroll so the playhead stays centred horizontally
+        canvas.PlayheadXChanged += xPx => Dispatcher.UIThread.Post(() =>
+        {
+            double target = Math.Max(0, xPx - scrollViewer.Bounds.Width / 2.0);
+            scrollViewer.Offset = new Vector(target, scrollViewer.Offset.Y);
+        });
+
+        var statusBlock = new TextBlock
+        {
+            Text = $"Stopped  |  BPM: {score.DefaultBpm:F0}  |  {score.Title}",
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            FontSize = 12,
+            Margin = new Thickness(8, 0)
+        };
+
+        var bpmSlider = new Slider
+        {
+            Minimum = 40, Maximum = 300,
+            Value   = score.DefaultBpm,
+            Width   = 180,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            [ToolTip.TipProperty] = "Tempo (BPM)"
+        };
+        var bpmLabel = new TextBlock
+        {
+            Text = $"{score.DefaultBpm:F0} BPM",
+            Width = 60,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            FontSize = 12
+        };
+        bpmSlider.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == Slider.ValueProperty)
+                bpmLabel.Text = $"{bpmSlider.Value:F0} BPM";
+        };
+
+        var playBtn = new Button { Content = "▶  Play",  Margin = new Thickness(4), Padding = new Thickness(8, 2) };
+        var stopBtn = new Button { Content = "■  Stop",  Margin = new Thickness(4), Padding = new Thickness(8, 2), IsEnabled = false };
+
+        MxlMidiPlayer? player = null;
+
+        void SetStopped()
+        {
+            player?.Dispose();
+            player = null;
+            canvas.CurrentGlobalDivisions = -1;
+            statusBlock.Text = "Stopped";
+            playBtn.IsEnabled = true;
+            stopBtn.IsEnabled = false;
+        }
+
+        playBtn.Click += (_, _) =>
+        {
+            player?.Dispose();
+            player = new MxlMidiPlayer(score) { Bpm = bpmSlider.Value };
+
+            player.PositionChanged += (_, divs) => Dispatcher.UIThread.Post(() =>
+            {
+                canvas.CurrentGlobalDivisions = divs;
+                int measureNo = score.Parts[0].Measures
+                    .LastOrDefault(m => m.GlobalOnsetDivisions <= divs)?.Number ?? 1;
+                statusBlock.Text = $"Playing ▶  measure {measureNo}  |  {bpmSlider.Value:F0} BPM";
+            });
+
+            player.PlaybackEnded += (_, _) => Dispatcher.UIThread.Post(SetStopped);
+
+            playBtn.IsEnabled = false;
+            stopBtn.IsEnabled = true;
+            statusBlock.Text  = "Playing ▶  ...";
+            player.Start();
+        };
+
+        stopBtn.Click += (_, _) => SetStopped();
+
+        var toolbar = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Margin = new Thickness(4),
+            Children = { playBtn, stopBtn, bpmSlider, bpmLabel, statusBlock }
+        };
+
+        var layout = new DockPanel();
+        DockPanel.SetDock(toolbar, Dock.Top);
+        layout.Children.Add(toolbar);
+        layout.Children.Add(scrollViewer);
+
+        var window = new Window
+        {
+            Title = $"Playable Piano Roll — {Path.GetFileName(mxlPath)}",
+            Width = 1400,
+            Height = 620,
+            WindowState = WindowState.Maximized,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            Content = layout
+        };
+        window.Closed += (_, _) => SetStopped();
+        return window;
+    }
+
+    private async Task ShowPlayablePianoRollWindowAsync(string mxlPath, MxlScore score) =>
+        await AvaloniaTestHelper.RunAvaloniaTest(async (lifetime, testCompleted) =>
+        {
+            var window = BuildPlayablePianoRollWindow(mxlPath, score);
+            lifetime.MainWindow = window;
+            window.Closed += AvaloniaTestHelper.CreateWindowClosedHandler(testCompleted, lifetime, "Playable piano roll closed.");
+            window.Show();
+            await Task.CompletedTask;
+        });
+
     private async Task ShowRhythmDensityWindowAsync(string mxlPath, MxlScore score) =>
         await AvaloniaTestHelper.RunAvaloniaTest(async (lifetime, testCompleted) =>
         {
@@ -623,8 +762,9 @@ public class MxlVisualizationManualTests : TestBase
 /// <summary>Top-level parsed score.</summary>
 internal sealed class MxlScore
 {
-    public string Title { get; private set; } = string.Empty;
-    public string Composer { get; private set; } = string.Empty;
+    public string Title      { get; private set; } = string.Empty;
+    public string Composer   { get; private set; } = string.Empty;
+    public double DefaultBpm { get; private set; } = 120.0;   // from <sound tempo=""> or 120
     public List<MxlPart> Parts { get; } = new();
 
     public int TotalMeasures => Parts.Sum(p => p.Measures.Count);
@@ -648,6 +788,17 @@ internal sealed class MxlScore
                                  StringComparison.OrdinalIgnoreCase))
                              ?.Value.Trim()
                          ?? string.Empty;
+
+        // Tempo from first <sound tempo=""> element
+        var soundEl = root.Descendants(ns + "sound")
+                          .FirstOrDefault(e => e.Attribute("tempo") != null);
+        if (soundEl != null && double.TryParse(soundEl.Attribute("tempo")?.Value,
+                System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out var parsedBpm)
+            && parsedBpm > 0)
+        {
+            score.DefaultBpm = parsedBpm;
+        }
 
         // Build part-name map from <part-list>
         var partNames = new Dictionary<string, (string Name, int Midi)>(StringComparer.OrdinalIgnoreCase);
@@ -793,19 +944,19 @@ internal sealed class MxlScore
 /// Renders a piano-roll grid: time (measures) on the X axis, MIDI pitch on Y.
 /// Staff 1 (treble/right hand) = green; staff 2 (bass/left hand) = blue.
 /// </summary>
-internal sealed class PianoRollCanvas : Control
+internal class PianoRollCanvas : Control
 {
-    private static readonly int MinMidi      = 21;   // A0
-    private static readonly int MaxMidi      = 108;  // C8
-    private static readonly int KeyH         = 5;    // px per semitone
-    private static readonly int MeasureW     = 80;   // px per measure
-    private static readonly int YAxisW       = 32;   // label gutter
-    private static readonly int[] BlackKeys  = { 1, 3, 6, 8, 10 };
+    protected static readonly int MinMidi      = 21;
+    protected static readonly int MaxMidi      = 108;
+    protected static readonly int KeyH         = 5;
+    protected static readonly int MeasureW     = 80;
+    protected static readonly int YAxisW       = 32;
+    private   static readonly int[] BlackKeys  = { 1, 3, 6, 8, 10 };
 
-    private readonly MxlScore _score;
-    private readonly int _totalMeasures;
-    private readonly double _canvasW;
-    private readonly double _canvasH;
+    protected readonly MxlScore _score;
+    protected readonly int    _totalMeasures;
+    protected readonly double _canvasW;
+    protected readonly double _canvasH;
 
     public PianoRollCanvas(MxlScore score)
     {
@@ -816,6 +967,28 @@ internal sealed class PianoRollCanvas : Control
     }
 
     protected override Size MeasureOverride(Size _) => new(_canvasW, _canvasH);
+
+    /// <summary>Maps a global-divisions offset to the canvas X coordinate.</summary>
+    protected double DivisionsToX(long globalDivs)
+    {
+        // Walk all measures of the first part to find which measure contains globalDivs
+        var parts = _score.Parts;
+        if (parts.Count == 0) return YAxisW;
+        foreach (var measure in parts[0].Measures)
+        {
+            int divs  = Math.Max(1, measure.Divisions);
+            long mEnd = measure.GlobalOnsetDivisions + divs * 4;  // approx measure end
+            if (globalDivs >= measure.GlobalOnsetDivisions && globalDivs < mEnd)
+            {
+                double frac = (double)(globalDivs - measure.GlobalOnsetDivisions) / (divs * 4);
+                return YAxisW + (measure.Number - 1) * MeasureW + frac * MeasureW;
+            }
+        }
+        return YAxisW + _totalMeasures * MeasureW;
+    }
+
+    /// <summary>Called at the end of Render for subclasses to draw overlays.</summary>
+    protected virtual void RenderOverlay(DrawingContext ctx) { }
 
     public override void Render(DrawingContext ctx)
     {
@@ -874,7 +1047,6 @@ internal sealed class PianoRollCanvas : Control
             if (note.IsRest || note.MidiPitch < MinMidi || note.MidiPitch > MaxMidi) continue;
 
             int divs = Math.Max(1, measure.Divisions);
-            // Assume 4 quarter-note beats per measure (use actual divisions * beats if needed)
             double xFrac   = (double)note.OnsetDivisions  / (divs * 4);
             double wFrac   = (double)note.Duration         / (divs * 4);
             double x       = YAxisW + (measure.Number - 1) * MeasureW + xFrac * MeasureW;
@@ -884,6 +1056,8 @@ internal sealed class PianoRollCanvas : Control
             var brush = note.Staff == 1 ? staff1Brush : note.Staff == 2 ? staff2Brush : otherBrush;
             ctx.FillRectangle(brush, new Rect(x, y, w, KeyH - 2));
         }
+
+        RenderOverlay(ctx);
     }
 }
 
@@ -1258,4 +1432,160 @@ internal sealed class MxlNote
             return int.TryParse(Octave, out var oct) ? 12 * (oct + 1) + step + alter : 0;
         }
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// <summary>
+/// Extends <see cref="PianoRollCanvas"/> with a red playhead cursor.
+/// Set <see cref="CurrentGlobalDivisions"/> from the MIDI player to animate it.
+/// </summary>
+internal sealed class PlayablePianoRollCanvas : PianoRollCanvas
+{
+    private long _currentGlobalDivisions = -1;
+
+    /// <summary>Fired (from any thread) when the playhead X pixel changes.</summary>
+    public event Action<double>? PlayheadXChanged;
+
+    public long CurrentGlobalDivisions
+    {
+        get => _currentGlobalDivisions;
+        set
+        {
+            _currentGlobalDivisions = value;
+            if (value >= 0)
+                PlayheadXChanged?.Invoke(DivisionsToX(value));
+            Dispatcher.UIThread.Post(InvalidateVisual, DispatcherPriority.Render);
+        }
+    }
+
+    public PlayablePianoRollCanvas(MxlScore score) : base(score) { }
+
+    protected override void RenderOverlay(DrawingContext ctx)
+    {
+        if (_currentGlobalDivisions < 0) return;
+        double x = DivisionsToX(_currentGlobalDivisions);
+        ctx.DrawLine(new Pen(Brushes.Red, 2), new Point(x, 0), new Point(x, _canvasH));
+        // Semi-transparent "now" band
+        ctx.FillRectangle(new SolidColorBrush(Color.FromArgb(40, 255, 80, 80)),
+            new Rect(x - 1, 0, MeasureW / 2.0, _canvasH));
+    }
+}
+
+/// <summary>
+/// Plays an <see cref="MxlScore"/> through the Windows MIDI synthesizer (winmm.dll).
+/// Fires <see cref="PositionChanged"/> with the current global-divisions offset so a
+/// <see cref="PlayablePianoRollCanvas"/> can track playback in real time.
+/// </summary>
+internal sealed class MxlMidiPlayer : IDisposable
+{
+    [DllImport("winmm.dll")] static extern int midiOutOpen(out IntPtr hmo, int uDeviceID, IntPtr dwCallback, IntPtr dwInstance, int fdwOpen);
+    [DllImport("winmm.dll")] static extern int midiOutShortMsg(IntPtr hmo, uint dwMsg);
+    [DllImport("winmm.dll")] static extern int midiOutClose(IntPtr hmo);
+
+    private static uint NoteOn (int ch, int n, int v) => (uint)((0x90 | ch) | (n << 8) | (v << 16));
+    private static uint NoteOff(int ch, int n)        => (uint)((0x80 | ch) | (n << 8));
+    private static uint ProgChg(int ch, int p)        => (uint)((0xC0 | ch) | (p << 8));
+    private static uint AllOff (int ch)               => (uint)((0xB0 | ch) | (123 << 8));
+
+    private readonly MxlScore _score;
+    private IntPtr _handle = IntPtr.Zero;
+    private CancellationTokenSource? _cts;
+
+    public double Bpm { get; set; } = 120.0;
+
+    /// <summary>Fired on the playback thread with the current global-divisions offset.</summary>
+    public event EventHandler<long>? PositionChanged;
+    /// <summary>Fired on the playback thread when playback finishes naturally.</summary>
+    public event EventHandler? PlaybackEnded;
+
+    public MxlMidiPlayer(MxlScore score) { _score = score; }
+
+    public void Start()
+    {
+        Stop();
+        if (midiOutOpen(out _handle, -1, IntPtr.Zero, IntPtr.Zero, 0) != 0)
+            throw new InvalidOperationException("Could not open MIDI output device.");
+        _cts = new CancellationTokenSource();
+        _ = PlayAsync(_cts.Token);
+    }
+
+    public void Stop()
+    {
+        _cts?.Cancel();
+        if (_handle != IntPtr.Zero)
+        {
+            for (int ch = 0; ch < 16; ch++) midiOutShortMsg(_handle, AllOff(ch));
+            midiOutClose(_handle);
+            _handle = IntPtr.Zero;
+        }
+    }
+
+    private record struct MidiEvent(long TimeMs, uint Message, long GlobalDivisions);
+
+    private async Task PlayAsync(CancellationToken ct)
+    {
+        var events = new List<MidiEvent>();
+
+        // Program-change events: one channel per part (channels 0-14; skip 9=drums)
+        int ChannelFor(int partIndex) => partIndex >= 9 ? partIndex + 1 : partIndex;
+
+        for (int pi = 0; pi < _score.Parts.Count && pi < 15; pi++)
+        {
+            int prog = Math.Clamp(_score.Parts[pi].MidiProgram - 1, 0, 127);
+            events.Add(new MidiEvent(0, ProgChg(ChannelFor(pi), prog), 0));
+        }
+
+        // Note events
+        for (int pi = 0; pi < _score.Parts.Count && pi < 15; pi++)
+        {
+            int ch = ChannelFor(pi);
+            foreach (var measure in _score.Parts[pi].Measures)
+            {
+                int    divs      = Math.Max(1, measure.Divisions);
+                double msPerDiv  = 60_000.0 / (Bpm * divs);
+
+                foreach (var note in measure.Notes)
+                {
+                    if (note.IsRest || note.IsChord || note.MidiPitch == 0) continue;
+                    int  midi     = Math.Clamp(note.MidiPitch, 0, 127);
+                    long onset    = measure.GlobalOnsetDivisions + note.OnsetDivisions;
+                    long onsetMs  = (long)(onset * msPerDiv);
+                    long offMs    = onsetMs + Math.Max(30, (long)(note.Duration * msPerDiv) - 15);
+                    events.Add(new MidiEvent(onsetMs, NoteOn (ch, midi, 72), onset));
+                    events.Add(new MidiEvent(offMs,   NoteOff(ch, midi),     onset));
+                }
+            }
+        }
+
+        events.Sort((a, b) => a.TimeMs.CompareTo(b.TimeMs));
+
+        var start       = DateTimeOffset.UtcNow;
+        long lastDivs   = -1;
+
+        try
+        {
+            foreach (var ev in events)
+            {
+                if (ct.IsCancellationRequested) return;
+                long elapsed = (long)(DateTimeOffset.UtcNow - start).TotalMilliseconds;
+                int  wait    = (int)(ev.TimeMs - elapsed);
+                if (wait > 1) await Task.Delay(wait, ct).ConfigureAwait(false);
+                if (ct.IsCancellationRequested) return;
+
+                midiOutShortMsg(_handle, ev.Message);
+
+                if (ev.GlobalDivisions != lastDivs)
+                {
+                    lastDivs = ev.GlobalDivisions;
+                    PositionChanged?.Invoke(this, lastDivs);
+                }
+            }
+        }
+        catch (OperationCanceledException) { return; }
+
+        PlaybackEnded?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void Dispose() => Stop();
 }
