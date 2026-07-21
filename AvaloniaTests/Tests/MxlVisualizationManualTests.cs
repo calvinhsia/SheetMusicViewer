@@ -199,6 +199,21 @@ public class MxlVisualizationManualTests : TestBase
         await ShowPlayablePianoRollWindowAsync(AdhocMxlPath, score);
     }
 
+    /// <summary>
+    /// Vertical falling-notes piano roll: notes fall downward toward a piano keyboard
+    /// drawn at the bottom of the window. Keys light up (green = right hand,
+    /// blue = left hand) as each note is played.  Includes Play / Stop / BPM controls
+    /// and uses the same Windows MIDI back-end as the playable piano roll.
+    /// </summary>
+    [TestMethod]
+    public async Task VisualizeAdhocMxl_VerticalPianoRoll()
+    {
+        if (!OperatingSystem.IsWindows())
+            Assert.Inconclusive("MIDI playback requires Windows (winmm.dll).");
+        var score = ParseMxl(AdhocMxlPath);
+        await ShowVerticalPianoRollWindowAsync(AdhocMxlPath, score);
+    }
+
     // -----------------------------------------------------------------------
     //  Run all visualizations in sequence
     //  A single Avalonia AppBuilder session is used; windows are chained so
@@ -226,6 +241,7 @@ public class MxlVisualizationManualTests : TestBase
                 () => BuildNotesBrowserWindow(mxlPath, score),
                 () => BuildPianoRollWindow(mxlPath, score),
                 () => BuildPlayablePianoRollWindow(mxlPath, score),
+                () => BuildVerticalPianoRollWindow(mxlPath, score),
                 () => BuildRhythmDensityWindow(mxlPath, score),
                 () => BuildHandRangeWindow(mxlPath, score),
                 () => BuildHarmonyTimelineWindow(mxlPath, score),
@@ -687,6 +703,114 @@ public class MxlVisualizationManualTests : TestBase
             var window = BuildPlayablePianoRollWindow(mxlPath, score);
             lifetime.MainWindow = window;
             window.Closed += AvaloniaTestHelper.CreateWindowClosedHandler(testCompleted, lifetime, "Playable piano roll closed.");
+            window.Show();
+            await Task.CompletedTask;
+        });
+
+    private Window BuildVerticalPianoRollWindow(string mxlPath, MxlScore score)
+    {
+        LogMessage($"Vertical piano roll: {score.TotalNotes} notes");
+
+        var canvas = new VerticalPianoRollCanvas(score);
+
+        var statusBlock = new TextBlock
+        {
+            Text = $"Stopped  |  BPM: {score.DefaultBpm:F0}  |  {score.Title}",
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            FontSize = 12,
+            Margin = new Thickness(8, 0)
+        };
+
+        var bpmSlider = new Slider
+        {
+            Minimum = 40, Maximum = 300,
+            Value   = score.DefaultBpm,
+            Width   = 180,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            [ToolTip.TipProperty] = "Tempo (BPM)"
+        };
+        var bpmLabel = new TextBlock
+        {
+            Text = $"{score.DefaultBpm:F0} BPM",
+            Width = 60,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            FontSize = 12
+        };
+        bpmSlider.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == Slider.ValueProperty)
+                bpmLabel.Text = $"{bpmSlider.Value:F0} BPM";
+        };
+
+        var playBtn = new Button { Content = "▶  Play",  Margin = new Thickness(4), Padding = new Thickness(8, 2) };
+        var stopBtn = new Button { Content = "■  Stop",  Margin = new Thickness(4), Padding = new Thickness(8, 2), IsEnabled = false };
+
+        MxlMidiPlayer? player = null;
+
+        void SetStopped()
+        {
+            player?.Dispose();
+            player = null;
+            canvas.CurrentGlobalDivisions = -1;
+            statusBlock.Text = "Stopped";
+            playBtn.IsEnabled = true;
+            stopBtn.IsEnabled = false;
+        }
+
+        playBtn.Click += (_, _) =>
+        {
+            player?.Dispose();
+            player = new MxlMidiPlayer(score) { Bpm = bpmSlider.Value };
+
+            player.PositionChanged += (_, divs) => Dispatcher.UIThread.Post(() =>
+            {
+                canvas.CurrentGlobalDivisions = divs;
+                int measureNo = score.Parts[0].Measures
+                    .LastOrDefault(m => m.GlobalOnsetDivisions <= divs)?.Number ?? 1;
+                statusBlock.Text = $"Playing ▶  measure {measureNo}  |  {bpmSlider.Value:F0} BPM";
+            });
+
+            player.PlaybackEnded += (_, _) => Dispatcher.UIThread.Post(SetStopped);
+
+            playBtn.IsEnabled = false;
+            stopBtn.IsEnabled = true;
+            statusBlock.Text  = "Playing ▶  ...";
+            player.Start();
+        };
+
+        stopBtn.Click += (_, _) => SetStopped();
+
+        var toolbar = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Margin = new Thickness(4),
+            Children = { playBtn, stopBtn, bpmSlider, bpmLabel, statusBlock }
+        };
+
+        var layout = new DockPanel();
+        DockPanel.SetDock(toolbar, Dock.Top);
+        layout.Children.Add(toolbar);
+        layout.Children.Add(canvas);
+
+        var window = new Window
+        {
+            Title = $"Vertical Piano Roll — {Path.GetFileName(mxlPath)}",
+            Width = 1400,
+            Height = 720,
+            WindowState = WindowState.Maximized,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            Content = layout
+        };
+        window.Closed += (_, _) => SetStopped();
+        return window;
+    }
+
+    private async Task ShowVerticalPianoRollWindowAsync(string mxlPath, MxlScore score) =>
+        await AvaloniaTestHelper.RunAvaloniaTest(async (lifetime, testCompleted) =>
+        {
+            var window = BuildVerticalPianoRollWindow(mxlPath, score);
+            lifetime.MainWindow = window;
+            window.Closed += AvaloniaTestHelper.CreateWindowClosedHandler(testCompleted, lifetime, "Vertical piano roll closed.");
             window.Show();
             await Task.CompletedTask;
         });
@@ -1589,3 +1713,285 @@ internal sealed class MxlMidiPlayer : IDisposable
 
     public void Dispose() => Stop();
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+/// <summary>
+/// Vertical "falling notes" piano roll with a keyboard at the bottom.
+/// <para>
+/// The piano keyboard spans the full width; white keys are wider than black keys.
+/// Note bars drop toward their key from above.  As the playhead reaches a note,
+/// the corresponding piano key is highlighted (green = staff 1, blue = staff 2).
+/// Set <see cref="CurrentGlobalDivisions"/> from <see cref="MxlMidiPlayer"/> to
+/// animate playback; when negative the view shows a static preview of the first
+/// few seconds of the score.
+/// </para>
+/// </summary>
+internal sealed class VerticalPianoRollCanvas : Control
+{
+    // ── MIDI range to display ──────────────────────────────────────────────
+    private static readonly int MinMidi = 21;   // A0
+    private static readonly int MaxMidi = 108;  // C8
+    private static readonly int KeyCount = MaxMidi - MinMidi + 1;
+
+    // ── White-key layout helpers ───────────────────────────────────────────
+    // Which pitch-classes within an octave are black keys
+    private static readonly HashSet<int> BlackPitchClass = new() { 1, 3, 6, 8, 10 };
+
+    // For every MIDI note in [MinMidi..MaxMidi], compute the white-key index
+    // (i.e. how many white keys precede it) and whether it is a black key.
+    private static readonly (int whiteIndex, bool isBlack)[] KeyLayout;
+
+    static VerticalPianoRollCanvas()
+    {
+        KeyLayout = new (int, bool)[KeyCount];
+        int whites = 0;
+        for (int m = MinMidi; m <= MaxMidi; m++)
+        {
+            bool black = BlackPitchClass.Contains(m % 12);
+            KeyLayout[m - MinMidi] = (whites, black);
+            if (!black) whites++;
+        }
+    }
+
+    // ── Sizing ────────────────────────────────────────────────────────────
+    private const double KeyboardH    = 120;  // pixel height of the keyboard section
+    private const double WhiteKeyW    = 14;
+    private const double BlackKeyW    = 8;
+    private const double BlackKeyH    = 70;   // fraction of keyboard height for black keys
+    private const double LookaheadSec = 4.0;  // seconds of notes visible above the keyboard
+
+    // Total white-key count across the display range
+    private readonly int _totalWhiteKeys;
+    private readonly double _canvasW;
+
+    // Pre-built note render list: pitch → x-centre on keyboard
+    private sealed record NoteBar(double X, double W, long GlobalOnset, long GlobalOff,
+                                  int MidiPitch, int Staff, bool IsBlack);
+    private readonly List<NoteBar> _bars = new();
+
+    // Playback state (set from outside on UI thread)
+    private long _currentGlobalDivisions = -1;
+    private double _divisionsPerPixelTime; // globalDivs per pixel-height in the scroll zone
+    private readonly MxlScore _score;
+
+    // Precomputed: globalDivisions → seconds mapping (linear: bpm-independent at parse time)
+    // We store globalDivisions per quarter note for the whole score (first part, first measure)
+    private readonly int _divsPerQuarter;
+
+    public long CurrentGlobalDivisions
+    {
+        get => _currentGlobalDivisions;
+        set { _currentGlobalDivisions = value; InvalidateVisual(); }
+    }
+
+    public VerticalPianoRollCanvas(MxlScore score)
+    {
+        _score = score;
+
+        // Count white keys
+        int w = 0;
+        for (int m = MinMidi; m <= MaxMidi; m++)
+            if (!BlackPitchClass.Contains(m % 12)) w++;
+        _totalWhiteKeys = w;
+        _canvasW = _totalWhiteKeys * WhiteKeyW;
+
+        _divsPerQuarter = score.Parts.Count > 0 && score.Parts[0].Measures.Count > 0
+            ? Math.Max(1, score.Parts[0].Measures[0].Divisions)
+            : 480;
+
+        BuildBars();
+    }
+
+    protected override Size MeasureOverride(Size _) =>
+        new Size(_canvasW, double.IsInfinity(_.Height) ? 720 : _.Height);
+
+    // Convert white-key pixel X for a given MIDI pitch
+    private double MidiToX(int midi)
+    {
+        if (midi < MinMidi || midi > MaxMidi) return -1;
+        var (wi, isBlack) = KeyLayout[midi - MinMidi];
+        if (!isBlack)
+            return wi * WhiteKeyW + WhiteKeyW / 2.0;   // centre of white key
+        // Black key sits between two white keys
+        return wi * WhiteKeyW + WhiteKeyW - BlackKeyW / 2.0;
+    }
+
+    private double MidiToWidth(int midi) =>
+        BlackPitchClass.Contains(midi % 12) ? BlackKeyW - 1 : WhiteKeyW - 1;
+
+    private void BuildBars()
+    {
+        foreach (var part in _score.Parts)
+        foreach (var measure in part.Measures)
+        {
+            int divs = Math.Max(1, measure.Divisions);
+            foreach (var note in measure.Notes)
+            {
+                if (note.IsRest || note.MidiPitch < MinMidi || note.MidiPitch > MaxMidi) continue;
+                long onset  = measure.GlobalOnsetDivisions + note.OnsetDivisions;
+                long off    = onset + Math.Max(1, note.Duration);
+                double x    = MidiToX(note.MidiPitch);
+                double bw   = MidiToWidth(note.MidiPitch);
+                bool black  = BlackPitchClass.Contains(note.MidiPitch % 12);
+                _bars.Add(new NoteBar(x, bw, onset, off, note.MidiPitch, note.Staff, black));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Given a global-divisions offset and a BPM, returns the pixel Y position
+    /// relative to the top of the scroll zone where that division falls.
+    /// </summary>
+    private double DivisionsToY(long globalDivisions, long currentDivs, double scrollH, double bpm)
+    {
+        // How many global divisions fit in LookaheadSec of music?
+        double divsPerSec    = bpm / 60.0 * _divsPerQuarter;
+        double lookaheadDivs = divsPerSec * LookaheadSec;
+        // Map division offset (relative to now) → pixel y from top of scroll zone
+        // "now" (currentDivs) maps to y = scrollH (keyboard top)
+        // "now - lookaheadDivs" maps to y = 0 (top of scroll zone)
+        double divsFromNow = globalDivisions - currentDivs;
+        // divsFromNow = 0  → y = scrollH   (at keyboard)
+        // divsFromNow = +lookaheadDivs → y = 0  (top of window)
+        return scrollH - (divsFromNow / lookaheadDivs) * scrollH;
+    }
+
+    public override void Render(DrawingContext ctx)
+    {
+        double totalH  = Bounds.Height;
+        double scrollH = Math.Max(50, totalH - KeyboardH);
+
+        // Default BPM for static preview
+        double bpm = _score.DefaultBpm > 0 ? _score.DefaultBpm : 120;
+
+        // When stopped, show notes that start within LookaheadSec from time=0
+        long displayDivs = _currentGlobalDivisions >= 0 ? _currentGlobalDivisions : 0;
+
+        // ── Background ────────────────────────────────────────────────────
+        ctx.FillRectangle(new SolidColorBrush(Color.FromRgb(20, 20, 20)),
+            new Rect(0, 0, _canvasW, scrollH));
+
+        // ── Faint pitch lanes (every white key, every C label) ─────────────
+        var lanePen  = new Pen(new SolidColorBrush(Color.FromArgb(30, 200, 200, 200)), 0.5);
+        var cPen     = new Pen(new SolidColorBrush(Color.FromArgb(60, 200, 200, 200)), 0.8);
+        var labelBrush = new SolidColorBrush(Color.FromArgb(120, 200, 200, 200));
+        var tf         = new Typeface("Consolas");
+
+        for (int m = MinMidi; m <= MaxMidi; m++)
+        {
+            bool isBlack = BlackPitchClass.Contains(m % 12);
+            if (isBlack) continue; // only draw lanes for white keys
+            double x = KeyLayout[m - MinMidi].whiteIndex * WhiteKeyW;
+            ctx.DrawLine(m % 12 == 0 ? cPen : lanePen,
+                new Point(x, 0), new Point(x, scrollH));
+            if (m % 12 == 0)
+            {
+                var ft = new FormattedText($"C{m / 12 - 1}", CultureInfo.InvariantCulture,
+                    FlowDirection.LeftToRight, tf, 8, labelBrush);
+                ctx.DrawText(ft, new Point(x + 1, 2));
+            }
+        }
+
+        // ── "Now" glow line just above the keyboard ───────────────────────
+        ctx.FillRectangle(new SolidColorBrush(Color.FromArgb(60, 255, 255, 200)),
+            new Rect(0, scrollH - 2, _canvasW, 4));
+
+        // ── Note bars ─────────────────────────────────────────────────────
+        var staff1Brush = new SolidColorBrush(Color.FromArgb(210, 64, 200, 90));   // green
+        var staff2Brush = new SolidColorBrush(Color.FromArgb(210, 80, 130, 230));  // blue
+        var otherBrush  = new SolidColorBrush(Color.FromArgb(200, 200, 180, 80));  // amber
+
+        double divsPerSec    = bpm / 60.0 * _divsPerQuarter;
+        double lookaheadDivs = divsPerSec * LookaheadSec;
+
+        foreach (var bar in _bars)
+        {
+            // Y of note top (onset) and bottom (release) in scroll zone
+            double yBottom = scrollH - ((bar.GlobalOnset - displayDivs) / lookaheadDivs) * scrollH;
+            double yTop    = scrollH - ((bar.GlobalOff   - displayDivs) / lookaheadDivs) * scrollH;
+
+            if (yBottom < 0 || yTop > scrollH) continue; // outside view
+
+            double h = Math.Max(2, yBottom - yTop);
+            double x = bar.X - bar.W / 2.0;
+
+            // Clip to scroll zone
+            double clippedTop = Math.Max(0, yTop);
+            double clippedH   = Math.Min(yBottom, scrollH) - clippedTop;
+            if (clippedH <= 0) continue;
+
+            var brush = bar.Staff == 1 ? staff1Brush : bar.Staff == 2 ? staff2Brush : otherBrush;
+
+            // Rounded-rect style: draw main body with a brighter top edge
+            ctx.FillRectangle(brush, new Rect(x, clippedTop, bar.W, clippedH),
+                (float)Math.Min(3, bar.W / 2));
+
+            // Bright leading edge (bottom of falling bar = onset = closest to keyboard)
+            double edgeY = Math.Min(yBottom, scrollH - 1);
+            if (edgeY - clippedTop > 2)
+            {
+                ctx.FillRectangle(new SolidColorBrush(Color.FromArgb(200, 255, 255, 255)),
+                    new Rect(x, edgeY - 2, bar.W, 2));
+            }
+        }
+
+        // ── Determine which keys are currently sounding ───────────────────
+        // A key is "active" when displayDivs is within [onset, off)
+        var activeKeys = new Dictionary<int, int>(); // midiPitch → staff
+        if (_currentGlobalDivisions >= 0)
+        {
+            foreach (var bar in _bars)
+            {
+                if (displayDivs >= bar.GlobalOnset && displayDivs < bar.GlobalOff)
+                    activeKeys.TryAdd(bar.MidiPitch, bar.Staff);
+            }
+        }
+
+        // ── Piano keyboard ────────────────────────────────────────────────
+        double kbY = scrollH;  // keyboard starts here
+
+        var whiteKeyBrush  = new SolidColorBrush(Color.FromRgb(240, 240, 240));
+        var blackKeyBrush  = new SolidColorBrush(Color.FromRgb(30,  30,  30));
+        var whiteKeyPen    = new Pen(new SolidColorBrush(Color.FromRgb(80, 80, 80)), 0.5);
+        var activeS1       = new SolidColorBrush(Color.FromArgb(230, 64, 200, 90));   // green
+        var activeS2       = new SolidColorBrush(Color.FromArgb(230, 80, 130, 230));  // blue
+        var activeOther    = new SolidColorBrush(Color.FromArgb(230, 200, 180, 80));
+
+        ISolidColorBrush ActiveBrush(int staff) =>
+            staff == 1 ? activeS1 : staff == 2 ? activeS2 : activeOther;
+
+        // Draw white keys first (so black keys paint on top)
+        for (int m = MinMidi; m <= MaxMidi; m++)
+        {
+            var (wi, isBlack) = KeyLayout[m - MinMidi];
+            if (isBlack) continue;
+            double kx = wi * WhiteKeyW;
+            bool active = activeKeys.TryGetValue(m, out int staff);
+            var fill = active ? ActiveBrush(staff) : whiteKeyBrush;
+            ctx.FillRectangle(fill, new Rect(kx, kbY, WhiteKeyW - 0.5, KeyboardH));
+            ctx.DrawRectangle(null, whiteKeyPen, new Rect(kx, kbY, WhiteKeyW - 0.5, KeyboardH));
+
+            // Note label on white keys at C positions
+            if (m % 12 == 0 && !active)
+            {
+                var ft = new FormattedText($"C{m/12-1}", CultureInfo.InvariantCulture,
+                    FlowDirection.LeftToRight, tf, 7,
+                    new SolidColorBrush(Color.FromRgb(100, 100, 100)));
+                ctx.DrawText(ft, new Point(kx + 1, kbY + KeyboardH - 14));
+            }
+        }
+
+        // Draw black keys on top
+        for (int m = MinMidi; m <= MaxMidi; m++)
+        {
+            var (wi, isBlack) = KeyLayout[m - MinMidi];
+            if (!isBlack) continue;
+            // Black key is offset to the right of the preceding white key
+            double kx = wi * WhiteKeyW + WhiteKeyW - BlackKeyW / 2.0 - BlackKeyW / 2.0;
+            bool active = activeKeys.TryGetValue(m, out int staff);
+            var fill = active ? ActiveBrush(staff) : blackKeyBrush;
+            ctx.FillRectangle(fill, new Rect(kx, kbY, BlackKeyW, BlackKeyH));
+        }
+    }
+}
+
