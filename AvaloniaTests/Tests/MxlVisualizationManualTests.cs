@@ -290,9 +290,17 @@ public class MxlVisualizationManualTests : TestBase
         sb.AppendLine("─── Parts ───────────────────────────────────────────");
         foreach (var p in score.Parts)
         {
-            sb.AppendLine($"  [{p.PartId}] {p.InstrumentName,-30}  MIDI={p.MidiProgram,3}  " +
-                          $"Measures={p.Measures.Count,4}  Notes={p.NoteCount,5}  Rests={p.RestCount,4}");
+            int staff1Notes = p.Measures.Sum(m => m.Notes.Count(n => !n.IsRest && n.Staff == 1));
+            int staff2Notes = p.Measures.Sum(m => m.Notes.Count(n => !n.IsRest && n.Staff == 2));
+            int otherNotes  = p.Measures.Sum(m => m.Notes.Count(n => !n.IsRest && n.Staff > 2));
+            sb.AppendLine($"  [{p.PartId}] idx={p.PartIndex} {p.InstrumentName,-28}  MIDI={p.MidiProgram,3}  " +
+                          $"Measures={p.Measures.Count,4}  Notes={p.NoteCount,5}  Rests={p.RestCount,4}  " +
+                          $"Staff1={staff1Notes}  Staff2={staff2Notes}  StaffOther={otherNotes}");
         }
+        bool isMultiStaff = score.Parts.Any(p =>
+            p.Measures.Any(m => m.Notes.Any(n => !n.IsRest && n.Staff > 1)));
+        sb.AppendLine();
+        sb.AppendLine($"Layout: {(isMultiStaff ? "Grand-staff (1 part, 2 staves — colouring by <staff> element)" : "Two-part (colouring by part index: part 0=green, part 1=blue)")}");
         var summaryText = sb.ToString();
         Trace.WriteLine(summaryText);
 
@@ -588,7 +596,20 @@ public class MxlVisualizationManualTests : TestBase
 
     private Window BuildPlayablePianoRollWindow(string mxlPath, MxlScore score)
     {
-        LogMessage($"Playable piano roll: {score.TotalNotes} notes, default BPM={score.DefaultBpm}");
+        bool isMultiStaffP = score.Parts.Any(p =>
+            p.Measures.Any(m => m.Notes.Any(n => !n.IsRest && n.Staff > 1)));
+        string layoutP = isMultiStaffP
+            ? "Grand-staff (colouring by <staff> element)"
+            : "Two-part (colouring by part index: 0=green, 1=blue)";
+        var diagSbP = new StringBuilder();
+        diagSbP.AppendLine($"Playable piano roll: {score.TotalNotes} notes  Parts={score.Parts.Count}  BPM={score.DefaultBpm}  Layout={layoutP}");
+        foreach (var p in score.Parts)
+        {
+            int s1 = p.Measures.Sum(m => m.Notes.Count(n => !n.IsRest && n.Staff == 1));
+            int s2 = p.Measures.Sum(m => m.Notes.Count(n => !n.IsRest && n.Staff == 2));
+            diagSbP.AppendLine($"  Part[{p.PartIndex}] {p.PartId,-6} {p.InstrumentName,-28}  Notes={p.NoteCount}  Staff1={s1}  Staff2={s2}");
+        }
+        LogMessage(diagSbP.ToString());
 
         var canvas       = new PlayablePianoRollCanvas(score);
         var scrollViewer = new ScrollViewer
@@ -694,6 +715,7 @@ public class MxlVisualizationManualTests : TestBase
             Content = layout
         };
         window.Closed += (_, _) => SetStopped();
+        window.Opened += (_, _) => playBtn.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         return window;
     }
 
@@ -709,7 +731,42 @@ public class MxlVisualizationManualTests : TestBase
 
     private Window BuildVerticalPianoRollWindow(string mxlPath, MxlScore score)
     {
-        LogMessage($"Vertical piano roll: {score.TotalNotes} notes");
+        bool isMultiStaff = score.Parts.Any(p =>
+            p.Measures.Any(m => m.Notes.Any(n => !n.IsRest && n.Staff > 1)));
+        string staffLayout = isMultiStaff
+            ? "Grand-staff (colouring by <staff> element)"
+            : "Two-part (colouring by part index: 0=green, 1=blue)";
+
+        var diagSb = new StringBuilder();
+        diagSb.AppendLine($"Vertical piano roll: {score.TotalNotes} notes  Parts={score.Parts.Count}  Layout={staffLayout}");
+        foreach (var p in score.Parts)
+        {
+            int s1 = p.Measures.Sum(m => m.Notes.Count(n => !n.IsRest && n.Staff == 1));
+            int s2 = p.Measures.Sum(m => m.Notes.Count(n => !n.IsRest && n.Staff == 2));
+            int sX = p.Measures.Sum(m => m.Notes.Count(n => !n.IsRest && n.Staff > 2));
+            int lowestS1  = p.Measures.SelectMany(m => m.Notes).Where(n => !n.IsRest && n.Staff == 1 && n.MidiPitch > 0).Select(n => n.MidiPitch).DefaultIfEmpty(0).Min();
+            int highestS2 = p.Measures.SelectMany(m => m.Notes).Where(n => !n.IsRest && n.Staff == 2 && n.MidiPitch > 0).Select(n => n.MidiPitch).DefaultIfEmpty(0).Max();
+            int overlapRange = Math.Max(0, highestS2 - lowestS1 + 1);
+            diagSb.AppendLine($"  Part[{p.PartIndex}] {p.PartId,-6} {p.InstrumentName,-28}  Notes={p.NoteCount}  Staff1={s1} (lowest={lowestS1})  Staff2={s2} (highest={highestS2})  StaffOther={sX}");
+            diagSb.AppendLine($"    Pitch overlap between staves: {overlapRange} semitones  " +
+                              $"(Staff1 bottom={lowestS1}, Staff2 top={highestS2} — " +
+                              $"{(overlapRange > 0 ? "hands DO share pitch range, both colours should appear" : "hands occupy disjoint ranges — colour split only visible where ranges cross")})");
+
+            // Per-note dump of the first 5 measures so we can see exact onsets / visual-staff assignments
+            diagSb.AppendLine($"    --- Per-note dump: first 5 measures ---");
+            foreach (var m in p.Measures.Where(m => m.Number <= 5))
+            {
+                diagSb.AppendLine($"    Measure {m.Number,2}  (divs={m.Divisions} globalOnset={m.GlobalOnsetDivisions})");
+                foreach (var n in m.Notes)
+                {
+                    int vs = score.VisualStaff(p, n);
+                    string colour = vs == 1 ? "GREEN" : vs == 2 ? "BLUE " : "OTHER";
+                    diagSb.AppendLine($"      onset={n.OnsetDivisions,5} dur={n.Duration,5}  staff={n.Staff} visualStaff={vs} [{colour}]" +
+                                      $"  midi={n.MidiPitch,3}  {(n.IsRest ? "REST" : $"{n.Pitch}{n.Octave}")}  isChord={n.IsChord}");
+                }
+            }
+        }
+        LogMessage(diagSb.ToString());
 
         var canvas = new VerticalPianoRollCanvas(score);
 
@@ -802,6 +859,7 @@ public class MxlVisualizationManualTests : TestBase
             Content = layout
         };
         window.Closed += (_, _) => SetStopped();
+        window.Opened += (_, _) => playBtn.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         return window;
     }
 
@@ -895,6 +953,24 @@ internal sealed class MxlScore
     public int TotalNotes    => Parts.Sum(p => p.NoteCount);
     public int TotalRests    => Parts.Sum(p => p.RestCount);
 
+    /// <summary>
+    /// Resolves the "visual staff" (1 = right hand / green, 2 = left hand / blue) for a note.
+    /// Piano scores come in two common layouts:
+    ///  - Grand-staff (1 part, 2 staves): use note.Staff directly (already 1 or 2).
+    ///  - Two-part (2 parts, each staff=1): use part.PartIndex + 1.
+    /// We detect which layout is in use by checking whether any note has Staff > 1.
+    /// </summary>
+    private bool? _isMultiStaff;
+    public int VisualStaff(MxlPart part, MxlNote note)
+    {
+        if (_isMultiStaff == null)
+        {
+            _isMultiStaff = Parts.Any(p =>
+                p.Measures.Any(m => m.Notes.Any(n => !n.IsRest && n.Staff > 1)));
+        }
+        return _isMultiStaff.Value ? note.Staff : (part.PartIndex + 1);
+    }
+
     public static MxlScore Parse(string xml)
     {
         var score = new MxlScore();
@@ -937,6 +1013,7 @@ internal sealed class MxlScore
         }
 
         // Parse each <part>
+        int partIndex = 0;
         foreach (var partEl in root.Elements(ns + "part"))
         {
             var partId = partEl.Attribute("id")?.Value ?? string.Empty;
@@ -946,7 +1023,8 @@ internal sealed class MxlScore
             {
                 PartId         = partId,
                 InstrumentName = nameInfo.Name,
-                MidiProgram    = nameInfo.Midi
+                MidiProgram    = nameInfo.Midi,
+                PartIndex      = partIndex++,
             };
 
             string currentTimeSig = string.Empty;
@@ -990,11 +1068,36 @@ internal sealed class MxlScore
                     GlobalOnsetDivisions = globalOnset,
                 };
 
-                int cursor     = 0;  // running onset within this measure
+                int cursor     = 0;  // running onset within this measure (advances with notes, resets on <backup>)
                 int lastCursor = 0;  // onset of the most recent non-chord note
 
-                foreach (var noteEl in measureEl.Elements(ns + "note"))
+                // Iterate ALL child elements so we honour <backup> and <forward> time-cursor moves.
+                // MusicXML uses <backup> to rewind the cursor when switching staves/voices within a
+                // measure — without it every staff-2 note appears *after* all staff-1 notes instead
+                // of alongside them.
+                foreach (var child in measureEl.Elements())
                 {
+                    var localName = child.Name.LocalName;
+
+                    if (localName == "backup")
+                    {
+                        var backDur = int.TryParse(child.Element(ns + "duration")?.Value, out var bd) ? bd : 0;
+                        cursor = Math.Max(0, cursor - backDur);
+                        lastCursor = cursor;
+                        continue;
+                    }
+
+                    if (localName == "forward")
+                    {
+                        var fwdDur = int.TryParse(child.Element(ns + "duration")?.Value, out var fd) ? fd : 0;
+                        cursor += fwdDur;
+                        lastCursor = cursor;
+                        continue;
+                    }
+
+                    if (localName != "note") continue;
+
+                    var noteEl  = child;
                     var isRest  = noteEl.Element(ns + "rest")  != null;
                     var isChord = noteEl.Element(ns + "chord") != null;
                     var dur     = int.TryParse(noteEl.Element(ns + "duration")?.Value, out var d) ? d : 0;
@@ -1038,7 +1141,15 @@ internal sealed class MxlScore
                     }
                 }
 
-                globalOnset += cursor;
+                // Advance the global onset by the true measure duration.
+                // After <backup> elements the cursor may be behind the furthest point
+                // reached, so track the high-water mark separately.
+                int measureDuration = measure.Notes
+                    .Where(n => !n.IsChord)
+                    .Select(n => n.OnsetDivisions + n.Duration)
+                    .DefaultIfEmpty(0)
+                    .Max();
+                globalOnset += measureDuration;
                 part.Measures.Add(measure);
             }
 
@@ -1159,10 +1270,14 @@ internal class PianoRollCanvas : Control
             }
         }
 
-        // Notes
+        // Notes — split each pitch row top/bottom by staff so both are visible at the same pitch.
+        // Staff 1 (right hand) → top half of the row (green)
+        // Staff 2 (left hand)  → bottom half of the row (blue)
         var staff1Brush = new SolidColorBrush(Color.FromArgb(220, 64, 192, 87));   // green
         var staff2Brush = new SolidColorBrush(Color.FromArgb(220, 88, 130, 226));  // blue
         var otherBrush  = new SolidColorBrush(Color.FromArgb(200, 200, 180, 80));  // amber
+
+        int halfH = Math.Max(1, (KeyH - 2) / 2);
 
         foreach (var part in _score.Parts)
         foreach (var measure in part.Measures)
@@ -1171,14 +1286,20 @@ internal class PianoRollCanvas : Control
             if (note.IsRest || note.MidiPitch < MinMidi || note.MidiPitch > MaxMidi) continue;
 
             int divs = Math.Max(1, measure.Divisions);
-            double xFrac   = (double)note.OnsetDivisions  / (divs * 4);
-            double wFrac   = (double)note.Duration         / (divs * 4);
+            double xFrac   = (double)note.OnsetDivisions / (divs * 4);
+            double wFrac   = (double)note.Duration        / (divs * 4);
             double x       = YAxisW + (measure.Number - 1) * MeasureW + xFrac * MeasureW;
             double w       = Math.Max(1.5, wFrac * MeasureW - 1);
-            double y       = _canvasH - (note.MidiPitch - MinMidi + 1) * KeyH + 1;
+            double rowTop  = _canvasH - (note.MidiPitch - MinMidi + 1) * KeyH + 1;
 
-            var brush = note.Staff == 1 ? staff1Brush : note.Staff == 2 ? staff2Brush : otherBrush;
-            ctx.FillRectangle(brush, new Rect(x, y, w, KeyH - 2));
+            int visualStaff = _score.VisualStaff(part, note);
+            double ny, nh;
+            IBrush brush;
+            if (visualStaff == 1)      { ny = rowTop;         nh = halfH;     brush = staff1Brush; }
+            else if (visualStaff == 2) { ny = rowTop + halfH; nh = halfH;     brush = staff2Brush; }
+            else                       { ny = rowTop;         nh = KeyH - 2;  brush = otherBrush; }
+
+            ctx.FillRectangle(brush, new Rect(x, ny, w, nh));
         }
 
         RenderOverlay(ctx);
@@ -1502,6 +1623,7 @@ internal sealed class MxlPart
     public string PartId         { get; set; } = string.Empty;
     public string InstrumentName { get; set; } = string.Empty;
     public int    MidiProgram    { get; set; }
+    public int    PartIndex      { get; set; }   // 0-based index in the score's part list
     public List<MxlMeasure> Measures { get; } = new();
     public int NoteCount => Measures.Sum(m => m.NoteCount);
     public int RestCount => Measures.Sum(m => m.RestCount);
@@ -1664,25 +1786,56 @@ internal sealed class MxlMidiPlayer : IDisposable
         for (int pi = 0; pi < _score.Parts.Count && pi < 15; pi++)
         {
             int ch = ChannelFor(pi);
+            double measureStartMs = 0;  // accumulated wall-clock start of each measure
+
             foreach (var measure in _score.Parts[pi].Measures)
             {
-                int    divs      = Math.Max(1, measure.Divisions);
-                double msPerDiv  = 60_000.0 / (Bpm * divs);
+                int    divs     = Math.Max(1, measure.Divisions);
+                double msPerDiv = 60_000.0 / (Bpm * divs);
+                int    cursorAdvance = 0;  // how far the non-chord cursor moved this measure
 
                 foreach (var note in measure.Notes)
                 {
-                    if (note.IsRest || note.IsChord || note.MidiPitch == 0) continue;
-                    int  midi     = Math.Clamp(note.MidiPitch, 0, 127);
-                    long onset    = measure.GlobalOnsetDivisions + note.OnsetDivisions;
-                    long onsetMs  = (long)(onset * msPerDiv);
-                    long offMs    = onsetMs + Math.Max(30, (long)(note.Duration * msPerDiv) - 15);
-                    events.Add(new MidiEvent(onsetMs, NoteOn (ch, midi, 72), onset));
-                    events.Add(new MidiEvent(offMs,   NoteOff(ch, midi),     onset));
+                    if (note.IsRest || note.MidiPitch == 0) continue;
+
+                    int  midi    = Math.Clamp(note.MidiPitch, 0, 127);
+                    long globalDivs = measure.GlobalOnsetDivisions + note.OnsetDivisions;
+
+                    // Use measureStartMs + local onset so GlobalOnsetDivisions mixing is avoided
+                    long onsetMs = (long)(measureStartMs + note.OnsetDivisions * msPerDiv);
+                    long offMs   = onsetMs + Math.Max(30, (long)(note.Duration * msPerDiv) - 15);
+
+                    events.Add(new MidiEvent(onsetMs, NoteOn (ch, midi, 72), globalDivs));
+                    events.Add(new MidiEvent(offMs,   NoteOff(ch, midi),     globalDivs));
+
+                    // Track the furthest non-chord note for measure duration
+                    if (!note.IsChord)
+                        cursorAdvance = Math.Max(cursorAdvance, note.OnsetDivisions + note.Duration);
                 }
+
+                measureStartMs += cursorAdvance * msPerDiv;
             }
         }
 
         events.Sort((a, b) => a.TimeMs.CompareTo(b.TimeMs));
+
+        // Dump the first 3 seconds of scheduled events so we can verify simultaneous notes
+        var dumpSb = new System.Text.StringBuilder();
+        dumpSb.AppendLine("MxlMidiPlayer — first 3000 ms of scheduled events:");
+        foreach (var ev in events.Where(e => e.TimeMs <= 3000))
+        {
+            uint msg    = ev.Message;
+            int  status = (int)(msg & 0xFF);
+            int  ch     = status & 0x0F;
+            int  cmd    = status & 0xF0;
+            int  d1     = (int)((msg >> 8)  & 0xFF);
+            int  d2     = (int)((msg >> 16) & 0xFF);
+            string kind = cmd == 0x90 ? $"NoteOn  midi={d1,3} vel={d2}" :
+                          cmd == 0x80 ? $"NoteOff midi={d1,3}        " :
+                          cmd == 0xC0 ? $"ProgChg prog={d1,3}        " : $"Msg=0x{msg:X8}";
+            dumpSb.AppendLine($"  t={ev.TimeMs,6} ms  ch={ch}  {kind}  (globalDivs={ev.GlobalDivisions})");
+        }
+        System.Diagnostics.Trace.WriteLine(dumpSb.ToString());
 
         var start       = DateTimeOffset.UtcNow;
         long lastDivs   = -1;
@@ -1828,12 +1981,13 @@ internal sealed class VerticalPianoRollCanvas : Control
             foreach (var note in measure.Notes)
             {
                 if (note.IsRest || note.MidiPitch < MinMidi || note.MidiPitch > MaxMidi) continue;
-                long onset  = measure.GlobalOnsetDivisions + note.OnsetDivisions;
-                long off    = onset + Math.Max(1, note.Duration);
-                double x    = MidiToX(note.MidiPitch);
-                double bw   = MidiToWidth(note.MidiPitch);
-                bool black  = BlackPitchClass.Contains(note.MidiPitch % 12);
-                _bars.Add(new NoteBar(x, bw, onset, off, note.MidiPitch, note.Staff, black));
+                long onset       = measure.GlobalOnsetDivisions + note.OnsetDivisions;
+                long off         = onset + Math.Max(1, note.Duration);
+                double x         = MidiToX(note.MidiPitch);
+                double bw        = MidiToWidth(note.MidiPitch);
+                bool black       = BlackPitchClass.Contains(note.MidiPitch % 12);
+                int visualStaff  = _score.VisualStaff(part, note);
+                _bars.Add(new NoteBar(x, bw, onset, off, note.MidiPitch, visualStaff, black));
             }
         }
     }
@@ -1896,7 +2050,8 @@ internal sealed class VerticalPianoRollCanvas : Control
         ctx.FillRectangle(new SolidColorBrush(Color.FromArgb(60, 255, 255, 200)),
             new Rect(0, scrollH - 2, _canvasW, 4));
 
-        // ── Note bars ─────────────────────────────────────────────────────
+        // ── Note bars — left half = staff 1 (green), right half = staff 2 (blue) ──
+        // Splitting each key column ensures both hands are visible at shared pitches.
         var staff1Brush = new SolidColorBrush(Color.FromArgb(210, 64, 200, 90));   // green
         var staff2Brush = new SolidColorBrush(Color.FromArgb(210, 80, 130, 230));  // blue
         var otherBrush  = new SolidColorBrush(Color.FromArgb(200, 200, 180, 80));  // amber
@@ -1906,75 +2061,79 @@ internal sealed class VerticalPianoRollCanvas : Control
 
         foreach (var bar in _bars)
         {
-            // Y of note top (onset) and bottom (release) in scroll zone
             double yBottom = scrollH - ((bar.GlobalOnset - displayDivs) / lookaheadDivs) * scrollH;
             double yTop    = scrollH - ((bar.GlobalOff   - displayDivs) / lookaheadDivs) * scrollH;
 
-            if (yBottom < 0 || yTop > scrollH) continue; // outside view
+            if (yBottom < 0 || yTop > scrollH) continue;
 
-            double h = Math.Max(2, yBottom - yTop);
-            double x = bar.X - bar.W / 2.0;
-
-            // Clip to scroll zone
             double clippedTop = Math.Max(0, yTop);
             double clippedH   = Math.Min(yBottom, scrollH) - clippedTop;
             if (clippedH <= 0) continue;
 
-            var brush = bar.Staff == 1 ? staff1Brush : bar.Staff == 2 ? staff2Brush : otherBrush;
+            double fullX = bar.X - bar.W / 2.0;
+            double halfW = bar.W / 2.0;
+            double bx, bw;
+            ISolidColorBrush brush;
+            if (bar.Staff == 1)      { bx = fullX;         bw = halfW; brush = staff1Brush; }
+            else if (bar.Staff == 2) { bx = fullX + halfW; bw = halfW; brush = staff2Brush; }
+            else                     { bx = fullX;         bw = bar.W; brush = otherBrush; }
 
-            // Rounded-rect style: draw main body with a brighter top edge
-            ctx.FillRectangle(brush, new Rect(x, clippedTop, bar.W, clippedH),
-                (float)Math.Min(3, bar.W / 2));
+            ctx.FillRectangle(brush, new Rect(bx, clippedTop, bw, clippedH),
+                (float)Math.Min(3, bw / 2));
 
-            // Bright leading edge (bottom of falling bar = onset = closest to keyboard)
+            // Bright leading edge at onset
             double edgeY = Math.Min(yBottom, scrollH - 1);
             if (edgeY - clippedTop > 2)
-            {
                 ctx.FillRectangle(new SolidColorBrush(Color.FromArgb(200, 255, 255, 255)),
-                    new Rect(x, edgeY - 2, bar.W, 2));
-            }
+                    new Rect(bx, edgeY - 2, bw, 2));
         }
 
-        // ── Determine which keys are currently sounding ───────────────────
-        // A key is "active" when displayDivs is within [onset, off)
-        var activeKeys = new Dictionary<int, int>(); // midiPitch → staff
+        // ── Which keys are sounding — bitfield per pitch ──────────────────
+        // bit 0 = staff 1 active, bit 1 = staff 2 active, bit 2 = other active
+        var activeKeys = new Dictionary<int, int>();
         if (_currentGlobalDivisions >= 0)
         {
             foreach (var bar in _bars)
             {
                 if (displayDivs >= bar.GlobalOnset && displayDivs < bar.GlobalOff)
-                    activeKeys.TryAdd(bar.MidiPitch, bar.Staff);
+                {
+                    int bit = bar.Staff == 1 ? 1 : bar.Staff == 2 ? 2 : 4;
+                    activeKeys[bar.MidiPitch] = activeKeys.GetValueOrDefault(bar.MidiPitch) | bit;
+                }
             }
         }
 
         // ── Piano keyboard ────────────────────────────────────────────────
-        double kbY = scrollH;  // keyboard starts here
+        double kbY = scrollH;
 
-        var whiteKeyBrush  = new SolidColorBrush(Color.FromRgb(240, 240, 240));
-        var blackKeyBrush  = new SolidColorBrush(Color.FromRgb(30,  30,  30));
-        var whiteKeyPen    = new Pen(new SolidColorBrush(Color.FromRgb(80, 80, 80)), 0.5);
-        var activeS1       = new SolidColorBrush(Color.FromArgb(230, 64, 200, 90));   // green
-        var activeS2       = new SolidColorBrush(Color.FromArgb(230, 80, 130, 230));  // blue
-        var activeOther    = new SolidColorBrush(Color.FromArgb(230, 200, 180, 80));
+        var whiteKeyBrush = new SolidColorBrush(Color.FromRgb(240, 240, 240));
+        var blackKeyBrush = new SolidColorBrush(Color.FromRgb(30,  30,  30));
+        var whiteKeyPen   = new Pen(new SolidColorBrush(Color.FromRgb(80, 80, 80)), 0.5);
+        var activeS1      = new SolidColorBrush(Color.FromArgb(230, 64, 200, 90));   // green
+        var activeS2      = new SolidColorBrush(Color.FromArgb(230, 80, 130, 230));  // blue
 
-        ISolidColorBrush ActiveBrush(int staff) =>
-            staff == 1 ? activeS1 : staff == 2 ? activeS2 : activeOther;
-
-        // Draw white keys first (so black keys paint on top)
+        // Draw white keys first
         for (int m = MinMidi; m <= MaxMidi; m++)
         {
             var (wi, isBlack) = KeyLayout[m - MinMidi];
             if (isBlack) continue;
-            double kx = wi * WhiteKeyW;
-            bool active = activeKeys.TryGetValue(m, out int staff);
-            var fill = active ? ActiveBrush(staff) : whiteKeyBrush;
-            ctx.FillRectangle(fill, new Rect(kx, kbY, WhiteKeyW - 0.5, KeyboardH));
-            ctx.DrawRectangle(null, whiteKeyPen, new Rect(kx, kbY, WhiteKeyW - 0.5, KeyboardH));
+            double kx   = wi * WhiteKeyW;
+            double kw   = WhiteKeyW - 0.5;
+            int    bits = activeKeys.GetValueOrDefault(m);
 
-            // Note label on white keys at C positions
-            if (m % 12 == 0 && !active)
+            ctx.FillRectangle(whiteKeyBrush, new Rect(kx, kbY, kw, KeyboardH));
+            if (bits != 0)
             {
-                var ft = new FormattedText($"C{m/12-1}", CultureInfo.InvariantCulture,
+                // Overlay each active-staff half
+                double hw = kw / 2.0;
+                if ((bits & 1) != 0) ctx.FillRectangle(activeS1, new Rect(kx,      kbY, hw, KeyboardH));
+                if ((bits & 2) != 0) ctx.FillRectangle(activeS2, new Rect(kx + hw, kbY, hw, KeyboardH));
+            }
+            ctx.DrawRectangle(null, whiteKeyPen, new Rect(kx, kbY, kw, KeyboardH));
+
+            if (m % 12 == 0 && bits == 0)
+            {
+                var ft = new FormattedText($"C{m / 12 - 1}", CultureInfo.InvariantCulture,
                     FlowDirection.LeftToRight, tf, 7,
                     new SolidColorBrush(Color.FromRgb(100, 100, 100)));
                 ctx.DrawText(ft, new Point(kx + 1, kbY + KeyboardH - 14));
@@ -1986,11 +2145,16 @@ internal sealed class VerticalPianoRollCanvas : Control
         {
             var (wi, isBlack) = KeyLayout[m - MinMidi];
             if (!isBlack) continue;
-            // Black key is offset to the right of the preceding white key
-            double kx = wi * WhiteKeyW + WhiteKeyW - BlackKeyW / 2.0 - BlackKeyW / 2.0;
-            bool active = activeKeys.TryGetValue(m, out int staff);
-            var fill = active ? ActiveBrush(staff) : blackKeyBrush;
-            ctx.FillRectangle(fill, new Rect(kx, kbY, BlackKeyW, BlackKeyH));
+            double kx   = wi * WhiteKeyW + WhiteKeyW - BlackKeyW;
+            int    bits = activeKeys.GetValueOrDefault(m);
+
+            ctx.FillRectangle(blackKeyBrush, new Rect(kx, kbY, BlackKeyW, BlackKeyH));
+            if (bits != 0)
+            {
+                double hw = BlackKeyW / 2.0;
+                if ((bits & 1) != 0) ctx.FillRectangle(activeS1, new Rect(kx,      kbY, hw, BlackKeyH));
+                if ((bits & 2) != 0) ctx.FillRectangle(activeS2, new Rect(kx + hw, kbY, hw, BlackKeyH));
+            }
         }
     }
 }
