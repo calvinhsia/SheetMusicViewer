@@ -34,7 +34,7 @@ public class PdfWindowsOcrManualTests : TestBase
     public async Task ExtractTocFromAdhocPdf_WindowsOcr()
     {
         // â”€â”€ Edit these two lines before running â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        var pdfPath  = @"C:\Users\Calvi\OneDrive\SheetMusic\Classical\Chopin Complete Waltzes.pdf";
+        var pdfPath  = Path.Combine(GetSheetMusicFolder(), @"Classical\Chopin Complete Waltzes.pdf");
         var rotation = 2;   // 0=normal  1=90CW  2=180  3=270CW
         // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -48,7 +48,7 @@ public class PdfWindowsOcrManualTests : TestBase
     [TestMethod]
     public async Task ExtractToc_ChopinCompleteWaltzes_WindowsOcr()
     {
-        const string pdf = @"C:\Users\Calvi\OneDrive\SheetMusic\Classical\Chopin Complete Waltzes.pdf";
+        var pdf = Path.Combine(GetSheetMusicFolder(), @"Classical\Chopin Complete Waltzes.pdf");
         await RunWindowsOcrAsync(pdf, rotation: 2);
     }
 

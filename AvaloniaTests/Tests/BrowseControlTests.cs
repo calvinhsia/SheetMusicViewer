@@ -442,16 +442,6 @@ public class BrowseControlTests : TestBase
             await Task.Delay(100);
         });
     }
-    public static string GetSheetMusicFolder()
-    {
-        var username = Environment.UserName;
-        var folder = $@"C:\Users\{username}\OneDrive\SheetMusic";
-        if (!Directory.Exists(folder))
-        {
-            throw new DirectoryNotFoundException($"SheetMusic folder not found: {folder}");
-        }
-        return folder;
-    }
     [TestMethod]
     [TestCategory("Manual")]
     public async Task TestBrowseControlWithRealPDFMetadata()

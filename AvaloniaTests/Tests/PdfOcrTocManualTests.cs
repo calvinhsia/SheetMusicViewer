@@ -28,14 +28,14 @@ public class PdfOcrTocManualTests : TestBase
     [TestMethod]
     public async Task ExtractToc_ChopinCompleteWaltzes()
     {
-        const string pdf = @"C:\Users\Calvi\OneDrive\SheetMusic\Classical\Chopin Complete Waltzes.pdf";
+        var pdf = Path.Combine(GetSheetMusicFolder(), @"Classical\Chopin Complete Waltzes.pdf");
         await RunExtractionAsync(pdf, defaultRotation: 2);
     }
 
     [TestMethod]
     public async Task ExtractToc_MultiVolumePdf()
     {
-        const string pdf = @"C:\Users\Calvi\OneDrive\SheetMusic\FakeBooks\The Ultimate Pop Rock Fake Book.json";
+        var pdf = Path.Combine(GetSheetMusicFolder(), @"FakeBooks\The Ultimate Pop Rock Fake Book.json");
         await RunExtractionAsync(pdf);
     }
 
