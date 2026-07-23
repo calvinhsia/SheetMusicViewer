@@ -176,7 +176,7 @@ public class MxlVisualizationManualTests : TestBase
 
     /// <summary>
     /// Harmony timeline view: pitch-class (root) of the lowest note on each beat,
-    /// colour-coded by chromatic pitch class — a quick harmonic fingerprint.
+    /// color-coded by chromatic pitch class — a quick harmonic fingerprint.
     /// </summary>
     [TestMethod]
     public async Task VisualizeAdhocMxl_HarmonyTimeline()
@@ -300,7 +300,7 @@ public class MxlVisualizationManualTests : TestBase
         bool isMultiStaff = score.Parts.Any(p =>
             p.Measures.Any(m => m.Notes.Any(n => !n.IsRest && n.Staff > 1)));
         sb.AppendLine();
-        sb.AppendLine($"Layout: {(isMultiStaff ? "Grand-staff (1 part, 2 staves — colouring by <staff> element)" : "Two-part (colouring by part index: part 0=green, part 1=blue)")}");
+        sb.AppendLine($"Layout: {(isMultiStaff ? "Grand-staff (1 part, 2 staves — coloring by <staff> element)" : "Two-part (coloring by part index: part 0=green, part 1=blue)")}");
         var summaryText = sb.ToString();
         Trace.WriteLine(summaryText);
 
@@ -599,8 +599,8 @@ public class MxlVisualizationManualTests : TestBase
         bool isMultiStaffP = score.Parts.Any(p =>
             p.Measures.Any(m => m.Notes.Any(n => !n.IsRest && n.Staff > 1)));
         string layoutP = isMultiStaffP
-            ? "Grand-staff (colouring by <staff> element)"
-            : "Two-part (colouring by part index: 0=green, 1=blue)";
+            ? "Grand-staff (coloring by <staff> element)"
+            : "Two-part (coloring by part index: 0=green, 1=blue)";
         var diagSbP = new StringBuilder();
         diagSbP.AppendLine($"Playable piano roll: {score.TotalNotes} notes  Parts={score.Parts.Count}  BPM={score.DefaultBpm}  Layout={layoutP}");
         foreach (var p in score.Parts)
@@ -780,8 +780,8 @@ public class MxlVisualizationManualTests : TestBase
         bool isMultiStaff = score.Parts.Any(p =>
             p.Measures.Any(m => m.Notes.Any(n => !n.IsRest && n.Staff > 1)));
         string staffLayout = isMultiStaff
-            ? "Grand-staff (colouring by <staff> element)"
-            : "Two-part (colouring by part index: 0=green, 1=blue)";
+            ? "Grand-staff (coloring by <staff> element)"
+            : "Two-part (coloring by part index: 0=green, 1=blue)";
 
         var diagSb = new StringBuilder();
         diagSb.AppendLine($"Vertical piano roll: {score.TotalNotes} notes  Parts={score.Parts.Count}  Layout={staffLayout}");
@@ -796,7 +796,7 @@ public class MxlVisualizationManualTests : TestBase
             diagSb.AppendLine($"  Part[{p.PartIndex}] {p.PartId,-6} {p.InstrumentName,-28}  Notes={p.NoteCount}  Staff1={s1} (lowest={lowestS1})  Staff2={s2} (highest={highestS2})  StaffOther={sX}");
             diagSb.AppendLine($"    Pitch overlap between staves: {overlapRange} semitones  " +
                               $"(Staff1 bottom={lowestS1}, Staff2 top={highestS2} — " +
-                              $"{(overlapRange > 0 ? "hands DO share pitch range, both colours should appear" : "hands occupy disjoint ranges — colour split only visible where ranges cross")})");
+                              $"{(overlapRange > 0 ? "hands DO share pitch range, both colors should appear" : "hands occupy disjoint ranges — color split only visible where ranges cross")})");
 
             // Per-note dump (first 5 measures) — commented out; re-enable to debug missing notes.
             // To enable: change the measure range in the Where clause and uncomment below.
@@ -808,8 +808,8 @@ public class MxlVisualizationManualTests : TestBase
             //     foreach (var n in m.Notes)
             //     {
             //         int vs = score.VisualStaff(p, n);
-            //         string colour = vs == 1 ? "GREEN" : vs == 2 ? "BLUE " : "OTHER";
-            //         diagSb.AppendLine($"      onset={n.OnsetDivisions,5} dur={n.Duration,5}  staff={n.Staff} vs={vs} [{colour}]"
+            //         string color = vs == 1 ? "GREEN" : vs == 2 ? "BLUE " : "OTHER";
+            //         diagSb.AppendLine($"      onset={n.OnsetDivisions,5} dur={n.Duration,5}  staff={n.Staff} vs={vs} [{color}]"
             //                         + $"  midi={n.MidiPitch,3}  {(n.IsRest ? "REST" : $"{n.Pitch}{n.Octave}")}  chord={n.IsChord}");
             //     }
             // }
@@ -1598,7 +1598,7 @@ internal sealed class HandRangeCanvas : Control
 
 /// <summary>
 /// Harmony timeline: for every beat across the piece, finds the lowest
-/// non-rest note and colours a cell by its pitch class (chromatic root),
+/// non-rest note and colors a cell by its pitch class (chromatic root),
 /// giving a compact view of harmonic motion.
 /// </summary>
 internal sealed class HarmonyTimelineCanvas : Control
@@ -1608,7 +1608,7 @@ internal sealed class HarmonyTimelineCanvas : Control
     private const int YAxisW  = 26;
     private const int XAxisH  = 16;
     private static readonly string[] PitchNames = { "C","C#","D","Eb","E","F","F#","G","Ab","A","Bb","B" };
-    // Colour wheel: each pitch class gets a distinct hue
+    // color wheel: each pitch class gets a distinct hue
     private static readonly Color[] PcColors =
     {
         Color.FromRgb(220, 60,  60),   // C  red
@@ -2090,8 +2090,8 @@ internal sealed class VerticalPianoRollCanvas : Control
         var (wi, isBlack) = KeyLayout[midi - MinMidi];
         if (!isBlack)
             return wi * WhiteKeyW + WhiteKeyW / 2.0;   // centre of white key
-        // Black key sits between two white keys
-        return wi * WhiteKeyW + WhiteKeyW - BlackKeyW / 2.0;
+        // Black key is centred on the boundary between white key (wi-1) and white key wi
+        return wi * WhiteKeyW;
     }
 
     private double MidiToWidth(int midi) =>
@@ -2270,7 +2270,8 @@ internal sealed class VerticalPianoRollCanvas : Control
         {
             var (wi, isBlack) = KeyLayout[m - MinMidi];
             if (!isBlack) continue;
-            double kx   = wi * WhiteKeyW + WhiteKeyW - BlackKeyW;
+            // Centre on the boundary between white key (wi-1) and white key wi
+            double kx   = wi * WhiteKeyW - BlackKeyW / 2.0;
             int    bits = activeKeys.GetValueOrDefault(m);
 
             ctx.FillRectangle(blackKeyBrush, new Rect(kx, kbY, BlackKeyW, BlackKeyH));

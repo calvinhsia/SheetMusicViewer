@@ -394,7 +394,7 @@ public sealed class MetronomeService : IDisposable
         int    n     = (int)(sampleRate * 0.060);
         var    buf   = new float[n];
         var    rng   = new Random(13);
-        // Simple two-pole high-pass to give metallic colour
+        // Simple two-pole high-pass to give metallic color
         double hp = 0, prev = 0;
         for (int i = 0; i < n; i++)
         {
