@@ -22,6 +22,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.9" />
+    <PackageReference Include="nfluidsynth" Version="0.3.1" />
     <PackageReference Include="Tmds.DBus.Protocol" Version="0.21.3" />
     <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.9" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.9" />
@@ -37,17 +38,14 @@
     <PackageReference Include="SkiaSharp" Version="3.116.1" />
   </ItemGroup>
 
-  <!-- Tesseract language data � see Desktop project for download notes -->
+  <!-- Tesseract language data � see Desktop project for download notes -->
   <PropertyGroup>
     <TessdataDir Condition="'$(SolutionDir)' != '' And '$(SolutionDir)' != '*Undefined*'">$(SolutionDir)tessdata\</TessdataDir>
     <TessdataDir Condition="'$(TessdataDir)' == ''">$(MSBuildProjectDirectory)\..\tessdata\</TessdataDir>
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="$(TessdataDir)eng.traineddata"
-             CopyToOutputDirectory="PreserveNewest"
-             Link="tessdata\eng.traineddata"
-             Condition="Exists('$(TessdataDir)eng.traineddata')" />
+    <Content Include="$(TessdataDir)eng.traineddata" CopyToOutputDirectory="PreserveNewest" Link="tessdata\eng.traineddata" Condition="Exists('$(TessdataDir)eng.traineddata')" />
   </ItemGroup>
 
   <!--
@@ -56,5 +54,24 @@
     fetched the file before this project's build starts.
     If you build AvaloniaTests in isolation, build Desktop once first.
   -->
+
+  <!-- ── FluidSynth native DLLs (optional; only needed for MidiBackendKind.FluidSynth) ─────
+       Copies libfluidsynth-3.dll + its two deps to the build output so the DLLs are found
+       at runtime without any PATH changes.  The Condition means a missing ThirdParty folder
+       is silently skipped (winmm backend continues to work without them). -->
+  <PropertyGroup>
+    <FluidSynthNativeDir>$(MSBuildThisFileDirectory)..\ThirdParty\FluidSynth\win-x64\</FluidSynthNativeDir>
+    <SoundfontsDir>$(MSBuildThisFileDirectory)..\ThirdParty\Soundfonts\</SoundfontsDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="$(FluidSynthNativeDir)*.dll"
+             Condition="Exists('$(FluidSynthNativeDir)')"
+             CopyToOutputDirectory="PreserveNewest"
+             Link="%(Filename)%(Extension)" />
+    <Content Include="$(SoundfontsDir)*.sf2"
+             Condition="Exists('$(SoundfontsDir)')"
+             CopyToOutputDirectory="PreserveNewest"
+             Link="Soundfonts\%(Filename)%(Extension)" />
+  </ItemGroup>
 
 </Project>

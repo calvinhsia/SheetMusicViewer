@@ -60,11 +60,22 @@ public static class AvaloniaTestHelper
         var completedTask = await Task.WhenAny(testCompleted.Task, Task.Delay(timeoutMs));
         if (completedTask != testCompleted.Task)
         {
-            Trace.WriteLine($"Test timed out after {timeoutMs}ms - manually close the window to complete");
+            Trace.WriteLine($"Test timed out after {timeoutMs}ms — closing window automatically");
+            // Signal completion so the test doesn't block forever, then shut down the UI.
+            testCompleted.TrySetResult(false);
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lt)
+                        lt.Shutdown();
+                }
+                catch { }
+            });
         }
-        
+
         await testCompleted.Task;
-        uiThread.Join(2000);
+        uiThread.Join(5000);
     }
 
     public static EventHandler CreateWindowClosedHandler(

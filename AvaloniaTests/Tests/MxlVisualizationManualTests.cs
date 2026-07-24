@@ -18,6 +18,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+using NFluidsynth;
 using static SheetMusicViewer.Desktop.BrowseControl;
 
 namespace AvaloniaTests.Tests;
@@ -212,6 +213,39 @@ public class MxlVisualizationManualTests : TestBase
             Assert.Inconclusive("MIDI playback requires Windows (winmm.dll).");
         var score = ParseMxl(AdhocMxlPath);
         await ShowVerticalPianoRollWindowAsync(AdhocMxlPath, score);
+    }
+
+    /// <summary>
+    /// Same as <see cref="VisualizeAdhocMxl_VerticalPianoRoll"/> but starts playback at
+    /// measure 80 so the tail of the score (the section that previously appeared to hang)
+    /// can be verified quickly.  The window auto-closes when playback ends naturally.
+    /// Note logging is on by default so every NoteOn appears in the output.
+    /// </summary>
+    [TestMethod]
+    [Timeout(120_000)]  // 2 minutes — the tail section is ~45 s at default BPM
+    public async Task VisualizeAdhocMxl_VerticalPianoRoll_From80()
+    {
+        if (!OperatingSystem.IsWindows())
+            Assert.Inconclusive("MIDI playback requires Windows (winmm.dll).");
+
+        // Write all Trace output to a file so we can inspect it regardless of how the test is run.
+        var logPath = Path.Combine(Path.GetTempPath(), "VtPianoRoll_From80_run.log");
+        using var fileListener = new System.Diagnostics.TextWriterTraceListener(logPath) { TraceOutputOptions = System.Diagnostics.TraceOptions.DateTime };
+        Trace.Listeners.Add(fileListener);
+        Trace.AutoFlush = true;
+        Trace.WriteLine($"=== VisualizeAdhocMxl_VerticalPianoRoll_From80 started {DateTime.Now:HH:mm:ss} log={logPath} ===");
+        try
+        {
+            var score = ParseMxl(AdhocMxlPath);
+            await ShowVerticalPianoRollWindowAsync(AdhocMxlPath, score,
+                startMeasure: 80, autoCloseOnEnd: true, logNotesDefault: true);
+        }
+        finally
+        {
+            Trace.WriteLine($"=== test method returning {DateTime.Now:HH:mm:ss} ===");
+            Trace.Listeners.Remove(fileListener);
+        }
+        LogMessage($"Full trace log: {logPath}");
     }
 
     // -----------------------------------------------------------------------
@@ -692,14 +726,27 @@ public class MxlVisualizationManualTests : TestBase
             [ToolTip.TipProperty] = "Write every NoteOn to Trace while playing (check before pressing Play, or mid-song)"
         };
 
+        var fluidSynthChk = new CheckBox
+        {
+            Content = "FluidSynth",
+            IsChecked = false,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin = new Thickness(4, 0),
+            [ToolTip.TipProperty] = "FluidSynth (better sound) — may stall at high polyphony; use VintageDreamsWaves.sf2 for reliability. Unchecked = WinMM (default, reliable)"
+        };
+
+        var sfComboH = BuildSoundfontCombo(fluidSynthChk);
+
         void SetStopped()
         {
-            player?.Dispose();
+            // Dispose runs Stop() which waits for the playback task — do it off the UI thread.
+            var playerToStop = player;
             player = null;
             canvas.CurrentGlobalDivisions = -1;
             statusBlock.Text = "Stopped";
             playBtn.IsEnabled = true;
             stopBtn.IsEnabled = false;
+            if (playerToStop != null) Task.Run(() => playerToStop.Dispose());
         }
 
         // Wire once — updates player.LogNotes whenever the checkbox is toggled (including mid-playback)
@@ -710,12 +757,18 @@ public class MxlVisualizationManualTests : TestBase
 
         playBtn.Click += (_, _) =>
         {
-            player?.Dispose();
+            var prev = player; player = null;
+            if (prev != null) Task.Run(() => prev.Dispose());
+            string sfPathH = sfComboH.SelectedItem is string sfN
+                ? Path.Combine(AppContext.BaseDirectory, "Soundfonts", sfN)
+                : Path.Combine(AppContext.BaseDirectory, "Soundfonts", "VintageDreamsWaves.sf2");
             player = new MxlMidiPlayer(score)
             {
-                Bpm          = bpmSlider.Value,
-                StartMeasure = (int)measureSlider.Value,
-                LogNotes     = logNotesChk.IsChecked == true,
+                Bpm           = bpmSlider.Value,
+                StartMeasure  = (int)measureSlider.Value,
+                LogNotes      = logNotesChk.IsChecked == true,
+                Backend       = fluidSynthChk.IsChecked == true ? MidiBackendKind.FluidSynth : MidiBackendKind.Winmm,
+                SoundfontPath = sfPathH,
             };
 
             player.PositionChanged += (_, divs) => Dispatcher.UIThread.Post(() =>
@@ -743,7 +796,7 @@ public class MxlVisualizationManualTests : TestBase
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
             Margin = new Thickness(4),
-            Children = { playBtn, stopBtn, bpmSlider, bpmLabel, measureSlider, measureLabel, logNotesChk, statusBlock }
+            Children = { playBtn, stopBtn, bpmSlider, bpmLabel, measureSlider, measureLabel, logNotesChk, fluidSynthChk, sfComboH, statusBlock }
         };
 
         var layout = new DockPanel();
@@ -775,7 +828,35 @@ public class MxlVisualizationManualTests : TestBase
             await Task.CompletedTask;
         });
 
-    private Window BuildVerticalPianoRollWindow(string mxlPath, MxlScore score)
+    /// <summary>
+    /// Builds a ComboBox listing all .sf2 files in the output Soundfonts folder.
+    /// Defaults to VintageDreamsWaves (fast voice allocation).
+    /// Enabled/disabled in sync with the FluidSynth checkbox.
+    /// </summary>
+    private static ComboBox BuildSoundfontCombo(CheckBox fluidSynthChk)
+    {
+        string soundfontsDir = Path.Combine(AppContext.BaseDirectory, "Soundfonts");
+        var sf2Files = Directory.Exists(soundfontsDir)
+            ? Directory.GetFiles(soundfontsDir, "*.sf2").Select(Path.GetFileName).OfType<string>().OrderBy(x => x).ToList()
+            : new List<string>();
+        string defaultSf = "VintageDreamsWaves.sf2";
+        if (!sf2Files.Contains(defaultSf) && sf2Files.Count > 0) defaultSf = sf2Files[0];
+        var combo = new ComboBox
+        {
+            ItemsSource  = sf2Files,
+            SelectedItem = sf2Files.Contains(defaultSf) ? defaultSf : sf2Files.FirstOrDefault(),
+            Width        = 220,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin  = new Thickness(4, 0),
+            IsEnabled = fluidSynthChk.IsChecked == true,
+            [ToolTip.TipProperty] = "Soundfont (.sf2) — VintageDreams is fast; YDP-GrandPiano sounds best but needs polyphony≤32"
+        };
+        fluidSynthChk.IsCheckedChanged += (_, _) => combo.IsEnabled = fluidSynthChk.IsChecked == true;
+        return combo;
+    }
+
+    private Window BuildVerticalPianoRollWindow(string mxlPath, MxlScore score,
+        int startMeasure = 1, bool autoCloseOnEnd = false, bool logNotesDefault = false)
     {
         bool isMultiStaff = score.Parts.Any(p =>
             p.Measures.Any(m => m.Notes.Any(n => !n.IsRest && n.Staff > 1)));
@@ -854,7 +935,7 @@ public class MxlVisualizationManualTests : TestBase
         var measureSlider  = new Slider
         {
             Minimum = 1, Maximum = Math.Max(1, totalMeasuresV),
-            Value   = 1,
+            Value   = Math.Max(1, startMeasure),
             Width   = 260,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
             [ToolTip.TipProperty] = "Jump to measure (stop first)"
@@ -874,24 +955,41 @@ public class MxlVisualizationManualTests : TestBase
 
         MxlMidiPlayer? player = null;
         bool sliderDrivingV = false;
+        // Forward reference so the PlaybackEnded lambda can close the window when autoCloseOnEnd=true.
+        Window?[] windowHolder = [null];
 
         var logNotesChk = new CheckBox
         {
             Content = "Log notes",
-            IsChecked = false,
+            IsChecked = logNotesDefault,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
             Margin = new Thickness(4, 0),
             [ToolTip.TipProperty] = "Write every NoteOn to Trace while playing (check before pressing Play, or mid-song)"
         };
 
+        var fluidSynthChk = new CheckBox
+        {
+            Content = "FluidSynth",
+            IsChecked = false,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin = new Thickness(4, 0),
+            [ToolTip.TipProperty] = "FluidSynth (better sound) — may stall at high polyphony; use VintageDreamsWaves.sf2 for reliability. Unchecked = WinMM (default, reliable)"
+        };
+
+        var sfComboV = BuildSoundfontCombo(fluidSynthChk);
+
         void SetStopped()
         {
-            player?.Dispose();
+            System.Diagnostics.Trace.WriteLine(
+                $"{DateTime.Now:HH:mm:ss.fff} SetStopped called (vertical)  stack={new System.Diagnostics.StackTrace(true).ToString().Split('\n')[1].Trim()}");
+            // Dispose runs Stop() which waits for the playback task — do it off the UI thread.
+            var playerToStop = player;
             player = null;
             canvas.CurrentGlobalDivisions = -1;
             statusBlock.Text = "Stopped";
             playBtn.IsEnabled = true;
             stopBtn.IsEnabled = false;
+            if (playerToStop != null) Task.Run(() => playerToStop.Dispose());
         }
 
         // Wire once — updates player.LogNotes whenever the checkbox is toggled (including mid-playback)
@@ -902,12 +1000,17 @@ public class MxlVisualizationManualTests : TestBase
 
         playBtn.Click += (_, _) =>
         {
-            player?.Dispose();
+            var prev = player; player = null;
+            if (prev != null) Task.Run(() => prev.Dispose());
             player = new MxlMidiPlayer(score)
             {
                 Bpm          = bpmSlider.Value,
                 StartMeasure = (int)measureSlider.Value,
                 LogNotes     = logNotesChk.IsChecked == true,
+                Backend       = fluidSynthChk.IsChecked == true ? MidiBackendKind.FluidSynth : MidiBackendKind.Winmm,
+                SoundfontPath = sfComboV.SelectedItem is string sfN2
+                    ? Path.Combine(AppContext.BaseDirectory, "Soundfonts", sfN2)
+                    : Path.Combine(AppContext.BaseDirectory, "Soundfonts", "VintageDreamsWaves.sf2"),
             };
 
             player.PositionChanged += (_, divs) => Dispatcher.UIThread.Post(() =>
@@ -921,7 +1024,11 @@ public class MxlVisualizationManualTests : TestBase
                 statusBlock.Text = $"Playing ▶  measure {measureNo}  |  {bpmSlider.Value:F0} BPM";
             });
 
-            player.PlaybackEnded += (_, _) => Dispatcher.UIThread.Post(SetStopped);
+            player.PlaybackEnded += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                SetStopped();
+                if (autoCloseOnEnd) windowHolder[0]?.Close();
+            });
 
             playBtn.IsEnabled = false;
             stopBtn.IsEnabled = true;
@@ -935,7 +1042,7 @@ public class MxlVisualizationManualTests : TestBase
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
             Margin = new Thickness(4),
-            Children = { playBtn, stopBtn, bpmSlider, bpmLabel, measureSlider, measureLabel, logNotesChk, statusBlock }
+            Children = { playBtn, stopBtn, bpmSlider, bpmLabel, measureSlider, measureLabel, logNotesChk, fluidSynthChk, sfComboV, statusBlock }
         };
 
         var layout = new DockPanel();
@@ -952,20 +1059,45 @@ public class MxlVisualizationManualTests : TestBase
             WindowStartupLocation = WindowStartupLocation.CenterScreen,
             Content = layout
         };
+        windowHolder[0] = window;
+        window.Closing += (_, e) => System.Diagnostics.Trace.WriteLine(
+            $"{DateTime.Now:HH:mm:ss.fff} WINDOW CLOSING  IsProgrammatic={e.IsProgrammatic}  stack={new System.Diagnostics.StackTrace(true).ToString().Split('\n')[1].Trim()}");
         window.Closed += (_, _) => SetStopped();
-        window.Opened += (_, _) => playBtn.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        bool autoPlayFired = false;
+        window.Opened += (_, _) =>
+        {
+            if (autoPlayFired) return;
+            autoPlayFired = true;
+            playBtn.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        };
         return window;
     }
 
-    private async Task ShowVerticalPianoRollWindowAsync(string mxlPath, MxlScore score) =>
+    private async Task ShowVerticalPianoRollWindowAsync(string mxlPath, MxlScore score,
+        int startMeasure = 1, bool autoCloseOnEnd = false, bool logNotesDefault = false)
+    {
+        // Compute how long the tail of the score takes at default BPM=120 and add a 30s buffer.
+        // This ensures RunAvaloniaTest's internal timeout never fires before playback ends.
+        var seekMeasure = score.Parts.Count > 0
+            ? score.Parts[0].Measures.FirstOrDefault(m => m.Number >= startMeasure)
+            : null;
+        double seekMs   = seekMeasure?.GlobalOnsetMs ?? 0.0;
+        var lastMeasure = score.Parts.Count > 0 ? score.Parts[0].Measures.LastOrDefault() : null;
+        double totalMs  = lastMeasure != null
+            ? (lastMeasure.GlobalOnsetMs - seekMs) * 1.0 + 8_000   // +8 s for last measure's notes
+            : 60_000;
+        int timeoutMs = (int)Math.Clamp(totalMs + 30_000, 60_000, 600_000);  // min 60 s, max 10 min
+        Trace.WriteLine($"{DateTime.Now:HH:mm:ss.fff} RunAvaloniaTest timeout={timeoutMs / 1000} s  " +
+            $"(scoreMs={totalMs:F0}  startMeasure={startMeasure})");
         await AvaloniaTestHelper.RunAvaloniaTest(async (lifetime, testCompleted) =>
         {
-            var window = BuildVerticalPianoRollWindow(mxlPath, score);
+            var window = BuildVerticalPianoRollWindow(mxlPath, score, startMeasure, autoCloseOnEnd, logNotesDefault);
             lifetime.MainWindow = window;
             window.Closed += AvaloniaTestHelper.CreateWindowClosedHandler(testCompleted, lifetime, "Vertical piano roll closed.");
             window.Show();
             await Task.CompletedTask;
-        });
+        }, timeoutMs: timeoutMs);
+    }
 
     private async Task ShowRhythmDensityWindowAsync(string mxlPath, MxlScore score) =>
         await AvaloniaTestHelper.RunAvaloniaTest(async (lifetime, testCompleted) =>
@@ -1121,10 +1253,13 @@ internal sealed class MxlScore
                 PartIndex      = partIndex++,
             };
 
-            string currentTimeSig = string.Empty;
-            string currentKeySig  = string.Empty;
-            int    divisions      = 1;    // ticks per quarter note (from <divisions>)
-            long   globalOnset    = 0;   // running total across measures
+            string currentTimeSig     = string.Empty;
+            string currentKeySig     = string.Empty;
+            int    divisions         = 1;    // ticks per quarter note (from <divisions>)
+            long   globalOnset       = 0;    // running total across measures (in ticks; mixed units — informational only)
+            double globalOnsetMs     = 0.0;  // authoritative wall-clock accumulator (ms at base Bpm=120)
+            int    currentTSBeats    = 4;
+            int    currentTSBeatType = 4;
 
             foreach (var measureEl in partEl.Elements(ns + "measure"))
             {
@@ -1142,6 +1277,8 @@ internal sealed class MxlScore
                     var beats    = timeEl.Element(ns + "beats")?.Value ?? "?";
                     var beatType = timeEl.Element(ns + "beat-type")?.Value ?? "?";
                     currentTimeSig = $"{beats}/{beatType}";
+                    if (int.TryParse(beats, out var tsb) && tsb > 0)    currentTSBeats    = tsb;
+                    if (int.TryParse(beatType, out var tsbt) && tsbt > 0) currentTSBeatType = tsbt;
                 }
 
                 // Key signature change?
@@ -1160,6 +1297,9 @@ internal sealed class MxlScore
                     KeySig               = currentKeySig,
                     Divisions            = divisions,
                     GlobalOnsetDivisions = globalOnset,
+                    GlobalOnsetMs        = globalOnsetMs,
+                    TimeSigBeats         = currentTSBeats,
+                    TimeSigBeatType      = currentTSBeatType,
                 };
 
                 int cursor     = 0;  // running onset within this measure (advances with notes, resets on <backup>)
@@ -1243,15 +1383,25 @@ internal sealed class MxlScore
                     }
                 }
 
-                // Advance the global onset by the true measure duration.
-                // After <backup> elements the cursor may be behind the furthest point
-                // reached, so track the high-water mark separately.
-                int measureDuration = measure.Notes
+                // Advance globalOnset (ticks) — keep for backward-compat / informational use.
+                int rawMeasureDur = measure.Notes
                     .Where(n => !n.IsChord)
                     .Select(n => n.OnsetDivisions + n.Duration)
                     .DefaultIfEmpty(0)
                     .Max();
-                globalOnset += measureDuration;
+                globalOnset += rawMeasureDur;
+
+                // Advance globalOnsetMs using the time-sig-exact measure length so that a
+                // tie-chain note with a bogus <duration> can never corrupt later measures.
+                // quarterNotes = beats × (4 / beatType)
+                double msPerDiv       = 60_000.0 / (120.0 * divisions);  // base Bpm=120; scaled at playback
+                double quarterNotes   = currentTSBeats * (4.0 / currentTSBeatType);
+                double expectedDivs   = quarterNotes * divisions;
+                // For pickup measures (measure 0 or short measures) fall back to note-based length.
+                double actualMs       = expectedDivs * msPerDiv;
+                double noteBasedMs    = rawMeasureDur * msPerDiv;
+                // A pickup measure has fewer beats than the time sig; use the shorter value.
+                globalOnsetMs += Math.Min(actualMs, noteBasedMs > 0 ? noteBasedMs : actualMs);
                 part.Measures.Add(measure);
             }
 
@@ -1737,7 +1887,10 @@ internal sealed class MxlMeasure
     public string TimeSig               { get; set; } = string.Empty;
     public string KeySig                { get; set; } = string.Empty;
     public int    Divisions             { get; set; } = 1;  // ticks per quarter note
-    public long   GlobalOnsetDivisions  { get; set; }       // absolute onset from start of score
+    public long   GlobalOnsetDivisions  { get; set; }       // absolute onset from start of score (informational only — NOT safe for ms conversion across division changes)
+    public double GlobalOnsetMs         { get; set; }       // authoritative wall-clock onset of this measure in ms at Bpm=120 base tempo
+    public int    TimeSigBeats          { get; set; } = 4;  // numerator
+    public int    TimeSigBeatType       { get; set; } = 4;  // denominator (power of 2)
     public List<MxlNote> Notes { get; } = new();
     public int ChordCount   { get; set; }
     public int NoteCount    => Notes.Count(n => !n.IsRest);
@@ -1816,24 +1969,285 @@ internal sealed class PlayablePianoRollCanvas : PianoRollCanvas
 }
 
 /// <summary>
-/// Plays an <see cref="MxlScore"/> through the Windows MIDI synthesizer (winmm.dll).
+// ─────────────────────────────────────────────────────────────────────────────
+// MIDI backend abstraction — swap between Winmm and FluidSynth with one line.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// <summary>Thin abstraction over a MIDI output device.</summary>
+internal interface IMidiBackend : IDisposable
+{
+    /// <summary>Open the device. Throws on failure.</summary>
+    void Open();
+    /// <summary>Send a packed 3-byte MIDI message (same format as winmm midiOutShortMsg).</summary>
+    void Send(uint message);
+    /// <summary>Send All-Notes-Off on every channel and close the device.</summary>
+    void Close();
+}
+
+// ── Windows winmm backend ────────────────────────────────────────────────────
+internal sealed class WinmmMidiBackend : IMidiBackend
+{
+    [DllImport("winmm.dll")] static extern int midiOutOpen(out IntPtr h, int dev, IntPtr cb, IntPtr inst, int flags);
+    [DllImport("winmm.dll")] static extern int midiOutShortMsg(IntPtr h, uint msg);
+    [DllImport("winmm.dll")] static extern int midiOutClose(IntPtr h);
+
+    private IntPtr _h = IntPtr.Zero;
+
+    public void Open()
+    {
+        if (midiOutOpen(out _h, -1, IntPtr.Zero, IntPtr.Zero, 0) != 0)
+            throw new InvalidOperationException("Could not open MIDI output device (winmm).");
+    }
+
+    public void Send(uint message) => midiOutShortMsg(_h, message);
+
+    public void Close()
+    {
+        if (_h == IntPtr.Zero) return;
+        for (int ch = 0; ch < 16; ch++) midiOutShortMsg(_h, (uint)((0xB0 | ch) | (123 << 8))); // AllOff
+        midiOutClose(_h);
+        _h = IntPtr.Zero;
+    }
+
+    public void Dispose() => Close();
+}
+
+// ── FluidSynth backend ───────────────────────────────────────────────────────
+/// <summary>
+/// FluidSynth backend via NFluidSynth.
+/// Requires libfluidsynth-3.dll on the PATH (or in the app folder) and a .sf2 soundfont.
+/// Install FluidSynth: https://www.fluidsynth.org/  or  winget install FluidSynth.FluidSynth
+/// Free soundfonts:
+///   GeneralUser GS  — http://www.schristiancollins.com/generaluser.php  (any use, ~30 MB)
+///   Salamander Grand Piano — https://freepats.zenvoid.org/Piano/  (CC-BY-3.0, ~350 MB)
+/// </summary>
+internal sealed class FluidSynthMidiBackend : IMidiBackend
+{
+    private readonly string _soundfontPath;
+    private NFluidsynth.Settings?    _settings;
+    private NFluidsynth.Synth?       _synth;
+    private NFluidsynth.AudioDriver? _driver;
+
+    // All FluidSynth API calls are funnelled through a single dedicated thread via this
+    // channel.  The WASAPI audio render callback internally holds the same mutex that
+    // fluid_synth_noteoff/noteon acquire.  If our playback thread calls the API while
+    // the render callback holds that mutex, we deadlock.  Routing everything through a
+    // single non-WASAPI-related thread eliminates the contention entirely.
+    private System.Threading.Channels.Channel<uint>? _msgChannel;
+    private CancellationTokenSource _consumerCts = new();
+    private Task _consumerTask = Task.CompletedTask;
+    // Diagnostics: track how many messages are queued but not yet dispatched.
+    internal int _channelBacklog = 0;
+
+    /// <param name="soundfontPath">Full path to a .sf2 soundfont file.</param>
+    public FluidSynthMidiBackend(string soundfontPath) => _soundfontPath = soundfontPath;
+
+    public void Open()
+    {
+        _settings = new NFluidsynth.Settings();
+        _settings[NFluidsynth.ConfigurationKeys.AudioDriver].StringValue = "wasapi";
+        _settings[NFluidsynth.ConfigurationKeys.AudioPeriodSize].IntValue = 64;
+        _settings[NFluidsynth.ConfigurationKeys.AudioPeriods].IntValue    = 3;
+        _settings[NFluidsynth.ConfigurationKeys.SynthThreadSafeApi].IntValue = 1;
+        _settings[NFluidsynth.ConfigurationKeys.SynthPolyphony].IntValue = 64;
+        _settings[NFluidsynth.ConfigurationKeys.SynthReverbActive].IntValue  = 0;
+        _settings[NFluidsynth.ConfigurationKeys.SynthChorusActive].IntValue  = 0;
+        _synth = new NFluidsynth.Synth(_settings);
+        // Load soundfont BEFORE creating the AudioDriver so all samples are in memory
+        // before the audio render thread starts.
+        _synth.LoadSoundFont(_soundfontPath, resetPresets: true);
+        _driver = new NFluidsynth.AudioDriver(_settings, _synth);
+
+        // Start the dedicated MIDI dispatch thread.
+        _consumerCts = new CancellationTokenSource();
+        _msgChannel = System.Threading.Channels.Channel.CreateUnbounded<uint>(
+            new System.Threading.Channels.UnboundedChannelOptions { SingleReader = true });
+        var ch  = _msgChannel;
+        var syn = _synth;
+        var cct = _consumerCts.Token;
+        _consumerTask = Task.Factory.StartNew(() =>
+        {
+            var reader = ch.Reader;
+            try
+            {
+                while (reader.WaitToReadAsync(cct).AsTask().GetAwaiter().GetResult())
+                {
+                    while (reader.TryRead(out uint msg))
+                    {
+                        long t0 = Stopwatch.GetTimestamp();
+                        DispatchDirect(syn, msg);
+                        long ms = (Stopwatch.GetTimestamp() - t0) * 1000 / Stopwatch.Frequency;
+                        int backlog = Interlocked.Decrement(ref _channelBacklog);
+                        if (ms > 20)
+                            Trace.WriteLine($"{Ts()} DISPATCH SLOW {ms,5} ms  backlog={backlog}  msg=0x{msg:X8}");
+                    }
+                }
+            }
+            catch (OperationCanceledException) { }
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+    }
+
+    // Called only from the dedicated consumer thread — no locking needed.
+    // Per-channel active-note sets used by DispatchDirect to prevent sending a NoteOn for
+    // a pitch already sounding.  Sending NoteOn while a voice for that pitch is still in
+    // release phase triggers FluidSynth's exclusive-class / kill-voice logic which can
+    // block the calling thread for seconds under polyphony pressure.
+    private readonly HashSet<int>[] _activeNotes =
+        Enumerable.Range(0, 16).Select(_ => new HashSet<int>()).ToArray();
+
+    private void DispatchDirect(NFluidsynth.Synth syn, uint message)
+    {
+        int status  = (int)(message & 0xFF);
+        int type    = status & 0xF0;
+        int channel = status & 0x0F;
+        int data1   = (int)((message >>  8) & 0xFF);
+        int data2   = (int)((message >> 16) & 0xFF);
+        switch (type)
+        {
+            case 0x90:
+                if (data2 > 0)
+                {
+                    // If this pitch is still in an active/releasing voice, kill it first.
+                    // Skipping this step causes fluid_synth_noteon to stall finding the old voice.
+                    if (_activeNotes[channel].Contains(data1))
+                        syn.NoteOff(channel, data1);
+                    syn.NoteOn(channel, data1, data2);
+                    _activeNotes[channel].Add(data1);
+                }
+                else
+                {
+                    syn.NoteOff(channel, data1);
+                    _activeNotes[channel].Remove(data1);
+                }
+                break;
+            case 0x80:
+                syn.NoteOff(channel, data1);
+                _activeNotes[channel].Remove(data1);
+                break;
+            case 0xC0:
+                syn.ProgramChange(channel, data1);
+                _activeNotes[channel].Clear();
+                break;
+        }
+    }
+
+    public void Send(uint message)
+    {
+        // Non-blocking post to the channel; the consumer thread does the actual API call.
+        if (_msgChannel?.Writer.TryWrite(message) == true)
+            Interlocked.Increment(ref _channelBacklog);
+    }
+
+    private static string Ts() => DateTime.Now.ToString("HH:mm:ss.fff");
+
+    public void Close()
+    {
+        Trace.WriteLine($"{Ts()} CLOSE begin");
+
+        // Send AllNotesOff through the channel so it is sequenced after any in-flight notes.
+        if (_msgChannel is not null && _synth is not null)
+        {
+            for (int ch = 0; ch < 16; ch++)
+                _msgChannel.Writer.TryWrite((uint)(0xB0 | ch) | (123u << 8));  // CC#123 = AllNotesOff
+            // Complete the channel so the consumer thread exits cleanly.
+            _msgChannel.Writer.Complete();
+            // Cancel the consumer's WaitToReadAsync so it unblocks immediately after draining.
+            _consumerCts.Cancel();
+            _consumerTask.Wait(TimeSpan.FromSeconds(2));
+            Trace.WriteLine($"{Ts()} CLOSE AllNotesOff + consumer done");
+        }
+
+        var drv = _driver;   _driver      = null;
+        var syn = _synth;    _synth       = null;
+        var set = _settings; _settings    = null;
+        _msgChannel = null;
+
+        // Dispose in correct order on a background thread:
+        //   1. AudioDriver  — waits for the WASAPI render thread to exit
+        //   2. Synth        — safe once audio thread is gone
+        //   3. Settings
+        Task.Run(() =>
+        {
+            try
+            {
+                drv?.Dispose();
+                Trace.WriteLine($"{Ts()} CLOSE driver.Dispose done");
+                syn?.Dispose();
+                Trace.WriteLine($"{Ts()} CLOSE synth.Dispose done");
+                set?.Dispose();
+                Trace.WriteLine($"{Ts()} CLOSE settings.Dispose done");
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"{Ts()} CLOSE dispose ex: {ex.Message}");
+            }
+        });
+        Trace.WriteLine($"{Ts()} CLOSE done (dispose running in background)");
+    }
+
+    public void Dispose() => Close();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// <summary>Which MIDI backend to use for playback.</summary>
+internal enum MidiBackendKind { Winmm, FluidSynth }
+
+// ─────────────────────────────────────────────────────────────────────────────
+/// <summary>
+/// Plays an <see cref="MxlScore"/> through a pluggable MIDI backend.
+/// Default is <see cref="MidiBackendKind.Winmm"/> (Windows built-in GS synth, no dependencies).
+/// Switch to <see cref="MidiBackendKind.FluidSynth"/> for better sound quality — requires
+/// FluidSynth installed and a .sf2 soundfont pointed to by <see cref="SoundfontPath"/>.
 /// Fires <see cref="PositionChanged"/> with the current global-divisions offset so a
 /// <see cref="PlayablePianoRollCanvas"/> can track playback in real time.
 /// </summary>
 internal sealed class MxlMidiPlayer : IDisposable
 {
-    [DllImport("winmm.dll")] static extern int midiOutOpen(out IntPtr hmo, int uDeviceID, IntPtr dwCallback, IntPtr dwInstance, int fdwOpen);
-    [DllImport("winmm.dll")] static extern int midiOutShortMsg(IntPtr hmo, uint dwMsg);
-    [DllImport("winmm.dll")] static extern int midiOutClose(IntPtr hmo);
+    // ── Swap this one line to change the audio backend ───────────────────
+    /// <summary>
+    /// Backend to use.  Change before calling <see cref="Start"/>.
+    /// <list type="bullet">
+    ///   <item><see cref="MidiBackendKind.Winmm"/> — Windows built-in GS synth; zero setup; sounds OK.</item>
+    ///   <item><see cref="MidiBackendKind.FluidSynth"/> — FluidSynth + soundfont; much better piano sound;
+    ///         requires FluidSynth installed and <see cref="SoundfontPath"/> set.</item>
+    /// </list>
+    /// </summary>
+    // WinMM is the default: zero-dependency, works perfectly on Windows, no known stalls.
+    // Switch to FluidSynth via the checkbox in the UI for better sound quality — note that
+    // FluidSynth's SynthThreadSafeApi mutex can stall for seconds at high polyphony with
+    // large soundfonts; use VintageDreamsWaves.sf2 for reliable playback.
+    public MidiBackendKind Backend { get; set; } = MidiBackendKind.Winmm;
+
+    /// <summary>
+    /// Path to a .sf2 soundfont — only used when <see cref="Backend"/> is
+    /// <see cref="MidiBackendKind.FluidSynth"/>.
+    /// Free soundfonts bundled in ThirdParty\Soundfonts\ (copied to output by MSBuild):
+    ///   YDP-GrandPiano.sf2     — 113 MB realistic grand piano (CC BY 3.0, Freepats Project)
+    ///   VintageDreamsWaves.sf2 — 0.3 MB tiny GM set (CC BY 4.0, Ian Wilson)
+    ///
+    /// Required attributions when distributing (see ThirdParty\README.md for full details):
+    ///   FluidSynth       : "Uses FluidSynth (https://www.fluidsynth.org/), LGPL-2.1"
+    ///   YDP-GrandPiano   : "YDP-GrandPiano soundfont by the Freepats Project, CC BY 3.0"
+    ///   VintageDreams    : "VintageDreamsWaves by Ian Wilson, CC BY 4.0"
+    /// </summary>
+    // VintageDreamsWaves is the default: its tiny 0.3 MB sample set means voice-stealing
+    // (scanning all active voices to kill the quietest) completes in microseconds, not seconds.
+    // Switch to YDP-GrandPiano for better sound quality once the song plays reliably.
+    public string SoundfontPath { get; set; } =
+        Path.Combine(AppContext.BaseDirectory, "Soundfonts", "VintageDreamsWaves.sf2");
+    // ─────────────────────────────────────────────────────────────────────
 
     private static uint NoteOn (int ch, int n, int v) => (uint)((0x90 | ch) | (n << 8) | (v << 16));
     private static uint NoteOff(int ch, int n)        => (uint)((0x80 | ch) | (n << 8));
     private static uint ProgChg(int ch, int p)        => (uint)((0xC0 | ch) | (p << 8));
-    private static uint AllOff (int ch)               => (uint)((0xB0 | ch) | (123 << 8));
 
     private readonly MxlScore _score;
-    private IntPtr _handle = IntPtr.Zero;
+    private IMidiBackend? _backend;
     private CancellationTokenSource? _cts;
+    private Task _playTask = Task.CompletedTask;
+    // Used for interruptible waits that are immune to STA/COM thread pumping interference.
+    private readonly System.Threading.ManualResetEventSlim _waitEvent = new(false);
 
     public double Bpm { get; set; } = 120.0;
     /// <summary>Start playback from this measure number (1-based). Events before it are skipped.</summary>
@@ -1851,27 +2265,45 @@ internal sealed class MxlMidiPlayer : IDisposable
     public void Start()
     {
         Stop();
-        if (midiOutOpen(out _handle, -1, IntPtr.Zero, IntPtr.Zero, 0) != 0)
-            throw new InvalidOperationException("Could not open MIDI output device.");
+        _backend = Backend switch
+        {
+            MidiBackendKind.FluidSynth => new FluidSynthMidiBackend(SoundfontPath),
+            _                          => new WinmmMidiBackend(),
+        };
+        _backend.Open();
         _cts = new CancellationTokenSource();
-        _ = PlayAsync(_cts.Token);
+        // Run playback on a dedicated thread (not the thread pool) so that Task.Delay timer
+        // callbacks are not starved by FluidSynth's WASAPI audio threads, which consume
+        // thread pool threads and can prevent Task.Delay from resuming.
+        var cts = _cts;
+        _playTask = Task.Factory.StartNew(
+            () => PlayAsync(cts.Token).GetAwaiter().GetResult(),
+            cts.Token,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
     }
 
     public void Stop()
     {
+        System.Diagnostics.Trace.WriteLine(
+            $"{DateTime.Now:HH:mm:ss.fff} PLAYER STOP called  stack={new System.Diagnostics.StackTrace(true).ToString().Split('\n')[1].Trim()}");
         _cts?.Cancel();
-        if (_handle != IntPtr.Zero)
-        {
-            for (int ch = 0; ch < 16; ch++) midiOutShortMsg(_handle, AllOff(ch));
-            midiOutClose(_handle);
-            _handle = IntPtr.Zero;
-        }
+        // Wait for PlayAsync to fully exit before disposing the audio driver.
+        // AudioDriver.Dispose() joins the FluidSynth audio thread; if we dispose
+        // while PlayAsync is still calling NoteOn/NoteOff, the synth mutex deadlocks
+        // because the audio thread can't exit until the API lock is released.
+        try { _playTask.Wait(TimeSpan.FromSeconds(2)); } catch { }
+        _backend?.Close();
+        _backend = null;
+        _cts = null;
     }
 
     private record struct MidiEvent(long TimeMs, uint Message, long GlobalDivisions,
         int MeasureNo = 0, string NoteName = "", int MidiNote = 0, int Staff = 0, int Voice = 0);
 
-    private async Task PlayAsync(CancellationToken ct)
+    private async Task PlayAsync(CancellationToken ct) { PlaySync(ct); await Task.CompletedTask; }
+
+    private void PlaySync(CancellationToken ct)
     {
         var events = new List<MidiEvent>();
 
@@ -1884,17 +2316,20 @@ internal sealed class MxlMidiPlayer : IDisposable
             events.Add(new MidiEvent(0, ProgChg(ChannelFor(pi), prog), 0));
         }
 
-        // Note events
+        // Note events.
+        // GlobalOnsetMs is pre-computed by the parser using the time-sig-exact measure length
+        // at base Bpm=120. Scale to actual Bpm here: onsetMs = GlobalOnsetMs * (120 / Bpm).
+        double bpmScale = 120.0 / Bpm;
         for (int pi = 0; pi < _score.Parts.Count && pi < 15; pi++)
         {
             int ch = ChannelFor(pi);
-            double measureStartMs = 0;  // accumulated wall-clock start of each measure
+            var measures = _score.Parts[pi].Measures;
 
-            foreach (var measure in _score.Parts[pi].Measures)
+            foreach (var measure in measures)
             {
                 int    divs     = Math.Max(1, measure.Divisions);
                 double msPerDiv = 60_000.0 / (Bpm * divs);
-                int    cursorAdvance = 0;  // how far the non-chord cursor moved this measure
+                double measureStartMs = measure.GlobalOnsetMs * bpmScale;
 
                 foreach (var note in measure.Notes)
                 {
@@ -1902,32 +2337,46 @@ internal sealed class MxlMidiPlayer : IDisposable
 
                     int  midi       = Math.Clamp(note.MidiPitch, 0, 127);
                     long globalDivs = measure.GlobalOnsetDivisions + note.OnsetDivisions;
-                    // Build label from PitchAlter (authoritative, includes key-sig) rather than the
-                    // display Accidental (absent for key-sig-implied sharps/flats).
                     string alterSuffix = note.PitchAlter switch { 1 => "#", 2 => "##", -1 => "b", -2 => "bb", _ => "" };
                     string noteName = $"{note.Pitch}{alterSuffix}{note.Octave}";
 
-                    // Use measureStartMs + local onset so GlobalOnsetDivisions mixing is avoided
                     long onsetMs = (long)(measureStartMs + note.OnsetDivisions * msPerDiv);
-                    long offMs   = onsetMs + Math.Max(30, (long)(note.Duration * msPerDiv) - 15);
+                    long offMs   = onsetMs + Math.Max(30, Math.Min(4_000, (long)(note.Duration * msPerDiv) - 15));
 
                     events.Add(new MidiEvent(onsetMs, NoteOn(ch, midi, 72), globalDivs,
                         MeasureNo: measure.Number, NoteName: noteName, MidiNote: midi,
                         Staff: note.Staff, Voice: note.Voice));
                     events.Add(new MidiEvent(offMs, NoteOff(ch, midi), globalDivs));
-
-                    // Track the furthest non-chord note for measure duration
-                    if (!note.IsChord)
-                        cursorAdvance = Math.Max(cursorAdvance, note.OnsetDivisions + note.Duration);
                 }
-
-                measureStartMs += cursorAdvance * msPerDiv;
             }
         }
 
         events.Sort((a, b) => a.TimeMs.CompareTo(b.TimeMs));
 
-        // Seek: drop events before the requested start measure and shift timestamps
+        // Remove exact duplicate messages at the same timestamp.  These can arise when
+        // a MusicXML backup/forward causes the same NoteOff to be generated twice; in
+        // FluidSynth the second call can deadlock if the audio-render callback holds the
+        // mutex that fluid_synth_noteoff tries to acquire.
+        events = events
+            .GroupBy(e => (e.TimeMs, e.Message))
+            .Select(g => g.First())
+            .OrderBy(e => e.TimeMs)
+            .ToList();
+
+        // Dump measure onset times so timing issues are visible in logs.
+        if (_score.Parts.Count > 0)
+        {
+            var sbM = new System.Text.StringBuilder();
+            sbM.AppendLine("MEASURE ONSETS (part 0):");
+            foreach (var m in _score.Parts[0].Measures)
+            {
+                long mMs = (long)(m.GlobalOnsetMs * bpmScale);
+                sbM.AppendLine($"  m={m.Number,4}  ts={m.TimeSigBeats}/{m.TimeSigBeatType}  divs={m.Divisions,3}  onsetMs={mMs,8}");
+            }
+            Trace.WriteLine(sbM.ToString());
+        }
+
+
         long seekDivs = 0;
         long seekMs   = 0;
         if (StartMeasure > 1 && _score.Parts.Count > 0)
@@ -1937,10 +2386,7 @@ internal sealed class MxlMidiPlayer : IDisposable
             if (startMeasure != null)
             {
                 seekDivs = startMeasure.GlobalOnsetDivisions;
-                // Find the earliest NoteOn at/after that measure to determine the ms offset
-                var firstAfter = events.FirstOrDefault(e =>
-                    (e.Message & 0xF0) == 0x90 && e.GlobalDivisions >= seekDivs);
-                seekMs = firstAfter.TimeMs;
+                seekMs   = (long)(startMeasure.GlobalOnsetMs * bpmScale);
             }
         }
         var playEvents = events
@@ -1948,17 +2394,51 @@ internal sealed class MxlMidiPlayer : IDisposable
             .Select(e => e with { TimeMs = e.TimeMs - seekMs })
             .ToList();
 
-        // -- MIDI event dump (first 3 s) commented out — re-enable when debugging timing --
-        // var dumpSb = new System.Text.StringBuilder();
-        // dumpSb.AppendLine("MxlMidiPlayer — first 3000 ms:");
-        // foreach (var ev in playEvents.Where(e => e.TimeMs <= 3000)) { ... }
-        // System.Diagnostics.Trace.WriteLine(dumpSb.ToString());
+        // Dump the last 20 events so we can see what NoteOffs follow the last NoteOn.
+        var lastNoteOnIdx = -1;
+        for (int i = playEvents.Count - 1; i >= 0; i--)
+            if ((playEvents[i].Message & 0xF0) == 0x90) { lastNoteOnIdx = i; break; }
+        if (lastNoteOnIdx >= 0)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"EVENT TAIL (last NoteOn idx={lastNoteOnIdx} of {playEvents.Count}):");
+            for (int i = Math.Max(0, lastNoteOnIdx - 2); i < playEvents.Count; i++)
+            {
+                var e = playEvents[i];
+                string kind = (e.Message & 0xF0) switch { 0x90 => "ON ", 0x80 => "OFF", 0xC0 => "PC ", _ => "?  " };
+                int pitch = (int)((e.Message >> 8) & 0xFF);
+                sb.AppendLine($"  [{i,4}] t={e.TimeMs,8} ms  {kind}  pitch={pitch,3}  m={e.MeasureNo}  msg=0x{e.Message:X8}");
+            }
+            Trace.WriteLine(sb.ToString());
+        }
+
+        // Scan for suspiciously large gaps between consecutive events (> 2 s).
+        // These indicate a note with a bogus Duration that pushes its NoteOff far into the future.
+        for (int i = 1; i < playEvents.Count; i++)
+        {
+            long gap = playEvents[i].TimeMs - playEvents[i - 1].TimeMs;
+            if (gap > 2000)
+            {
+                var prev = playEvents[i - 1];
+                var curr = playEvents[i];
+                System.Diagnostics.Trace.WriteLine(
+                    $"GAP  [{i - 1}→{i}]  gap={gap,7} ms  " +
+                    $"from t={prev.TimeMs,7} ms (m={prev.MeasureNo} msg=0x{prev.Message:X8})  " +
+                    $"to   t={curr.TimeMs,7} ms (m={curr.MeasureNo} msg=0x{curr.Message:X8})");
+            }
+        }
 
         var start     = DateTimeOffset.UtcNow;
         long lastDivs = -1;
+        long lastHeartbeatMs = 0;  // for once-per-second alive trace
+        long maxSendMs = 0;        // slowest Send() call seen so far
+        long maxWaitDriftMs = 0;   // worst scheduling slip (wanted vs actual wake time)
 
         // Fire an immediate position update so the canvas/slider shows where we started
         PositionChanged?.Invoke(this, seekDivs);
+
+        System.Diagnostics.Trace.WriteLine(
+            $"{DateTime.Now:HH:mm:ss.fff} PLAYBACK START  events={playEvents.Count}  backend={_backend?.GetType().Name}");
 
         try
         {
@@ -1967,15 +2447,67 @@ internal sealed class MxlMidiPlayer : IDisposable
                 if (ct.IsCancellationRequested) return;
                 long elapsed = (long)(DateTimeOffset.UtcNow - start).TotalMilliseconds;
                 int  wait    = (int)(ev.TimeMs - elapsed);
-                if (wait > 1) await Task.Delay(wait, ct).ConfigureAwait(false);
-                if (ct.IsCancellationRequested) return;
 
-                midiOutShortMsg(_handle, ev.Message);
+                // Heartbeat: log once per second so we can tell if the loop is alive
+                long hbSlot = elapsed / 1000;
+                if (hbSlot != lastHeartbeatMs / 1000)
+                {
+                    lastHeartbeatMs = elapsed;
+                    int backlog = _backend is FluidSynthMidiBackend fsb
+                        ? System.Threading.Volatile.Read(ref fsb._channelBacklog) : 0;
+                    System.Diagnostics.Trace.WriteLine(
+                        $"{DateTime.Now:HH:mm:ss.fff} HEARTBEAT  t={elapsed,7} ms  nextEvent={ev.TimeMs,7} ms  " +
+                        $"wait={wait,6} ms  maxSendMs={maxSendMs}  maxDriftMs={maxWaitDriftMs}  backlog={backlog}  m={ev.MeasureNo}");
+                }
+
+                if (wait > 1)
+                {
+                    if (wait > 100)
+                        System.Diagnostics.Trace.WriteLine(
+                            $"{DateTime.Now:HH:mm:ss.fff} LONG WAIT  {wait,7} ms  elapsed={elapsed,7} ms  nextEvent={ev.TimeMs,7} ms  m={ev.MeasureNo}");
+                    // ManualResetEventSlim.Wait is immune to STA/COM thread pumping that causes Thread.Sleep and Task.Delay to block indefinitely when FluidSynth WASAPI audio threads run alongside the Avalonia UI.
+                    _waitEvent.Wait(wait, ct);
+                    if (ct.IsCancellationRequested)
+                    {
+                        System.Diagnostics.Trace.WriteLine(
+                            $"{DateTime.Now:HH:mm:ss.fff} CANCEL after wait  elapsed={elapsed,7} ms  m={ev.MeasureNo}");
+                        return;
+                    }
+                    // Measure scheduling slip: how long past the target did we actually wake?
+                    long wakeElapsed = (long)(DateTimeOffset.UtcNow - start).TotalMilliseconds;
+                    long drift = wakeElapsed - ev.TimeMs;
+                    if (drift > maxWaitDriftMs)
+                    {
+                        maxWaitDriftMs = drift;
+                        if (drift > 200)  // log individual large slips
+                            System.Diagnostics.Trace.WriteLine(
+                                $"SCHED SLIP  target={ev.TimeMs,7} ms  woke={wakeElapsed,7} ms  slip={drift,5} ms  m={ev.MeasureNo}");
+                    }
+                }
+                if (ct.IsCancellationRequested)
+                {
+                    System.Diagnostics.Trace.WriteLine(
+                        $"{DateTime.Now:HH:mm:ss.fff} CANCEL DETECTED  elapsed={elapsed,7} ms  at event t={ev.TimeMs,7} ms  m={ev.MeasureNo}");
+                    return;
+                }
+
+                // Time the Send() call — a blocking synth/audio-driver call will show up here
+                long t0 = Stopwatch.GetTimestamp();
+                _backend?.Send(ev.Message);
+                long sendMs = (Stopwatch.GetTimestamp() - t0) * 1000 / Stopwatch.Frequency;
+                if (sendMs > maxSendMs)
+                {
+                    maxSendMs = sendMs;
+                    if (sendMs > 50)  // log individual slow sends
+                        System.Diagnostics.Trace.WriteLine(
+                            $"SLOW SEND   {sendMs,5} ms  t={ev.TimeMs,7} ms  m={ev.MeasureNo}  " +
+                            $"msg=0x{ev.Message:X8}");
+                }
 
                 // Per-note logging (toggled via checkbox in the UI)
                 if (LogNotes && (ev.Message & 0xF0) == 0x90 && ev.MeasureNo > 0)
                     System.Diagnostics.Trace.WriteLine(
-                        $"NOTE  m={ev.MeasureNo,4}  midi={ev.MidiNote,3}  {ev.NoteName,-8}  staff={ev.Staff}  voice={ev.Voice}  t={ev.TimeMs,7} ms");
+                        $"{DateTime.Now:HH:mm:ss.fff} NOTE  m={ev.MeasureNo,4}  midi={ev.MidiNote,3}  {ev.NoteName,-8}  staff={ev.Staff}  voice={ev.Voice}  t={ev.TimeMs,7} ms");
 
                 if (ev.GlobalDivisions != lastDivs)
                 {
@@ -1984,9 +2516,23 @@ internal sealed class MxlMidiPlayer : IDisposable
                 }
             }
         }
-        catch (OperationCanceledException) { return; }
+        catch (OperationCanceledException oce)
+        {
+            System.Diagnostics.Trace.WriteLine(
+                $"{DateTime.Now:HH:mm:ss.fff} PLAYBACK CANCELLED (OperationCanceledException)  {oce.Message}");
+            return;
+        }
+        catch (ThreadInterruptedException)
+        {
+            System.Diagnostics.Trace.WriteLine(
+                $"{DateTime.Now:HH:mm:ss.fff} PLAYBACK THREAD INTERRUPTED");
+            return;
+        }
 
+        System.Diagnostics.Trace.WriteLine(
+            $"{DateTime.Now:HH:mm:ss.fff} PLAYBACK END  maxSendMs={maxSendMs}  maxDriftMs={maxWaitDriftMs}");
         PlaybackEnded?.Invoke(this, EventArgs.Empty);
+        System.Diagnostics.Trace.WriteLine($"{DateTime.Now:HH:mm:ss.fff} PLAYBACK END PlaybackEnded fired");
     }
 
     public void Dispose() => Stop();
