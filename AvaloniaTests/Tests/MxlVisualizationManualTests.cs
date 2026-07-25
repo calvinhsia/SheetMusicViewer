@@ -839,7 +839,8 @@ public class MxlVisualizationManualTests : TestBase
         var sf2Files = Directory.Exists(soundfontsDir)
             ? Directory.GetFiles(soundfontsDir, "*.sf2").Select(Path.GetFileName).OfType<string>().OrderBy(x => x).ToList()
             : new List<string>();
-        string defaultSf = "VintageDreamsWaves.sf2";
+        //string defaultSf = "VintageDreamsWaves.sf2";
+        string defaultSf = "YDP-GrandPiano.sf2";
         if (!sf2Files.Contains(defaultSf) && sf2Files.Count > 0) defaultSf = sf2Files[0];
         var combo = new ComboBox
         {
@@ -970,7 +971,7 @@ public class MxlVisualizationManualTests : TestBase
         var fluidSynthChk = new CheckBox
         {
             Content = "FluidSynth",
-            IsChecked = false,
+            IsChecked = true,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
             Margin = new Thickness(4, 0),
             [ToolTip.TipProperty] = "FluidSynth (better sound) — may stall at high polyphony; use VintageDreamsWaves.sf2 for reliability. Unchecked = WinMM (default, reliable)"
@@ -1026,8 +1027,15 @@ public class MxlVisualizationManualTests : TestBase
 
             player.PlaybackEnded += (_, _) => Dispatcher.UIThread.Post(() =>
             {
+                System.Diagnostics.Trace.WriteLine(
+                    $"{DateTime.Now:HH:mm:ss.fff} PlaybackEnded UI-handler: calling SetStopped  autoClose={autoCloseOnEnd}");
                 SetStopped();
-                if (autoCloseOnEnd) windowHolder[0]?.Close();
+                if (autoCloseOnEnd)
+                {
+                    System.Diagnostics.Trace.WriteLine(
+                        $"{DateTime.Now:HH:mm:ss.fff} PlaybackEnded UI-handler: closing window");
+                    windowHolder[0]?.Close();
+                }
             });
 
             playBtn.IsEnabled = false;
@@ -2038,6 +2046,8 @@ internal sealed class FluidSynthMidiBackend : IMidiBackend
     private Task _consumerTask = Task.CompletedTask;
     // Diagnostics: track how many messages are queued but not yet dispatched.
     internal int _channelBacklog = 0;
+    /// <summary>Mirror of <see cref="MxlMidiPlayer.LogNotes"/> — set before Open() or any time during playback.</summary>
+    internal bool LogNotes { get; set; }
 
     /// <param name="soundfontPath">Full path to a .sf2 soundfont file.</param>
     public FluidSynthMidiBackend(string soundfontPath) => _soundfontPath = soundfontPath;
@@ -2046,9 +2056,23 @@ internal sealed class FluidSynthMidiBackend : IMidiBackend
     {
         _settings = new NFluidsynth.Settings();
         _settings[NFluidsynth.ConfigurationKeys.AudioDriver].StringValue = "wasapi";
-        _settings[NFluidsynth.ConfigurationKeys.AudioPeriodSize].IntValue = 64;
-        _settings[NFluidsynth.ConfigurationKeys.AudioPeriods].IntValue    = 3;
-        _settings[NFluidsynth.ConfigurationKeys.SynthThreadSafeApi].IntValue = 1;
+        // AudioPeriodSize=64 (1.45 ms @ 44100 Hz) was too short: at ~20 s the render
+        // callback occasionally ran long (64 voices of piano), causing a WASAPI buffer
+        // underrun.  WASAPI then reset the audio client while the render thread still
+        // held FluidSynth's SynthThreadSafeApi mutex, permanently blocking the consumer
+        // thread's next NoteOn call.  256 samples (5.8 ms) gives ample headroom and is
+        // the commonly recommended minimum for WASAPI shared-mode FluidSynth.
+        _settings[NFluidsynth.ConfigurationKeys.AudioPeriodSize].IntValue = 256;
+        _settings[NFluidsynth.ConfigurationKeys.AudioPeriods].IntValue    = 4;   // 4×256 = ~23 ms buffer
+        // SynthThreadSafeApi=0: our dedicated consumer thread is the SOLE caller of
+        // FluidSynth API functions, exactly the use-case the FluidSynth docs cite for
+        // disabling the internal mutex.  With =1 the mutex is shared with the WASAPI
+        // render callback; after ~30 s of piano music, 64 release-tail voices fill the
+        // polyphony limit, voice-stealing holds the mutex while rendering, WASAPI misses
+        // its deadline, resets the stream while still holding the mutex → permanent
+        // deadlock.  With =0 there is no mutex to deadlock on; the worst-case outcome
+        // of a consumer/render race is a brief audio pop, which is acceptable here.
+        _settings[NFluidsynth.ConfigurationKeys.SynthThreadSafeApi].IntValue = 0;
         _settings[NFluidsynth.ConfigurationKeys.SynthPolyphony].IntValue = 64;
         _settings[NFluidsynth.ConfigurationKeys.SynthReverbActive].IntValue  = 0;
         _settings[NFluidsynth.ConfigurationKeys.SynthChorusActive].IntValue  = 0;
@@ -2065,6 +2089,18 @@ internal sealed class FluidSynthMidiBackend : IMidiBackend
         var ch  = _msgChannel;
         var syn = _synth;
         var cct = _consumerCts.Token;
+
+        // Heartbeat: every 2 s log whether the consumer thread is making progress.
+        // _consumerDispatchCount is incremented inside the loop; if it hasn't changed
+        // the consumer is stuck inside a FluidSynth API call.
+        _consumerDispatchCount = 0;
+        _consumerHeartbeatTimer = new System.Threading.Timer(_ =>
+        {
+            int cnt = System.Threading.Volatile.Read(ref _consumerDispatchCount);
+            int bl  = System.Threading.Volatile.Read(ref _channelBacklog);
+            Trace.WriteLine($"{Ts()} CONSUMER-HB  dispatched={cnt}  backlog={bl}  stuck={_consumerStuckIn ?? "no"}");
+        }, null, 2000, 2000);
+
         _consumerTask = Task.Factory.StartNew(() =>
         {
             var reader = ch.Reader;
@@ -2074,22 +2110,50 @@ internal sealed class FluidSynthMidiBackend : IMidiBackend
                 {
                     while (reader.TryRead(out uint msg))
                     {
+                        // Log the message we are about to send so a stall/crash is visible.
+                        if (LogNotes)
+                        {
+                            uint mt = msg & 0xF0;
+                            if (mt == 0x90 && ((msg >> 16) & 0xFF) > 0)
+                                Trace.WriteLine($"{Ts()} PRE-DISPATCH NoteOn  midi={(msg >> 8) & 0xFF,3}  backlog={System.Threading.Volatile.Read(ref _channelBacklog)}");
+                            else if (mt == 0x80)
+                                Trace.WriteLine($"{Ts()} PRE-DISPATCH NoteOff midi={(msg >> 8) & 0xFF,3}  backlog={System.Threading.Volatile.Read(ref _channelBacklog)}");
+                        }
                         long t0 = Stopwatch.GetTimestamp();
                         DispatchDirect(syn, msg);
                         long ms = (Stopwatch.GetTimestamp() - t0) * 1000 / Stopwatch.Frequency;
                         int backlog = Interlocked.Decrement(ref _channelBacklog);
+                        Interlocked.Increment(ref _consumerDispatchCount);
                         if (ms > 20)
                             Trace.WriteLine($"{Ts()} DISPATCH SLOW {ms,5} ms  backlog={backlog}  msg=0x{msg:X8}");
+                        // Log every dispatched NoteOn so we can verify notes reach FluidSynth.
+                        if (LogNotes && (msg & 0xF0) == 0x90 && ((msg >> 16) & 0xFF) > 0)
+                            Trace.WriteLine($"{Ts()} DISPATCH NOTE  midi={(msg >> 8) & 0xFF,3}  vel={(msg >> 16) & 0xFF}  backlog={backlog}  dispatchMs={ms}");
                     }
                 }
             }
             catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                // Any non-cancellation exception means the consumer is dead.  Log it so
+                // the stall is immediately visible rather than silently growing backlog.
+                Trace.WriteLine($"{Ts()} CONSUMER EXCEPTION {ex.GetType().Name}: {ex.Message}");
+            }
+            finally
+            {
+                _consumerHeartbeatTimer?.Dispose();
+                _consumerHeartbeatTimer = null;
+            }
         }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
     }
 
+    private int _consumerDispatchCount;   // accessed via Interlocked / Volatile only
+    private volatile string? _consumerStuckIn;
+    private System.Threading.Timer? _consumerHeartbeatTimer;
+
     // Called only from the dedicated consumer thread — no locking needed.
     // Per-channel active-note sets used by DispatchDirect to prevent sending a NoteOn for
-    // a pitch already sounding.  Sending NoteOn while a voice for that pitch is still in
+    // a pitch already sounding.
     // release phase triggers FluidSynth's exclusive-class / kill-voice logic which can
     // block the calling thread for seconds under polyphony pressure.
     private readonly HashSet<int>[] _activeNotes =
@@ -2110,25 +2174,51 @@ internal sealed class FluidSynthMidiBackend : IMidiBackend
                     // If this pitch is still in an active/releasing voice, kill it first.
                     // Skipping this step causes fluid_synth_noteon to stall finding the old voice.
                     if (_activeNotes[channel].Contains(data1))
+                    {
+                        if (LogNotes)
+                            Trace.WriteLine($"{Ts()} RETRIGGER  ch={channel}  midi={data1}  (voice killed before re-trigger)");
+                        _consumerStuckIn = $"NoteOff(retrig ch={channel} m={data1})";
                         syn.NoteOff(channel, data1);
+                        _consumerStuckIn = null;
+                    }
+                    _consumerStuckIn = $"NoteOn(ch={channel} m={data1} v={data2})";
                     syn.NoteOn(channel, data1, data2);
+                    _consumerStuckIn = null;
                     _activeNotes[channel].Add(data1);
                 }
                 else
                 {
-                    syn.NoteOff(channel, data1);
-                    _activeNotes[channel].Remove(data1);
+                    // NoteOn with vel=0 is a NoteOff — only call if the note is active.
+                    if (_activeNotes[channel].Remove(data1))
+                    {
+                        _consumerStuckIn = $"NoteOff(vel0 ch={channel} m={data1})";
+                        syn.NoteOff(channel, data1);
+                        _consumerStuckIn = null;
+                    }
+                    else if (LogNotes)
+                        Trace.WriteLine($"{Ts()} SKIP-NOFF(vel0)  ch={channel}  midi={data1}  (not active)");
                 }
                 break;
             case 0x80:
-                syn.NoteOff(channel, data1);
-                _activeNotes[channel].Remove(data1);
+                // Only call NoteOff if the note is currently tracked as active; FluidSynth
+                // throws FluidSynthInteropException if the voice no longer exists.
+                if (_activeNotes[channel].Remove(data1))
+                {
+                    _consumerStuckIn = $"NoteOff(ch={channel} m={data1})";
+                    syn.NoteOff(channel, data1);
+                    _consumerStuckIn = null;
+                }
+                else if (LogNotes)
+                    Trace.WriteLine($"{Ts()} SKIP-NOFF  ch={channel}  midi={data1}  (not active)");
                 break;
             case 0xC0:
+                _consumerStuckIn = $"ProgramChange(ch={channel} pgm={data1})";
                 syn.ProgramChange(channel, data1);
+                _consumerStuckIn = null;
                 _activeNotes[channel].Clear();
                 break;
         }
+        _consumerStuckIn = null;
     }
 
     public void Send(uint message)
@@ -2272,6 +2362,7 @@ internal sealed class MxlMidiPlayer : IDisposable
         };
         _backend.Open();
         _cts = new CancellationTokenSource();
+        if (_backend is FluidSynthMidiBackend fsb) fsb.LogNotes = LogNotes;
         // Run playback on a dedicated thread (not the thread pool) so that Task.Delay timer
         // callbacks are not starved by FluidSynth's WASAPI audio threads, which consume
         // thread pool threads and can prevent Task.Delay from resuming.
@@ -2331,16 +2422,30 @@ internal sealed class MxlMidiPlayer : IDisposable
                 double msPerDiv = 60_000.0 / (Bpm * divs);
                 double measureStartMs = measure.GlobalOnsetMs * bpmScale;
 
+                // Max valid onset within this measure (in divisions).
+                // Any note whose OnsetDivisions exceeds this was generated by a malformed
+                // <duration>/<forward> element without a matching <backup>.  Clamping here
+                // prevents a far-future event timestamp that would cause the playback loop
+                // to wait indefinitely after the last audible note, blocking PlaybackEnded.
+                int tsBeats    = measure.TimeSigBeats    > 0 ? measure.TimeSigBeats    : 4;
+                int tsBeatType = measure.TimeSigBeatType > 0 ? measure.TimeSigBeatType : 4;
+                int maxOnsetDivs = (int)(tsBeats * (4.0 / tsBeatType) * divs);
+
                 foreach (var note in measure.Notes)
                 {
                     if (note.IsRest || note.MidiPitch == 0) continue;
 
                     int  midi       = Math.Clamp(note.MidiPitch, 0, 127);
-                    long globalDivs = measure.GlobalOnsetDivisions + note.OnsetDivisions;
+                    int  clampedOnset = Math.Min(note.OnsetDivisions, maxOnsetDivs);
+                    if (clampedOnset != note.OnsetDivisions)
+                        System.Diagnostics.Trace.WriteLine(
+                            $"BOGUS ONSET  m={measure.Number}  OnsetDivisions={note.OnsetDivisions} > maxOnsetDivs={maxOnsetDivs}  " +
+                            $"midi={note.MidiPitch}  — clamped to {clampedOnset}");
+                    long globalDivs = measure.GlobalOnsetDivisions + clampedOnset;
                     string alterSuffix = note.PitchAlter switch { 1 => "#", 2 => "##", -1 => "b", -2 => "bb", _ => "" };
                     string noteName = $"{note.Pitch}{alterSuffix}{note.Octave}";
 
-                    long onsetMs = (long)(measureStartMs + note.OnsetDivisions * msPerDiv);
+                    long onsetMs = (long)(measureStartMs + clampedOnset * msPerDiv);
                     long offMs   = onsetMs + Math.Max(30, Math.Min(4_000, (long)(note.Duration * msPerDiv) - 15));
 
                     events.Add(new MidiEvent(onsetMs, NoteOn(ch, midi, 72), globalDivs,
@@ -2505,9 +2610,16 @@ internal sealed class MxlMidiPlayer : IDisposable
                 }
 
                 // Per-note logging (toggled via checkbox in the UI)
-                if (LogNotes && (ev.Message & 0xF0) == 0x90 && ev.MeasureNo > 0)
-                    System.Diagnostics.Trace.WriteLine(
-                        $"{DateTime.Now:HH:mm:ss.fff} NOTE  m={ev.MeasureNo,4}  midi={ev.MidiNote,3}  {ev.NoteName,-8}  staff={ev.Staff}  voice={ev.Voice}  t={ev.TimeMs,7} ms");
+                if (LogNotes)
+                {
+                    uint msgType = ev.Message & 0xF0;
+                    if (msgType == 0x90 && ev.MeasureNo > 0)
+                        System.Diagnostics.Trace.WriteLine(
+                            $"{DateTime.Now:HH:mm:ss.fff} NOTE  m={ev.MeasureNo,4}  midi={ev.MidiNote,3}  {ev.NoteName,-8}  staff={ev.Staff}  voice={ev.Voice}  t={ev.TimeMs,7} ms");
+                    else if (msgType == 0x80)
+                        System.Diagnostics.Trace.WriteLine(
+                            $"{DateTime.Now:HH:mm:ss.fff} NOFF              midi={(ev.Message >> 8) & 0xFF,3}                              t={ev.TimeMs,7} ms");
+                }
 
                 if (ev.GlobalDivisions != lastDivs)
                 {
@@ -2515,6 +2627,13 @@ internal sealed class MxlMidiPlayer : IDisposable
                     PositionChanged?.Invoke(this, lastDivs);
                 }
             }
+            // Log elapsed time and backlog at the exact moment the event loop finishes
+            // (before PlaybackEnded fires) so we can confirm when PlaySync actually ended.
+            long loopElapsedMs = (long)(DateTimeOffset.UtcNow - start).TotalMilliseconds;
+            int  finalBacklog  = _backend is FluidSynthMidiBackend fsEnd
+                ? System.Threading.Volatile.Read(ref fsEnd._channelBacklog) : 0;
+            System.Diagnostics.Trace.WriteLine(
+                $"{DateTime.Now:HH:mm:ss.fff} LOOP DONE  elapsed={loopElapsedMs,7} ms  backlog={finalBacklog}  maxSendMs={maxSendMs}  maxDriftMs={maxWaitDriftMs}");
         }
         catch (OperationCanceledException oce)
         {
