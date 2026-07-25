@@ -318,6 +318,23 @@ public partial class MetaDataFormWindow : Window
                                 btn.Click += (s, e) => field.Data.OpenInMuseScoreCommand.Execute(null);
                                 return btn;
                             }) { SortKey = toc.HasCachedMxl ? "🎵" : "" },
+                        Roll = new BrowseControl.BrowseField<TocEntryViewModel>(
+                            toc, (field) =>
+                            {
+                                if (!field.Data.HasCachedMxl) return new TextBlock { Text = "" };
+                                var btn = new Button
+                                {
+                                    Content = "🎹",
+                                    Padding = new Avalonia.Thickness(2),
+                                    Background = Avalonia.Media.Brushes.Transparent,
+                                    BorderThickness = new Avalonia.Thickness(0),
+                                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                                    [ToolTip.TipProperty] = "Open in vertical piano roll (autoplay)"
+                                };
+                                btn.Click += (s, e) => field.Data.OpenInVerticalPianoRollCommand.Execute(null);
+                                return btn;
+                            }) { SortKey = toc.HasCachedMxl ? "🎹" : "" },
                         toc.SongName,
                         toc.Composer,
                         toc.Date,
@@ -325,9 +342,9 @@ public partial class MetaDataFormWindow : Window
                         _Toc = toc
                     };
 
-        // Columns: Page=60, Fav=45, Lnk=45, Mxl=45, SongName=300, Composer=160, Date=80, Notes=*
+        // Columns: Page=60, Fav=45, Lnk=45, Mxl=45, Roll=45, SongName=300, Composer=160, Date=80, Notes=*
         return new BrowseControl(query,
-            colWidths: new[] { 60, 45, 45, 45, 300, 160, 80, 0 },
+            colWidths: new[] { 60, 45, 45, 45, 45, 300, 160, 80, 0 },
             rowHeight: BrowseControl.DefaultRowHeight);
     }
 
@@ -1092,6 +1109,48 @@ public partial class TocEntryViewModel : ObservableObject
         {
             System.Diagnostics.Debug.WriteLine($"Failed to launch MuseScore: {ex.Message}");
         }
+    }
+
+    [RelayCommand]
+    private void OpenInVerticalPianoRoll()
+    {
+        if (string.IsNullOrEmpty(CachedMxlPath)) return;
+        try
+        {
+            // Resolve the XML path (unzip .mxl if needed, then parse and open window).
+            string xmlPath = ResolveMxlToXml(CachedMxlPath);
+            var window = VerticalPianoRollWindowFactory.BuildWindow(xmlPath);
+            window.Show();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to open vertical piano roll: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// If <paramref name="mxlPath"/> is a .mxl (ZIP), extracts the score XML to a temp file
+    /// and returns its path.  If it is already a plain .xml/.musicxml, returns the path unchanged.
+    /// </summary>
+    private static string ResolveMxlToXml(string mxlPath)
+    {
+        if (!mxlPath.EndsWith(".mxl", StringComparison.OrdinalIgnoreCase))
+            return mxlPath;
+
+        using var zip = System.IO.Compression.ZipFile.OpenRead(mxlPath);
+        var scoreEntry = zip.Entries.FirstOrDefault(e =>
+            e.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) &&
+            !e.FullName.StartsWith("META-INF", StringComparison.OrdinalIgnoreCase));
+        if (scoreEntry == null)
+            throw new InvalidOperationException($"No score XML entry found inside {mxlPath}");
+
+        string tmpPath = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            System.IO.Path.GetFileNameWithoutExtension(mxlPath) + "_score.xml");
+        using var stream = scoreEntry.Open();
+        using var fs    = System.IO.File.Create(tmpPath);
+        stream.CopyTo(fs);
+        return tmpPath;
     }
 
     public TocEntryViewModel()

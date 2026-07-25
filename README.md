@@ -165,6 +165,24 @@ Convert any PDF page range to an editable MuseScore file using [Audiveris](https
 
 > **Tip:** Best results come from clearly engraved, high-resolution PDFs. Handwritten or low-resolution scans may need manual correction in MuseScore afterward.
 
+### Metadata Editor — MXL Columns
+
+After a song has been exported to MXL (via the MuseScore export pipeline), two buttons appear in the **Metadata Editor** TOC grid:
+
+| Button | Action |
+|--------|--------|
+| 🎵 | Open the cached MXL in **MuseScore Studio** for editing |
+| 🎹 | Open the MXL in the built-in **Vertical Piano Roll** — playback starts automatically |
+
+The vertical piano roll shows falling notes above a piano keyboard, with the right hand highlighted in green and the left hand in blue. Use the **BPM slider** and **measure seek slider** to adjust playback, and toggle **FluidSynth** for higher-quality audio (requires the bundled `GeneralUser-GS.sf2` soundfont to be present in the `Soundfonts\` folder next to the executable).
+
+#### Soundfont
+
+The app ships with **GeneralUser GS** (`Soundfonts\GeneralUser-GS.sf2`, ~30 MB), which provides General MIDI coverage with a good piano patch.
+
+> *GeneralUser GS soundfont by S. Christian Collins, GeneralUser GS License v2.0 (free for any use including commercial).*  
+> *Source: http://www.schristiancollins.com/generaluser.php*
+
 ### Organizing Your Music
 
 **Multi-volume books**: Name files `Book0.pdf`, `Book1.pdf`, `Book2.pdf`, etc. They'll be treated as one book.
@@ -216,11 +234,11 @@ dotnet run --project SheetMusicViewer.Desktop
 
 | Project | Description |
 |---------|-------------|
-| `SheetMusicViewer.Desktop` | Cross-platform Avalonia UI application |
+| `SheetMusicViewer.Desktop` | Cross-platform Avalonia UI application (includes `VerticalPianoRollWindow.cs` — MusicXML parser, MIDI player, falling-notes canvas) |
 | `SheetMusicLib` | Shared library with core business logic |
 | `SheetMusicViewer` | Original WPF application (Windows only) |
 | `Tests` | Unit and integration tests for WPF version |
-| `AvaloniaTests` | Tests for Avalonia version |
+| `AvaloniaTests` | Tests for Avalonia version (includes `VerticalPianoRollTests.cs` — unit tests for the piano roll production code) |
 
 ## Creating a Release
 
