@@ -3,6 +3,7 @@ using SheetMusicViewer.Desktop;
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace AvaloniaTests.Tests;
 
@@ -205,10 +206,13 @@ public class VerticalPianoRollTests
     [TestMethod]
     public void VerticalPianoRollCanvas_ConstructsWithoutException()
     {
-        var score  = MxlScore.Parse(MinimalMxl);
-        var canvas = new VerticalPianoRollCanvas(score);
-        // Verify the canvas has a non-zero desired width (one white key per white pitch in A0-C8 range)
-        var size = canvas.DesiredSize;
+        // VerticalPianoRollCanvas is an Avalonia control; construction must happen on the UI thread.
+        var score = MxlScore.Parse(MinimalMxl);
+        VerticalPianoRollCanvas? canvas = null;
+        AvaloniaUIThreadFixture.RunOnUIThread(() =>
+        {
+            canvas = new VerticalPianoRollCanvas(score);
+        });
         // DesiredSize is (0,0) until Measure is called; just confirm construction did not throw.
         Assert.IsNotNull(canvas);
     }
