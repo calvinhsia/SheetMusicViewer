@@ -207,6 +207,11 @@ public class VerticalPianoRollTests
     public void VerticalPianoRollCanvas_ConstructsWithoutException()
     {
         // VerticalPianoRollCanvas is an Avalonia control; construction must happen on the UI thread.
+        // Headless Avalonia initialisation is Windows-only in this test suite.
+        AvaloniaUIThreadFixture.EnsureInitialized();
+        if (!AvaloniaUIThreadFixture.IsSupported)
+            Assert.Inconclusive("Headless Avalonia UI thread is only supported on Windows.");
+
         var score = MxlScore.Parse(MinimalMxl);
         VerticalPianoRollCanvas? canvas = null;
         AvaloniaUIThreadFixture.RunOnUIThread(() =>
