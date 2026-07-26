@@ -41,7 +41,7 @@ public class MxlVisualizationManualTests : TestBase
 {
     // - Edit this relative path to point at the .mxl you want to inspect -
     private string AdhocMxlPath =>
-        Path.Combine(GetSheetMusicFolder(), @"..\Temp\Tico-Tico no Fub- - A Minor - MN0227296 - Tico-Tico no Fub- - A Minor - MN0227296.mxl\Tico-Tico no Fub- - A Minor - MN0227296.xml");
+        Path.Combine(GetSheetMusicFolder(), @"Pop\SangahNoonaSingles\Tico-Tico no Fubá - A Minor - MN0227296 - Tico-Tico no Fubá - A Minor - MN0227296.mxl");
 
     // -
 

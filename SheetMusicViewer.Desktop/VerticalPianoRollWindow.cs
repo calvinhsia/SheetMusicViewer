@@ -409,12 +409,12 @@ internal sealed class FluidSynthMidiBackend : IMidiBackend
             Trace.WriteLine($"{Ts()} CONSUMER-HB  dispatched={cnt}  backlog={bl}  stuck={_consumerStuckIn ?? "no"}");
         }, null, 2000, 2000);
 
-        _consumerTask = Task.Factory.StartNew(() =>
+        _consumerTask = Task.Factory.StartNew(async () =>
         {
             var reader = ch.Reader;
             try
             {
-                while (reader.WaitToReadAsync(cct).AsTask().GetAwaiter().GetResult())
+                while (await reader.WaitToReadAsync(cct).ConfigureAwait(false))
                 {
                     while (reader.TryRead(out uint msg))
                     {
@@ -441,7 +441,7 @@ internal sealed class FluidSynthMidiBackend : IMidiBackend
                 _consumerHeartbeatTimer?.Dispose();
                 _consumerHeartbeatTimer = null;
             }
-        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default).Unwrap();
     }
 
     private void DispatchDirect(NFluidsynth.Synth syn, uint message)
