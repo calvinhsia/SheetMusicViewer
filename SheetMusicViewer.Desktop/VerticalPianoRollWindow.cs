@@ -1151,6 +1151,7 @@ public static class VerticalPianoRollWindowFactory
             Height = 720,
             WindowState = WindowState.Maximized,
             WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            ShowInTaskbar = false,
             Content = layout
         };
         windowHolder[0] = window;

@@ -1120,7 +1120,13 @@ public partial class TocEntryViewModel : ObservableObject
             // Resolve the XML path (unzip .mxl if needed, then parse and open window).
             string xmlPath = ResolveMxlToXml(CachedMxlPath);
             var window = VerticalPianoRollWindowFactory.BuildWindow(xmlPath);
-            window.Show();
+            var owner  = (Avalonia.Application.Current?.ApplicationLifetime
+                          as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)
+                         ?.MainWindow;
+            if (owner != null)
+                window.Show(owner);
+            else
+                window.Show();
         }
         catch (Exception ex)
         {
