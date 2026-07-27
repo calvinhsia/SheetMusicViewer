@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Primitives;
@@ -41,7 +41,7 @@ public class MxlVisualizationManualTests : TestBase
 {
     // - Edit this relative path to point at the .mxl you want to inspect -
     private string AdhocMxlPath =>
-        Path.Combine(GetSheetMusicFolder(), @"Pop\SangahNoonaSingles\Tico-Tico no Fub� - A Minor - MN0227296 - Tico-Tico no Fub� - A Minor - MN0227296.mxl");
+        Path.Combine(GetSheetMusicFolder(), @"Pop\SangahNoonaSingles\Tico-Tico no Fubá - A Minor - MN0227296 - Tico-Tico no Fubá - A Minor - MN0227296.mxl");
 
     // -
 
@@ -246,6 +246,63 @@ public class MxlVisualizationManualTests : TestBase
             Trace.Listeners.Remove(fileListener);
         }
         LogMessage($"Full trace log: {logPath}");
+    }
+
+    // -----------------------------------------------------------------------
+    //  Generated-music vertical piano roll
+    //  No MXL file required — an MxlScore is built programmatically.
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Demonstrates the vertical piano-roll visualizer without any MusicXML file.
+    /// An <see cref="MusicGenerator"/> builds an <see cref="MxlScore"/> in memory
+    /// for the pattern selected by <paramref name="pattern"/>.
+    ///
+    /// Available patterns:
+    ///   ChromaticFullRange  — every semitone A0 → C8, then back down
+    ///   MajorScales         — all 12 major scales ascending/descending (cycle of 5ths)
+    ///   WholeToneScales     — both whole-tone sets, each up and down
+    ///   MinorArpeggios      — broken minor triads (root, ♭3, 5) across all 12 roots
+    ///   AlbertiBassAndMelody— classic LH Alberti bass + RH C-major melody (grand staff)
+    ///   Polyrhythm          — LH 3-against-RH-4 for 12 measures
+    ///   BrownianWalk        — pitch drifts ±1 semitone per eighth note (random walk)
+    ///
+    /// Edit the pattern string below and run.
+    /// </summary>
+    [TestMethod]
+    public async Task VisualizeGenerated_VerticalPianoRoll()
+    {
+        if (!OperatingSystem.IsWindows())
+            Assert.Inconclusive("MIDI playback requires Windows (winmm.dll).");
+
+        string[] patterns = {
+            "ChromaticFullRange",
+            "MajorScales",
+            "WholeToneScales",
+            "MinorArpeggios",
+            "AlbertiBassAndMelody",
+            "Polyrhythm",
+            "BrownianWalk"
+        };
+        var pattern = patterns[6];
+        {
+            var score = pattern switch
+            {
+                "ChromaticFullRange" => MusicGenerator.ChromaticFullRange(),
+                "MajorScales" => MusicGenerator.MajorScales(),
+                "WholeToneScales" => MusicGenerator.WholeToneScales(),
+                "MinorArpeggios" => MusicGenerator.MinorArpeggios(),
+                "AlbertiBassAndMelody" => MusicGenerator.AlbertiBassAndMelody(),
+                "Polyrhythm" => MusicGenerator.Polyrhythm(),
+                "BrownianWalk" => MusicGenerator.BrownianWalk(),
+                _ => throw new ArgumentException($"Unknown pattern '{pattern}'.")
+            };
+
+            LogMessage($"Generated score: pattern={pattern}  parts={score.Parts.Count}  " +
+                       $"measures={score.TotalMeasures}  notes={score.TotalNotes}");
+            await ShowVerticalPianoRollWindowAsync($"[generated] {pattern}", score);
+        }
+
     }
 
     // -----------------------------------------------------------------------
@@ -953,6 +1010,391 @@ public class MxlVisualizationManualTests : TestBase
             return reader.ReadToEnd();
         }
         return File.ReadAllText(filePath);
+    }
+}
+
+// ---------------------------------------------------------------------------
+//  Programmatic music generator
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// Builds <see cref="MxlScore"/> objects from scratch, without any MusicXML file.
+/// Each static factory method produces a different musical pattern that can be
+/// visualized in the vertical piano-roll window.
+///
+/// Patterns
+/// ─────────────────────────────────────────────────────────────────────────
+/// ChromaticFullRange   — every semitone A0 (MIDI 21) → C8 (108), then back down
+/// MajorScales          — all 12 major scales ascending/descending (cycle of 5ths)
+/// WholeToneScales      — both whole-tone hexatonic sets, each up then down
+/// MinorArpeggios       — broken minor triads (root, ♭3, 5) across all 12 roots
+/// AlbertiBassAndMelody — classic LH Alberti bass + RH C-major scale (grand staff)
+/// Polyrhythm           — LH triplet (3) against RH quarter (4) for 12 measures
+/// BrownianWalk         — pitch drifts ±1 semitone per eighth note (random walk)
+/// </summary>
+internal static class MusicGenerator
+{
+    // ── constants ────────────────────────────────────────────────────────────
+    private const int Divisions = 4;          // quarter note = 4 divisions
+    private const int Eighth    = 2;          // eighth  note duration in divisions
+    private const int Quarter   = 4;          // quarter note duration in divisions
+    private const int Half      = 8;          // half    note duration in divisions
+
+    // MIDI pitch boundaries
+    private const int MidiA0   = 21;
+    private const int MidiC8   = 108;
+    private const int MidiC4   = 60;         // middle C
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Creates a bare-bones score with one part already added.
+    /// </summary>
+    private static (MxlScore score, MxlPart part) MakeSinglePartScore(
+        string title, double bpm = 120.0, int midiProgram = 0,
+        string partName = "Piano RH")
+    {
+        var score = new MxlScore(title, bpm);
+        var part  = new MxlPart
+        {
+            PartId         = "P1",
+            InstrumentName = partName,
+            MidiProgram    = midiProgram,
+            PartIndex      = 0,
+        };
+        score.Parts.Add(part);
+        return (score, part);
+    }
+
+    /// <summary>
+    /// Converts a MIDI pitch number to an <see cref="MxlNote"/> (quarter note by default).
+    /// </summary>
+    private static MxlNote NoteFromMidi(int midiPitch, int duration = Quarter,
+                                        int onsetDiv = 0, int staff = 1, int voice = 1)
+    {
+        // MIDI 60 = C4, pitch class 0 = C
+        string[] stepNames = { "C", "C", "D", "D", "E", "F", "F", "G", "G", "A", "A", "B" };
+        int[]    alters    = { 0,    1,   0,   1,   0,   0,   1,   0,   1,   0,   1,   0  };
+        int pc  = ((midiPitch % 12) + 12) % 12;
+        int oct = midiPitch / 12 - 1;
+        return new MxlNote
+        {
+            Pitch          = stepNames[pc],
+            Octave         = oct.ToString(),
+            PitchAlter     = alters[pc],
+            Duration       = duration,
+            OnsetDivisions = onsetDiv,
+            Staff          = staff,
+            Voice          = voice,
+            NoteType       = duration switch { 2 => "eighth", 4 => "quarter", 8 => "half", 1 => "16th", _ => "quarter" },
+        };
+    }
+
+    /// <summary>
+    /// Appends sequential notes (no overlap) to <paramref name="part"/> using
+    /// <paramref name="noteDuration"/> divisions per note, 4/4 time.
+    /// Measures are filled left-to-right; a new measure starts automatically.
+    /// </summary>
+    private static void AppendSequentialNotes(MxlPart part, IEnumerable<int> midiPitches,
+        int noteDuration = Quarter, double bpm = 120.0,
+        int beatsPerMeasure = 4, int beatType = 4)
+    {
+        var queue        = new Queue<int>(midiPitches);
+        int measureNo    = part.Measures.Count + 1;
+        int capacityDiv  = beatsPerMeasure * Divisions; // divisions per measure
+        double msPerDiv  = 60_000.0 / (bpm * Divisions);
+        double globalMs  = part.Measures.Count == 0
+            ? 0.0
+            : part.Measures.Last().GlobalOnsetMs +
+              part.Measures.Last().Notes
+                  .Where(n => !n.IsChord)
+                  .Select(n => n.OnsetDivisions + n.Duration)
+                  .DefaultIfEmpty(0).Max() * msPerDiv;
+        long globalDiv = part.Measures.Count == 0
+            ? 0L
+            : part.Measures.Last().GlobalOnsetDivisions +
+              part.Measures.Last().Notes
+                  .Where(n => !n.IsChord)
+                  .Select(n => n.OnsetDivisions + n.Duration)
+                  .DefaultIfEmpty(0).Max();
+
+        while (queue.Count > 0)
+        {
+            var measure = new MxlMeasure
+            {
+                Number               = measureNo++,
+                TimeSig              = $"{beatsPerMeasure}/{beatType}",
+                KeySig               = "C major",
+                Divisions            = Divisions,
+                GlobalOnsetDivisions = globalDiv,
+                GlobalOnsetMs        = globalMs,
+                TimeSigBeats         = beatsPerMeasure,
+                TimeSigBeatType      = beatType,
+            };
+
+            int cursor = 0;
+            while (queue.Count > 0 && cursor + noteDuration <= capacityDiv)
+            {
+                var note = NoteFromMidi(queue.Dequeue(), noteDuration, cursor);
+                measure.Notes.Add(note);
+                cursor += noteDuration;
+            }
+
+            int usedDiv = measure.Notes.Count > 0
+                ? measure.Notes.Last().OnsetDivisions + measure.Notes.Last().Duration
+                : capacityDiv;
+            globalMs  += usedDiv * msPerDiv;
+            globalDiv += usedDiv;
+            part.Measures.Add(measure);
+        }
+    }
+
+    // ── patterns ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Every semitone from A0 (MIDI 21) up to C8 (108) then back down.
+    /// 88 notes ascending + 88 descending = 176 eighth notes ≈ 44 measures at 4/4.
+    /// </summary>
+    public static MxlScore ChromaticFullRange()
+    {
+        var (score, part) = MakeSinglePartScore("Chromatic Full Range", bpm: 160.0);
+        var ascending     = Enumerable.Range(MidiA0, MidiC8 - MidiA0 + 1);
+        var descending    = Enumerable.Range(MidiA0, MidiC8 - MidiA0 + 1).Reverse();
+        AppendSequentialNotes(part, ascending.Concat(descending), noteDuration: Eighth, bpm: 160.0);
+        return score;
+    }
+
+    /// <summary>
+    /// All 12 major scales ordered by the circle of 5ths (C G D A E B F# Db Ab Eb Bb F).
+    /// Each scale is played ascending then descending in eighth notes in the octave
+    /// centred on middle C.  Scale roots are MIDI pitches for each key.
+    /// </summary>
+    public static MxlScore MajorScales()
+    {
+        var (score, part) = MakeSinglePartScore("All Major Scales (circle of 5ths)", bpm: 140.0);
+
+        // roots (MIDI, starting at or just below middle C octave)
+        int[] roots = { 60, 67, 62, 69, 64, 71, 66, 61, 68, 63, 70, 65 };
+        int[] majorIntervals = { 0, 2, 4, 5, 7, 9, 11, 12 }; // W W H W W W H
+
+        var pitches = new List<int>();
+        foreach (int root in roots)
+        {
+            var asc  = majorIntervals.Select(i => root + i).ToList();
+            var desc = majorIntervals.Reverse().Select(i => root + i).ToList();
+            pitches.AddRange(asc);
+            pitches.AddRange(desc.Skip(1)); // skip repeated octave at the turnaround
+        }
+
+        AppendSequentialNotes(part, pitches, noteDuration: Eighth, bpm: 140.0);
+        return score;
+    }
+
+    /// <summary>
+    /// The two whole-tone hexatonic sets (C D E F# G# A# and C# D# F G A B),
+    /// each played ascending then descending across two octaves.
+    /// Eerie, symmetric sound characteristic of Debussy.
+    /// </summary>
+    public static MxlScore WholeToneScales()
+    {
+        var (score, part) = MakeSinglePartScore("Whole-Tone Scales", bpm: 130.0);
+        int[] set1Roots = { 60, 62, 64, 66, 68, 70 }; // C whole-tone
+        int[] set2Roots = { 61, 63, 65, 67, 69, 71 }; // C# whole-tone
+
+        var pitches = new List<int>();
+        foreach (int[] set in new[] { set1Roots, set2Roots })
+        {
+            // two octaves ascending
+            var asc  = set.Concat(set.Select(p => p + 12)).ToList();
+            var desc = asc.AsEnumerable().Reverse().ToList();
+            pitches.AddRange(asc);
+            pitches.AddRange(desc.Skip(1));
+        }
+
+        AppendSequentialNotes(part, pitches, noteDuration: Eighth, bpm: 130.0);
+        return score;
+    }
+
+    /// <summary>
+    /// Broken minor triads (root, ♭3, 5) for all 12 chromatic roots from C3 to B3,
+    /// then repeated one octave higher.  Demonstrates the visualizer's color-coding
+    /// of chromatic pitch classes.
+    /// </summary>
+    public static MxlScore MinorArpeggios()
+    {
+        var (score, part) = MakeSinglePartScore("Minor Arpeggios (all 12 roots)", bpm: 120.0);
+        int[] minorTriad = { 0, 3, 7 }; // semitone intervals
+
+        var pitches = new List<int>();
+        for (int octave = 0; octave < 2; octave++)
+        {
+            int baseOct = 48 + octave * 12; // C3, then C4
+            for (int root = 0; root < 12; root++)
+            {
+                // broken triad up then down
+                var asc  = minorTriad.Select(i => baseOct + root + i).ToList();
+                var desc = asc.AsEnumerable().Reverse().ToList();
+                pitches.AddRange(asc);
+                pitches.AddRange(desc.Skip(1));
+            }
+        }
+
+        AppendSequentialNotes(part, pitches, noteDuration: Eighth, bpm: 120.0);
+        return score;
+    }
+
+    /// <summary>
+    /// Classic two-part texture: left hand (staff 2) plays an Alberti-bass pattern
+    /// (low–high–mid–high) on a C-major triad while the right hand (staff 1) plays a
+    /// C-major scale melody.  Eight measures, 4/4, 120 BPM.
+    /// </summary>
+    public static MxlScore AlbertiBassAndMelody()
+    {
+        const int bpm        = 120;
+        const int measures   = 8;
+        const double msPerDiv = 60_000.0 / (bpm * Divisions);
+
+        var score = new MxlScore("Alberti Bass + Melody", bpm);
+
+        // ── Right hand part (staff 1) ─────────────────────────────────────
+        var rh = new MxlPart { PartId = "P1", InstrumentName = "Piano RH", PartIndex = 0 };
+
+        // C-major melody notes repeating over 8 measures
+        int[] melodyMidi = { 60, 62, 64, 65, 67, 69, 71, 72, 71, 69, 67, 65, 64, 62, 60, 60 };
+
+        for (int m = 0; m < measures; m++)
+        {
+            var measure = new MxlMeasure
+            {
+                Number = m + 1, TimeSig = "4/4", KeySig = "C major", Divisions = Divisions,
+                GlobalOnsetDivisions = m * (long)(4 * Divisions),
+                GlobalOnsetMs        = m * 4 * Divisions * msPerDiv,
+                TimeSigBeats = 4, TimeSigBeatType = 4,
+            };
+            for (int n = 0; n < 4; n++)
+            {
+                int pitch = melodyMidi[(m * 4 + n) % melodyMidi.Length];
+                measure.Notes.Add(NoteFromMidi(pitch, Quarter, n * Quarter, staff: 1, voice: 1));
+            }
+            rh.Measures.Add(measure);
+        }
+        score.Parts.Add(rh);
+
+        // ── Left hand part (staff 2) ──────────────────────────────────────
+        var lh = new MxlPart { PartId = "P2", InstrumentName = "Piano LH", PartIndex = 1 };
+
+        // Alberti pattern: low (C3=48), high (G3=55), mid (E3=52), high (G3=55)
+        int[] alberti = { 48, 55, 52, 55 };
+
+        for (int m = 0; m < measures; m++)
+        {
+            var measure = new MxlMeasure
+            {
+                Number = m + 1, TimeSig = "4/4", KeySig = "C major", Divisions = Divisions,
+                GlobalOnsetDivisions = m * (long)(4 * Divisions),
+                GlobalOnsetMs        = m * 4 * Divisions * msPerDiv,
+                TimeSigBeats = 4, TimeSigBeatType = 4,
+            };
+            for (int n = 0; n < 4; n++)
+                measure.Notes.Add(NoteFromMidi(alberti[n], Quarter, n * Quarter, staff: 2, voice: 2));
+            lh.Measures.Add(measure);
+        }
+        score.Parts.Add(lh);
+
+        return score;
+    }
+
+    /// <summary>
+    /// Classic 3-against-4 polyrhythm: the right hand (staff 1) plays steady quarter
+    /// notes while the left hand (staff 2) plays triplets (three evenly-spaced notes
+    /// per measure, approximated as 3×(4/3) divisions).  12 measures at 100 BPM.
+    ///
+    /// Note: MxlScore uses integer divisions; triplets are approximated with
+    /// Divisions=12 so that both 3 and 4 subdivide evenly.
+    /// </summary>
+    public static MxlScore Polyrhythm()
+    {
+        const int bpm      = 100;
+        const int divs     = 12;   // LCM(3,4)=12 divisions per quarter note
+        const int measures = 12;
+        const double msPerDiv = 60_000.0 / (bpm * divs);
+
+        var score = new MxlScore("Polyrhythm 3-against-4", bpm);
+
+        // RH: 4 quarter notes per measure (MIDI 64 = E4)
+        var rh = new MxlPart { PartId = "P1", InstrumentName = "Piano RH", PartIndex = 0 };
+        // LH: 3 evenly-spaced notes per measure (MIDI 52 = E3)
+        var lh = new MxlPart { PartId = "P2", InstrumentName = "Piano LH", PartIndex = 1 };
+
+        int[] rhPitches = { 64, 65, 67, 69, 71, 72 };
+        int[] lhPitches = { 52, 53, 55, 57, 59, 60 };
+
+        for (int m = 0; m < measures; m++)
+        {
+            long globalDiv = m * 4L * divs;
+            double globalMs = globalDiv * msPerDiv;
+
+            // RH measure – 4 quarter notes
+            var rhMeasure = new MxlMeasure
+            {
+                Number = m + 1, TimeSig = "4/4", KeySig = "C major", Divisions = divs,
+                GlobalOnsetDivisions = globalDiv, GlobalOnsetMs = globalMs,
+                TimeSigBeats = 4, TimeSigBeatType = 4,
+            };
+            for (int n = 0; n < 4; n++)
+            {
+                int pitch = rhPitches[(m * 4 + n) % rhPitches.Length];
+                rhMeasure.Notes.Add(NoteFromMidi(pitch, divs, n * divs, staff: 1, voice: 1));
+            }
+            rh.Measures.Add(rhMeasure);
+
+            // LH measure – 3 triplet notes (each spans 4/3 of a quarter = divs*4/3 divs)
+            // Approximate with divs*4/3 = 16 divs each (when divs=12 → 16 per triplet note)
+            var lhMeasure = new MxlMeasure
+            {
+                Number = m + 1, TimeSig = "4/4", KeySig = "C major", Divisions = divs,
+                GlobalOnsetDivisions = globalDiv, GlobalOnsetMs = globalMs,
+                TimeSigBeats = 4, TimeSigBeatType = 4,
+            };
+            int tripletDur = divs * 4 / 3; // = 16 when divs=12
+            for (int n = 0; n < 3; n++)
+            {
+                int pitch = lhPitches[(m * 3 + n) % lhPitches.Length];
+                lhMeasure.Notes.Add(NoteFromMidi(pitch, tripletDur, n * tripletDur, staff: 2, voice: 2));
+            }
+            lh.Measures.Add(lhMeasure);
+        }
+
+        score.Parts.Add(rh);
+        score.Parts.Add(lh);
+        return score;
+    }
+
+    /// <summary>
+    /// Brownian (random-walk) melody: starts at middle C and at each step moves
+    /// ±1 semitone with equal probability, clamped to MIDI 48–84 (C3–C6).
+    /// 64 measures of 4/4 eighth notes at 120 BPM.  Each run produces a unique melody.
+    /// </summary>
+    public static MxlScore BrownianWalk(int seed = 42, int measures = 64)
+    {
+        var (score, part) = MakeSinglePartScore("Brownian Walk", bpm: 120.0);
+        var rng           = new Random(seed);
+
+        int pitch       = MidiC4;
+        const int lo    = 48; // C3
+        const int hi    = 84; // C6
+
+        // 8 eighth notes per 4/4 measure
+        int totalNotes = measures * 8;
+        var pitches    = new List<int>(totalNotes);
+        for (int i = 0; i < totalNotes; i++)
+        {
+            pitches.Add(pitch);
+            pitch = Math.Clamp(pitch + (rng.Next(2) == 0 ? -1 : 1), lo, hi);
+        }
+
+        AppendSequentialNotes(part, pitches, noteDuration: Eighth, bpm: 120.0);
+        return score;
     }
 }
 

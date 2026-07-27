@@ -40,6 +40,10 @@ public sealed class MxlScore
     public double DefaultBpm { get; private set; } = 120.0;
     public List<MxlPart> Parts { get; } = new();
 
+    /// <summary>Creates an empty score with the given title and BPM (for programmatic use).</summary>
+    public MxlScore() { }
+    public MxlScore(string title, double bpm = 120.0) { Title = title; DefaultBpm = bpm; }
+
     public int TotalMeasures => Parts.Sum(p => p.Measures.Count);
     public int TotalNotes    => Parts.Sum(p => p.NoteCount);
     public int TotalRests    => Parts.Sum(p => p.RestCount);
@@ -1097,8 +1101,8 @@ public static class VerticalPianoRollWindowFactory
 
             // Start playback
             bool useFluid = fluidSynthChk.IsChecked == true
-                || !RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-            string? sf = FindSoundfont();
+                || !isWindows;
+            string? sf = useFluid ? FindSoundfont() : null;
             player = new MxlMidiPlayer(score)
             {
                 Bpm           = bpmSlider.Value,
