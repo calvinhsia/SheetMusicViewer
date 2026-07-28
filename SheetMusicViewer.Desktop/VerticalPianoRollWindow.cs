@@ -115,6 +115,7 @@ public sealed class MxlScore
             double globalOnsetMs      = 0.0;
             int    currentTSBeats     = 4;
             int    currentTSBeatType  = 4;
+            int    currentVelocity    = 64;   // MIDI velocity tracking; updated by <sound dynamics>
 
             foreach (var measureEl in partEl.Elements(ns + "measure"))
             {
@@ -153,6 +154,18 @@ public sealed class MxlScore
                     TimeSigBeats         = currentTSBeats,
                     TimeSigBeatType      = currentTSBeatType,
                 };
+
+                // Update running velocity from any <direction><sound dynamics="N"/> in this measure.
+                // MusicXML dynamics range 0–160; clamp to MIDI 0–127.
+                foreach (var dirEl in measureEl.Elements(ns + "direction"))
+                {
+                    var dirSoundEl = dirEl.Element(ns + "sound");
+                    if (dirSoundEl != null &&
+                        double.TryParse(dirSoundEl.Attribute("dynamics")?.Value,
+                            System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture, out var dynVal))
+                        currentVelocity = Math.Clamp((int)Math.Round(dynVal * 127.0 / 160.0), 1, 127);
+                }
 
                 int cursor     = 0;
                 int lastCursor = 0;
@@ -195,6 +208,29 @@ public sealed class MxlScore
                             pitchAlter = (int)Math.Round(alterD);
                     }
 
+                    // Per-note dynamics override: <notations><dynamics> symbolic markings.
+                    int noteVelocity = currentVelocity;
+                    var notationsEl = child.Element(ns + "notations");
+                    if (notationsEl != null)
+                    {
+                        var dynEl = notationsEl.Element(ns + "dynamics");
+                        if (dynEl != null)
+                        {
+                            // <dynamics> may contain a numeric value or a symbolic child element.
+                            if (double.TryParse(dynEl.Value,
+                                    System.Globalization.NumberStyles.Any,
+                                    System.Globalization.CultureInfo.InvariantCulture, out var perNoteDyn))
+                                noteVelocity = Math.Clamp((int)Math.Round(perNoteDyn * 127.0 / 160.0), 1, 127);
+                            else
+                                noteVelocity = dynEl.Elements().FirstOrDefault()?.Name.LocalName switch
+                                {
+                                    "ppp" => 16, "pp" => 33, "p" => 49, "mp" => 64,
+                                    "mf"  => 80, "f"  => 96, "ff" => 112, "fff" => 127,
+                                    _ => currentVelocity
+                                };
+                        }
+                    }
+
                     var note = new MxlNote
                     {
                         IsRest         = isRest,
@@ -209,6 +245,7 @@ public sealed class MxlScore
                         Dots           = child.Elements(ns + "dot").Count(),
                         Staff          = int.TryParse(child.Element(ns + "staff")?.Value, out var st) ? st : 1,
                         Voice          = int.TryParse(child.Element(ns + "voice")?.Value, out var v)  ? v  : 1,
+                        Velocity       = noteVelocity,
                     };
                     measure.Notes.Add(note);
 
@@ -292,6 +329,8 @@ public sealed class MxlNote
     public int    Dots            { get; set; }
     public int    Staff           { get; set; }
     public int    Voice           { get; set; }
+    /// <summary>MIDI velocity 0–127 (parsed from MusicXML dynamics; default 64 = mf).</summary>
+    public int    Velocity        { get; set; } = 64;
 
     /// <summary>MIDI pitch (21=A0 … 108=C8). Returns 0 for rests.</summary>
     public int MidiPitch
@@ -425,8 +464,13 @@ internal sealed class FluidSynthMidiBackend : IMidiBackend
                         if (LogNotes)
                         {
                             uint mt = msg & 0xF0;
-                            if (mt == 0x90 && ((msg >> 16) & 0xFF) > 0)
-                                Trace.WriteLine($"{Ts()} PRE-DISPATCH NoteOn  midi={(msg >> 8) & 0xFF,3}  backlog={System.Threading.Volatile.Read(ref _channelBacklog)}");
+                            int  mn = (int)((msg >> 8) & 0xFF);
+                            int  vel = (int)((msg >> 16) & 0xFF);
+                            int  bl = System.Threading.Volatile.Read(ref _channelBacklog);
+                            if (mt == 0x90 && vel > 0)
+                                Trace.WriteLine($"{Ts()} PRE-DISPATCH NoteOn  midi={mn,3}  vel={vel,3}  backlog={bl}");
+                            else if (mt == 0x80 || (mt == 0x90 && vel == 0))
+                                Trace.WriteLine($"{Ts()} PRE-DISPATCH NoteOff midi={mn,3}            backlog={bl}");
                         }
                         long t0 = Stopwatch.GetTimestamp();
                         DispatchDirect(syn, msg);
@@ -646,7 +690,7 @@ public sealed class MxlMidiPlayer : IDisposable
                     long globalDivs  = measure.GlobalOnsetDivisions + clampedOnset;
                     long onsetMs     = (long)(measureStartMs + clampedOnset * msPerDiv);
                     long offMs       = onsetMs + Math.Max(30, Math.Min(4_000, (long)(note.Duration * msPerDiv) - 15));
-                    events.Add(new MidiEvent(onsetMs, NoteOn(ch, midi, 72), globalDivs,
+                    events.Add(new MidiEvent(onsetMs, NoteOn(ch, midi, note.Velocity), globalDivs,
                         MeasureNo: measure.Number, Staff: note.Staff, Voice: note.Voice));
                     events.Add(new MidiEvent(offMs, NoteOff(ch, midi), globalDivs));
                 }
@@ -692,6 +736,24 @@ public sealed class MxlMidiPlayer : IDisposable
                 if (ct.IsCancellationRequested) return;
 
                 _backend!.Send(ev.Message);
+                if (LogNotes)
+                {
+                    int evType = (int)(ev.Message & 0xF0);
+                    int evMidi = (int)((ev.Message >>  8) & 0xFF);
+                    int evVel  = (int)((ev.Message >> 16) & 0xFF);
+                    bool isOn  = evType == 0x90 && evVel > 0;
+                    bool isOff = evType == 0x80 || (evType == 0x90 && evVel == 0);
+                    if (isOn || isOff)
+                    {
+                        long actualMs = (long)(DateTimeOffset.UtcNow - start).TotalMilliseconds;
+                        long drift    = actualMs - ev.TimeMs;
+                        Trace.WriteLine(
+                            $"{DateTime.Now:HH:mm:ss.fff} SCHED {(isOn ? "NoteOn " : "NoteOff")} " +
+                            $"midi={evMidi,3}  sched={ev.TimeMs,6}ms  " +
+                            $"actual={actualMs,6}ms  drift={(drift >= 0 ? "+" : "")}{drift}ms" +
+                            (ev.MeasureNo > 0 ? $"  m={ev.MeasureNo} s={ev.Staff}" : ""));
+                    }
+                }
                 if (ev.GlobalDivisions != -1)
                     PositionChanged?.Invoke(this, ev.GlobalDivisions);
             }
@@ -753,7 +815,7 @@ public sealed class VerticalPianoRollCanvas : Control
     private readonly double _canvasW;
 
     private sealed record NoteBar(double X, double W, long GlobalOnset, long GlobalOff,
-                                  int MidiPitch, int Staff, bool IsBlack);
+                                  int MidiPitch, int Staff, int Velocity);
     private readonly List<NoteBar> _bars = new();
 
     private long   _currentGlobalDivisions = -1;
@@ -791,8 +853,7 @@ public sealed class VerticalPianoRollCanvas : Control
         return isBlack ? wi * WhiteKeyW : wi * WhiteKeyW + WhiteKeyW / 2.0;
     }
 
-    private double MidiToWidth(int midi) =>
-        BlackPitchClass.Contains(midi % 12) ? BlackKeyW - 1 : WhiteKeyW - 1;
+    private double MidiToWidth(int midi) => WhiteKeyW - 1;
 
     private void BuildBars()
     {
@@ -805,9 +866,8 @@ public sealed class VerticalPianoRollCanvas : Control
             long off        = onset + Math.Max(1, note.Duration);
             double x        = MidiToX(note.MidiPitch);
             double bw       = MidiToWidth(note.MidiPitch);
-            bool black      = BlackPitchClass.Contains(note.MidiPitch % 12);
             int visualStaff = _score.VisualStaff(part, note);
-            _bars.Add(new NoteBar(x, bw, onset, off, note.MidiPitch, visualStaff, black));
+            _bars.Add(new NoteBar(x, bw, onset, off, note.MidiPitch, visualStaff, note.Velocity));
         }
     }
 
@@ -840,9 +900,10 @@ public sealed class VerticalPianoRollCanvas : Control
             }
         }
 
-        var staff1Brush = new SolidColorBrush(Color.FromArgb(220, 64, 200, 90));
-        var staff2Brush = new SolidColorBrush(Color.FromArgb(220, 80, 130, 230));
-        var otherBrush  = new SolidColorBrush(Color.FromArgb(200, 200, 180, 80));
+        // Base RGB values for each staff; alpha is scaled by velocity below.
+        const byte S1R = 64,  S1G = 200, S1B = 90;   // green  – right hand
+        const byte S2R = 80,  S2G = 130, S2B = 230;  // blue   – left hand
+        const byte OtR = 200, OtG = 180, OtB = 80;   // yellow – other
 
         double divsPerSec    = bpm / 60.0 * _divsPerQuarter;
         double lookaheadDivs = divsPerSec * LookaheadSec;
@@ -856,13 +917,16 @@ public sealed class VerticalPianoRollCanvas : Control
             double clippedH   = Math.Min(yBottom, scrollH) - clippedTop;
             if (clippedH <= 0) continue;
 
+            // Alpha: map velocity 1–127 → 80–240 so even quiet notes are always visible.
+            byte alpha = (byte)(80 + (int)Math.Round((bar.Velocity - 1) * (240 - 80) / 126.0));
+
             double fullX = bar.X - bar.W / 2.0;
             double halfW = bar.W / 2.0;
             double bx, bw;
             ISolidColorBrush brush;
-            if (bar.Staff == 1)      { bx = fullX;         bw = halfW; brush = staff1Brush; }
-            else if (bar.Staff == 2) { bx = fullX + halfW; bw = halfW; brush = staff2Brush; }
-            else                     { bx = fullX;         bw = bar.W; brush = otherBrush; }
+            if (bar.Staff == 1)      { bx = fullX;         bw = halfW; brush = new SolidColorBrush(Color.FromArgb(alpha, S1R, S1G, S1B)); }
+            else if (bar.Staff == 2) { bx = fullX + halfW; bw = halfW; brush = new SolidColorBrush(Color.FromArgb(alpha, S2R, S2G, S2B)); }
+            else                     { bx = fullX;         bw = bar.W; brush = new SolidColorBrush(Color.FromArgb(alpha, OtR, OtG, OtB)); }
 
             ctx.FillRectangle(brush, new Rect(bx, clippedTop, bw, clippedH), (float)Math.Min(3, bw / 2));
             double edgeY = Math.Min(yBottom, scrollH - 1);
