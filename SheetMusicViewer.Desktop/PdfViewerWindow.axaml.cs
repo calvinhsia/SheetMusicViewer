@@ -272,6 +272,20 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         var mnuOpenInMuseScore = this.GetControl<MenuItem>("mnuOpenInMuseScore");
         mnuOpenInMuseScore.Click += (s, e) => _ = ShowExportToMuseScoreDialogAsync();
 
+        var mnuRhythms = this.GetControl<MenuItem>("mnuRhythms");
+        mnuRhythms.Click += (s, e) =>
+        {
+            var w = VerticalPianoRollWindowFactory.BuildRhythmsWindow();
+            w.Show();
+        };
+
+        var mnuStyles = this.GetControl<MenuItem>("mnuStyles");
+        mnuStyles.Click += (s, e) =>
+        {
+            var w = VerticalPianoRollWindowFactory.BuildStylesWindow();
+            w.Show();
+        };
+
         // Wire up per-page link buttons
         var btnLink0 = this.GetControl<Button>("btnLink0");
         btnLink0.Click += (s, e) => OpenLinkForPage(0);

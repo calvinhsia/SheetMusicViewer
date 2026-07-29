@@ -374,8 +374,14 @@ internal sealed class WinmmMidiBackend : IMidiBackend
 
     public void Open()
     {
-        if (midiOutOpen(out _h, -1, IntPtr.Zero, IntPtr.Zero, 0) != 0)
-            throw new InvalidOperationException("Could not open MIDI output device (winmm).");
+        // Retry with back-off: the OS can take a short time to release the device
+        // after a previous Close(), especially when patterns switch rapidly.
+        for (int attempt = 0; attempt < 6; attempt++)
+        {
+            if (midiOutOpen(out _h, -1, IntPtr.Zero, IntPtr.Zero, 0) == 0) return;
+            Thread.Sleep(30 * (attempt + 1));  // 30 ms, 60 ms, 90 ms …
+        }
+        throw new InvalidOperationException("Could not open MIDI output device (winmm).");
     }
 
     public void Send(uint message) => midiOutShortMsg(_h, message);
@@ -618,6 +624,13 @@ public sealed class MxlMidiPlayer : IDisposable
     public double Bpm         { get; set; } = 120.0;
     public int    StartMeasure { get; set; } = 1;
     public bool   LogNotes    { get; set; } = false;
+    /// <summary>
+    /// Staff numbers (1 = RH/green, 2 = LH/blue) whose NoteOn messages are suppressed.
+    /// Checked dynamically at dispatch time — toggle at any point during playback.
+    /// Mirrors <see cref="VerticalPianoRollCanvas.MutedStaves"/> so both canvas and audio
+    /// are controlled by the same set.
+    /// </summary>
+    public HashSet<int> MutedStaves { get; } = new();
 
     /// <summary>Fired on the playback thread with the current global-divisions offset.</summary>
     public event EventHandler<long>? PositionChanged;
@@ -654,7 +667,8 @@ public sealed class MxlMidiPlayer : IDisposable
     }
 
     private record struct MidiEvent(long TimeMs, uint Message, long GlobalDivisions,
-        int MeasureNo = 0, string NoteName = "", int MidiNote = 0, int Staff = 0, int Voice = 0);
+        int MeasureNo = 0, string NoteName = "", int MidiNote = 0, int Staff = 0, int Voice = 0,
+        int PartIndex = -1);
 
     private void PlaySync(CancellationToken ct)
     {
@@ -690,8 +704,9 @@ public sealed class MxlMidiPlayer : IDisposable
                     long globalDivs  = measure.GlobalOnsetDivisions + clampedOnset;
                     long onsetMs     = (long)(measureStartMs + clampedOnset * msPerDiv);
                     long offMs       = onsetMs + Math.Max(30, Math.Min(4_000, (long)(note.Duration * msPerDiv) - 15));
+                    // NoteOn carries Staff so the dispatch loop can check MutedStaves dynamically.
                     events.Add(new MidiEvent(onsetMs, NoteOn(ch, midi, note.Velocity), globalDivs,
-                        MeasureNo: measure.Number, Staff: note.Staff, Voice: note.Voice));
+                        MeasureNo: measure.Number, Staff: note.Staff, Voice: note.Voice, PartIndex: pi));
                     events.Add(new MidiEvent(offMs, NoteOff(ch, midi), globalDivs));
                 }
             }
@@ -735,7 +750,16 @@ public sealed class MxlMidiPlayer : IDisposable
                     _waitEvent.Wait(wait, ct);
                 if (ct.IsCancellationRequested) return;
 
+                // Dynamic mute: skip NoteOn for muted staves; always send NoteOff to release stuck notes.
+                {
+                    int evType = (int)(ev.Message & 0xF0);
+                    int evVel  = (int)((ev.Message >> 16) & 0xFF);
+                    bool isNoteOn = evType == 0x90 && evVel > 0;
+                    if (isNoteOn && ev.Staff > 0 && MutedStaves.Contains(ev.Staff))
+                        goto advancePosition;
+                }
                 _backend!.Send(ev.Message);
+                advancePosition:
                 if (LogNotes)
                 {
                     int evType = (int)(ev.Message & 0xF0);
@@ -828,6 +852,13 @@ public sealed class VerticalPianoRollCanvas : Control
         set { _currentGlobalDivisions = value; InvalidateVisual(); }
     }
 
+    /// <summary>
+    /// Staves listed here are hidden in the visual and excluded from active-key highlighting.
+    /// Staff 1 = right hand (green), staff 2 = left hand (blue).
+    /// Changing this property automatically triggers a redraw.
+    /// </summary>
+    public HashSet<int> MutedStaves { get; } = new();
+
     public VerticalPianoRollCanvas(MxlScore score)
     {
         _score = score;
@@ -871,6 +902,14 @@ public sealed class VerticalPianoRollCanvas : Control
         }
     }
 
+    /// <summary>Rebuilds the bar list (call after MutedStaves changes to show/hide parts).</summary>
+    public void RefreshBars()
+    {
+        _bars.Clear();
+        BuildBars();
+        InvalidateVisual();
+    }
+
     public override void Render(DrawingContext ctx)
     {
         double totalH  = Bounds.Height;
@@ -910,6 +949,7 @@ public sealed class VerticalPianoRollCanvas : Control
 
         foreach (var bar in _bars)
         {
+            if (MutedStaves.Contains(bar.Staff)) continue;
             double yBottom = scrollH - ((bar.GlobalOnset - displayDivs) / lookaheadDivs) * scrollH;
             double yTop    = scrollH - ((bar.GlobalOff   - displayDivs) / lookaheadDivs) * scrollH;
             if (yBottom < 0 || yTop > scrollH) continue;
@@ -940,6 +980,7 @@ public sealed class VerticalPianoRollCanvas : Control
         {
             foreach (var bar in _bars)
             {
+                if (MutedStaves.Contains(bar.Staff)) continue;
                 if (displayDivs >= bar.GlobalOnset && displayDivs < bar.GlobalOff)
                 {
                     int bit = bar.Staff == 1 ? 1 : bar.Staff == 2 ? 2 : 4;
@@ -1152,10 +1193,11 @@ public static class VerticalPianoRollWindowFactory
             var playerToStop = player;
             player = null;
             canvas.CurrentGlobalDivisions = -1;
-            statusBlock.Text = "Stopped";
+            measureSlider.Value = score.Parts.Count > 0 ? 1 : 0;
+            statusBlock.Text = $"Stopped  |  {score.Title}";
             playStopBtn.Content = "▶  Play";
             if (playerToStop != null)
-                Task.Run(() => { try { playerToStop.Dispose(); } catch { } });
+                Task.Run(() => { try { playerToStop.Stop(); playerToStop.Dispose(); } catch { } });
         }
 
         playStopBtn.Click += (_, _) =>
@@ -1198,13 +1240,52 @@ public static class VerticalPianoRollWindowFactory
             statusBlock.Text = $"Playing  |  BPM: {bpmSlider.Value:F0}  |  {score.Title}";
             playStopBtn.Content = "■  Stop";
             player.Start();
+            // Push current canvas mute state into the new player
+            foreach (var s in canvas.MutedStaves) player.MutedStaves.Add(s);
         };
+
+        // ── Part mute checkboxes ────────────────────────────────────────────
+        // Staff 1 = RH (green), staff 2 = LH (blue).  Wired to both canvas and player.
+        var rhChk = new CheckBox
+        {
+            Content           = "RH",
+            IsChecked         = true,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin            = new Thickness(6, 0, 2, 0),
+            Foreground        = new SolidColorBrush(Color.FromRgb(64, 200, 90)),
+            [ToolTip.TipProperty] = "Enable right-hand / staff 1 (green)"
+        };
+        var lhChk = new CheckBox
+        {
+            Content           = "LH",
+            IsChecked         = true,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin            = new Thickness(2, 0, 6, 0),
+            Foreground        = new SolidColorBrush(Color.FromRgb(80, 130, 230)),
+            [ToolTip.TipProperty] = "Enable left-hand / staff 2 (blue)"
+        };
+
+        void ApplyMutes()
+        {
+            bool rhOn = rhChk.IsChecked == true;
+            bool lhOn = lhChk.IsChecked == true;
+            if (!rhOn) canvas.MutedStaves.Add(1); else canvas.MutedStaves.Remove(1);
+            if (!lhOn) canvas.MutedStaves.Add(2); else canvas.MutedStaves.Remove(2);
+            canvas.RefreshBars();
+            if (player != null)
+            {
+                if (!rhOn) player.MutedStaves.Add(1); else player.MutedStaves.Remove(1);
+                if (!lhOn) player.MutedStaves.Add(2); else player.MutedStaves.Remove(2);
+            }
+        }
+        rhChk.IsCheckedChanged += (_, _) => ApplyMutes();
+        lhChk.IsCheckedChanged += (_, _) => ApplyMutes();
 
         var toolbar = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
             Margin      = new Thickness(4),
-            Children    = { playStopBtn, bpmSlider, bpmLabel, measureSlider, measureLabel, fluidSynthChk, logNotesChk, statusBlock }
+            Children    = { playStopBtn, bpmSlider, bpmLabel, measureSlider, measureLabel, lhChk, rhChk, fluidSynthChk, logNotesChk, statusBlock }
         };
 
         var layout = new DockPanel();
@@ -1232,6 +1313,269 @@ public static class VerticalPianoRollWindowFactory
             autoPlayFired = true;
             playStopBtn.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         };
+        return window;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Rhythms tutorial window
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Opens a vertical piano-roll window with a dropdown for selecting any rhythm
+    /// or theory pattern from <see cref="MusicGenerator.RhythmPatterns"/>.
+    /// </summary>
+    public static Window BuildRhythmsWindow()
+        => BuildPatternSelectorWindow("🥁 Rhythm Patterns", MusicGenerator.RhythmPatterns);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Styles tutorial window
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Opens a vertical piano-roll window with a dropdown for selecting any style
+    /// / genre pattern from <see cref="MusicGenerator.StylePatterns"/>.
+    /// </summary>
+    public static Window BuildStylesWindow()
+        => BuildPatternSelectorWindow("🎹 Style Patterns", MusicGenerator.StylePatterns);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Shared pattern-selector scaffold
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private static Window BuildPatternSelectorWindow(
+        string windowTitle,
+        IReadOnlyList<MusicPatternInfo> patterns)
+    {
+        // ── initial score (first entry) ───────────────────────────────────
+        var firstPattern = patterns[0];
+        var score        = firstPattern.Build();
+
+        // Canvas and player state
+        var canvasHolder = new Control?[1];
+        var playerHolder = new MxlMidiPlayer?[1];
+        var windowHolder = new Window?[1];
+
+        void StopPlayer()
+        {
+            playerHolder[0]?.Stop();
+            playerHolder[0] = null;
+        }
+
+        // ── toolbar controls ──────────────────────────────────────────────
+        var patternCombo = new ComboBox
+        {
+            Width                = 320,
+            VerticalAlignment    = Avalonia.Layout.VerticalAlignment.Center,
+            [ToolTip.TipProperty] = "Select a pattern",
+        };
+        patternCombo.ItemsSource    = patterns;
+        patternCombo.SelectedIndex  = 0;
+        patternCombo.ItemTemplate   = new Avalonia.Controls.Templates.FuncDataTemplate<MusicPatternInfo>(
+            (info, _) => new TextBlock { Text = info.Display });
+
+        var statusBlock = new TextBlock
+        {
+            Text              = $"Stopped  |  BPM: {score.DefaultBpm:F0}  |  {score.Title}",
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            FontSize          = 12,
+            Margin            = new Thickness(8, 0)
+        };
+
+        var bpmSlider = new Slider
+        {
+            Minimum = 40, Maximum = 300, Value = score.DefaultBpm,
+            Width   = 180,
+            VerticalAlignment    = Avalonia.Layout.VerticalAlignment.Center,
+            [ToolTip.TipProperty] = "Tempo (BPM)"
+        };
+        var bpmLabel = new TextBlock
+        {
+            Text = $"{score.DefaultBpm:F0} BPM", Width = 60,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, FontSize = 12
+        };
+        bpmSlider.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == Slider.ValueProperty)
+                bpmLabel.Text = $"{bpmSlider.Value:F0} BPM";
+        };
+
+        var playStopBtn = new Button
+        {
+            Content = "▶  Play",
+            Margin  = new Thickness(4),
+            Padding = new Thickness(8, 2)
+        };
+
+        bool isWindows    = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        var fluidSynthChk = new CheckBox
+        {
+            Content           = "FluidSynth",
+            IsChecked         = !isWindows,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin            = new Thickness(4, 0),
+            [ToolTip.TipProperty] = "Use FluidSynth (cross-platform); uncheck for WinMM (Windows only)"
+        };
+
+        // ── canvas holder panel (swapped when pattern changes) ────────────
+        var contentPanel = new DockPanel();
+
+        // ── Part mute checkboxes (declared here so LoadPattern can call ApplyMutesP) ──
+        var rhChkP = new CheckBox
+        {
+            Content           = "RH",
+            IsChecked         = true,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin            = new Thickness(6, 0, 2, 0),
+            Foreground        = new SolidColorBrush(Color.FromRgb(64, 200, 90)),
+            [ToolTip.TipProperty] = "Enable right-hand / staff 1 (green)"
+        };
+        var lhChkP = new CheckBox
+        {
+            Content           = "LH",
+            IsChecked         = true,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin            = new Thickness(2, 0, 6, 0),
+            Foreground        = new SolidColorBrush(Color.FromRgb(80, 130, 230)),
+            [ToolTip.TipProperty] = "Enable left-hand / staff 2 (blue)"
+        };
+
+        void ApplyMutesP()
+        {
+            bool rhOn = rhChkP.IsChecked == true;
+            bool lhOn = lhChkP.IsChecked == true;
+            if (canvasHolder[0] is VerticalPianoRollCanvas cv)
+            {
+                if (!rhOn) cv.MutedStaves.Add(1); else cv.MutedStaves.Remove(1);
+                if (!lhOn) cv.MutedStaves.Add(2); else cv.MutedStaves.Remove(2);
+                cv.RefreshBars();
+            }
+            if (playerHolder[0] is MxlMidiPlayer pr)
+            {
+                if (!rhOn) pr.MutedStaves.Add(1); else pr.MutedStaves.Remove(1);
+                if (!lhOn) pr.MutedStaves.Add(2); else pr.MutedStaves.Remove(2);
+            }
+        }
+        rhChkP.IsCheckedChanged += (_, _) => ApplyMutesP();
+        lhChkP.IsCheckedChanged += (_, _) => ApplyMutesP();
+
+        void LoadPattern(MusicPatternInfo info)
+        {
+            StopPlayer();
+            var s = info.Build();
+
+            // Rebuild canvas with new score
+            contentPanel.Children.Clear();
+            var newCanvas = new VerticalPianoRollCanvas(s);
+            canvasHolder[0] = newCanvas;
+            contentPanel.Children.Add(newCanvas);
+
+            bpmSlider.Value = s.DefaultBpm;
+            patternCombo[ToolTip.TipProperty] = info.Tooltip;
+            statusBlock.Text     = $"Stopped  |  BPM: {s.DefaultBpm:F0}  |  {s.Title}";
+            playStopBtn.Content  = "▶  Play";
+
+            // Re-apply current mute state to new canvas (rhChkP/lhChkP defined below but
+            // this lambda is called after those variables are assigned)
+            ApplyMutesP();
+
+            // Auto-play
+            Dispatcher.UIThread.Post(() =>
+                playStopBtn.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)),
+                DispatcherPriority.Background);
+        }
+
+        patternCombo.SelectionChanged += (_, _) =>
+        {
+            if (patternCombo.SelectedItem is MusicPatternInfo info)
+                LoadPattern(info);
+        };
+
+        // ── play/stop wiring ──────────────────────────────────────────────
+        playStopBtn.Click += (_, _) =>
+        {
+            if (playerHolder[0] != null) { StopPlayer(); playStopBtn.Content = "▶  Play"; return; }
+
+            if (patternCombo.SelectedItem is not MusicPatternInfo info) return;
+            var s = info.Build();
+
+            bool useFluid = fluidSynthChk.IsChecked == true || !isWindows;
+            string? sf    = useFluid ? FindSoundfont() : null;
+            var p = new MxlMidiPlayer(s)
+            {
+                Bpm           = bpmSlider.Value,
+                StartMeasure  = 1,
+                Backend       = (useFluid && sf != null) ? MidiBackendKind.FluidSynth : MidiBackendKind.Winmm,
+                SoundfontPath = sf ?? string.Empty,
+            };
+            playerHolder[0] = p;
+            // Apply current mute state before playback starts
+            ApplyMutesP();
+
+            p.PositionChanged += (_, divs) =>
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (canvasHolder[0] is VerticalPianoRollCanvas c)
+                        c.CurrentGlobalDivisions = divs;
+                    statusBlock.Text = $"Playing  |  BPM: {bpmSlider.Value:F0}  |  {s.Title}";
+                }, DispatcherPriority.Render);
+
+            p.PlaybackEnded += (_, _) =>
+                Dispatcher.UIThread.Post(() =>
+                {
+                    var old = playerHolder[0];
+                    playerHolder[0] = null;
+                    // Reset canvas to beginning so next Play starts fresh
+                    if (canvasHolder[0] is VerticalPianoRollCanvas cv)
+                        cv.CurrentGlobalDivisions = -1;
+                    playStopBtn.Content = "▶  Play";
+                    statusBlock.Text    = $"Stopped  |  BPM: {bpmSlider.Value:F0}  |  {s.Title}";
+                    // Dispose old player on background thread to release WinMM/FluidSynth device
+                    if (old != null) Task.Run(() => { try { old.Stop(); } catch { } });
+                }, DispatcherPriority.Normal);
+
+            playStopBtn.Content = "■  Stop";
+            p.Start();
+        };
+
+        // ── initial canvas ────────────────────────────────────────────────
+        var initialCanvas = new VerticalPianoRollCanvas(score);
+        canvasHolder[0] = initialCanvas;
+        contentPanel.Children.Add(initialCanvas);
+
+        var toolbar = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Margin      = new Thickness(4),
+            Children    = { patternCombo, playStopBtn, bpmSlider, bpmLabel, lhChkP, rhChkP, fluidSynthChk, statusBlock }
+        };
+
+        var layout = new DockPanel();
+        DockPanel.SetDock(toolbar, Dock.Top);
+        layout.Children.Add(toolbar);
+        layout.Children.Add(contentPanel);
+
+        var window = new Window
+        {
+            Title                 = windowTitle,
+            Width                 = 1400,
+            Height                = 720,
+            WindowState           = WindowState.Maximized,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            ShowInTaskbar         = false,
+            Content               = layout,
+        };
+        windowHolder[0] = window;
+        window.Closed += (_, _) => StopPlayer();
+
+        // Auto-play first pattern on open
+        bool autoPlayFired2 = false;
+        window.Opened += (_, _) =>
+        {
+            if (autoPlayFired2) return;
+            autoPlayFired2 = true;
+            playStopBtn.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        };
+
         return window;
     }
 }

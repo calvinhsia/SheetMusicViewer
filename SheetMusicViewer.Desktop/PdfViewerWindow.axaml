@@ -141,6 +141,9 @@
                             <Separator/>
                             <MenuItem Name="mnuOpenInMuseScore" Header="🎼 Open in _MuseScore…" InputGesture="Alt+S" IsEnabled="{Binding PdfUIEnabled}" ToolTip.Tip="Export current song/page range to MusicXML via Audiveris and open in MuseScore Studio"/>
                             <Separator/>
+                            <MenuItem Name="mnuRhythms" Header="🥁 _Rhythm Patterns…" ToolTip.Tip="Open the Rhythm Patterns tutorial (chromatic scales, arpeggios, polyrhythm…)"/>
+                            <MenuItem Name="mnuStyles"  Header="🎹 _Style Patterns…"  ToolTip.Tip="Open the Style Patterns tutorial (Pop, Jazz, R&amp;B, Rock, Tango, Bossa Nova…)"/>
+                            <Separator/>
                             <MenuItem Name="mnuShowLogs" Header="Show _Logs" ToolTip.Tip="Show application log file"/>
                             <MenuItem Name="mnuAbout" Header="_About" ToolTip.Tip="Show build information"/>
                             <MenuItem Name="mnuQuit" Header="_Quit Application" InputGesture="Alt+Q" ToolTip.Tip="Exit application"/>
