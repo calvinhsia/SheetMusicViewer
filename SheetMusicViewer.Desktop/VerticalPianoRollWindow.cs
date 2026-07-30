@@ -843,13 +843,57 @@ public sealed class VerticalPianoRollCanvas : Control
     private readonly List<NoteBar> _bars = new();
 
     private long   _currentGlobalDivisions = -1;
+    private long   _anchorDivisions;
+    private long   _anchorTimestamp;            // Stopwatch.GetTimestamp() at last anchor
+    private double _playBpm = 120;
+    private readonly DispatcherTimer _animTimer;
     private readonly MxlScore _score;
     private readonly int _divsPerQuarter;
+
+    /// <summary>BPM used for between-event position interpolation. Set this before calling Play.</summary>
+    public double PlayBpm
+    {
+        get => _playBpm;
+        set => _playBpm = Math.Max(1, value);
+    }
 
     public long CurrentGlobalDivisions
     {
         get => _currentGlobalDivisions;
-        set { _currentGlobalDivisions = value; InvalidateVisual(); }
+        set
+        {
+            // Only the stop path uses this setter during playback.
+            _currentGlobalDivisions = value;
+            if (value < 0)
+            {
+                _anchorTimestamp = 0;
+                _animTimer.Stop();
+            }
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>
+    /// Starts the 60-fps interpolation timer anchored to <paramref name="startDivisions"/>.
+    /// Call once when playback begins; do NOT call again per MIDI event.
+    /// </summary>
+    public void StartSmoothPlay(long startDivisions)
+    {
+        _anchorDivisions        = startDivisions;
+        _anchorTimestamp        = 0;              // clock frozen until SyncAnchor confirms audio started
+        _currentGlobalDivisions = startDivisions;
+        if (!_animTimer.IsEnabled) _animTimer.Start();
+    }
+
+    /// <summary>
+    /// Called once from the first PositionChanged event to align the visual clock with
+    /// the moment audio actually began.  Subsequent calls are no-ops.
+    /// </summary>
+    public void SyncAnchor(long divs)
+    {
+        if (_anchorTimestamp != 0) return;        // already synced — don't re-anchor
+        _anchorDivisions = divs;
+        _anchorTimestamp = Stopwatch.GetTimestamp();
     }
 
     /// <summary>
@@ -872,6 +916,19 @@ public sealed class VerticalPianoRollCanvas : Control
             ? Math.Max(1, score.Parts[0].Measures[0].Divisions) : 480;
 
         BuildBars();
+
+        _animTimer = new DispatcherTimer(DispatcherPriority.Render)
+        {
+            Interval = TimeSpan.FromMilliseconds(16)   // ~60 fps
+        };
+        _animTimer.Tick += (_, _) =>
+        {
+            if (_anchorTimestamp == 0) return;
+            double divsPerSec = _playBpm / 60.0 * _divsPerQuarter;
+            long   elapsed    = Stopwatch.GetTimestamp() - _anchorTimestamp;
+            _currentGlobalDivisions = _anchorDivisions + (long)(elapsed * divsPerSec / Stopwatch.Frequency);
+            InvalidateVisual();
+        };
     }
 
     protected override Size MeasureOverride(Size availableSize) =>
@@ -914,8 +971,13 @@ public sealed class VerticalPianoRollCanvas : Control
     {
         double totalH  = Bounds.Height;
         double scrollH = Math.Max(50, totalH - KeyboardH);
-        double bpm     = _score.DefaultBpm > 0 ? _score.DefaultBpm : 120;
-        long   displayDivs = _currentGlobalDivisions >= 0 ? _currentGlobalDivisions : 0;
+        double bpm     = _playBpm > 0 ? _playBpm : (_score.DefaultBpm > 0 ? _score.DefaultBpm : 120);
+        // Compute position with full double precision directly from the wall clock so
+        // rendering is smooth regardless of when the timer fires.
+        double displayDivs = _anchorTimestamp != 0
+            ? _anchorDivisions + (Stopwatch.GetTimestamp() - _anchorTimestamp)
+                                 * (bpm / 60.0 * _divsPerQuarter) / Stopwatch.Frequency
+            : (_currentGlobalDivisions >= 0 ? (double)_currentGlobalDivisions : 0.0);
 
         ctx.FillRectangle(new SolidColorBrush(Color.FromRgb(20, 20, 20)),
             new Rect(0, 0, _canvasW, scrollH));
@@ -1091,10 +1153,54 @@ public sealed class StaffNotationCanvas : Control
     public HashSet<int> MutedStaves { get; } = new();
 
     private long _currentGlobalDivisions = -1;
+    private long   _anchorDivisions;
+    private long   _anchorTimestamp;
+    private double _playBpm = 120;
+    private readonly DispatcherTimer _animTimer;
+
+    /// <summary>BPM used for between-event position interpolation. Set this before calling Play.</summary>
+    public double PlayBpm
+    {
+        get => _playBpm;
+        set => _playBpm = Math.Max(1, value);
+    }
+
     public long CurrentGlobalDivisions
     {
         get => _currentGlobalDivisions;
-        set { _currentGlobalDivisions = value; InvalidateVisual(); }
+        set
+        {
+            _currentGlobalDivisions = value;
+            if (value < 0)
+            {
+                _anchorTimestamp = 0;
+                _animTimer.Stop();
+            }
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>
+    /// Starts the 60-fps interpolation timer anchored to <paramref name="startDivisions"/>.
+    /// Call once when playback begins; do NOT call again per MIDI event.
+    /// </summary>
+    public void StartSmoothPlay(long startDivisions)
+    {
+        _anchorDivisions        = startDivisions;
+        _anchorTimestamp        = 0;              // clock frozen until SyncAnchor confirms audio started
+        _currentGlobalDivisions = startDivisions;
+        if (!_animTimer.IsEnabled) _animTimer.Start();
+    }
+
+    /// <summary>
+    /// Called once from the first PositionChanged event to align the visual clock.
+    /// Subsequent calls are no-ops.
+    /// </summary>
+    public void SyncAnchor(long divs)
+    {
+        if (_anchorTimestamp != 0) return;
+        _anchorDivisions = divs;
+        _anchorTimestamp = Stopwatch.GetTimestamp();
     }
 
     public StaffNotationCanvas(MxlScore score)
@@ -1123,6 +1229,19 @@ public sealed class StaffNotationCanvas : Control
         }
         _notes.Sort((a, b) => a.GlobalOnset.CompareTo(b.GlobalOnset));
         _barlines.Sort((a, b) => a.Divs.CompareTo(b.Divs));
+
+        _animTimer = new DispatcherTimer(DispatcherPriority.Render)
+        {
+            Interval = TimeSpan.FromMilliseconds(16)   // ~60 fps
+        };
+        _animTimer.Tick += (_, _) =>
+        {
+            if (_anchorTimestamp == 0) return;
+            double divsPerSec = _playBpm / 60.0 * _divsPerQuarter;
+            long   elapsed    = Stopwatch.GetTimestamp() - _anchorTimestamp;
+            _currentGlobalDivisions = _anchorDivisions + (long)(elapsed * divsPerSec / Stopwatch.Frequency);
+            InvalidateVisual();
+        };
     }
 
     public void RefreshNotes() => InvalidateVisual();
@@ -1137,14 +1256,19 @@ public sealed class StaffNotationCanvas : Control
         double H = Bounds.Height;
         if (W < 20 || H < 20) return;
 
-        double bpm          = _score.DefaultBpm > 0 ? _score.DefaultBpm : 120;
+        double bpm          = _playBpm > 0 ? _playBpm : (_score.DefaultBpm > 0 ? _score.DefaultBpm : 120);
         double divsPerSec   = bpm / 60.0 * _divsPerQuarter;
         double lookaheadDiv = divsPerSec * LookaheadSec;
-        long   displayDivs  = _currentGlobalDivisions >= 0 ? _currentGlobalDivisions : 0;
+        // Compute with full double precision from the wall clock so rendering is
+        // smooth regardless of when the timer fires.
+        double displayDivs  = _anchorTimestamp != 0
+            ? _anchorDivisions + (Stopwatch.GetTimestamp() - _anchorTimestamp)
+                                 * (bpm / 60.0 * _divsPerQuarter) / Stopwatch.Frequency
+            : (_currentGlobalDivisions >= 0 ? (double)_currentGlobalDivisions : 0.0);
         double nowX         = W * CursorFrac;
 
         // Global-divisions → pixel X (notes to the right of nowX scroll leftward)
-        double DivsToX(long d) => nowX + (d - displayDivs) / lookaheadDiv * (W * (1 - CursorFrac));
+        double DivsToX(double d) => nowX + (d - displayDivs) / lookaheadDiv * (W * (1 - CursorFrac));
 
         // ── background ────────────────────────────────────────────────────
         ctx.FillRectangle(new SolidColorBrush(Color.FromRgb(250, 248, 240)), new Rect(0, 0, W, H));
@@ -1524,16 +1648,34 @@ public static class VerticalPianoRollWindowFactory
             if (useFluid && sf == null)
                 Trace.WriteLine("VerticalPianoRoll: no soundfont found -- falling back to WinMM");
 
+            canvas.PlayBpm      = bpmSlider.Value;
+            staffCanvas.PlayBpm = bpmSlider.Value;
+
+            // Compute the start divisions from the measure map so the timer anchor
+            // is set once — before the first MIDI event — giving a perfectly smooth clock.
+            int  startMeasure    = (int)measureSlider.Value;
+            long startDivisions  = startMeasure <= 1
+                ? 0
+                : (measureDivMap.FirstOrDefault(x => x.Number >= startMeasure).Divs);
+            canvas.StartSmoothPlay(startDivisions);
+            staffCanvas.StartSmoothPlay(startDivisions);
+
             player.PositionChanged += (_, divs) =>
+            {
+                // High-priority post for the one-time clock sync; normal post for UI updates.
                 Dispatcher.UIThread.Post(() =>
                 {
-                    canvas.CurrentGlobalDivisions      = divs;
-                    staffCanvas.CurrentGlobalDivisions = divs;
+                    canvas.SyncAnchor(divs);
+                    staffCanvas.SyncAnchor(divs);
+                }, DispatcherPriority.Render);
+                Dispatcher.UIThread.Post(() =>
+                {
                     int mno = DivsToMeasure(divs);
                     if ((int)measureSlider.Value != mno)
                         measureSlider.Value = mno;
                     statusBlock.Text = $"M {mno}/{totalMeasures}  |  BPM: {bpmSlider.Value:F0}  |  {score.Title}";
-                }, DispatcherPriority.Render);
+                }, DispatcherPriority.Normal);
+            };
 
             player.PlaybackEnded += (_, _) =>
                 Dispatcher.UIThread.Post(() =>
