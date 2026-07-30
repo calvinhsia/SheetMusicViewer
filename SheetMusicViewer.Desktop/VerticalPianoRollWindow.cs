@@ -1152,11 +1152,11 @@ public sealed class StaffNotationCanvas : Control
         // ── staff layout ──────────────────────────────────────────────────
         // Each staff section occupies half the height.
         // The five-line staff is centered vertically in its section.
-        double sectionH  = H / 2.0;
-        double staffSpan = 4 * LineSpacing;
+        double staffSpan  = 4 * LineSpacing;
+        double staffGap   = LineSpacing * 2;   // gap between the two staves
 
-        double trebleTopY = sectionH / 2.0 - staffSpan / 2.0;
-        double bassTopY   = sectionH + sectionH / 2.0 - staffSpan / 2.0;
+        double trebleTopY = H / 2.0 - staffSpan - staffGap;
+        double bassTopY   = H / 2.0 + staffGap;
         double trebleMidY = trebleTopY + 2 * LineSpacing;  // middle (3rd) line Y
         double bassMidY   = bassTopY   + 2 * LineSpacing;
 
@@ -1191,9 +1191,7 @@ public sealed class StaffNotationCanvas : Control
         DrawStaffLines(trebleTopY);
         DrawStaffLines(bassTopY);
 
-        // ── divider between the two sections ──────────────────────────────
-        ctx.DrawLine(new Pen(new SolidColorBrush(Color.FromArgb(40, 0, 0, 0)), 0.5),
-            new Point(0, sectionH), new Point(W, sectionH));
+
 
         // ── clef symbols (drawn with geometric primitives) ─────────────────
         // Treble G-clef: drawn as simplified strokes around the G4 line (line index 3 from top = 1 above mid)
@@ -1242,7 +1240,7 @@ public sealed class StaffNotationCanvas : Control
             if (bn >= 1)
             {
                 var ft = new FormattedText($"{bn}", CultureInfo.InvariantCulture,
-                    FlowDirection.LeftToRight, tf, 8,
+                    FlowDirection.LeftToRight, tf, 11,
                     new SolidColorBrush(Color.FromRgb(80, 80, 80)));
                 ctx.DrawText(ft, new Point(bx + 2, trebleTopY - LineSpacing - 2));
             }
