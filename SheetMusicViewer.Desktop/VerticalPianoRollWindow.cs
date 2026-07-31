@@ -1139,7 +1139,7 @@ public sealed class StaffNotationCanvas : Control
     private const double LookaheadSec = 4.0;
         private const double CursorFrac   = 0.25;   // "now" line position (0=left 1=right)
         private const double LatencyMs    = 60.0;   // audio-buffer latency compensation (ms)
-    private const double ClefAreaW    = 28.0;   // left margin reserved for clef drawing
+    private const double ClefAreaW    = 48.0;   // left margin reserved for clef glyph
 
     // Diatonic step within octave (C=0 D=1 E=2 F=3 G=4 A=5 B=6)
     private static readonly int[] MidiPcToDiatonic = { 0,-1, 1,-1, 2, 3,-1, 4,-1, 5,-1, 6 };
@@ -1363,39 +1363,56 @@ public sealed class StaffNotationCanvas : Control
 
 
 
-        // ── clef symbols (drawn with geometric primitives) ─────────────────
-        // Treble G-clef: drawn as simplified strokes around the G4 line (line index 3 from top = 1 above mid)
-        // G4 = MIDI 67. G4 row from our diatonic mapping:
-        double g4Y   = RowToY(MidiToDiatonicRow(67), true);   // G4 line
-        double clefX = ClefAreaW / 2.0;
-
-        // Treble clef: vertical stem + oval on G4 line + curl
+        // ── clef symbols ──────────────────────────────────────────────────────
+        // On Windows "Segoe UI Symbol" carries U+1D11E (G clef) and U+1D122 (F clef)
+        // from the SMuFL supplementary block.  On macOS/Linux that font is absent so
+        // we fall back to primitive geometry which still looks reasonable.
+        double g4Y  = RowToY(MidiToDiatonicRow(67), true);   // G4 line
+        double f3Y  = RowToY(MidiToDiatonicRow(53), false);  // F3 line
+        bool useGlyphs = OperatingSystem.IsWindows();
+        if (useGlyphs)
         {
-            double botY   = trebleTopY + 4 * LineSpacing + LineSpacing * 0.8;
-            double topClef= trebleTopY - LineSpacing * 1.2;
-            var cp = new Pen(inkBrush, 1.6);
-            // Vertical stem
-            ctx.DrawLine(cp, new Point(clefX, topClef), new Point(clefX, botY));
-            // Small oval sitting on G4 line
-            ctx.DrawEllipse(inkBrush, null, new Point(clefX, g4Y), 3.5, 2.5);
-            // Upper curl (arc approximated with two lines)
-            ctx.DrawLine(cp, new Point(clefX, g4Y - 2.5), new Point(clefX + 5, trebleTopY + LineSpacing * 0.7));
-            ctx.DrawLine(cp, new Point(clefX + 5, trebleTopY + LineSpacing * 0.7), new Point(clefX - 3, trebleTopY + LineSpacing * 1.2));
-            // Lower loop
-            ctx.DrawEllipse(null, cp, new Point(clefX, g4Y + 5), 5.5, 4.5);
+            // U+1D11E / U+1D122 are supplementary-plane chars (surrogate pairs in C#).
+            var clefTf = new Typeface(new FontFamily("Segoe UI Symbol,Arial Unicode MS"),
+                                      FontStyle.Normal, FontWeight.Regular);
+            // Treble
+            {
+                string gClef = "\uD834\uDD1E";   // U+1D11E MUSICAL SYMBOL G CLEF
+                var ft = new FormattedText(gClef, CultureInfo.InvariantCulture,
+                             FlowDirection.LeftToRight, clefTf, 4 * LineSpacing * 1.6, inkBrush);
+                ctx.DrawText(ft, new Point(2, g4Y - ft.Height * 0.72));
+            }
+            // Bass
+            {
+                string fClef = "\uD834\uDD22";   // U+1D122 MUSICAL SYMBOL F CLEF
+                var ft = new FormattedText(fClef, CultureInfo.InvariantCulture,
+                             FlowDirection.LeftToRight, clefTf, 4 * LineSpacing * 0.9, inkBrush);
+                ctx.DrawText(ft, new Point(2, f3Y - ft.Height * 0.38));
+            }
         }
-
-        // Bass F-clef: two dots above/below F3 line + a curve from it
-        // F3 = MIDI 53 sits on the top line of bass staff (line index 0 from top of bass = bassTopY)
-        double f3Y = RowToY(MidiToDiatonicRow(53), false);
+        else
         {
-            var cp = new Pen(inkBrush, 1.6);
-            // Curve from F3 line to bottom of bass staff
-            ctx.DrawLine(cp, new Point(clefX - 4, f3Y), new Point(clefX + 4, f3Y));
-            ctx.DrawLine(cp, new Point(clefX + 4, f3Y), new Point(clefX - 2, f3Y + 3 * LineSpacing));
-            // Two dots (one line above F3, one two lines above)
-            ctx.DrawEllipse(inkBrush, null, new Point(clefX + 7, f3Y - LineSpacing * 0.7), 2.0, 2.0);
-            ctx.DrawEllipse(inkBrush, null, new Point(clefX + 7, f3Y + LineSpacing * 0.3), 2.0, 2.0);
+            // Primitive fallback (macOS / Linux): bold text labels "G" / "F" + dot pair.
+            var clefTf  = new Typeface("sans-serif", FontStyle.Italic, FontWeight.Bold);
+            var cp      = new Pen(inkBrush, 1.5);
+            // Treble: italic bold "G" centred on g4Y
+            {
+                var ft = new FormattedText("G", CultureInfo.InvariantCulture,
+                             FlowDirection.LeftToRight, clefTf, 3 * LineSpacing, inkBrush);
+                ctx.DrawText(ft, new Point(2, g4Y - ft.Height * 0.55));
+                // small descending stem below
+                ctx.DrawLine(cp, new Point(ft.Width / 2 + 2, g4Y + LineSpacing * 0.5),
+                                 new Point(ft.Width / 2 + 2, g4Y + LineSpacing * 1.5));
+            }
+            // Bass: italic bold "F" + two dots
+            {
+                var ft = new FormattedText("F", CultureInfo.InvariantCulture,
+                             FlowDirection.LeftToRight, clefTf, 2.5 * LineSpacing, inkBrush);
+                ctx.DrawText(ft, new Point(2, f3Y - ft.Height * 0.45));
+                double dotX = ft.Width + 6;
+                ctx.DrawEllipse(inkBrush, null, new Point(dotX, f3Y - LineSpacing * 0.55), 2.0, 2.0);
+                ctx.DrawEllipse(inkBrush, null, new Point(dotX, f3Y + LineSpacing * 0.25), 2.0, 2.0);
+            }
         }
 
         // ── barlines ──────────────────────────────────────────────────────
