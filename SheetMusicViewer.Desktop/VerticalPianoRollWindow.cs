@@ -707,7 +707,7 @@ public sealed class MxlMidiPlayer : IDisposable
                     // NoteOn carries Staff so the dispatch loop can check MutedStaves dynamically.
                     events.Add(new MidiEvent(onsetMs, NoteOn(ch, midi, note.Velocity), globalDivs,
                         MeasureNo: measure.Number, Staff: note.Staff, Voice: note.Voice, PartIndex: pi));
-                    events.Add(new MidiEvent(offMs, NoteOff(ch, midi), globalDivs));
+                    events.Add(new MidiEvent(offMs, NoteOff(ch, midi), -1));  // -1: NoteOff never fires PositionChanged
                 }
             }
         }
@@ -850,6 +850,13 @@ public sealed class VerticalPianoRollCanvas : Control
     private readonly DispatcherTimer _animTimer;
     private readonly MxlScore _score;
     private readonly int _divsPerQuarter;
+    private int    _syncCallCount;
+
+    /// <summary>
+    /// Set to true to emit Trace lines for every SyncAnchor call.
+    /// Format:  SyncAnchor  #{n}  audio={divs}  predicted={p:F0}  err={errMs:+0.0;-0.0} ms  [{action}]
+    /// </summary>
+    public static bool SyncDiagnostics { get; set; } = false;
 
     /// <summary>BPM used for between-event position interpolation. Set this before calling Play.</summary>
     public double PlayBpm
@@ -887,18 +894,28 @@ public sealed class VerticalPianoRollCanvas : Control
     }
 
     /// <summary>
-    /// Called once from the first PositionChanged event to align the visual clock with
-    /// the moment audio actually began.  Subsequent calls are no-ops.
+    /// Called on every NoteOn PositionChanged event to re-lock the visual clock
+    /// to the actual audio position.  NoteOff events no longer fire PositionChanged
+    /// so divs is always monotonically increasing; a direct re-anchor on each call
+    /// eliminates long-term drift without any visible jump.
     /// </summary>
     public void SyncAnchor(long divs)
     {
-        if (_anchorTimestamp != 0) return;        // already synced — don't re-anchor
+        long now = Stopwatch.GetTimestamp();
+        int  call = ++_syncCallCount;
+        if (SyncDiagnostics)
+        {
+            double bpm        = _playBpm > 0 ? _playBpm : 120.0;
+            double divsPerSec = bpm / 60.0 * _divsPerQuarter;
+            double predicted  = _anchorTimestamp == 0 ? divs
+                : _anchorDivisions + (now - _anchorTimestamp) * divsPerSec / Stopwatch.Frequency;
+            double errMs      = (divs - predicted) / divsPerSec * 1000.0;
+            string tag        = _anchorTimestamp == 0 ? "INIT" : $"err={errMs:+0.0;-0.0} ms";
+            Trace.WriteLine($"SyncAnchor #{call,4}  audio={divs,8}  predicted={predicted,8:F0}  [{tag}]");
+        }
         _anchorDivisions = divs;
-        _anchorTimestamp = Stopwatch.GetTimestamp();
+        _anchorTimestamp = now;
     }
-
-    /// <summary>
-    /// Staves listed here are hidden in the visual and excluded from active-key highlighting.
     /// Staff 1 = right hand (green), staff 2 = left hand (blue).
     /// Changing this property automatically triggers a redraw.
     /// </summary>
@@ -1209,12 +1226,12 @@ public sealed class StaffNotationCanvas : Control
     }
 
     /// <summary>
-    /// Called once from the first PositionChanged event to align the visual clock.
-    /// Subsequent calls are no-ops.
+    /// <summary>
+    /// Called on every NoteOn PositionChanged event to re-lock the visual clock.
+    /// Direct re-anchor; see VerticalPianoRollCanvas.SyncAnchor for the rationale.
     /// </summary>
     public void SyncAnchor(long divs)
     {
-        if (_anchorTimestamp != 0) return;
         _anchorDivisions = divs;
         _anchorTimestamp = Stopwatch.GetTimestamp();
     }
@@ -1581,11 +1598,12 @@ public static class VerticalPianoRollWindowFactory
     /// <param name="autoCloseOnEnd">If true, closes the window when playback finishes naturally.</param>
     /// <param name="logNotesDefault">Initial value for the Log Notes checkbox.</param>
     public static Window BuildWindow(string mxlPath,
-        int startMeasure = 1, bool autoCloseOnEnd = false, bool logNotesDefault = false)
+        int startMeasure = 1, bool autoCloseOnEnd = false, bool logNotesDefault = false,
+        bool syncDiagnostics = false)
     {
         var xml   = File.ReadAllText(mxlPath);
         var score = MxlScore.Parse(xml);
-        return BuildWindow(mxlPath, score, startMeasure, autoCloseOnEnd, logNotesDefault);
+        return BuildWindow(mxlPath, score, startMeasure, autoCloseOnEnd, logNotesDefault, syncDiagnostics);
     }
 
     /// <summary>
@@ -1598,8 +1616,10 @@ public static class VerticalPianoRollWindowFactory
     /// <param name="autoCloseOnEnd">If true, closes the window when playback finishes naturally.</param>
     /// <param name="logNotesDefault">Initial value for the Log Notes checkbox.</param>
     public static Window BuildWindow(string mxlPath, MxlScore score,
-        int startMeasure = 1, bool autoCloseOnEnd = false, bool logNotesDefault = false)
+        int startMeasure = 1, bool autoCloseOnEnd = false, bool logNotesDefault = false,
+        bool syncDiagnostics = false)
     {
+        VerticalPianoRollCanvas.SyncDiagnostics = syncDiagnostics;
         var canvas      = new VerticalPianoRollCanvas(score);
         var staffCanvas = new StaffNotationCanvas(score);
         var statusBlock = new TextBlock

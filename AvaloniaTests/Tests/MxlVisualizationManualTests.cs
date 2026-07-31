@@ -212,7 +212,7 @@ public class MxlVisualizationManualTests : TestBase
         if (!OperatingSystem.IsWindows())
             Assert.Inconclusive("MIDI playback requires Windows (winmm.dll).");
         var score = ParseMxl(AdhocMxlPath);
-        await ShowVerticalPianoRollWindowAsync(AdhocMxlPath, score);
+        await ShowVerticalPianoRollWindowAsync(AdhocMxlPath, score, syncDiagnostics: false);
     }
 
     /// <summary>
@@ -956,17 +956,19 @@ public class MxlVisualizationManualTests : TestBase
     }
 
     private Window BuildVerticalPianoRollWindow(string mxlPath, MxlScore score,
-        int startMeasure = 1, bool autoCloseOnEnd = false, bool logNotesDefault = false)
+        int startMeasure = 1, bool autoCloseOnEnd = false, bool logNotesDefault = false,
+        bool syncDiagnostics = false)
     {
         // Delegate to the production factory in SheetMusicViewer.Desktop.
         // The factory builds the full window including toolbar, canvas, and autoplay wiring.
         LogMessage($"Vertical piano roll: {score.TotalNotes} notes  Parts={score.Parts.Count}  Title={score.Title}");
         return VerticalPianoRollWindowFactory.BuildWindow(mxlPath, score,
-            startMeasure, autoCloseOnEnd, logNotesDefault);
+            startMeasure, autoCloseOnEnd, logNotesDefault, syncDiagnostics);
     }
 
     private async Task ShowVerticalPianoRollWindowAsync(string mxlPath, MxlScore score,
-        int startMeasure = 1, bool autoCloseOnEnd = false, bool logNotesDefault = false)
+        int startMeasure = 1, bool autoCloseOnEnd = false, bool logNotesDefault = false,
+        bool syncDiagnostics = false)
     {
         // Compute how long the tail of the score takes at default BPM=120 and add a 30s buffer.
         // This ensures RunAvaloniaTest's internal timeout never fires before playback ends.
@@ -983,7 +985,7 @@ public class MxlVisualizationManualTests : TestBase
             $"(scoreMs={totalMs:F0}  startMeasure={startMeasure})");
         await AvaloniaTestHelper.RunAvaloniaTest(async (lifetime, testCompleted) =>
         {
-            var window = BuildVerticalPianoRollWindow(mxlPath, score, startMeasure, autoCloseOnEnd, logNotesDefault);
+            var window = BuildVerticalPianoRollWindow(mxlPath, score, startMeasure, autoCloseOnEnd, logNotesDefault, syncDiagnostics);
             lifetime.MainWindow = window;
             window.Closed += AvaloniaTestHelper.CreateWindowClosedHandler(testCompleted, lifetime, "Vertical piano roll closed.");
             window.Show();
