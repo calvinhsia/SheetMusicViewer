@@ -834,6 +834,7 @@ public sealed class VerticalPianoRollCanvas : Control
     private const double BlackKeyW    = 8;
     private const double BlackKeyH    = 70;
     private const double LookaheadSec = 4.0;
+    private const double LatencyMs    = 60.0;   // audio-buffer latency compensation (ms)
 
     private readonly int    _totalWhiteKeys;
     private readonly double _canvasW;
@@ -973,11 +974,14 @@ public sealed class VerticalPianoRollCanvas : Control
         double scrollH = Math.Max(50, totalH - KeyboardH);
         double bpm     = _playBpm > 0 ? _playBpm : (_score.DefaultBpm > 0 ? _score.DefaultBpm : 120);
         // Compute position with full double precision directly from the wall clock so
-        // rendering is smooth regardless of when the timer fires.
-        double displayDivs = _anchorTimestamp != 0
+        // rendering is smooth regardless of when the timer fires.  Add LatencyMs to
+        // compensate for audio-buffer delay so notes hit the cursor line on time.
+        double latencyDiv  = bpm / 60.0 * _divsPerQuarter * (LatencyMs / 1000.0);
+        double displayDivs = (_anchorTimestamp != 0
             ? _anchorDivisions + (Stopwatch.GetTimestamp() - _anchorTimestamp)
                                  * (bpm / 60.0 * _divsPerQuarter) / Stopwatch.Frequency
-            : (_currentGlobalDivisions >= 0 ? (double)_currentGlobalDivisions : 0.0);
+            : (_currentGlobalDivisions >= 0 ? (double)_currentGlobalDivisions : 0.0))
+            + latencyDiv;
 
         ctx.FillRectangle(new SolidColorBrush(Color.FromRgb(20, 20, 20)),
             new Rect(0, 0, _canvasW, scrollH));
@@ -1116,12 +1120,20 @@ public sealed class StaffNotationCanvas : Control
     private const double NoteRadiusY  = 4.0;    // oval y-radius
     private const double StemLength   = 32.0;
     private const double LookaheadSec = 4.0;
-    private const double CursorFrac   = 0.25;   // "now" line position (0=left 1=right)
+        private const double CursorFrac   = 0.25;   // "now" line position (0=left 1=right)
+        private const double LatencyMs    = 60.0;   // audio-buffer latency compensation (ms)
     private const double ClefAreaW    = 28.0;   // left margin reserved for clef drawing
 
     // Diatonic step within octave (C=0 D=1 E=2 F=3 G=4 A=5 B=6)
     private static readonly int[] MidiPcToDiatonic = { 0,-1, 1,-1, 2, 3,-1, 4,-1, 5,-1, 6 };
     private static readonly bool[] MidiPcIsSharp   = { false,true,false,true,false,false,true,false,true,false,true,false };
+
+    // Written step letter → diatonic position within octave (C=0 … B=6)
+    private static int StepToDiatonicInOctave(string step) => step switch
+    {
+        "C" => 0, "D" => 1, "E" => 2, "F" => 3,
+        "G" => 4, "A" => 5, "B" => 6, _ => 0
+    };
 
     // MIDI → diatonic pitch row (C0 = 0, D0 = 1, … C1 = 7, …)
     private static int MidiToDiatonicRow(int midi)
@@ -1143,12 +1155,16 @@ public sealed class StaffNotationCanvas : Control
 
     private sealed record StaffNote(
         long   GlobalOnset, long GlobalOff,
-        int    DiatonicRow, bool IsSharp,
+        int    DiatonicRow, string Accidental,
         int    Staff,       int  Velocity,
         int    MidiPitch,   long MeasureOnsetDivisions,
         string NoteType);
 
+    private sealed record StaffRest(
+        long GlobalOnset, int Staff, string NoteType);
+
     private readonly List<StaffNote>              _notes    = new();
+    private readonly List<StaffRest>              _rests    = new();
     private readonly List<(long Divs, int Number)> _barlines = new();
     public HashSet<int> MutedStaves { get; } = new();
 
@@ -1214,13 +1230,23 @@ public sealed class StaffNotationCanvas : Control
         {
             foreach (var note in measure.Notes)
             {
-                if (note.IsRest || note.MidiPitch < 21 || note.MidiPitch > 108) continue;
-                int  pc      = note.MidiPitch % 12;
-                long onset   = measure.GlobalOnsetDivisions + note.OnsetDivisions;
-                long off     = onset + Math.Max(1, note.Duration);
-                int  staff   = score.VisualStaff(part, note);
+                long onset = measure.GlobalOnsetDivisions + note.OnsetDivisions;
+                int  staff = score.VisualStaff(part, note);
+
+                if (note.IsRest)
+                {
+                    _rests.Add(new StaffRest(onset, staff, note.NoteType));
+                    continue;
+                }
+                if (note.MidiPitch < 21 || note.MidiPitch > 108) continue;
+
+                // Use the WRITTEN pitch step+octave so that e.g. D# lands on D's line
+                // (not E's), and Eb lands on E's line (not D's).
+                int octave = int.TryParse(note.Octave, out var o) ? o : 4;
+                int diaRow = octave * 7 + StepToDiatonicInOctave(note.Pitch);
+                long off   = onset + Math.Max(1, note.Duration);
                 _notes.Add(new StaffNote(onset, off,
-                    MidiToDiatonicRow(note.MidiPitch), MidiPcIsSharp[pc],
+                    diaRow, note.Accidental,
                     staff, note.Velocity, note.MidiPitch,
                     measure.GlobalOnsetDivisions, note.NoteType));
             }
@@ -1260,11 +1286,14 @@ public sealed class StaffNotationCanvas : Control
         double divsPerSec   = bpm / 60.0 * _divsPerQuarter;
         double lookaheadDiv = divsPerSec * LookaheadSec;
         // Compute with full double precision from the wall clock so rendering is
-        // smooth regardless of when the timer fires.
-        double displayDivs  = _anchorTimestamp != 0
+        // smooth regardless of when the timer fires.  Add LatencyMs to compensate
+        // for audio-buffer delay so notes hit the cursor line on time.
+        double latencyDiv   = bpm / 60.0 * _divsPerQuarter * (LatencyMs / 1000.0);
+        double displayDivs  = (_anchorTimestamp != 0
             ? _anchorDivisions + (Stopwatch.GetTimestamp() - _anchorTimestamp)
                                  * (bpm / 60.0 * _divsPerQuarter) / Stopwatch.Frequency
-            : (_currentGlobalDivisions >= 0 ? (double)_currentGlobalDivisions : 0.0);
+            : (_currentGlobalDivisions >= 0 ? (double)_currentGlobalDivisions : 0.0))
+            + latencyDiv;
         double nowX         = W * CursorFrac;
 
         // Global-divisions → pixel X (notes to the right of nowX scroll leftward)
@@ -1452,12 +1481,66 @@ public sealed class StaffNotationCanvas : Control
                     new Point(x + NoteRadiusX * 2, ly));
             }
 
-            // ── accidental ────────────────────────────────────────────────
-            if (n.IsSharp)
+            // -- accidental --
+            if (!string.IsNullOrEmpty(n.Accidental))
             {
-                var ft = new FormattedText("♯", CultureInfo.InvariantCulture,
-                    FlowDirection.LeftToRight, tf, 9, inkBrush);
-                ctx.DrawText(ft, new Point(x - NoteRadiusX - 10, y - 7));
+                string sym = n.Accidental switch
+                {
+                    "sharp" or "natural-sharp" or "sharp-up"  => "♯",
+                    "flat"  or "natural-flat"  or "flat-down" => "♭",
+                    "natural"                                  => "♮",
+                    _ => string.Empty
+                };
+                if (sym.Length > 0)
+                {
+                    var accTf = new Typeface("Arial", FontStyle.Normal, FontWeight.Bold);
+                    var ft = new FormattedText(sym, CultureInfo.InvariantCulture,
+                        FlowDirection.LeftToRight, accTf, 20, inkBrush);
+                    // Place the glyph immediately left of the notehead, vertically centred on y.
+                    // ft.Height is the full bounding-box height; musical symbols have their
+                    // visual centre at ~55 % from the top, so offset by 0.55 * ft.Height.
+                    double ax = x - NoteRadiusX - ft.Width - 1;
+                    double ay = y - ft.Height * 0.55;
+                    ctx.DrawText(ft, new Point(ax, ay));
+                }
+            }
+        }
+
+        // -- rests --
+        foreach (var r in _rests)
+        {
+            if (MutedStaves.Contains(r.Staff)) continue;
+            double rx = DivsToX(r.GlobalOnset);
+            if (rx < -20 || rx > W + 20) continue;
+
+            bool   isTreble = r.Staff == 1;
+            double rTopY    = isTreble ? trebleTopY : bassTopY;
+            double rMidY    = isTreble ? trebleMidY : bassMidY;
+
+            switch (r.NoteType)
+            {
+                case "whole":
+                    ctx.FillRectangle(inkBrush, new Rect(rx - 5, rTopY + LineSpacing - 3, 10, 4));
+                    break;
+                case "half":
+                    ctx.DrawRectangle(null, inkPen, new Rect(rx - 5, rMidY - 4, 10, 4));
+                    break;
+                case "quarter":
+                {
+                    var rp = new Pen(inkBrush, 1.5);
+                    ctx.DrawLine(rp, new Point(rx + 2, rMidY - 7), new Point(rx + 6, rMidY - 2));
+                    ctx.DrawLine(rp, new Point(rx + 6, rMidY - 2), new Point(rx - 2, rMidY + 3));
+                    ctx.DrawLine(rp, new Point(rx - 2, rMidY + 3), new Point(rx + 3, rMidY + 9));
+                    ctx.DrawEllipse(inkBrush, null, new Point(rx + 1, rMidY + 11), 2.5, 2.5);
+                    break;
+                }
+                default:
+                {
+                    var rp = new Pen(inkBrush, 1.5);
+                    ctx.DrawLine(rp, new Point(rx + 3, rMidY - 6), new Point(rx - 2, rMidY + 4));
+                    ctx.DrawEllipse(inkBrush, null, new Point(rx + 3, rMidY - 6), 2.5, 2.5);
+                    break;
+                }
             }
         }
     }
