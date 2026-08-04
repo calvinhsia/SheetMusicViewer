@@ -894,6 +894,18 @@ public sealed class VerticalPianoRollCanvas : Control
     }
 
     /// <summary>
+    /// Stops the animation timer and freezes the visual at the current position.
+    /// Call on pause; <see cref="CurrentGlobalDivisions"/> is preserved so resume
+    /// restarts from the right spot.
+    /// </summary>
+    public void FreezeAtCurrentPosition()
+    {
+        _anchorTimestamp = 0;
+        _animTimer.Stop();
+        InvalidateVisual();
+    }
+
+    /// <summary>
     /// Called on every NoteOn PositionChanged event to re-lock the visual clock
     /// to the actual audio position.  NoteOff events no longer fire PositionChanged
     /// so divs is always monotonically increasing; a direct re-anchor on each call
@@ -1223,6 +1235,16 @@ public sealed class StaffNotationCanvas : Control
         _anchorTimestamp        = 0;              // clock frozen until SyncAnchor confirms audio started
         _currentGlobalDivisions = startDivisions;
         if (!_animTimer.IsEnabled) _animTimer.Start();
+    }
+
+    /// <summary>
+    /// Stops the animation timer and freezes the visual at the current position.
+    /// </summary>
+    public void FreezeAtCurrentPosition()
+    {
+        _anchorTimestamp = 0;
+        _animTimer.Stop();
+        InvalidateVisual();
     }
 
     /// <summary>
@@ -1750,6 +1772,20 @@ public static class VerticalPianoRollWindowFactory
                 Task.Run(() => { try { playerToStop.Stop(); playerToStop.Dispose(); } catch { } });
         }
 
+        void SetPaused()
+        {
+            var playerToStop = player;
+            player = null;
+            // Freeze the visual exactly where it is — resume restarts from there.
+            canvas.FreezeAtCurrentPosition();
+            staffCanvas.FreezeAtCurrentPosition();
+            int mno = (int)measureSlider.Value;
+            statusBlock.Text = $"Paused  |  M {mno}/{totalMeasures}  |  BPM: {bpmSlider.Value:F0}  |  {score.Title}";
+            playStopBtn.Content = "▶  Play";
+            if (playerToStop != null)
+                Task.Run(() => { try { playerToStop.Stop(); playerToStop.Dispose(); } catch { } });
+        }
+
         // True while PositionChanged is updating the slider to suppress the seek-on-change handler.
         bool suppressMeasureSliderSync = false;
 
@@ -1810,17 +1846,17 @@ public static class VerticalPianoRollWindowFactory
                 }, DispatcherPriority.Normal);
 
             statusBlock.Text = $"Playing  |  BPM: {bpm:F0}  |  {score.Title}";
-            playStopBtn.Content = "■  Stop";
+            playStopBtn.Content = "⏸  Pause";
             player.Start();
             foreach (var s in canvas.MutedStaves) player.MutedStaves.Add(s);
         }
 
         playStopBtn.Click += (_, _) =>
         {
-            // If playing -> stop
-            if (player != null) { SetStopped(); return; }
+            // If playing -> pause (preserves position; click again to resume)
+            if (player != null) { SetPaused(); return; }
 
-            // Start playback
+            // Stopped or paused -> start / resume from current measure
             StartPlayer((int)measureSlider.Value, bpmSlider.Value);
         };
 
@@ -1849,7 +1885,21 @@ public static class VerticalPianoRollWindowFactory
         measureSlider.PropertyChanged += (_, e) =>
         {
             if (e.Property != Slider.ValueProperty) return;
-            measureLabel.Text = $"M {(int)measureSlider.Value}/{totalMeasures}";
+            int mno = (int)measureSlider.Value;
+            measureLabel.Text = $"M {mno}/{totalMeasures}";
+
+            // When stopped or paused (player == null) the animation timer is idle, so we can
+            // drive the canvas directly from the slider for instant visual preview.
+            // Skip this when playing — the timer owns the position and will overwrite it anyway.
+            if (player == null)
+            {
+                long previewDivs = mno <= 1
+                    ? 0
+                    : (measureDivMap.FirstOrDefault(x => x.Number >= mno).Divs);
+                canvas.CurrentGlobalDivisions      = previewDivs;
+                staffCanvas.CurrentGlobalDivisions = previewDivs;
+            }
+
             if (suppressMeasureSliderSync || player == null) return;
             // Debounce: seek only after the slider has been idle for 200 ms.
             measureDebounceCts?.Cancel();
