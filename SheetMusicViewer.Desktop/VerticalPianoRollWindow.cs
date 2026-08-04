@@ -1669,6 +1669,7 @@ public static class VerticalPianoRollWindowFactory
         };
 
         var playStopBtn = new Button { Content = "▶  Play", Margin = new Thickness(4), Padding = new Thickness(8, 2) };
+        // NOTE: live-playback BPM debounce and measure-seek handlers are wired below, after StartPlayer is defined.
 
         int totalMeasures = score.Parts.Count > 0 ? score.Parts.Max(p => p.Measures.Count) : 1;
         var measureSlider = new Slider
@@ -1677,7 +1678,7 @@ public static class VerticalPianoRollWindowFactory
             Value   = Math.Max(1, startMeasure),
             Width   = 260,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            [ToolTip.TipProperty] = "Jump to measure (stop first)"
+            [ToolTip.TipProperty] = "Jump to measure (drag to seek)"
         };
         var measureLabel = new TextBlock
         {
@@ -1691,6 +1692,7 @@ public static class VerticalPianoRollWindowFactory
             if (e.Property == Slider.ValueProperty)
                 measureLabel.Text = $"M {(int)measureSlider.Value}/{totalMeasures}";
         };
+        // NOTE: live seek handler wired below, after StartPlayer is defined.
 
         bool isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
         var fluidSynthChk = new CheckBox
@@ -1748,19 +1750,23 @@ public static class VerticalPianoRollWindowFactory
                 Task.Run(() => { try { playerToStop.Stop(); playerToStop.Dispose(); } catch { } });
         }
 
-        playStopBtn.Click += (_, _) =>
-        {
-            // If playing -> stop
-            if (player != null) { SetStopped(); return; }
+        // True while PositionChanged is updating the slider to suppress the seek-on-change handler.
+        bool suppressMeasureSliderSync = false;
 
-            // Start playback
-            bool useFluid = fluidSynthChk.IsChecked == true
-                || !isWindows;
+        void StartPlayer(int measure, double bpm)
+        {
+            // Stop the currently running player asynchronously so the new one can start immediately.
+            var playerToStop = player;
+            player = null;
+            if (playerToStop != null)
+                Task.Run(() => { try { playerToStop.Stop(); playerToStop.Dispose(); } catch { } });
+
+            bool useFluid = fluidSynthChk.IsChecked == true || !isWindows;
             string? sf = useFluid ? FindSoundfont() : null;
             player = new MxlMidiPlayer(score)
             {
-                Bpm           = bpmSlider.Value,
-                StartMeasure  = (int)measureSlider.Value,
+                Bpm           = bpm,
+                StartMeasure  = measure,
                 Backend       = (useFluid && sf != null) ? MidiBackendKind.FluidSynth : MidiBackendKind.Winmm,
                 SoundfontPath = sf ?? string.Empty,
                 LogNotes      = logNotesChk.IsChecked == true,
@@ -1768,15 +1774,12 @@ public static class VerticalPianoRollWindowFactory
             if (useFluid && sf == null)
                 Trace.WriteLine("VerticalPianoRoll: no soundfont found -- falling back to WinMM");
 
-            canvas.PlayBpm      = bpmSlider.Value;
-            staffCanvas.PlayBpm = bpmSlider.Value;
+            canvas.PlayBpm      = bpm;
+            staffCanvas.PlayBpm = bpm;
 
-            // Compute the start divisions from the measure map so the timer anchor
-            // is set once — before the first MIDI event — giving a perfectly smooth clock.
-            int  startMeasure    = (int)measureSlider.Value;
-            long startDivisions  = startMeasure <= 1
+            long startDivisions = measure <= 1
                 ? 0
-                : (measureDivMap.FirstOrDefault(x => x.Number >= startMeasure).Divs);
+                : (measureDivMap.FirstOrDefault(x => x.Number >= measure).Divs);
             canvas.StartSmoothPlay(startDivisions);
             staffCanvas.StartSmoothPlay(startDivisions);
 
@@ -1791,9 +1794,11 @@ public static class VerticalPianoRollWindowFactory
                 Dispatcher.UIThread.Post(() =>
                 {
                     int mno = DivsToMeasure(divs);
+                    suppressMeasureSliderSync = true;
                     if ((int)measureSlider.Value != mno)
                         measureSlider.Value = mno;
-                    statusBlock.Text = $"M {mno}/{totalMeasures}  |  BPM: {bpmSlider.Value:F0}  |  {score.Title}";
+                    suppressMeasureSliderSync = false;
+                    statusBlock.Text = $"M {mno}/{totalMeasures}  |  BPM: {bpm:F0}  |  {score.Title}";
                 }, DispatcherPriority.Normal);
             };
 
@@ -1804,14 +1809,60 @@ public static class VerticalPianoRollWindowFactory
                     if (autoCloseOnEnd) windowHolder[0]?.Close();
                 }, DispatcherPriority.Normal);
 
-            statusBlock.Text = $"Playing  |  BPM: {bpmSlider.Value:F0}  |  {score.Title}";
+            statusBlock.Text = $"Playing  |  BPM: {bpm:F0}  |  {score.Title}";
             playStopBtn.Content = "■  Stop";
             player.Start();
-            // Push current canvas mute state into the new player
             foreach (var s in canvas.MutedStaves) player.MutedStaves.Add(s);
+        }
+
+        playStopBtn.Click += (_, _) =>
+        {
+            // If playing -> stop
+            if (player != null) { SetStopped(); return; }
+
+            // Start playback
+            StartPlayer((int)measureSlider.Value, bpmSlider.Value);
         };
 
-        // ── Part mute checkboxes ────────────────────────────────────────────
+        // ── Live-playback slider wiring ────────────────────────────────────────────────
+        // Both handlers live here so StartPlayer, player, suppressMeasureSliderSync etc.
+        // are all already declared above.
+        CancellationTokenSource? bpmDebounceCts     = null;
+        CancellationTokenSource? measureDebounceCts = null;
+
+        bpmSlider.PropertyChanged += (_, e) =>
+        {
+            if (e.Property != Slider.ValueProperty) return;
+            bpmLabel.Text = $"{bpmSlider.Value:F0} BPM";
+            if (player == null) return;
+            // Debounce: restart audio only after the slider has been idle for 300 ms.
+            bpmDebounceCts?.Cancel();
+            bpmDebounceCts = new CancellationTokenSource();
+            var ct = bpmDebounceCts.Token;
+            Task.Delay(300, ct).ContinueWith(_ =>
+            {
+                if (!ct.IsCancellationRequested)
+                    Dispatcher.UIThread.Post(() => { if (player != null) StartPlayer((int)measureSlider.Value, bpmSlider.Value); });
+            }, TaskScheduler.Default);
+        };
+
+        measureSlider.PropertyChanged += (_, e) =>
+        {
+            if (e.Property != Slider.ValueProperty) return;
+            measureLabel.Text = $"M {(int)measureSlider.Value}/{totalMeasures}";
+            if (suppressMeasureSliderSync || player == null) return;
+            // Debounce: seek only after the slider has been idle for 200 ms.
+            measureDebounceCts?.Cancel();
+            measureDebounceCts = new CancellationTokenSource();
+            var ct = measureDebounceCts.Token;
+            Task.Delay(200, ct).ContinueWith(_ =>
+            {
+                if (!ct.IsCancellationRequested)
+                    Dispatcher.UIThread.Post(() => { if (player != null) StartPlayer((int)measureSlider.Value, bpmSlider.Value); });
+            }, TaskScheduler.Default);
+        };
+
+        // ── Part mute checkboxes
         // Staff 1 = RH (green), staff 2 = LH (blue).  Wired to both canvas and player.
         var rhChk = new CheckBox
         {
