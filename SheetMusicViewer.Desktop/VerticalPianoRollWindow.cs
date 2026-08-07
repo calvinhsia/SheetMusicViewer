@@ -1,4 +1,4 @@
-// VerticalPianoRollWindow.cs
+﻿// VerticalPianoRollWindow.cs
 // Vertical falling-notes piano roll with MIDI playback.
 //
 // Contains:
@@ -369,6 +369,37 @@ internal sealed class WinmmMidiBackend : IMidiBackend
     [DllImport("winmm.dll")] static extern int midiOutOpen(out IntPtr h, int dev, IntPtr cb, IntPtr inst, int flags);
     [DllImport("winmm.dll")] static extern int midiOutShortMsg(IntPtr h, uint msg);
     [DllImport("winmm.dll")] static extern int midiOutClose(IntPtr h);
+    [DllImport("winmm.dll")] static extern int midiOutGetNumDevs();
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    private struct MIDIOUTCAPS
+    {
+        public ushort wMid, wPid;
+        public uint   vDriverVersion;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+        public string szPname;
+        public ushort wTechnology, wVoices, wNotes, wChannelMask;
+        public uint   dwSupport;
+    }
+    [DllImport("winmm.dll", CharSet = CharSet.Auto)]
+    static extern int midiOutGetDevCaps(uint uDeviceID, ref MIDIOUTCAPS caps, uint cb);
+
+    /// <summary>WinMM device index to open. -1 = MIDI Mapper (system default).</summary>
+    public int DeviceId { get; set; } = -1;
+
+    /// <summary>Returns all available WinMM MIDI output devices. Id == -1 is the MIDI Mapper.</summary>
+    public static IReadOnlyList<(int Id, string Name)> EnumerateDevices()
+    {
+        var list = new List<(int, string)> { (-1, "MIDI Mapper (system default)") };
+        int n = midiOutGetNumDevs();
+        for (int i = 0; i < n; i++)
+        {
+            var caps = new MIDIOUTCAPS();
+            midiOutGetDevCaps((uint)i, ref caps, (uint)Marshal.SizeOf<MIDIOUTCAPS>());
+            list.Add((i, caps.szPname ?? $"Device {i}"));
+        }
+        return list;
+    }
 
     private IntPtr _h = IntPtr.Zero;
 
@@ -378,7 +409,7 @@ internal sealed class WinmmMidiBackend : IMidiBackend
         // after a previous Close(), especially when patterns switch rapidly.
         for (int attempt = 0; attempt < 6; attempt++)
         {
-            if (midiOutOpen(out _h, -1, IntPtr.Zero, IntPtr.Zero, 0) == 0) return;
+            if (midiOutOpen(out _h, DeviceId, IntPtr.Zero, IntPtr.Zero, 0) == 0) return;
             Thread.Sleep(30 * (attempt + 1));  // 30 ms, 60 ms, 90 ms …
         }
         throw new InvalidOperationException("Could not open MIDI output device (winmm).");
@@ -624,6 +655,8 @@ public sealed class MxlMidiPlayer : IDisposable
     public double Bpm         { get; set; } = 120.0;
     public int    StartMeasure { get; set; } = 1;
     public bool   LogNotes    { get; set; } = false;
+    /// <summary>WinMM output device index (-1 = MIDI Mapper). Ignored for FluidSynth.</summary>
+    public int    WinmmDeviceId { get; set; } = -1;
     /// <summary>
     /// Staff numbers (1 = RH/green, 2 = LH/blue) whose NoteOn messages are suppressed.
     /// Checked dynamically at dispatch time — toggle at any point during playback.
@@ -643,7 +676,7 @@ public sealed class MxlMidiPlayer : IDisposable
     {
         Stop();
         _backend = (Backend == MidiBackendKind.Winmm && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            ? new WinmmMidiBackend()
+            ? new WinmmMidiBackend { DeviceId = WinmmDeviceId }
             : (IMidiBackend)new FluidSynthMidiBackend(SoundfontPath);
         _backend.Open();
         _cts = new CancellationTokenSource();
@@ -1727,6 +1760,43 @@ public static class VerticalPianoRollWindowFactory
             [ToolTip.TipProperty] = "FluidSynth (better sound). Unchecked = WinMM (Windows MIDI, no extra dependencies)."
         };
 
+        // ── WinMM MIDI output device picker ────────────────────────────────────────────
+        // Only shown on Windows when FluidSynth is unchecked.
+        var midiDeviceLabel = new TextBlock
+        {
+            Text = "MIDI out:",
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin = new Thickness(6, 0, 2, 0),
+            IsVisible = false,
+        };
+        var midiDeviceCombo = new ComboBox
+        {
+            MinWidth = 180,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 4, 0),
+            IsVisible = false,
+            [ToolTip.TipProperty] = "WinMM MIDI output device",
+        };
+
+        // Populate the device list (Windows only).
+        var winmmDevices = isWindows ? WinmmMidiBackend.EnumerateDevices() : [];
+        midiDeviceCombo.ItemsSource = winmmDevices.Select(d => d.Name).ToList();
+        if (midiDeviceCombo.ItemCount > 0) midiDeviceCombo.SelectedIndex = 0;
+
+        void UpdateDevicePickerVisibility()
+        {
+            bool showPicker = isWindows && fluidSynthChk.IsChecked != true;
+            midiDeviceLabel.IsVisible = showPicker;
+            midiDeviceCombo.IsVisible = showPicker;
+        }
+        fluidSynthChk.IsCheckedChanged += (_, _) => UpdateDevicePickerVisibility();
+        UpdateDevicePickerVisibility();
+
+        int SelectedWinmmDeviceId() =>
+            (midiDeviceCombo.SelectedIndex >= 0 && midiDeviceCombo.SelectedIndex < winmmDevices.Count)
+                ? winmmDevices[midiDeviceCombo.SelectedIndex].Id
+                : -1;
+
         var logNotesChk = new CheckBox
         {
             Content = "Log notes",
@@ -1806,6 +1876,7 @@ public static class VerticalPianoRollWindowFactory
                 Backend       = (useFluid && sf != null) ? MidiBackendKind.FluidSynth : MidiBackendKind.Winmm,
                 SoundfontPath = sf ?? string.Empty,
                 LogNotes      = logNotesChk.IsChecked == true,
+                WinmmDeviceId = SelectedWinmmDeviceId(),
             };
             if (useFluid && sf == null)
                 Trace.WriteLine("VerticalPianoRoll: no soundfont found -- falling back to WinMM");
@@ -1956,7 +2027,7 @@ public static class VerticalPianoRollWindowFactory
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
             Margin      = new Thickness(4),
-            Children    = { playStopBtn, bpmSlider, bpmLabel, measureSlider, measureLabel, lhChk, rhChk, fluidSynthChk, logNotesChk, statusBlock }
+            Children    = { playStopBtn, bpmSlider, bpmLabel, measureSlider, measureLabel, lhChk, rhChk, fluidSynthChk, midiDeviceLabel, midiDeviceCombo, logNotesChk, statusBlock }
         };
 
         var layout = new DockPanel();
