@@ -1753,7 +1753,7 @@ public static class VerticalPianoRollWindowFactory
         var fluidSynthChk = new CheckBox
         {
             Content = "FluidSynth",
-            IsChecked = true,
+            IsChecked = SheetMusicLib.AppSettings.Instance.PianoRollUseFluidSynth ?? true,
             IsVisible = isWindows,   // Non-Windows: always FluidSynth, checkbox not needed
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
             Margin = new Thickness(4, 0),
@@ -1781,7 +1781,25 @@ public static class VerticalPianoRollWindowFactory
         // Populate the device list (Windows only).
         var winmmDevices = isWindows ? WinmmMidiBackend.EnumerateDevices() : [];
         midiDeviceCombo.ItemsSource = winmmDevices.Select(d => d.Name).ToList();
-        if (midiDeviceCombo.ItemCount > 0) midiDeviceCombo.SelectedIndex = 0;
+
+        // Restore the previously saved device by name (name is stable; index can shift).
+        if (isWindows && winmmDevices.Count > 0)
+        {
+            string saved = SheetMusicLib.AppSettings.Instance.PianoRollWinmmDeviceName;
+            int restoreIdx = string.IsNullOrEmpty(saved)
+                ? 0
+                : Math.Max(0, winmmDevices.ToList().FindIndex(d => d.Name == saved));
+            midiDeviceCombo.SelectedIndex = restoreIdx;
+        }
+
+        // Persist device choice whenever the user changes the selection.
+        midiDeviceCombo.SelectionChanged += (_, _) =>
+        {
+            int idx = midiDeviceCombo.SelectedIndex;
+            string name = (idx >= 0 && idx < winmmDevices.Count) ? winmmDevices[idx].Name : string.Empty;
+            SheetMusicLib.AppSettings.Instance.PianoRollWinmmDeviceName = name;
+            SheetMusicLib.AppSettings.Instance.SaveLocal();
+        };
 
         void UpdateDevicePickerVisibility()
         {
@@ -1789,7 +1807,12 @@ public static class VerticalPianoRollWindowFactory
             midiDeviceLabel.IsVisible = showPicker;
             midiDeviceCombo.IsVisible = showPicker;
         }
-        fluidSynthChk.IsCheckedChanged += (_, _) => UpdateDevicePickerVisibility();
+        fluidSynthChk.IsCheckedChanged += (_, _) =>
+        {
+            UpdateDevicePickerVisibility();
+            SheetMusicLib.AppSettings.Instance.PianoRollUseFluidSynth = fluidSynthChk.IsChecked == true;
+            SheetMusicLib.AppSettings.Instance.SaveLocal();
+        };
         UpdateDevicePickerVisibility();
 
         int SelectedWinmmDeviceId() =>
