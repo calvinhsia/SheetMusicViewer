@@ -146,7 +146,7 @@ public class ExportToMuseScoreWindow : Window
         // Song chooser combo
         var songRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(20, 0, 0, 0) };
         songRow.Children.Add(new TextBlock { Text = "Song:", VerticalAlignment = VerticalAlignment.Center, Width = 50 });
-        _cmbSong = new ComboBox { Width = 380 };
+        _cmbSong = new ComboBox { Width = 480 };
         PopulateSongCombo(toc, totalPages);
         _cmbSong.SelectionChanged += (_, _) => UpdateCacheStatus();
         songRow.Children.Add(_cmbSong);

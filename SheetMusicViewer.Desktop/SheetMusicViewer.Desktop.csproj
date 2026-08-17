@@ -206,6 +206,7 @@
   
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.9" />
+    <PackageReference Include="Tesseract" Version="5.2.0" />
     <PackageReference Include="Tmds.DBus.Protocol" Version="0.21.3" />
     <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.9" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.9" />
@@ -214,6 +215,7 @@
     <PackageReference Include="Avalonia.Diagnostics" Version="11.3.9" Condition="'$(Configuration)' == 'Debug'" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="NAudio" Version="2.3.0" />
+    <PackageReference Include="nfluidsynth" Version="0.3.1" />
     <PackageReference Include="PDFtoImage" Version="5.0.0" />
     <PackageReference Include="SkiaSharp" Version="3.116.1" />
     <!-- Explicit native asset references to ensure version consistency across platforms -->
@@ -221,4 +223,55 @@
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.116.1" />
     <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="8.3.1.1" />
   </ItemGroup>
+
+  <!-- FluidSynth native DLLs and soundfont (optional; only needed for FluidSynth MIDI backend) -->
+  <PropertyGroup>
+    <FluidSynthNativeDir>$(MSBuildThisFileDirectory)..\ThirdParty\FluidSynth\win-x64\</FluidSynthNativeDir>
+    <SoundfontsDir>$(MSBuildThisFileDirectory)..\ThirdParty\Soundfonts\</SoundfontsDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="$(FluidSynthNativeDir)*.dll"
+             Condition="Exists('$(FluidSynthNativeDir)')"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest"
+             Link="%(Filename)%(Extension)" />
+    <!-- Ship only GeneralUser-GS.sf2 (GeneralUser GS License v2.0, free for any use)
+         Attribution: "GeneralUser GS soundfont by S. Christian Collins." -->
+    <Content Include="$(SoundfontsDir)GeneralUser-GS.sf2"
+             Condition="Exists('$(SoundfontsDir)GeneralUser-GS.sf2')"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest"
+             Link="Soundfonts\GeneralUser-GS.sf2" />
+  </ItemGroup>
+
+  <!--
+    Tesseract language data
+    copied to every build output and publish layout automatically.
+    Works for: local dev builds, CI pipelines, dotnet publish.
+    The download only runs when the file is absent (idempotent / offline-safe after first run).
+  -->
+  <PropertyGroup>
+    <!-- Resolve tessdata folder whether building via solution or project directly -->
+    <TessdataDir Condition="'$(SolutionDir)' != '' And '$(SolutionDir)' != '*Undefined*'">$(SolutionDir)tessdata\</TessdataDir>
+    <TessdataDir Condition="'$(TessdataDir)' == ''">$(MSBuildProjectDirectory)\..\tessdata\</TessdataDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="$(TessdataDir)eng.traineddata"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest"
+             Link="tessdata\eng.traineddata"
+             Condition="Exists('$(TessdataDir)eng.traineddata')" />
+  </ItemGroup>
+
+  <Target Name="DownloadTessdata" BeforeTargets="BeforeBuild"
+          Condition="!Exists('$(TessdataDir)eng.traineddata')">
+    <Message Text="[Tesseract] Downloading eng.traineddata from tessdata_fast (~4 MB)…" Importance="High" />
+    <MakeDir Directories="$(TessdataDir)" />
+    <DownloadFile
+        SourceUrl="https://github.com/tesseract-ocr/tessdata_fast/raw/main/eng.traineddata"
+        DestinationFolder="$(TessdataDir)"
+        SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

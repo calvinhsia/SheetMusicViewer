@@ -174,6 +174,21 @@ startxref
     }
 
     /// <summary>
+    /// Returns the root SheetMusic folder, resolving the current user's OneDrive path.
+    /// Throws <see cref="DirectoryNotFoundException"/> when the folder does not exist.
+    /// </summary>
+    public static string GetSheetMusicFolder()
+    {
+        var folder = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            "OneDrive",
+            "SheetMusic");
+        if (!Directory.Exists(folder))
+            throw new DirectoryNotFoundException($"SheetMusic folder not found: {folder}");
+        return folder;
+    }
+
+    /// <summary>
     /// Gets environment information for diagnostic purposes
     /// </summary>
     protected string GetEnvironmentInfo()

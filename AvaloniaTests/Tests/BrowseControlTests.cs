@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -16,6 +17,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using static SheetMusicViewer.Desktop.BrowseControl;
 
 namespace AvaloniaTests.Tests;
 
@@ -27,7 +29,7 @@ public class AvaloniaPdfDocumentProvider : IPdfDocumentProvider
     // FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS = 0x00400000
     // This is set by Windows for cloud-only files that need to be downloaded when accessed
     private const FileAttributes RecallOnDataAccess = (FileAttributes)0x00400000;
-    
+
     // FILE_ATTRIBUTE_RECALL_ON_OPEN = 0x00040000  
     // This is set for files that need to be recalled even for metadata access
     private const FileAttributes RecallOnOpen = (FileAttributes)0x00040000;
@@ -36,7 +38,7 @@ public class AvaloniaPdfDocumentProvider : IPdfDocumentProvider
     /// If true, skip cloud-only files instead of triggering download
     /// </summary>
     public bool SkipCloudOnlyFiles { get; set; } = true;
-    
+
     /// <summary>
     /// Enable verbose logging of file attributes for debugging
     /// </summary>
@@ -53,23 +55,23 @@ public class AvaloniaPdfDocumentProvider : IPdfDocumentProvider
 
                 var fileInfo = new FileInfo(pdfFilePath);
                 var attrs = fileInfo.Attributes;
-                
+
                 // Check for OneDrive cloud-only placeholder files
                 bool hasRecallOnDataAccess = (attrs & RecallOnDataAccess) == RecallOnDataAccess;
                 bool hasRecallOnOpen = (attrs & RecallOnOpen) == RecallOnOpen;
                 bool hasOffline = (attrs & FileAttributes.Offline) == FileAttributes.Offline;
                 bool hasReparsePoint = (attrs & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint;
                 bool hasSparseFile = (attrs & FileAttributes.SparseFile) == FileAttributes.SparseFile;
-                
+
                 bool isCloudOnly = hasRecallOnDataAccess || hasRecallOnOpen || hasOffline;
-                                   
+
                 // ReparsePoint alone doesn't mean cloud-only (could be symlink, junction, etc.)
                 // Small reparse point file is likely a cloud placeholder
                 if (!isCloudOnly && hasReparsePoint && fileInfo.Length < 1024)
                 {
                     isCloudOnly = true;
                 }
-                
+
                 if (VerboseLogging)
                 {
                     var attrStr = $"Attrs=0x{(int)attrs:X8} " +
@@ -94,7 +96,7 @@ public class AvaloniaPdfDocumentProvider : IPdfDocumentProvider
                 {
                     pdfBytes = File.ReadAllBytes(pdfFilePath);
                 }
-                catch (IOException ex) when (ex.HResult == unchecked((int)0x80070185) || 
+                catch (IOException ex) when (ex.HResult == unchecked((int)0x80070185) ||
                                               ex.HResult == unchecked((int)0x80070186))
                 {
                     // ERROR_CLOUD_FILE_NETWORK_UNAVAILABLE (0x80070185)
@@ -129,9 +131,17 @@ public class AvaloniaPdfDocumentProvider : IPdfDocumentProvider
 /// </summary>
 public class TraceExceptionHandler : IExceptionHandler
 {
+    private TestContext testContext;
+
+    public TraceExceptionHandler(TestContext testContext)
+    {
+        this.testContext = testContext;
+    }
+
     public void OnException(string context, Exception ex)
     {
         Trace.WriteLine($"Exception in {context}: {ex.Message}");
+        testContext?.WriteLine($"Exception in {context}: {ex.Message}");
     }
 }
 
@@ -156,27 +166,18 @@ public class BrowseControlTests : TestBase
     [TestCategory("Manual")]
     public async Task TestConvertBmkToJson()
     {
-        var username = Environment.UserName;
-        var folder = $@"C:\Users\{username}\OneDrive\SheetMusic";
-
-        if (!Directory.Exists(folder))
-        {
-            Trace.WriteLine($"Folder not found: {folder}");
-            Assert.Inconclusive("SheetMusic folder not found");
-            return;
-        }
-
+        var folder = GetSheetMusicFolder();
         Trace.WriteLine($"Converting and verifying BMK files to JSON in: {folder}");
         Trace.WriteLine(new string('=', 80));
 
         var errors = new List<string>();
         var sw = Stopwatch.StartNew();
-        
+
         var (converted, verified, errorCount) = await PdfMetaDataCore.ConvertAllBmkToJsonAsync(
-            folder, 
+            folder,
             deleteOriginalBmk: false,
             verifyCallback: error => errors.Add(error));
-        
+
         sw.Stop();
 
         Trace.WriteLine($"\nProcessed in {sw.ElapsedMilliseconds}ms");
@@ -202,7 +203,7 @@ public class BrowseControlTests : TestBase
 
         // Load with JSON files available
         var pdfDocumentProvider = new ThrowingPdfDocumentProvider();
-        var exceptionHandler = new TraceExceptionHandler();
+        var exceptionHandler = new TraceExceptionHandler(TestContext);
 
         Trace.WriteLine("\n=== Loading with JSON files (where available) ===");
         var swJson = Stopwatch.StartNew();
@@ -233,22 +234,14 @@ public class BrowseControlTests : TestBase
     [TestCategory("Manual")]
     public async Task TestCompareSerialVsParallelLoading()
     {
-        var username = Environment.UserName;
-        var folder = $@"C:\Users\{username}\OneDrive\SheetMusic";
-
-        if (!Directory.Exists(folder))
-        {
-            Trace.WriteLine($"Folder not found: {folder}");
-            Assert.Inconclusive("SheetMusic folder not found");
-            return;
-        }
+        var folder = GetSheetMusicFolder();
 
         Trace.WriteLine($"Comparing Serial vs Parallel loading from: {folder}");
         Trace.WriteLine(new string('=', 80));
 
         // Use throwing provider to prevent reading PDFs without BMK files
         var pdfDocumentProvider = new ThrowingPdfDocumentProvider();
-        var exceptionHandler = new TraceExceptionHandler();
+        var exceptionHandler = new TraceExceptionHandler(TestContext);
 
         // Load using sequential method
         Trace.WriteLine("\n=== Loading with SEQUENTIAL method ===");
@@ -284,15 +277,15 @@ public class BrowseControlTests : TestBase
         Trace.WriteLine("\n" + new string('=', 80));
         Trace.WriteLine("=== COMPARISON RESULTS ===");
         Trace.WriteLine(new string('=', 80));
-        
+
         // Calculate total song counts (TOC entries)
         var serialSongCount = serialResults.Sum(r => r.TocEntries.Count);
         var parallelSongCount = parallelResults.Sum(r => r.TocEntries.Count);
-        
+
         Trace.WriteLine($"\nTotal in Sequential: {serialResults.Count} books, {serialSongCount} songs");
         Trace.WriteLine($"Total in Parallel:   {parallelResults.Count} books, {parallelSongCount} songs");
         Trace.WriteLine($"Difference:          {parallelResults.Count - serialResults.Count} books, {parallelSongCount - serialSongCount} songs");
-        
+
         Trace.WriteLine($"\nIn both:            {inBoth.Count}");
         Trace.WriteLine($"Only in Sequential: {onlyInSerial.Count}");
         Trace.WriteLine($"Only in Parallel:   {onlyInParallel.Count}");
@@ -329,10 +322,10 @@ public class BrowseControlTests : TestBase
         {
             var serial = serialDict[path];
             var parallel = parallelDict[path];
-            
+
             var serialPages = serial.VolumeInfoList.Sum(v => v.NPagesInThisVolume);
             var parallelPages = parallel.VolumeInfoList.Sum(v => v.NPagesInThisVolume);
-            
+
             if (serial.VolumeInfoList.Count != parallel.VolumeInfoList.Count ||
                 serialPages != parallelPages ||
                 serial.TocEntries.Count != parallel.TocEntries.Count)
@@ -355,7 +348,7 @@ public class BrowseControlTests : TestBase
         }
 
         Trace.WriteLine("\n" + new string('=', 80));
-        
+
         // Assert that results match
         if (onlyInSerial.Count > 0 || onlyInParallel.Count > 0 || differencesInContent.Count > 0)
         {
@@ -371,20 +364,9 @@ public class BrowseControlTests : TestBase
     [TestCategory("Manual")]
     public async Task TestAvaloniaChooseMusicDialog()
     {
-        var username = Environment.UserName;
-        var folder = $@"C:\Users\{username}\OneDrive\SheetMusic";
-
-        if (!Directory.Exists(folder))
-        {
-            Trace.WriteLine($"Folder not found: {folder}");
-            Assert.Inconclusive("SheetMusic folder not found");
-            return;
-        }
-
-        Trace.WriteLine($"Loading PDF metadata from: {folder}");
-        
+        var folder = GetSheetMusicFolder();
         var pdfDocumentProvider = new ThrowingPdfDocumentProvider();
-        var exceptionHandler = new TraceExceptionHandler();
+        var exceptionHandler = new TraceExceptionHandler(TestContext);
 
         var sw = Stopwatch.StartNew();
         var (results, folders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
@@ -397,7 +379,7 @@ public class BrowseControlTests : TestBase
         var totalTocEntries = results.Sum(r => r.TocEntries.Count);
         var totalPages = results.Sum(r => r.VolumeInfoList.Sum(v => v.NPagesInThisVolume));
         var totalFavorites = results.Sum(r => r.Favorites.Count);
-        
+
         Trace.WriteLine($"Loaded {results.Count} books, {totalTocEntries} songs, {totalPages} pages in {sw.ElapsedMilliseconds}ms");
 
         await AvaloniaTestHelper.RunAvaloniaTest(async (lifetime, testCompleted) =>
@@ -408,16 +390,16 @@ public class BrowseControlTests : TestBase
                 WindowState = WindowState.Maximized
             };
             lifetime.MainWindow = window;
-            
+
             var timer = new System.Timers.Timer(120000);
-            
+
             window.Closed += AvaloniaTestHelper.CreateWindowClosedHandler(
                 testCompleted,
                 lifetime,
                 "ChooseMusicWindow closed");
-            
+
             window.Closed += (s, e) => timer.Stop();
-            
+
             timer.Elapsed += (s, e) =>
             {
                 timer.Stop();
@@ -427,9 +409,9 @@ public class BrowseControlTests : TestBase
                     window?.Close();
                 });
             };
-            
+
             window.Show();
-            
+
             Trace.WriteLine($"ChooseMusicWindow created and shown with {results.Count} books");
             Trace.WriteLine($"Window will auto-close after 60 seconds, or close manually");
 
@@ -446,14 +428,14 @@ public class BrowseControlTests : TestBase
         {
             var window = new BrowseListWindow();
             lifetime.MainWindow = window;
-            
+
             window.Closed += AvaloniaTestHelper.CreateWindowClosedHandler(
                 testCompleted,
                 lifetime,
                 "BrowseListWindow closed by user");
-            
+
             window.Show();
-            
+
             Trace.WriteLine($"? BrowseListWindow created and shown");
             Trace.WriteLine($"? Loading types from Avalonia assemblies...");
 
@@ -466,63 +448,29 @@ public class BrowseControlTests : TestBase
     {
         await AvaloniaTestHelper.RunAvaloniaTest(async (lifetime, testCompleted) =>
         {
-            var username = Environment.UserName;
-            var folder = $@"C:\Users\{username}\OneDrive\SheetMusic";
-
-            if (!Directory.Exists(folder))
-            {
-                Trace.WriteLine($"? Folder not found: {folder}");
-                testCompleted.TrySetResult(true);
-                return;
-            }
-
-            Trace.WriteLine($"? Scanning folder: {folder}");
-            //var lstFileInfos = new List<FileInfo>();
-            //foreach (var bmkFile in Directory.EnumerateFiles(folder, "*.bmk", SearchOption.AllDirectories))
-            //{
-            //    lstFileInfos.Add(new FileInfo(bmkFile));
-            //}
-            //// output to csv
-            //var csvFilePath = Path.Combine(folder, "output.csv");
-            //if (File.Exists(csvFilePath))
-            //{
-            //    File.Delete(csvFilePath);
-            //}
-            //using (var writer = new StreamWriter(csvFilePath))
-            //{
-            //    await writer.WriteLineAsync("FileName,FileSize,LastModified");
-            //    foreach (var fileInfo in lstFileInfos)
-            //    {
-            //        // Quote filename in case it contains commas
-            //        await writer.WriteLineAsync($"\"{fileInfo.FullName}\",{fileInfo.Length},{fileInfo.LastWriteTime:yyyy-MM-dd HH:mm:ss}");
-            //    }
-            //}
-            //testCompleted.TrySetResult(true);
-            //return;
-
-
             var pdfDocumentProvider = new AvaloniaPdfDocumentProvider();
-            var exceptionHandler = new TraceExceptionHandler();
+            var exceptionHandler = new TraceExceptionHandler(TestContext);
 
             var sw = Stopwatch.StartNew();
-            
+
             // Use the portable LoadAllPdfMetaDataFromDiskAsync from SheetMusicLib
+            var folder = GetSheetMusicFolder();
             var (results, folders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
                 folder,
                 pdfDocumentProvider,
                 exceptionHandler);
-            
+
             sw.Stop();
-            
+
             // Diagnostic: count TOC entries per result
             var totalTocEntries = results.Sum(r => r.TocEntries.Count);
             var resultsWithToc = results.Count(r => r.TocEntries.Count > 0);
             var resultsWithoutToc = results.Count(r => r.TocEntries.Count == 0);
-            
+
             Trace.WriteLine($"? Loaded {results.Count} metadata files from {folders.Count} folders in {sw.ElapsedMilliseconds}ms");
             Trace.WriteLine($"? Total TOC entries: {totalTocEntries}");
             Trace.WriteLine($"? Results with TOC: {resultsWithToc}, without TOC: {resultsWithoutToc}");
-            
+
             // Show some samples
             foreach (var r in results.Take(10))
             {
@@ -603,7 +551,7 @@ public class BrowseControlTests : TestBase
             await Dispatcher.UIThread.InvokeAsync(async () =>
             {
                 Trace.WriteLine("=== BrowseControl with 10,000 Items ===");
-                
+
                 var itemCount = 10000;
                 var query = Enumerable.Range(0, itemCount)
                     .Select(i => new
@@ -616,11 +564,11 @@ public class BrowseControlTests : TestBase
                         Status = i % 3 == 0 ? "Active" : i % 3 == 1 ? "Pending" : "Inactive",
                         Description = $"Description for test item number {i} with additional details"
                     });
-                
+
                 var sw = Stopwatch.StartNew();
                 var browseControl = new BrowseControl(query, colWidths: new[] { 80, 150, 120, 80, 100, 100, 350 });
                 sw.Stop();
-                
+
                 var window = new Window
                 {
                     Title = $"BrowseControl - {itemCount:n0} Items (Virtualized)",
@@ -629,17 +577,144 @@ public class BrowseControlTests : TestBase
                     Content = browseControl,
                     WindowStartupLocation = WindowStartupLocation.CenterScreen
                 };
-                
+
                 window.Closed += AvaloniaTestHelper.CreateWindowClosedHandler(
                     testCompleted,
                     lifetime,
                     "BrowseControl window closed");
-                
+
                 window.Show();
                 await Task.Delay(1000);
-                
+
                 var memoryMB = GC.GetTotalMemory(false) / 1024 / 1024;
-                
+
+                Trace.WriteLine($"? Creation time: {sw.ElapsedMilliseconds:n0} ms");
+                Trace.WriteLine($"? Memory: ~{memoryMB:n0} MB");
+                Trace.WriteLine("Close the window when finished testing.");
+            });
+        });
+    }
+
+    [TestMethod]
+    [TestCategory("Manual")]
+    public async Task TestListBoxBrowseControlWithCustomField()
+    {
+        await AvaloniaTestHelper.RunAvaloniaTest(async (lifetime, testCompleted) =>
+        {
+            await Task.Delay(1000);
+
+            await Dispatcher.UIThread.InvokeAsync(async () =>
+            {
+
+                var folder = Path.Combine(GetSheetMusicFolder(), "Pop");
+                var pdfDocumentProvider = new AvaloniaPdfDocumentProvider();
+                var exceptionHandler = new TraceExceptionHandler(TestContext);
+                var (results, folders) = await PdfMetaDataCore.LoadAllPdfMetaDataFromDiskAsync(
+                    folder,
+                    pdfDocumentProvider,
+                    exceptionHandler);
+
+
+                var query = from pdfMetaDataItem in results
+                            from tentry in pdfMetaDataItem.TocEntries
+                            let pdfPath = pdfMetaDataItem.GetFullPathFileFromPageNo(tentry.PageNo)
+                            let fileInfo = File.Exists(pdfPath) ? new FileInfo(pdfPath) : null
+                            orderby tentry.SongName
+                            select new
+                            {
+                                tentry.SongName,
+                                Page = tentry.PageNo,
+                                Vol = pdfMetaDataItem.GetVolNumFromPageNum(tentry.PageNo),
+                                tentry.Composer,
+                                CompositionDate = tentry.Date,
+                                Mxl = new BrowseField<Tuple<PdfMetaDataReadResult, TOCEntry>>(Tuple.Create(pdfMetaDataItem, tentry), (field) =>
+                                {
+                                    // see if the mxl file exists in the same folder as the pdf
+                                    var pdfFilePath = field.Data.Item1.GetFullPathFileFromPageNo(field.Data.Item2.PageNo);
+                                    var fileInfo = File.Exists(pdfFilePath) ? new FileInfo(pdfFilePath) : null;
+                                    var mxlFilePath = Path.ChangeExtension(pdfFilePath, ".mxl");
+                                    var mxlExists = File.Exists(mxlFilePath);
+                                    var btn = new Button
+                                    {
+                                        Content = mxlExists ? "Mxl" : "NoMxl",
+                                        Padding = new Thickness(2, 0),
+                                        BorderThickness = new Thickness(0),
+                                        Background = Brushes.Transparent,
+                                        Foreground = Brushes.Green,
+                                        Cursor = new Cursor(StandardCursorType.Hand),
+                                        FontSize = 11
+                                    };
+                                    btn.Click += (s, e) =>
+                                    {
+                                        Trace.WriteLine($"Clicked Mxl for {field.Data.Item2.SongName}: {field.Data.Item2.PageNo}");
+                                    };
+                                    field.SortKey = btn.Content.ToString() ?? string.Empty;
+                                    return btn;
+                                }),
+                                Fav = new BrowseField<Tuple<PdfMetaDataReadResult, TOCEntry>>(Tuple.Create(pdfMetaDataItem, tentry), (field) =>
+                                {
+                                    var tbox = new TextBlock()
+                                    {
+                                        Text = field.Data.Item1.IsFavorite(field.Data.Item2.PageNo) ? "★" : string.Empty
+                                    };
+                                    field.SortKey = tbox.Text ?? string.Empty;
+                                    return tbox;
+                                }),
+                                //Fav = pdfMetaDataItem.IsFavorite(tentry.PageNo) ? "Fav" : string.Empty,,
+                                Link = new BrowseField<Tuple<PdfMetaDataReadResult, TOCEntry>>(Tuple.Create(pdfMetaDataItem, tentry), (field) =>
+                                {
+                                    field.SortKey = field.Data.Item2.Link ?? string.Empty;
+                                    if (string.IsNullOrEmpty(field.Data.Item2.Link))
+                                        return new TextBlock();
+                                    var btn = new Button
+                                    {
+                                        Content = "🔗",
+                                        Padding = new Thickness(2, 0),
+                                        BorderThickness = new Thickness(0),
+                                        Background = Brushes.Transparent,
+                                        Foreground = Brushes.Blue,
+                                        Cursor = new Cursor(StandardCursorType.Hand),
+                                        FontSize = 11,
+                                        [ToolTip.TipProperty] = field.Data.Item2.Link
+                                    };
+
+                                    btn.Click += (s, e) =>
+                                    {
+                                        Trace.WriteLine($"Clicked Link for {field.Data.Item2.SongName}: {field.Data.Item2.Link}");
+                                    };
+                                    return btn;
+                                }),
+                                BookName = pdfMetaDataItem.GetBookName(folder),
+                                tentry.Notes,
+                                Acquisition = fileInfo?.LastWriteTime,
+                                Access = fileInfo?.LastAccessTime,
+                                Created = fileInfo?.CreationTime,
+                                _Tup = Tuple.Create(pdfMetaDataItem, tentry)
+                            };
+                var sw = Stopwatch.StartNew();
+                var browseControl = new BrowseControl(query, colWidths: new[] { 280, 150, 120, 80, 100, 100, 350 });
+                sw.Stop();
+
+                var window = new Window
+                {
+                    WindowState = WindowState.Maximized,
+                    Title = $"BrowseControl",
+                    Width = 1200,
+                    Height = 800,
+                    Content = browseControl,
+                    WindowStartupLocation = WindowStartupLocation.CenterScreen
+                };
+
+                window.Closed += AvaloniaTestHelper.CreateWindowClosedHandler(
+                    testCompleted,
+                    lifetime,
+                    "BrowseControl window closed");
+
+                window.Show();
+                await Task.Delay(1000);
+
+                var memoryMB = GC.GetTotalMemory(false) / 1024 / 1024;
+
                 Trace.WriteLine($"? Creation time: {sw.ElapsedMilliseconds:n0} ms");
                 Trace.WriteLine($"? Memory: ~{memoryMB:n0} MB");
                 Trace.WriteLine("Close the window when finished testing.");

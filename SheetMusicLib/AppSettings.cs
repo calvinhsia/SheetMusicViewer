@@ -409,6 +409,18 @@ public class AppSettings
     /// </summary>
     public bool PersistMxlNextToPdf { get; set; } = true;
 
+    /// <summary>
+    /// Name of the last-selected WinMM MIDI output device in the piano roll.
+    /// Empty string or null = MIDI Mapper (system default).
+    /// Stored by name so it survives device-list reordering across sessions.
+    /// </summary>
+    public string PianoRollWinmmDeviceName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Last-used FluidSynth checkbox state in the piano roll. Null = not yet set (defaults to true).
+    /// </summary>
+    public bool? PianoRollUseFluidSynth { get; set; } = null;
+
     #endregion
 
     /// <summary>
@@ -460,6 +472,10 @@ public class AppSettings
                         settings.GhostscriptPath = localSettings.GhostscriptPath;
                     settings.UseGhostscript = localSettings.UseGhostscript;
                     settings.SpinePaddingPx = localSettings.SpinePaddingPx;
+                    if (!string.IsNullOrEmpty(localSettings.PianoRollWinmmDeviceName))
+                        settings.PianoRollWinmmDeviceName = localSettings.PianoRollWinmmDeviceName;
+                    if (localSettings.PianoRollUseFluidSynth.HasValue)
+                        settings.PianoRollUseFluidSynth = localSettings.PianoRollUseFluidSynth;
                 }
             }
         }
@@ -587,7 +603,9 @@ public class AppSettings
                 MuseScorePath = MuseScorePath,
                 GhostscriptPath = GhostscriptPath,
                 UseGhostscript = UseGhostscript,
-                SpinePaddingPx = SpinePaddingPx
+                SpinePaddingPx = SpinePaddingPx,
+                PianoRollWinmmDeviceName = PianoRollWinmmDeviceName,
+                PianoRollUseFluidSynth = PianoRollUseFluidSynth
             };
 
             var json = JsonSerializer.Serialize(localSettings, JsonOptions);
@@ -785,6 +803,8 @@ public class AppSettings
         public string GhostscriptPath { get; set; } = string.Empty;
         public bool UseGhostscript { get; set; } = false;
         public int SpinePaddingPx { get; set; } = 0;
+        public string PianoRollWinmmDeviceName { get; set; } = string.Empty;
+        public bool? PianoRollUseFluidSynth { get; set; } = null;
     }
 
     /// <summary>

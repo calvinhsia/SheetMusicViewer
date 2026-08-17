@@ -13,27 +13,76 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Top toolbar with buttons -->
-        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10" Spacing="10">
-            <TextBlock Text="PageNumberOffset:" VerticalAlignment="Center"/>
-            <TextBox Text="{Binding PageNumberOffset}" Width="50"/>
-            <Button Content="_Add Row" Command="{Binding AddRowCommand}"
-                    ToolTip.Tip="Add a new TOC entry"/>
-            <Button Content="_Delete Row" Command="{Binding DeleteRowCommand}"
-                    ToolTip.Tip="Delete the selected TOC entry"/>
-            <Button Content="_Import from Clipboard" Command="{Binding ImportCommand}" 
-                    ToolTip.Tip="Import TOC from clipboard tab separated values (PageNo, SongName, Composer, Date, Notes)"/>
-            <Button Content="_Export to Clipboard" Command="{Binding ExportCommand}"
-                    ToolTip.Tip="Export TOC to clipboard to paste to Excel"/>
-            <Button Content="_Cancel" Command="{Binding CancelCommand}"/>
-            <Button Content="_Save" Command="{Binding SaveCommand}"/>
-        </StackPanel>
+        <!-- Menu bar + right-aligned Save/Cancel toolbar -->
+        <DockPanel Grid.Row="0" Margin="0,0,0,6">
+
+            <!-- Menu (left) -->
+            <Menu DockPanel.Dock="Left" VerticalAlignment="Center">
+
+                <!-- Edit menu — TOC row operations -->
+                <MenuItem Header="_Edit">
+                    <MenuItem Header="_Add Row"
+                              Command="{Binding AddRowCommand}"
+                              ToolTip.Tip="Add a new TOC entry"/>
+                    <MenuItem Header="_Delete Row"
+                              Command="{Binding DeleteRowCommand}"
+                              ToolTip.Tip="Delete the selected TOC entry"/>
+                    <Separator/>
+                    <MenuItem Header="_Import from Clipboard"
+                              Command="{Binding ImportCommand}"
+                              ToolTip.Tip="Import TOC from clipboard (tab-separated: PageNo, SongName, Composer, Date, Notes)"/>
+                    <MenuItem Header="_Export to Clipboard"
+                              Command="{Binding ExportCommand}"
+                              ToolTip.Tip="Export TOC to clipboard for pasting into Excel"/>
+                </MenuItem>
+
+                <!-- Tools menu — OCR and other utilities -->
+                <MenuItem Header="_Tools">
+                    <MenuItem Header="E_xtract TOC from PDF (OCR)…"
+                              Command="{Binding ExtractTocFromOcrCommand}"
+                              ToolTip.Tip="Render each page, run Windows OCR on the top strip, and show raw text + suggested TOC JSON in a text window"/>
+                </MenuItem>
+
+            </Menu>
+
+            <!-- Right-aligned: PageNumberOffset + Cancel + Save -->
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                        HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="8">
+                <TextBlock Text="PageNumberOffset:" VerticalAlignment="Center"/>
+                <TextBox Text="{Binding PageNumberOffset}" Width="50"
+                         ToolTip.Tip="The PageNumberOffset setting maps between physical PDF pages and printed page numbers. The TOC uses printed page numbers, so this value is added to the raw OCR page index when generating the suggested TOC."/>
+                <Button Content="_Cancel" Command="{Binding CancelCommand}"/>
+                <Button Content="_Save"   Command="{Binding SaveCommand}"/>
+            </StackPanel>
+
+            <!-- spacer so menu and toolbar don't overlap -->
+            <Border/>
+
+        </DockPanel>
+
+        <!-- OCR progress bar — visible only while OCR is running -->
+        <Grid Grid.Row="1"
+              IsVisible="{Binding IsOcrRunning}"
+              Margin="0,0,0,4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" Orientation="Vertical" Spacing="2">
+                <TextBlock Text="{Binding OcrStatusText}" FontSize="12"/>
+                <ProgressBar Value="{Binding OcrProgressPercent}" Minimum="0" Maximum="100" Height="12"/>
+            </StackPanel>
+            <Button Grid.Column="1" Content="Cancel OCR" Margin="8,0,0,0"
+                    Command="{Binding CancelOcrCommand}"
+                    VerticalAlignment="Center"/>
+        </Grid>
 
         <!-- Header info panel -->
-        <Grid Grid.Row="1" Margin="0,0,0,10">
+        <Grid Grid.Row="2" Margin="0,0,0,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
@@ -103,106 +152,15 @@
         </Grid>
 
         <!-- Main content with TOC DataGrid and Favorites -->
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="3">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="3*"/>
                 <ColumnDefinition Width="5"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- TOC DataGrid -->
-            <DataGrid Grid.Column="0"
-                      Name="TocDataGrid"
-                      ItemsSource="{Binding TocEntries}"
-                      SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
-                      GridLinesVisibility="All"
-                      CanUserReorderColumns="True"
-                      CanUserResizeColumns="True"
-                      CanUserSortColumns="True"
-                      IsReadOnly="False"
-                      SelectionMode="Single"
-                      DoubleTapped="TocDataGrid_DoubleTapped">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Binding="{Binding PageNo}" Width="75" x:DataType="local:TocEntryViewModel">
-                        <DataGridTextColumn.Header>
-                            <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="Page number in the book (uses PageNumberOffset)">
-                                <TextBlock Text="Page"/>
-                            </Border>
-                        </DataGridTextColumn.Header>
-                    </DataGridTextColumn>
-                    <DataGridTextColumn Binding="{Binding FavDisplay}" Width="65" IsReadOnly="True" x:DataType="local:TocEntryViewModel">
-                        <DataGridTextColumn.Header>
-                            <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="★ — this song is marked as a favorite">
-                                <TextBlock Text="Fav"/>
-                            </Border>
-                        </DataGridTextColumn.Header>
-                    </DataGridTextColumn>
-                    <DataGridTextColumn Binding="{Binding LinkDisplay}" Width="65" IsReadOnly="True" x:DataType="local:TocEntryViewModel">
-                        <DataGridTextColumn.Header>
-                            <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="🔗 — this song has a linked URL (e.g. YouTube). Double-click to open.">
-                                <TextBlock Text="Lnk"/>
-                            </Border>
-                        </DataGridTextColumn.Header>
-                    </DataGridTextColumn>
-                    <DataGridTemplateColumn Width="65" IsReadOnly="True" x:DataType="local:TocEntryViewModel">
-                        <DataGridTemplateColumn.Header>
-                            <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="🎵 — a cached MusicXML (.mxl) file exists for this song. Click to open in MuseScore.">
-                                <TextBlock Text="MXL"/>
-                            </Border>
-                        </DataGridTemplateColumn.Header>
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate x:DataType="local:TocEntryViewModel">
-                                <Button Content="🎵"
-                                        Command="{Binding OpenInMuseScoreCommand}"
-                                        IsVisible="{Binding HasCachedMxl}"
-                                        Padding="2"
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        ToolTip.Tip="Open cached MXL in MuseScore"/>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-                    <DataGridTemplateColumn Width="500" x:DataType="local:TocEntryViewModel">
-                        <DataGridTemplateColumn.Header>
-                            <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="Song title — double-click a row to navigate to that page">
-                                <TextBlock Text="SongName"/>
-                            </Border>
-                        </DataGridTemplateColumn.Header>
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate x:DataType="local:TocEntryViewModel">
-                                <TextBlock Text="{Binding SongName}" VerticalAlignment="Center" Margin="2,0"/>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                        <DataGridTemplateColumn.CellEditingTemplate>
-                            <DataTemplate x:DataType="local:TocEntryViewModel">
-                                <TextBox Text="{Binding SongName, Mode=TwoWay}" 
-                                         IsEnabled="{Binding #MetaDataWindow.((local:MetaDataFormViewModel)DataContext).SongNameIsEnabled}"/>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellEditingTemplate>
-                    </DataGridTemplateColumn>
-                    <DataGridTextColumn Binding="{Binding Composer}" Width="200" x:DataType="local:TocEntryViewModel">
-                        <DataGridTextColumn.Header>
-                            <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="Composer name">
-                                <TextBlock Text="Composer"/>
-                            </Border>
-                        </DataGridTextColumn.Header>
-                    </DataGridTextColumn>
-                    <DataGridTextColumn Binding="{Binding Date}" Width="100" x:DataType="local:TocEntryViewModel">
-                        <DataGridTextColumn.Header>
-                            <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="Composition or publication date">
-                                <TextBlock Text="Date"/>
-                            </Border>
-                        </DataGridTextColumn.Header>
-                    </DataGridTextColumn>
-                    <DataGridTextColumn Binding="{Binding Notes}" Width="*" x:DataType="local:TocEntryViewModel">
-                        <DataGridTextColumn.Header>
-                            <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="Additional notes about this song">
-                                <TextBlock Text="Notes"/>
-                            </Border>
-                        </DataGridTextColumn.Header>
-                    </DataGridTextColumn>
-                </DataGrid.Columns>
-            </DataGrid>
+            <!-- TOC BrowseControl (built in code-behind) -->
+            <Grid Grid.Column="0" Name="TocPanel"/>
 
             <GridSplitter Grid.Column="1" Width="5" ResizeDirection="Columns"/>
 
@@ -214,32 +172,7 @@
                 </Grid.RowDefinitions>
 
                 <TextBlock Grid.Row="0" Text="Favorites:" FontWeight="Bold" Margin="5,0,0,5"/>
-                <DataGrid Grid.Row="1"
-                          Name="FavoritesDataGrid"
-                          ItemsSource="{Binding Favorites}"
-                          GridLinesVisibility="All"
-                          CanUserReorderColumns="False"
-                          CanUserResizeColumns="True"
-                          IsReadOnly="True"
-                          SelectionMode="Single"
-                          DoubleTapped="FavoritesDataGrid_DoubleTapped">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Binding="{Binding PageNo}" Width="60" x:DataType="local:FavoriteViewModel">
-                            <DataGridTextColumn.Header>
-                                <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="Page number of the favorite">
-                                    <TextBlock Text="Page"/>
-                                </Border>
-                            </DataGridTextColumn.Header>
-                        </DataGridTextColumn>
-                        <DataGridTextColumn Binding="{Binding Description}" Width="*" x:DataType="local:FavoriteViewModel">
-                            <DataGridTextColumn.Header>
-                                <Border HorizontalAlignment="Stretch" Background="Transparent" ToolTip.Tip="Song title at this page — double-click to navigate there">
-                                    <TextBlock Text="Desc"/>
-                                </Border>
-                            </DataGridTextColumn.Header>
-                        </DataGridTextColumn>
-                    </DataGrid.Columns>
-                </DataGrid>
+                <Grid Grid.Row="1" Name="FavoritesPanel"/>
             </Grid>
         </Grid>
     </Grid>

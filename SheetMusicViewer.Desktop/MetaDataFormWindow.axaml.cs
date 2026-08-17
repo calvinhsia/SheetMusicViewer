@@ -1,8 +1,11 @@
-﻿using Avalonia.Controls;
+﻿using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -13,6 +16,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SheetMusicViewer.Desktop;
@@ -20,9 +24,9 @@ namespace SheetMusicViewer.Desktop;
 public partial class MetaDataFormWindow : Window
 {
     private MetaDataFormViewModel? _viewModel;
-    private DataGrid? _tocDataGrid;
-    private DataGrid? _favoritesDataGrid;
-    private readonly DoubleTapHelper _doubleTapHelper = new();
+    private BrowseControl? _tocBrowseControl;
+    private BrowseControl? _favoritesBrowseControl;
+    private bool _isUpdatingTocSelection;
     
     /// <summary>
     /// Page number to navigate to after closing (set when user double-clicks a TOC entry or favorite)
@@ -47,19 +51,10 @@ public partial class MetaDataFormWindow : Window
         
         _viewModel = viewModel;
         DataContext = viewModel;
-        _tocDataGrid = this.FindControl<DataGrid>("TocDataGrid");
-        _favoritesDataGrid = this.FindControl<DataGrid>("FavoritesDataGrid");
-        
-        // Wire up custom double-tap handling for better touch sensitivity
-        if (_tocDataGrid != null)
-        {
-            _tocDataGrid.PointerPressed += TocDataGrid_PointerPressed;
-        }
-        if (_favoritesDataGrid != null)
-        {
-            _favoritesDataGrid.PointerPressed += FavoritesDataGrid_PointerPressed;
-        }
-        
+
+        BuildTocPanel(viewModel);
+        BuildFavoritesPanel(viewModel);
+
         viewModel.CloseAction = (saved) =>
         {
             WasSaved = saved;
@@ -72,6 +67,12 @@ public partial class MetaDataFormWindow : Window
             Close();
         };
         viewModel.GetClipboardFunc = () => Clipboard;
+
+        viewModel.ShowOcrResultAction = (rawText, suggestedJson) =>
+        {
+            var win = new OcrResultWindow(rawText, suggestedJson);
+            win.Show(this);
+        };
     }
     
     private void ApplyWindowSettings()
@@ -110,8 +111,6 @@ public partial class MetaDataFormWindow : Window
         if (e.Key == Key.Escape)
         {
             e.Handled = true;
-            // Commit any pending DataGrid edits before checking dirty state
-            _tocDataGrid?.CommitEdit();
             await TryCloseAsync();
         }
     }
@@ -209,55 +208,248 @@ public partial class MetaDataFormWindow : Window
     {
         AvaloniaXamlLoader.Load(this);
     }
-    
-    private void TocDataGrid_PointerPressed(object? sender, PointerPressedEventArgs e)
+
+    private void BuildTocPanel(MetaDataFormViewModel viewModel)
     {
-        if (_doubleTapHelper.IsDoubleTap(sender, e))
+        var panel = this.FindControl<Grid>("TocPanel");
+        if (panel == null) return;
+
+        _tocBrowseControl = BuildTocBrowseControl(viewModel);
+        panel.Children.Add(_tocBrowseControl);
+
+        // Keep ViewModel.SelectedItem in sync with BrowseControl selection
+        _tocBrowseControl.ListView.SelectionChanged += (s, e) => SyncTocSelectionToViewModel();
+
+        // Double-tap navigates to the page
+        _tocBrowseControl.ListView.DoubleTapped += (s, e) =>
         {
             if (_viewModel?.SelectedItem != null)
             {
                 PageNumberResult = _viewModel.SelectedItem.PageNo;
                 WasSaved = true;
                 Close();
-                e.Handled = true;
             }
+        };
+
+        // Rebuild BrowseControl when entries are added or removed (Add/Delete row)
+        viewModel.TocEntries.CollectionChanged += (s, e) =>
+        {
+            panel.Children.Clear();
+            _tocBrowseControl = BuildTocBrowseControl(viewModel);
+            _tocBrowseControl.ListView.SelectionChanged += (s2, e2) => SyncTocSelectionToViewModel();
+            _tocBrowseControl.ListView.DoubleTapped += (s2, e2) =>
+            {
+                if (_viewModel?.SelectedItem != null)
+                {
+                    PageNumberResult = _viewModel.SelectedItem.PageNo;
+                    WasSaved = true;
+                    Close();
+                }
+            };
+            panel.Children.Add(_tocBrowseControl);
+
+            // Re-select after rebuild
+            if (_viewModel?.SelectedItem != null)
+                SyncBrowseControlSelectionToTocEntry(_viewModel.SelectedItem);
+        };
+
+        // When ViewModel.SelectedItem changes (e.g. from AddRow), sync browse control selection
+        viewModel.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(MetaDataFormViewModel.SelectedItem) && _viewModel?.SelectedItem != null)
+                SyncBrowseControlSelectionToTocEntry(_viewModel.SelectedItem);
+        };
+
+        // Initial selection
+        if (viewModel.SelectedItem != null)
+            SyncBrowseControlSelectionToTocEntry(viewModel.SelectedItem);
+    }
+
+    private BrowseControl BuildTocBrowseControl(MetaDataFormViewModel viewModel)
+    {
+        var query = from toc in viewModel.TocEntries
+                    select new
+                    {
+                        Page = toc.PageNo,
+                        Fav = new BrowseControl.BrowseField<TocEntryViewModel>(
+                            toc, (field) =>
+                            {
+                                return new TextBlock
+                                {
+                                    Text = field.Data.FavDisplay,
+                                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                                    FontSize = 12
+                                };
+                            }) { SortKey = toc.FavDisplay },
+                        Lnk = new BrowseControl.BrowseField<TocEntryViewModel>(
+                            toc, (field) =>
+                            {
+                                var ctrl = string.IsNullOrEmpty(field.Data.Link)
+                                    ? (Control)new TextBlock { Text = "" }
+                                    : new Button
+                                    {
+                                        Content = "🔗",
+                                        Padding = new Avalonia.Thickness(2),
+                                        Background = Avalonia.Media.Brushes.Transparent,
+                                        BorderThickness = new Avalonia.Thickness(0),
+                                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                                        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                                        [ToolTip.TipProperty] = field.Data.Link ?? string.Empty
+                                    };
+                                if (ctrl is Button btn)
+                                    btn.Click += (s, e) => { if (!string.IsNullOrEmpty(field.Data.Link)) OpenUrl(field.Data.Link); };
+                                return ctrl;
+                            }) { SortKey = toc.LinkDisplay },
+                        Mxl = new BrowseControl.BrowseField<TocEntryViewModel>(
+                            toc, (field) =>
+                            {
+                                if (!field.Data.HasCachedMxl) return new TextBlock { Text = "" };
+                                var btn = new Button
+                                {
+                                    Content = "🎵",
+                                    Padding = new Avalonia.Thickness(2),
+                                    Background = Avalonia.Media.Brushes.Transparent,
+                                    BorderThickness = new Avalonia.Thickness(0),
+                                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                                    [ToolTip.TipProperty] = "Open cached MXL in MuseScore"
+                                };
+                                btn.Click += (s, e) => field.Data.OpenInMuseScoreCommand.Execute(null);
+                                return btn;
+                            }) { SortKey = toc.HasCachedMxl ? "🎵" : "" },
+                        Roll = new BrowseControl.BrowseField<TocEntryViewModel>(
+                            toc, (field) =>
+                            {
+                                if (!field.Data.HasCachedMxl) return new TextBlock { Text = "" };
+                                var btn = new Button
+                                {
+                                    Content = "🎹",
+                                    Padding = new Avalonia.Thickness(2),
+                                    Background = Avalonia.Media.Brushes.Transparent,
+                                    BorderThickness = new Avalonia.Thickness(0),
+                                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                                    [ToolTip.TipProperty] = "Open in vertical piano roll (autoplay)"
+                                };
+                                btn.Click += (s, e) => field.Data.OpenInVerticalPianoRollCommand.Execute(null);
+                                return btn;
+                            }) { SortKey = toc.HasCachedMxl ? "🎹" : "" },
+                        toc.SongName,
+                        toc.Composer,
+                        toc.Date,
+                        toc.Notes,
+                        _Toc = toc
+                    };
+
+        // Columns: Page=60, Fav=45, Lnk=45, Mxl=45, Roll=45, SongName=300, Composer=160, Date=80, Notes=*
+        return new BrowseControl(query,
+            colWidths: new[] { 60, 45, 45, 45, 45, 300, 160, 80, 0 },
+            rowHeight: BrowseControl.DefaultRowHeight);
+    }
+
+    private void SyncTocSelectionToViewModel()
+    {
+        if (_isUpdatingTocSelection || _viewModel == null || _tocBrowseControl == null) return;
+        _isUpdatingTocSelection = true;
+        try
+        {
+            var selected = _tocBrowseControl.ListView.SelectedItem;
+            var tocProp = selected?.GetType().GetProperty("_Toc");
+            if (tocProp?.GetValue(selected) is TocEntryViewModel toc)
+                _viewModel.SelectedItem = toc;
+        }
+        finally
+        {
+            _isUpdatingTocSelection = false;
         }
     }
-    
-    private void FavoritesDataGrid_PointerPressed(object? sender, PointerPressedEventArgs e)
+
+    private void SyncBrowseControlSelectionToTocEntry(TocEntryViewModel target)
     {
-        if (_doubleTapHelper.IsDoubleTap(sender, e))
+        if (_isUpdatingTocSelection || _tocBrowseControl == null) return;
+        _isUpdatingTocSelection = true;
+        try
         {
-            if (_favoritesDataGrid?.SelectedItem is FavoriteViewModel fav)
+            _tocBrowseControl.ListView.SelectFirstMatch(item =>
+            {
+                var tocProp = item.GetType().GetProperty("_Toc");
+                return tocProp?.GetValue(item) is TocEntryViewModel t && t == target;
+            });
+        }
+        finally
+        {
+            _isUpdatingTocSelection = false;
+        }
+    }
+
+    // Static helper used by the Lnk column button
+    private static void OpenUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return;
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return;
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to open URL: {ex.Message}");
+        }
+    }
+
+    private void BuildFavoritesPanel(MetaDataFormViewModel viewModel)
+    {
+        var panel = this.FindControl<Grid>("FavoritesPanel");
+        if (panel == null) return;
+
+        var query = from fav in viewModel.Favorites
+                    select new
+                    {
+                        Page = fav.PageNo,
+                        fav.Description,
+                        _Fav = fav
+                    };
+
+        _favoritesBrowseControl = new BrowseControl(query,
+            colWidths: new[] { 60, 200 },
+            rowHeight: BrowseControl.TouchRowHeight);
+
+        _favoritesBrowseControl.ListView.DoubleTapped += (s, e) =>
+        {
+            var selected = _favoritesBrowseControl.ListView.SelectedItem;
+            var favProp = selected?.GetType().GetProperty("_Fav");
+            if (favProp?.GetValue(selected) is FavoriteViewModel fav)
             {
                 PageNumberResult = fav.PageNo;
                 WasSaved = true;
                 Close();
-                e.Handled = true;
             }
-        }
-    }
-    
-    // Keep the existing DoubleTapped handlers as fallback for mouse double-click
-    private void TocDataGrid_DoubleTapped(object? sender, RoutedEventArgs e)
-    {
-        if (_viewModel?.SelectedItem != null)
-        {
-            PageNumberResult = _viewModel.SelectedItem.PageNo;
-            WasSaved = true;
-            Close();
-        }
-    }
-    
-    private void FavoritesDataGrid_DoubleTapped(object? sender, RoutedEventArgs e)
-    {
-        var dataGrid = sender as DataGrid;
-        if (dataGrid?.SelectedItem is FavoriteViewModel fav)
-        {
-            PageNumberResult = fav.PageNo;
-            WasSaved = true;
-            Close();
-        }
+        };
+
+        _favoritesBrowseControl.AddContextMenuItem(
+            "Navigate to Favorite",
+            "Navigate to this favorite page",
+            (selectedItems) =>
+            {
+                if (selectedItems.Count > 0)
+                {
+                    var favProp = selectedItems[0]?.GetType().GetProperty("_Fav");
+                    if (favProp?.GetValue(selectedItems[0]) is FavoriteViewModel fav)
+                    {
+                        PageNumberResult = fav.PageNo;
+                        WasSaved = true;
+                        Close();
+                    }
+                }
+            });
+
+        panel.Children.Add(_favoritesBrowseControl);
     }
 }
 
@@ -333,6 +525,26 @@ public partial class MetaDataFormViewModel : ObservableObject
     public Action<int>? CloseWithPageAction { get; set; }
     public Func<IClipboard?>? GetClipboardFunc { get; set; }
 
+    /// <summary>
+    /// Called by the command to display OCR results; the View wires this to <see cref="OcrResultWindow"/>.
+    /// Parameters: (rawText, suggestedJson)
+    /// </summary>
+    public Action<string, string>? ShowOcrResultAction { get; set; }
+
+    // -- OCR progress state --------------------------------------------------
+
+    [ObservableProperty]
+    private bool _isOcrRunning;
+
+    [ObservableProperty]
+    private int _ocrProgressPercent;   // 0-100
+
+    [ObservableProperty]
+    private string _ocrStatusText = string.Empty;
+
+    /// <summary>Cancels an in-progress OCR run.</summary>
+    private CancellationTokenSource? _ocrCts;
+
     public string Title { get; }
 
     /// <summary>
@@ -372,37 +584,6 @@ public partial class MetaDataFormViewModel : ObservableObject
         // Design-time constructor
         Title = "MetaData Editor";
         _rootFolder = string.Empty;
-    }
-
-    /// <summary>
-    /// Constructor for testing - loads metadata directly from a JSON file path
-    /// </summary>
-    public MetaDataFormViewModel(string jsonFilePath)
-    {
-        _rootFolder = Path.GetDirectoryName(jsonFilePath) ?? string.Empty;
-        Title = $"MetaData Editor - {Path.GetFileName(jsonFilePath)}";
-
-        // Load metadata from JSON file using the centralized reader
-        var pdfPath = Path.ChangeExtension(jsonFilePath, ".pdf");
-        var provider = new DummyPdfDocumentProvider(); // For testing only
-        
-        try
-        {
-            _pdfMetaData = PdfMetaDataCore.ReadPdfMetaDataAsync(
-                pdfPath,
-                isSingles: false,
-                provider,
-                preferJsonOverBmk: true).GetAwaiter().GetResult();
-            
-            if (_pdfMetaData != null)
-            {
-                InitializeFromPdfMetaData(_pdfMetaData, 0);
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Trace.WriteLine($"Error loading metadata: {ex.Message}");
-        }
     }
 
     public MetaDataFormViewModel(PdfMetaDataReadResult pdfMetaData, string rootFolder, int currentPageNo = 0)
@@ -524,6 +705,67 @@ public partial class MetaDataFormViewModel : ObservableObject
         return string.Empty;
     }
 
+    /// <summary>
+    /// Wraps a CSV field value in double-quotes and escapes any embedded double-quotes per RFC 4180.
+    /// </summary>
+    private static string QuoteCsvField(string? value)
+    {
+        var s = value ?? string.Empty;
+        return $"\"{s.Replace("\"", "\"\"")}\""; 
+    }
+
+    /// <summary>
+    /// Parses a single CSV line into fields, respecting RFC 4180 quoting
+    /// (quoted fields may contain commas and escaped double-quotes).
+    /// </summary>
+    private static List<string> ParseCsvLine(string line)
+    {
+        var fields = new List<string>();
+        var sb = new StringBuilder();
+        bool inQuotes = false;
+        int i = 0;
+        while (i < line.Length)
+        {
+            char c = line[i];
+            if (inQuotes)
+            {
+                if (c == '"')
+                {
+                    if (i + 1 < line.Length && line[i + 1] == '"')
+                    {
+                        sb.Append('"'); // escaped double-quote
+                        i += 2;
+                        continue;
+                    }
+                    inQuotes = false;
+                }
+                else
+                {
+                    sb.Append(c);
+                }
+            }
+            else
+            {
+                if (c == '"')
+                {
+                    inQuotes = true;
+                }
+                else if (c == ',')
+                {
+                    fields.Add(sb.ToString());
+                    sb.Clear();
+                }
+                else
+                {
+                    sb.Append(c);
+                }
+            }
+            i++;
+        }
+        fields.Add(sb.ToString());
+        return fields;
+    }
+
     [RelayCommand]
     private async Task ImportAsync()
     {
@@ -539,17 +781,21 @@ public partial class MetaDataFormViewModel : ObservableObject
             var lines = clipText.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries);
             foreach (var line in lines)
             {
-                var parts = line.Trim().Split('\t');
+                // Support both CSV (comma) and TSV (tab) clipboard formats
+                List<string> parts = line.Contains('\t')
+                    ? [.. line.Split('\t')]
+                    : ParseCsvLine(line);
+
                 var entry = new TOCEntry();
 
-                if (parts.Length > 0 && int.TryParse(parts[0], out var pageNo))
+                if (parts.Count > 0 && int.TryParse(parts[0].Trim(), out var pageNo))
                 {
                     entry.PageNo = pageNo;
                 }
-                if (parts.Length > 1) entry.SongName = parts[1].Trim();
-                if (parts.Length > 2) entry.Composer = parts[2].Trim();
-                if (parts.Length > 3) entry.Date = parts[3].Trim();
-                if (parts.Length > 4) entry.Notes = parts[4].Trim();
+                if (parts.Count > 1) entry.SongName = parts[1].Trim();
+                if (parts.Count > 2) entry.Composer = parts[2].Trim();
+                if (parts.Count > 3) entry.Date = parts[3].Trim();
+                if (parts.Count > 4) entry.Notes = parts[4].Trim();
 
                 importedEntries.Add(new TocEntryViewModel(entry));
             }
@@ -575,7 +821,12 @@ public partial class MetaDataFormViewModel : ObservableObject
         var sb = new StringBuilder();
         foreach (var entry in TocEntries)
         {
-            sb.AppendLine($"{entry.PageNo}\t{entry.SongName}\t{entry.Composer}\t{entry.Date}\t{entry.Notes}");
+            sb.AppendLine(string.Join(",",
+                QuoteCsvField(entry.PageNo.ToString()),
+                QuoteCsvField(entry.SongName),
+                QuoteCsvField(entry.Composer),
+                QuoteCsvField(entry.Date),
+                QuoteCsvField(entry.Notes)));
         }
 
         await clipboard.SetTextAsync(sb.ToString());
@@ -668,6 +919,72 @@ public partial class MetaDataFormViewModel : ObservableObject
         {
             System.Diagnostics.Debug.WriteLine($"Failed to open URL: {ex.Message}");
         }
+    }
+
+    [RelayCommand]
+    private async Task ExtractTocFromOcrAsync()
+    {
+        if (_pdfMetaData == null) return;
+
+        var pdfPath = _pdfMetaData.GetFullPathFileFromVolno(0);
+        if (string.IsNullOrEmpty(pdfPath) || !File.Exists(pdfPath))
+            return;
+
+        // Prefer the JSON sidecar so multi-volume sets are handled automatically.
+        var jsonSidecar = Path.ChangeExtension(pdfPath, ".json");
+        var extractPath = File.Exists(jsonSidecar) ? jsonSidecar : pdfPath;
+
+        int defaultRotation = _pdfMetaData.VolumeInfoList.Count > 0
+            ? _pdfMetaData.VolumeInfoList[0].Rotation
+            : 0;
+
+        _ocrCts = new CancellationTokenSource();
+        IsOcrRunning = true;
+        OcrProgressPercent = 0;
+        OcrStatusText = "Starting OCR…";
+
+        var progress = new Progress<(int Page, int Total)>(t =>
+        {
+            OcrProgressPercent = t.Total > 0 ? (int)(100.0 * t.Page / t.Total) : 0;
+            OcrStatusText = t.Total > 0
+                ? $"Scanning page {t.Page + 1} / {t.Total}…"
+                : $"Scanning page {t.Page + 1}…";
+        });
+
+        List<PdfPageOcrResult> results;
+        try
+        {
+            results = await PdfOcrService.ExtractAsync(
+                extractPath, defaultRotation, progress, _ocrCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            OcrStatusText = "Cancelled.";
+            return;
+        }
+        catch (Exception ex)
+        {
+            ShowOcrResultAction?.Invoke($"OCR failed: {ex.Message}", string.Empty);
+            return;
+        }
+        finally
+        {
+            IsOcrRunning = false;
+            _ocrCts.Dispose();
+            _ocrCts = null;
+        }
+
+        OcrStatusText = $"Done — {results.Count} pages.";
+        var rawText       = PdfOcrService.FormatRawText(results);
+        var suggestedJson = PdfOcrService.FormatSuggestedJson(results, PageNumberOffset);
+        ShowOcrResultAction?.Invoke(rawText, suggestedJson);
+    }
+
+    [RelayCommand]
+    private void CancelOcr()
+    {
+        _ocrCts?.Cancel();
+        OcrStatusText = "Cancelling…";
     }
 
     [RelayCommand]
@@ -794,6 +1111,54 @@ public partial class TocEntryViewModel : ObservableObject
         }
     }
 
+    [RelayCommand]
+    private void OpenInVerticalPianoRoll()
+    {
+        if (string.IsNullOrEmpty(CachedMxlPath)) return;
+        try
+        {
+            // Resolve the XML path (unzip .mxl if needed, then parse and open window).
+            string xmlPath = ResolveMxlToXml(CachedMxlPath);
+            var window = VerticalPianoRollWindowFactory.BuildWindow(xmlPath);
+            var owner  = (Avalonia.Application.Current?.ApplicationLifetime
+                          as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)
+                         ?.MainWindow;
+            if (owner != null)
+                window.Show(owner);
+            else
+                window.Show();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to open vertical piano roll: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// If <paramref name="mxlPath"/> is a .mxl (ZIP), extracts the score XML to a temp file
+    /// and returns its path.  If it is already a plain .xml/.musicxml, returns the path unchanged.
+    /// </summary>
+    private static string ResolveMxlToXml(string mxlPath)
+    {
+        if (!mxlPath.EndsWith(".mxl", StringComparison.OrdinalIgnoreCase))
+            return mxlPath;
+
+        using var zip = System.IO.Compression.ZipFile.OpenRead(mxlPath);
+        var scoreEntry = zip.Entries.FirstOrDefault(e =>
+            e.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) &&
+            !e.FullName.StartsWith("META-INF", StringComparison.OrdinalIgnoreCase));
+        if (scoreEntry == null)
+            throw new InvalidOperationException($"No score XML entry found inside {mxlPath}");
+
+        string tmpPath = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            System.IO.Path.GetFileNameWithoutExtension(mxlPath) + "_score.xml");
+        using var stream = scoreEntry.Open();
+        using var fs    = System.IO.File.Create(tmpPath);
+        stream.CopyTo(fs);
+        return tmpPath;
+    }
+
     public TocEntryViewModel()
     {
     }
@@ -843,3 +1208,112 @@ internal class DummyPdfDocumentProvider : IPdfDocumentProvider
         return Task.FromResult(1);
     }
 }
+
+/// <summary>
+/// A lightweight, code-only Avalonia window that displays OCR extraction results
+/// (raw text and a suggested JSON TOC) in two side-by-side scrollable TextBoxes.
+/// The user can read, select, and copy content freely.
+/// </summary>
+internal sealed class OcrResultWindow : Window
+{
+    public OcrResultWindow(string rawText, string suggestedJson)
+    {
+        Title  = "OCR Extraction Results";
+        Width  = 1100;
+        Height = 700;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+
+        // ── layout ─────────────────────────────────────────────────
+        // [header label row]
+        // [raw-text panel | suggested-json panel]   (50/50 split)
+        // [status / copy-all button row]
+
+        var rawBox = BuildTextBox(rawText);
+        var jsonBox = BuildTextBox(suggestedJson);
+
+        var btnCopyRaw = new Button
+        {
+            Content = "Copy Raw Text",
+            Margin  = new Thickness(0, 0, 6, 0)
+        };
+        btnCopyRaw.Click += async (_, _) =>
+            await (Clipboard?.SetTextAsync(rawText) ?? Task.CompletedTask);
+
+        var btnCopyJson = new Button { Content = "Copy Suggested JSON" };
+        btnCopyJson.Click += async (_, _) =>
+            await (Clipboard?.SetTextAsync(suggestedJson) ?? Task.CompletedTask);
+
+        var btnClose = new Button
+        {
+            Content = "Close",
+            Margin  = new Thickness(12, 0, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+        btnClose.Click += (_, _) => Close();
+
+        var buttonRow = new DockPanel { Margin = new Thickness(0, 6, 0, 0) };
+        DockPanel.SetDock(btnClose, Dock.Right);
+        buttonRow.Children.Add(btnClose);
+        buttonRow.Children.Add(new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Children    = { btnCopyRaw, btnCopyJson }
+        });
+
+        var rawPanel = new DockPanel();
+        rawPanel.Children.Add(new TextBlock
+        {
+            Text       = "Raw OCR text (one line per page)",
+            FontWeight = FontWeight.SemiBold,
+            Margin     = new Thickness(0, 0, 0, 4),
+            [DockPanel.DockProperty] = Dock.Top
+        });
+        rawPanel.Children.Add(rawBox);
+
+        var jsonPanel = new DockPanel { Margin = new Thickness(8, 0, 0, 0) };
+        jsonPanel.Children.Add(new TextBlock
+        {
+            Text       = "Suggested TOC JSON (review & edit)",
+            FontWeight = FontWeight.SemiBold,
+            Margin     = new Thickness(0, 0, 0, 4),
+            [DockPanel.DockProperty] = Dock.Top
+        });
+        jsonPanel.Children.Add(jsonBox);
+
+        var splitGrid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*, 0, *")
+        };
+        splitGrid.Children.Add(rawPanel);
+        Grid.SetColumn(rawPanel, 0);
+        splitGrid.Children.Add(new GridSplitter
+        {
+            Width               = 4,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Background          = Brushes.Gray
+        });
+        Grid.SetColumn(splitGrid.Children[1], 1);
+        splitGrid.Children.Add(jsonPanel);
+        Grid.SetColumn(jsonPanel, 2);
+
+        var root = new DockPanel { Margin = new Thickness(10) };
+        DockPanel.SetDock(buttonRow, Dock.Bottom);
+        root.Children.Add(buttonRow);
+        root.Children.Add(splitGrid);
+
+        Content = root;
+    }
+
+    private static TextBox BuildTextBox(string text) => new()
+    {
+        Text             = text,
+        IsReadOnly       = false,   // allow selection + copy
+        AcceptsReturn    = true,
+        TextWrapping     = TextWrapping.NoWrap,
+        FontFamily       = new FontFamily("Courier New,Consolas,monospace"),
+        FontSize         = 12,
+        [ScrollViewer.HorizontalScrollBarVisibilityProperty] = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+        [ScrollViewer.VerticalScrollBarVisibilityProperty]   = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto
+    };
+}
+

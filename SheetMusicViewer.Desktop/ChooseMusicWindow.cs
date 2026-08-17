@@ -35,8 +35,8 @@ public class ChooseMusicWindow : Window
     private RadioButton _rbtnByNumPages;
 
     // Favorites tab
-    private ListBox _favoritesListBox;
-    private TextBlock _favoritesStatus;
+    private BrowseControl? _favoritesBrowseControl;
+    private Grid _favoritesTabGrid = null!;
 
     // Query tab - uses BrowseControl
     private BrowseControl? _queryBrowseControl;
@@ -586,10 +586,10 @@ public class ChooseMusicWindow : Window
         // Clear cached data
         _bookItemCache.Clear();
         _allFavoriteItems.Clear();
+        _favoritesBrowseControl = null;
         _queryBrowseControl = null;
         _playlistSongsBrowseControl = null;
         _lbBooks.ItemsSource = null;
-        _favoritesListBox.ItemsSource = null;
 
         _tbxTotals.Text = "Loading...";
 
@@ -678,22 +678,19 @@ public class ChooseMusicWindow : Window
 
     private Control BuildFavoritesTabContent()
     {
-        var favGrid = new Grid();
-        favGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-        favGrid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star)));
+        _favoritesTabGrid = new Grid();
+        _favoritesTabGrid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star)));
 
-        _favoritesStatus = new TextBlock { Margin = new Thickness(10, 5, 10, 5) };
-        Grid.SetRow(_favoritesStatus, 0);
-        favGrid.Children.Add(_favoritesStatus);
+        var placeholder = new TextBlock
+        {
+            Text = "Select this tab to load favorites...",
+            Margin = new Thickness(20),
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center
+        };
+        _favoritesTabGrid.Children.Add(placeholder);
 
-        _favoritesListBox = new ListBox();
-        // Note: DoubleTapped is now handled on individual items in RefreshFavoritesDisplay
-        // to ensure selection is set before processing
-
-        Grid.SetRow(_favoritesListBox, 1);
-        favGrid.Children.Add(_favoritesListBox);
-
-        return favGrid;
+        return _favoritesTabGrid;
     }
 
     private Control BuildQueryTabContent()
@@ -875,7 +872,7 @@ public class ChooseMusicWindow : Window
             {
                 var header = selectedTab.Header?.ToString() ?? "";
 
-                if (header == "Fa_vorites" && _allFavoriteItems.Count == 0)
+                if (header == "Fa_vorites" && _favoritesBrowseControl == null)
                 {
                     // Save Query filter before switching
                     if (_queryBrowseControl != null)
@@ -1029,69 +1026,66 @@ public class ChooseMusicWindow : Window
     {
         if (_pdfMetadata.Count == 0) return;
 
-        _allFavoriteItems.Clear();
+        const int rowHeight = 64;
+        const int iconWidth = 48;
 
+        _allFavoriteItems.Clear();
         foreach (var pdfMetaData in _pdfMetadata.OrderBy(p => p.GetBookName(_rootFolder)))
         {
             foreach (var fav in pdfMetaData.Favorites)
             {
-                var description = GetDescription(pdfMetaData, fav.Pageno);
-                var thumbnail = pdfMetaData.GetCachedThumbnail<Bitmap>();
-
                 _allFavoriteItems.Add(new FavoriteItem
                 {
                     Metadata = pdfMetaData,
                     Favorite = fav,
-                    Description = description,
+                    Description = GetDescription(pdfMetaData, fav.Pageno),
                     PageNo = fav.Pageno,
-                    Thumbnail = thumbnail,
+                    Thumbnail = pdfMetaData.GetCachedThumbnail<Bitmap>(),
                     BookName = pdfMetaData.GetBookName(_rootFolder)
                 });
             }
         }
 
-        RefreshFavoritesDisplay();
-    }
-
-    private void RefreshFavoritesDisplay()
-    {
-        var items = new List<Control>();
-
-        foreach (var favItem in _allFavoriteItems)
-        {
-            var sp = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(5), Tag = favItem };
-
-            if (favItem.Thumbnail != null)
-            {
-                sp.Children.Add(new Image { Source = favItem.Thumbnail, Height = 60, Width = 40, Margin = new Thickness(0, 0, 10, 0) });
-            }
-
-            var textPanel = new StackPanel { Orientation = Orientation.Vertical, VerticalAlignment = VerticalAlignment.Center };
-            textPanel.Children.Add(new TextBlock { Text = favItem.Description, FontWeight = FontWeight.Bold });
-            textPanel.Children.Add(new TextBlock { Text = $"Page {favItem.PageNo} - {favItem.BookName}", Foreground = Brushes.Gray, FontSize = 11 });
-            sp.Children.Add(textPanel);
-
-            // Use shared DoubleTapHelper for more reliable double-tap detection
-            sp.PointerPressed += (sender, e) =>
-            {
-                if (sender is StackPanel panel && panel.Tag is FavoriteItem item)
-                {
-                    if (_doubleTapHelper.IsDoubleTap(panel, e))
+        var query = from favItem in _allFavoriteItems
+                    select new
                     {
-                        _favoritesListBox.SelectedItem = panel;
-                        ChosenPdfMetaData = item.Metadata;
-                        ChosenPageNo = item.PageNo;
-                        Close();
-                        e.Handled = true;
-                    }
-                }
-            };
+                        Icon = new BrowseControl.BrowseField<FavoriteItem>(favItem, (field) =>
+                        {
+                            if (field.Data.Thumbnail == null)
+                                return new TextBlock();
+                            return new Image
+                            {
+                                Source = field.Data.Thumbnail,
+                                Height = rowHeight - 8,
+                                Width = iconWidth - 8,
+                                Stretch = Stretch.Uniform,
+                                VerticalAlignment = VerticalAlignment.Center,
+                                HorizontalAlignment = HorizontalAlignment.Center
+                            };
+                        }),
+                        favItem.Description,
+                        Page = favItem.PageNo,
+                        FavName = favItem.Favorite.FavoriteName,
+                        favItem.BookName,
+                        _FavItem = favItem
+                    };
 
-            items.Add(sp);
-        }
+        _favoritesBrowseControl = new BrowseControl(query,
+            colWidths: new[] { iconWidth, 350, 60, 150, 300 },
+            rowHeight: rowHeight);
+        _favoritesBrowseControl.ListView.DoubleTapped += (s, e) => BtnOk_Click(s, e);
+        _favoritesBrowseControl.AddContextMenuItem(
+            "View Favorite",
+            "Navigate to this favorite",
+            (selectedItems) =>
+            {
+                if (selectedItems.Count > 0)
+                    TryNavigateToFavoriteItem(selectedItems[0]);
+            });
 
-        _favoritesListBox.ItemsSource = items;
-        _favoritesStatus.Text = $"# Favorites = {_allFavoriteItems.Count}";
+        _favoritesTabGrid.Children.Clear();
+        Grid.SetRow(_favoritesBrowseControl, 0);
+        _favoritesTabGrid.Children.Add(_favoritesBrowseControl);
     }
 
     private void FillQueryTab()
@@ -1660,6 +1654,22 @@ public class ChooseMusicWindow : Window
         return true;
     }
 
+    private bool TryNavigateToFavoriteItem(object? selectedItem)
+    {
+        if (selectedItem == null) return false;
+
+        var prop = selectedItem.GetType().GetProperty("_FavItem");
+        if (prop == null) return false;
+
+        var favItem = prop.GetValue(selectedItem) as FavoriteItem;
+        if (favItem == null) return false;
+
+        ChosenPdfMetaData = favItem.Metadata;
+        ChosenPageNo = favItem.PageNo;
+        Close();
+        return true;
+    }
+
     private void OnPlaylistEntryDoubleTapped(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         TryNavigateToPlaylistEntry(_playlistEntriesBrowseControl?.ListView?.SelectedItem);
@@ -2171,11 +2181,8 @@ public class ChooseMusicWindow : Window
                     break;
 
                 case "Fa_vorites":
-                    if (_favoritesListBox.SelectedItem is StackPanel favSp && favSp.Tag is FavoriteItem favItem)
-                    {
-                        ChosenPdfMetaData = favItem.Metadata;
-                        ChosenPageNo = favItem.PageNo;
-                    }
+                    if (TryNavigateToFavoriteItem(_favoritesBrowseControl?.ListView?.SelectedItem))
+                        return; // Already closed
                     break;
 
                 case "_Query":

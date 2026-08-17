@@ -151,7 +151,7 @@ public class MetronomeOverlayWindow : Window, INotifyPropertyChanged
         _metronome.Sound       = _sound;
         _isRunning             = metronome.IsRunning;
 
-        // Fade timer restores idle colour after each beat flash
+        // Fade timer restores idle color after each beat flash
         _fadeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _fadeTimer.Tick += (_, _) => { BeatBrush = IdleBrush; _fadeTimer.Stop(); };
 

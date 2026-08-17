@@ -23,7 +23,7 @@ public class MuseScoreExportManualTests : TestBase
     [TestMethod]
     public async Task ExportSingleVolume_PatriciaRag()
     {
-        const string pdf = @"C:\Users\Calvi\OneDrive\SheetMusic\Ragtime\Collections\PatriciaRag.pdf";
+        var pdf = Path.Combine(GetSheetMusicFolder(), @"Ragtime\Collections\PatriciaRag.pdf");
         await RunExportPipelineAsync(pdf, bookStart: 0, bookEnd: 0);
     }
 
@@ -31,7 +31,7 @@ public class MuseScoreExportManualTests : TestBase
     [TestMethod]
     public async Task ExportMultiVolume_AlleyCat()
     {
-        const string pdf = @"C:\Users\Calvi\OneDrive\SheetMusic\Pop\Frank Bjorn Alley Cat.pdf";
+        var pdf = Path.Combine(GetSheetMusicFolder(), @"Pop\Frank Bjorn Alley Cat.pdf");
         await RunExportPipelineAsync(pdf, bookStart: 0, bookEnd: 0);
     }
 
@@ -53,8 +53,8 @@ public class MuseScoreExportManualTests : TestBase
         var rotation = 0;
         var spinePaddingPx = 0;   // px of white padding on spine/gutter edge (0 = off)
         var adhocPdf =
-             @"C:\Users\Calvi\OneDrive\SheetMusic\Ragtime\Collections\Scott Joplin Complete Piano Works3.pdf"; adhocBookStart = 34; adhocBookEnd = 35; rotation = 2; spinePaddingPx = 0;// Something Doing
-        //@"C:\Users\Calvi\OneDrive\SheetMusic\Pop\PopSingles\Quarantine Rag - Bb Major - MN0212813.pdf";
+             Path.Combine(GetSheetMusicFolder(), @"Ragtime\Collections\Scott Joplin Complete Piano Works3.pdf"); adhocBookStart = 34; adhocBookEnd = 35; rotation = 2; spinePaddingPx = 0;// Something Doing
+        //Path.Combine(GetSheetMusicFolder(), @"Pop\PopSingles\Quarantine Rag - Bb Major - MN0212813.pdf");
         await RunExportPipelineAsync(adhocPdf, adhocBookStart, adhocBookEnd, rotation, spinePaddingPx);
     }
 
@@ -68,7 +68,7 @@ public class MuseScoreExportManualTests : TestBase
     [TestMethod]
     public async Task ExportMultiVolume_ScottJoplin_SomethingDoing()
     {
-        const string pdf = @"C:\Users\Calvi\OneDrive\SheetMusic\Ragtime\Collections\Scott Joplin Complete Piano Works1.pdf";
+        var pdf = Path.Combine(GetSheetMusicFolder(), @"Ragtime\Collections\Scott Joplin Complete Piano Works1.pdf");
         var spinePaddingPx = 60;   // px of white padding on spine/gutter edge (0 = off)
         // with 0, PDF file size is 527k. With 60, it's 3k: 19:36:39.362   [progress] Input to Audiveris: Scott Joplin Complete Piano Works3_p31-35_gs.pdf  page size = 596.0 × 842.0 pts  (8.28 × 11.69 in)
 

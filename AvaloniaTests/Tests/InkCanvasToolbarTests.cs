@@ -33,6 +33,8 @@ public class InkCanvasToolbarTests
             return true;
         }
 
+        AvaloniaUIThreadFixture.EnsureInitialized();
+
         if (AvaloniaUIThreadFixture.InitializationFailed)
         {
             Assert.Inconclusive($"Avalonia initialization failed: {AvaloniaUIThreadFixture.InitializationError}");
