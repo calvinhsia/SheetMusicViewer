@@ -261,6 +261,119 @@ public class VerticalPianoRollTests
         Assert.AreEqual(24, a4.OnsetDivisions, "A4 onset should be 24 within measure 2");
     }
 
+    // ── Tied-note merging ────────────────────────────────────────────────────
+
+    private static string TieMxl(string measuresXml) => $@"<?xml version=""1.0"" encoding=""UTF-8""?>
+<score-partwise version=""3.1"">
+  <movement-title>TieTest</movement-title>
+  <part-list><score-part id=""P1""><part-name>Piano</part-name></score-part></part-list>
+  <part id=""P1"">{measuresXml}</part>
+</score-partwise>";
+
+    [TestMethod]
+    public void MxlScore_Parse_TiedNotes_WithinMeasure_MergedIntoOne()
+    {
+        // Two quarter C4s tied within the same measure → one half-note bar, second note absorbed.
+        var xml = TieMxl(@"
+<measure number=""1"">
+  <attributes><divisions>4</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+  <note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type>
+    <tie type=""start""/></note>
+  <note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type>
+    <tie type=""stop""/></note>
+  <note><pitch><step>E</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type></note>
+  <note><pitch><step>G</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type></note>
+</measure>");
+
+        var score  = MxlScore.Parse(xml);
+        var notes  = score.Parts[0].Measures[0].Notes;
+        var c4open = notes.First(n => n.Pitch == "C" && !n.IsAbsorbed);
+        var c4cont = notes.First(n => n.Pitch == "C" && n.IsAbsorbed);
+
+        Assert.IsFalse(c4open.IsAbsorbed,  "Opener should not be absorbed");
+        Assert.IsTrue (c4cont.IsAbsorbed,  "Continuation should be absorbed");
+        Assert.AreEqual(8, c4open.Duration, "Opener duration should be extended to 8 (two quarters)");
+        Assert.AreEqual(0, c4open.OnsetDivisions, "Opener onset unchanged");
+    }
+
+    [TestMethod]
+    public void MxlScore_Parse_TiedNotes_CrossMeasure_MergedIntoOne()
+    {
+        // Tied C4 across a bar line: half note in m1 + quarter in m2 → one bar of duration 12.
+        var xml = TieMxl(@"
+<measure number=""1"">
+  <attributes><divisions>4</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+  <note><pitch><step>C</step><octave>4</octave></pitch><duration>8</duration><type>half</type>
+    <tie type=""start""/></note>
+  <note><pitch><step>D</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type></note>
+  <note><pitch><step>E</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type></note>
+</measure>
+<measure number=""2"">
+  <note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type>
+    <tie type=""stop""/></note>
+  <note><pitch><step>F</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type></note>
+  <note><pitch><step>G</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type></note>
+  <note><pitch><step>A</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type></note>
+</measure>");
+
+        var score = MxlScore.Parse(xml);
+        var m1    = score.Parts[0].Measures[0];
+        var m2    = score.Parts[0].Measures[1];
+
+        var opener = m1.Notes.First(n => n.Pitch == "C");
+        var cont   = m2.Notes.First(n => n.Pitch == "C");
+
+        Assert.IsFalse(opener.IsAbsorbed, "Opener in m1 must not be absorbed");
+        Assert.IsTrue (cont.IsAbsorbed,   "Continuation in m2 must be absorbed");
+        // Opener starts at onset 0 in m1 (globalOnset 0).
+        // Continuation starts at onset 0 in m2 (globalOnset 16), duration 4.
+        // Expected merged duration = (16 - 0 - 0 + 0 + 4) = 20.
+        Assert.AreEqual(20, opener.Duration, "Merged duration should span m1 half + m2 quarter = 20 divs");
+    }
+
+    [TestMethod]
+    public void MxlScore_Parse_TiedNotes_ChainedAcrossThreeMeasures()
+    {
+        // C4 tied across three measures: quarter + quarter + quarter → duration = 12.
+        var xml = TieMxl(@"
+<measure number=""1"">
+  <attributes><divisions>4</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+  <note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type>
+    <tie type=""start""/></note>
+  <note><pitch><step>D</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type></note>
+  <note><pitch><step>E</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type></note>
+  <note><pitch><step>F</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type></note>
+</measure>
+<measure number=""2"">
+  <note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type>
+    <tie type=""stop""/><tie type=""start""/></note>
+  <note><pitch><step>G</step><octave>4</octave></pitch><duration>12</duration><type>dotted-half</type></note>
+</measure>
+<measure number=""3"">
+  <note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type>
+    <tie type=""stop""/></note>
+  <note><pitch><step>A</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type></note>
+  <note><pitch><step>B</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type></note>
+  <note><pitch><step>D</step><octave>5</octave></pitch><duration>4</duration><type>quarter</type></note>
+</measure>");
+
+        var score = MxlScore.Parse(xml);
+        var m1    = score.Parts[0].Measures[0];
+        var m2    = score.Parts[0].Measures[1];
+        var m3    = score.Parts[0].Measures[2];
+
+        var opener = m1.Notes.First(n => n.Pitch == "C");
+        var mid    = m2.Notes.First(n => n.Pitch == "C");
+        var last   = m3.Notes.First(n => n.Pitch == "C");
+
+        Assert.IsFalse(opener.IsAbsorbed, "Opener must not be absorbed");
+        Assert.IsTrue (mid.IsAbsorbed,    "Middle link must be absorbed");
+        Assert.IsTrue (last.IsAbsorbed,   "Final link must be absorbed");
+        // globalOnset: m1=0, m2=16, m3=32.  Final C ends at 32+0+4=36.  Opener onset=0 in m1.
+        // merged duration = 36 - 0 - 0 = 36.
+        Assert.AreEqual(36, opener.Duration, "Chained tie: total duration = 3 quarters = 36 divs");
+    }
+
     [TestMethod]
     public void MxlScore_VisualStaff_GrandStaffUsesStaffElement()
     {

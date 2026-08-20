@@ -211,8 +211,10 @@ public class MxlVisualizationManualTests : TestBase
     {
         if (!OperatingSystem.IsWindows())
             Assert.Inconclusive("MIDI playback requires Windows (winmm.dll).");
-        var score = ParseMxl(AdhocMxlPath);
-        await ShowVerticalPianoRollWindowAsync(AdhocMxlPath, score, startMeasure:45, syncDiagnostics: true);
+        var pathToMxl = Path.Combine(GetSheetMusicFolder(), @"Pop\SangahNoonaSingles\Happy Birthday to You! - F Major - MK0108772.mxl");
+
+        var score = ParseMxl(pathToMxl);
+        await ShowVerticalPianoRollWindowAsync(pathToMxl, score, startMeasure: 0, syncDiagnostics: true);
     }
 
     /// <summary>
@@ -317,26 +319,26 @@ public class MxlVisualizationManualTests : TestBase
         {
             var score = pattern switch
             {
-                "ChromaticFullRange"      => MusicGenerator.ChromaticFullRange(),
-                "ChromaticWithOctave"     => MusicGenerator.ChromaticWithOctave(),
-                "MajorScales"             => MusicGenerator.MajorScales(),
-                "WholeToneScales"         => MusicGenerator.WholeToneScales(),
-                "MinorArpeggios"          => MusicGenerator.MinorArpeggios(),
-                "AlbertiBassAndMelody"    => MusicGenerator.AlbertiBassAndMelody(),
-                "Polyrhythm"              => MusicGenerator.Polyrhythm(),
+                "ChromaticFullRange" => MusicGenerator.ChromaticFullRange(),
+                "ChromaticWithOctave" => MusicGenerator.ChromaticWithOctave(),
+                "MajorScales" => MusicGenerator.MajorScales(),
+                "WholeToneScales" => MusicGenerator.WholeToneScales(),
+                "MinorArpeggios" => MusicGenerator.MinorArpeggios(),
+                "AlbertiBassAndMelody" => MusicGenerator.AlbertiBassAndMelody(),
+                "Polyrhythm" => MusicGenerator.Polyrhythm(),
                 "PolyrhythmTonicDominant" => MusicGenerator.PolyrhythmTonicDominant(),
-                "BrownianWalk"            => MusicGenerator.BrownianWalk(),
-                "Pop"                     => MusicGenerator.StylePop(),
-                "Jazz"                    => MusicGenerator.StyleJazz(),
-                "RnB"                     => MusicGenerator.StyleRnB(),
-                "Rock"                    => MusicGenerator.StyleRock(),
-                "HipHop"                  => MusicGenerator.StyleHipHop(),
-                "Latin"                   => MusicGenerator.StyleLatin(),
-                "Tango"                   => MusicGenerator.StyleTango(),
-                "BossaNova"               => MusicGenerator.StyleBossaNova(),
-                "Gospel"                  => MusicGenerator.StyleGospel(),
-                "Country"                 => MusicGenerator.StyleCountry(),
-                "Ragtime"                 => MusicGenerator.StyleRagtime(),
+                "BrownianWalk" => MusicGenerator.BrownianWalk(),
+                "Pop" => MusicGenerator.StylePop(),
+                "Jazz" => MusicGenerator.StyleJazz(),
+                "RnB" => MusicGenerator.StyleRnB(),
+                "Rock" => MusicGenerator.StyleRock(),
+                "HipHop" => MusicGenerator.StyleHipHop(),
+                "Latin" => MusicGenerator.StyleLatin(),
+                "Tango" => MusicGenerator.StyleTango(),
+                "BossaNova" => MusicGenerator.StyleBossaNova(),
+                "Gospel" => MusicGenerator.StyleGospel(),
+                "Country" => MusicGenerator.StyleCountry(),
+                "Ragtime" => MusicGenerator.StyleRagtime(),
                 _ => throw new ArgumentException($"Unknown pattern '{pattern}'.")
             };
 
@@ -425,7 +427,7 @@ public class MxlVisualizationManualTests : TestBase
         {
             int staff1Notes = p.Measures.Sum(m => m.Notes.Count(n => !n.IsRest && n.Staff == 1));
             int staff2Notes = p.Measures.Sum(m => m.Notes.Count(n => !n.IsRest && n.Staff == 2));
-            int otherNotes  = p.Measures.Sum(m => m.Notes.Count(n => !n.IsRest && n.Staff > 2));
+            int otherNotes = p.Measures.Sum(m => m.Notes.Count(n => !n.IsRest && n.Staff > 2));
             sb.AppendLine($"  [{p.PartId}] idx={p.PartIndex} {p.InstrumentName,-28}  MIDI={p.MidiProgram,3}  " +
                           $"Measures={p.Measures.Count,4}  Notes={p.NoteCount,5}  Rests={p.RestCount,4}  " +
                           $"Staff1={staff1Notes}  Staff2={staff2Notes}  StaffOther={otherNotes}");
@@ -744,11 +746,11 @@ public class MxlVisualizationManualTests : TestBase
         }
         LogMessage(diagSbP.ToString());
 
-        var canvas       = new PlayablePianoRollCanvas(score);
+        var canvas = new PlayablePianoRollCanvas(score);
         var scrollViewer = new ScrollViewer
         {
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-            VerticalScrollBarVisibility   = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Content = canvas
         };
 
@@ -769,9 +771,10 @@ public class MxlVisualizationManualTests : TestBase
 
         var bpmSlider = new Slider
         {
-            Minimum = 40, Maximum = 300,
-            Value   = score.DefaultBpm,
-            Width   = 180,
+            Minimum = 40,
+            Maximum = 300,
+            Value = score.DefaultBpm,
+            Width = 180,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
             [ToolTip.TipProperty] = "Tempo (BPM)"
         };
@@ -788,15 +791,16 @@ public class MxlVisualizationManualTests : TestBase
                 bpmLabel.Text = $"{bpmSlider.Value:F0} BPM";
         };
 
-        var playBtn = new Button { Content = "-  Play",  Margin = new Thickness(4), Padding = new Thickness(8, 2) };
-        var stopBtn = new Button { Content = "-  Stop",  Margin = new Thickness(4), Padding = new Thickness(8, 2), IsEnabled = false };
+        var playBtn = new Button { Content = "-  Play", Margin = new Thickness(4), Padding = new Thickness(8, 2) };
+        var stopBtn = new Button { Content = "-  Stop", Margin = new Thickness(4), Padding = new Thickness(8, 2), IsEnabled = false };
 
         int totalMeasuresH = score.Parts.Max(p => p.Measures.Count);
-        var measureSlider  = new Slider
+        var measureSlider = new Slider
         {
-            Minimum = 1, Maximum = Math.Max(1, totalMeasuresH),
-            Value   = 1,
-            Width   = 260,
+            Minimum = 1,
+            Maximum = Math.Max(1, totalMeasuresH),
+            Value = 1,
+            Width = 260,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
             [ToolTip.TipProperty] = "Jump to measure (stop first)"
         };
@@ -863,10 +867,10 @@ public class MxlVisualizationManualTests : TestBase
                 : Path.Combine(AppContext.BaseDirectory, "Soundfonts", "VintageDreamsWaves.sf2");
             player = new MxlMidiPlayer(score)
             {
-                Bpm           = bpmSlider.Value,
-                StartMeasure  = (int)measureSlider.Value,
-                LogNotes      = logNotesChk.IsChecked == true,
-                Backend       = fluidSynthChk.IsChecked == true ? MidiBackendKind.FluidSynth : MidiBackendKind.Winmm,
+                Bpm = bpmSlider.Value,
+                StartMeasure = (int)measureSlider.Value,
+                LogNotes = logNotesChk.IsChecked == true,
+                Backend = fluidSynthChk.IsChecked == true ? MidiBackendKind.FluidSynth : MidiBackendKind.Winmm,
                 SoundfontPath = sfPathH,
             };
 
@@ -885,7 +889,7 @@ public class MxlVisualizationManualTests : TestBase
 
             playBtn.IsEnabled = false;
             stopBtn.IsEnabled = true;
-            statusBlock.Text  = "Playing -  ...";
+            statusBlock.Text = "Playing -  ...";
             player.Start();
         };
 
@@ -943,11 +947,11 @@ public class MxlVisualizationManualTests : TestBase
         if (!sf2Files.Contains(defaultSf) && sf2Files.Count > 0) defaultSf = sf2Files[0];
         var combo = new ComboBox
         {
-            ItemsSource  = sf2Files,
+            ItemsSource = sf2Files,
             SelectedItem = sf2Files.Contains(defaultSf) ? defaultSf : sf2Files.FirstOrDefault(),
-            Width        = 220,
+            Width = 220,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Margin  = new Thickness(4, 0),
+            Margin = new Thickness(4, 0),
             IsEnabled = fluidSynthChk.IsChecked == true,
             [ToolTip.TipProperty] = "Soundfont (.sf2) - VintageDreams is fast; YDP-GrandPiano sounds best but needs polyphony-32"
         };
@@ -975,9 +979,9 @@ public class MxlVisualizationManualTests : TestBase
         var seekMeasure = score.Parts.Count > 0
             ? score.Parts[0].Measures.FirstOrDefault(m => m.Number >= startMeasure)
             : null;
-        double seekMs   = seekMeasure?.GlobalOnsetMs ?? 0.0;
+        double seekMs = seekMeasure?.GlobalOnsetMs ?? 0.0;
         var lastMeasure = score.Parts.Count > 0 ? score.Parts[0].Measures.LastOrDefault() : null;
-        double totalMs  = lastMeasure != null
+        double totalMs = lastMeasure != null
             ? (lastMeasure.GlobalOnsetMs - seekMs) * 1.0 + 8_000   // +8 s for last measure's notes
             : 60_000;
         int timeoutMs = (int)Math.Clamp(totalMs + 30_000, 60_000, 600_000);  // min 60 s, max 10 min
@@ -1064,24 +1068,24 @@ public class MxlVisualizationManualTests : TestBase
 /// </summary>
 internal class PianoRollCanvas : Control
 {
-    protected static readonly int MinMidi      = 21;
-    protected static readonly int MaxMidi      = 108;
-    protected static readonly int KeyH         = 5;
-    protected static readonly int MeasureW     = 80;
-    protected static readonly int YAxisW       = 32;
-    private   static readonly int[] BlackKeys  = { 1, 3, 6, 8, 10 };
+    protected static readonly int MinMidi = 21;
+    protected static readonly int MaxMidi = 108;
+    protected static readonly int KeyH = 5;
+    protected static readonly int MeasureW = 80;
+    protected static readonly int YAxisW = 32;
+    private static readonly int[] BlackKeys = { 1, 3, 6, 8, 10 };
 
     protected readonly MxlScore _score;
-    protected readonly int    _totalMeasures;
+    protected readonly int _totalMeasures;
     protected readonly double _canvasW;
     protected readonly double _canvasH;
 
     public PianoRollCanvas(MxlScore score)
     {
-        _score         = score;
+        _score = score;
         _totalMeasures = score.Parts.Max(p => p.Measures.Count);
-        _canvasW       = YAxisW + _totalMeasures * MeasureW;
-        _canvasH       = (MaxMidi - MinMidi + 1) * KeyH;
+        _canvasW = YAxisW + _totalMeasures * MeasureW;
+        _canvasH = (MaxMidi - MinMidi + 1) * KeyH;
     }
 
     protected override Size MeasureOverride(Size _) => new(_canvasW, _canvasH);
@@ -1094,7 +1098,7 @@ internal class PianoRollCanvas : Control
         if (parts.Count == 0) return YAxisW;
         foreach (var measure in parts[0].Measures)
         {
-            int divs  = Math.Max(1, measure.Divisions);
+            int divs = Math.Max(1, measure.Divisions);
             long mEnd = measure.GlobalOnsetDivisions + divs * 4;  // approx measure end
             if (globalDivs >= measure.GlobalOnsetDivisions && globalDivs < mEnd)
             {
@@ -1110,13 +1114,13 @@ internal class PianoRollCanvas : Control
 
     public override void Render(DrawingContext ctx)
     {
-        var bg        = new SolidColorBrush(Color.FromRgb(28, 28, 28));
+        var bg = new SolidColorBrush(Color.FromRgb(28, 28, 28));
         var blackKeyB = new SolidColorBrush(Color.FromRgb(48, 48, 48));
-        var gridPen   = new Pen(new SolidColorBrush(Color.FromRgb(55, 55, 55)), 0.5);
+        var gridPen = new Pen(new SolidColorBrush(Color.FromRgb(55, 55, 55)), 0.5);
         var octavePen = new Pen(new SolidColorBrush(Color.FromRgb(90, 90, 90)), 0.8);
-        var measurePen= new Pen(new SolidColorBrush(Color.FromRgb(65, 65, 65)), 0.5);
-        var labelBrush= new SolidColorBrush(Color.FromRgb(140, 140, 140));
-        var tf        = new Typeface("Consolas");
+        var measurePen = new Pen(new SolidColorBrush(Color.FromRgb(65, 65, 65)), 0.5);
+        var labelBrush = new SolidColorBrush(Color.FromRgb(140, 140, 140));
+        var tf = new Typeface("Consolas");
 
         ctx.FillRectangle(bg, new Rect(0, 0, _canvasW, _canvasH));
 
@@ -1158,32 +1162,32 @@ internal class PianoRollCanvas : Control
         // Staff 2 (left hand)  - bottom half of the row (blue)
         var staff1Brush = new SolidColorBrush(Color.FromArgb(220, 64, 192, 87));   // green
         var staff2Brush = new SolidColorBrush(Color.FromArgb(220, 88, 130, 226));  // blue
-        var otherBrush  = new SolidColorBrush(Color.FromArgb(200, 200, 180, 80));  // amber
+        var otherBrush = new SolidColorBrush(Color.FromArgb(200, 200, 180, 80));  // amber
 
         int halfH = Math.Max(1, (KeyH - 2) / 2);
 
         foreach (var part in _score.Parts)
-        foreach (var measure in part.Measures)
-        foreach (var note in measure.Notes)
-        {
-            if (note.IsRest || note.MidiPitch < MinMidi || note.MidiPitch > MaxMidi) continue;
+            foreach (var measure in part.Measures)
+                foreach (var note in measure.Notes)
+                {
+                    if (note.IsRest || note.MidiPitch < MinMidi || note.MidiPitch > MaxMidi) continue;
 
-            int divs = Math.Max(1, measure.Divisions);
-            double xFrac   = (double)note.OnsetDivisions / (divs * 4);
-            double wFrac   = (double)note.Duration        / (divs * 4);
-            double x       = YAxisW + (measure.Number - 1) * MeasureW + xFrac * MeasureW;
-            double w       = Math.Max(1.5, wFrac * MeasureW - 1);
-            double rowTop  = _canvasH - (note.MidiPitch - MinMidi + 1) * KeyH + 1;
+                    int divs = Math.Max(1, measure.Divisions);
+                    double xFrac = (double)note.OnsetDivisions / (divs * 4);
+                    double wFrac = (double)note.Duration / (divs * 4);
+                    double x = YAxisW + (measure.Number - 1) * MeasureW + xFrac * MeasureW;
+                    double w = Math.Max(1.5, wFrac * MeasureW - 1);
+                    double rowTop = _canvasH - (note.MidiPitch - MinMidi + 1) * KeyH + 1;
 
-            int visualStaff = _score.VisualStaff(part, note);
-            double ny, nh;
-            IBrush brush;
-            if (visualStaff == 1)      { ny = rowTop;         nh = halfH;     brush = staff1Brush; }
-            else if (visualStaff == 2) { ny = rowTop + halfH; nh = halfH;     brush = staff2Brush; }
-            else                       { ny = rowTop;         nh = KeyH - 2;  brush = otherBrush; }
+                    int visualStaff = _score.VisualStaff(part, note);
+                    double ny, nh;
+                    IBrush brush;
+                    if (visualStaff == 1) { ny = rowTop; nh = halfH; brush = staff1Brush; }
+                    else if (visualStaff == 2) { ny = rowTop + halfH; nh = halfH; brush = staff2Brush; }
+                    else { ny = rowTop; nh = KeyH - 2; brush = otherBrush; }
 
-            ctx.FillRectangle(brush, new Rect(x, ny, w, nh));
-        }
+                    ctx.FillRectangle(brush, new Rect(x, ny, w, nh));
+                }
 
         RenderOverlay(ctx);
     }
@@ -1195,19 +1199,19 @@ internal class PianoRollCanvas : Control
 /// </summary>
 internal sealed class RhythmDensityCanvas : Control
 {
-    private const int Slots       = 16;   // 16th-note positions per measure
-    private const int BarW        = 40;
-    private const int LabelH      = 24;
-    private const int LegendH     = 20;
+    private const int Slots = 16;   // 16th-note positions per measure
+    private const int BarW = 40;
+    private const int LabelH = 24;
+    private const int LegendH = 20;
     private readonly MxlScore _score;
-    private readonly int[]   _staff1 = new int[Slots];
-    private readonly int[]   _staff2 = new int[Slots];
-    private readonly double  _canvasW;
-    private readonly double  _canvasH = 420;
+    private readonly int[] _staff1 = new int[Slots];
+    private readonly int[] _staff2 = new int[Slots];
+    private readonly double _canvasW;
+    private readonly double _canvasH = 420;
 
     public RhythmDensityCanvas(MxlScore score)
     {
-        _score  = score;
+        _score = score;
         _canvasW = Slots * BarW + 60;
         BuildHistogram();
     }
@@ -1215,40 +1219,40 @@ internal sealed class RhythmDensityCanvas : Control
     private void BuildHistogram()
     {
         foreach (var part in _score.Parts)
-        foreach (var measure in part.Measures)
-        {
-            int divs = Math.Max(1, measure.Divisions);
-            int divsPer16th = divs / 4;  // divisions per 16th note (quarter = divs)
-            if (divsPer16th < 1) divsPer16th = 1;
-
-            foreach (var note in measure.Notes)
+            foreach (var measure in part.Measures)
             {
-                if (note.IsRest || note.IsChord) continue;
-                int slot = (int)Math.Round((double)note.OnsetDivisions / divsPer16th) % Slots;
-                if (slot < 0) slot = 0;
-                if (note.Staff == 1) _staff1[slot]++;
-                else                  _staff2[slot]++;
+                int divs = Math.Max(1, measure.Divisions);
+                int divsPer16th = divs / 4;  // divisions per 16th note (quarter = divs)
+                if (divsPer16th < 1) divsPer16th = 1;
+
+                foreach (var note in measure.Notes)
+                {
+                    if (note.IsRest || note.IsChord) continue;
+                    int slot = (int)Math.Round((double)note.OnsetDivisions / divsPer16th) % Slots;
+                    if (slot < 0) slot = 0;
+                    if (note.Staff == 1) _staff1[slot]++;
+                    else _staff2[slot]++;
+                }
             }
-        }
     }
 
     protected override Size MeasureOverride(Size _) => new(_canvasW, _canvasH);
 
     public override void Render(DrawingContext ctx)
     {
-        var bg       = new SolidColorBrush(Color.FromRgb(28, 28, 28));
-        var gridPen  = new Pen(new SolidColorBrush(Color.FromRgb(60, 60, 60)), 0.5);
-        var axispen  = new Pen(new SolidColorBrush(Color.FromRgb(120, 120, 120)), 1);
-        var s1Brush  = new SolidColorBrush(Color.FromArgb(220, 64, 192, 87));
-        var s2Brush  = new SolidColorBrush(Color.FromArgb(220, 88, 130, 226));
-        var labelBr  = new SolidColorBrush(Color.FromRgb(180, 180, 180));
-        var tf       = new Typeface("Consolas");
+        var bg = new SolidColorBrush(Color.FromRgb(28, 28, 28));
+        var gridPen = new Pen(new SolidColorBrush(Color.FromRgb(60, 60, 60)), 0.5);
+        var axispen = new Pen(new SolidColorBrush(Color.FromRgb(120, 120, 120)), 1);
+        var s1Brush = new SolidColorBrush(Color.FromArgb(220, 64, 192, 87));
+        var s2Brush = new SolidColorBrush(Color.FromArgb(220, 88, 130, 226));
+        var labelBr = new SolidColorBrush(Color.FromRgb(180, 180, 180));
+        var tf = new Typeface("Consolas");
 
         ctx.FillRectangle(bg, new Rect(0, 0, _canvasW, _canvasH));
 
         int maxCount = Math.Max(1, _staff1.Concat(_staff2).Max());
         double chartH = _canvasH - LabelH - LegendH - 10;
-        double xOff   = 30;
+        double xOff = 30;
 
         // Axis
         ctx.DrawLine(axispen, new Point(xOff, 0), new Point(xOff, _canvasH - LabelH - LegendH));
@@ -1271,18 +1275,18 @@ internal sealed class RhythmDensityCanvas : Control
             ctx.FillRectangle(s1Brush, new Rect(x + BarW / 2.0, _canvasH - LabelH - LegendH - h1, BarW / 2.0 - 2, h1));
 
             // Beat label (1, 1e, 1+, 1a, 2, ...)
-            string[] beatNames = { "1","e","+","a","2","e","+","a","3","e","+","a","4","e","+","a" };
+            string[] beatNames = { "1", "e", "+", "a", "2", "e", "+", "a", "3", "e", "+", "a", "4", "e", "+", "a" };
             var ft = new FormattedText(beatNames[i], CultureInfo.InvariantCulture,
-                FlowDirection.LeftToRight, tf, 10, i % 4 == 0 ? labelBr : new SolidColorBrush(Color.FromRgb(100,100,100)));
+                FlowDirection.LeftToRight, tf, 10, i % 4 == 0 ? labelBr : new SolidColorBrush(Color.FromRgb(100, 100, 100)));
             ctx.DrawText(ft, new Point(x + BarW / 4.0, _canvasH - LabelH - LegendH + 4));
         }
 
         // Legend
         double ly = _canvasH - LegendH + 2;
-        ctx.FillRectangle(s1Brush, new Rect(xOff,        ly, 14, 10));
+        ctx.FillRectangle(s1Brush, new Rect(xOff, ly, 14, 10));
         ctx.DrawText(new FormattedText("Staff 1 (treble)", CultureInfo.InvariantCulture,
             FlowDirection.LeftToRight, tf, 10, labelBr), new Point(xOff + 18, ly));
-        ctx.FillRectangle(s2Brush, new Rect(xOff + 150,  ly, 14, 10));
+        ctx.FillRectangle(s2Brush, new Rect(xOff + 150, ly, 14, 10));
         ctx.DrawText(new FormattedText("Staff 2 (bass)", CultureInfo.InvariantCulture,
             FlowDirection.LeftToRight, tf, 10, labelBr), new Point(xOff + 168, ly));
     }
@@ -1294,10 +1298,10 @@ internal sealed class RhythmDensityCanvas : Control
 /// </summary>
 internal sealed class HandRangeCanvas : Control
 {
-    private static readonly int MinMidi  = 21;
-    private static readonly int MaxMidi  = 108;
+    private static readonly int MinMidi = 21;
+    private static readonly int MaxMidi = 108;
     private static readonly int MeasureW = 10;   // px per measure
-    private static readonly int YAxisW   = 36;
+    private static readonly int YAxisW = 36;
     private readonly MxlScore _score;
     private readonly int _totalMeasures;
     private readonly double _canvasW;
@@ -1305,10 +1309,10 @@ internal sealed class HandRangeCanvas : Control
 
     public HandRangeCanvas(MxlScore score)
     {
-        _score         = score;
+        _score = score;
         _totalMeasures = score.Parts.Max(p => p.Measures.Count);
-        _canvasW       = YAxisW + _totalMeasures * MeasureW;
-        _canvasH       = (MaxMidi - MinMidi + 1) * 4.0 + 20;
+        _canvasW = YAxisW + _totalMeasures * MeasureW;
+        _canvasH = (MaxMidi - MinMidi + 1) * 4.0 + 20;
     }
 
     private double PitchY(int midi) => _canvasH - 20 - (midi - MinMidi) * 4.0;
@@ -1317,13 +1321,13 @@ internal sealed class HandRangeCanvas : Control
 
     public override void Render(DrawingContext ctx)
     {
-        var bg       = new SolidColorBrush(Color.FromRgb(28, 28, 28));
-        var gridPen  = new Pen(new SolidColorBrush(Color.FromRgb(50, 50, 50)), 0.3);
-        var octavePen= new Pen(new SolidColorBrush(Color.FromRgb(80, 80, 80)), 0.5);
-        var s1Pen    = new Pen(new SolidColorBrush(Color.FromArgb(210, 64, 192, 87)),  2.5);
-        var s2Pen    = new Pen(new SolidColorBrush(Color.FromArgb(210, 88, 130, 226)), 2.5);
-        var labelBr  = new SolidColorBrush(Color.FromRgb(130, 130, 130));
-        var tf       = new Typeface("Consolas");
+        var bg = new SolidColorBrush(Color.FromRgb(28, 28, 28));
+        var gridPen = new Pen(new SolidColorBrush(Color.FromRgb(50, 50, 50)), 0.3);
+        var octavePen = new Pen(new SolidColorBrush(Color.FromRgb(80, 80, 80)), 0.5);
+        var s1Pen = new Pen(new SolidColorBrush(Color.FromArgb(210, 64, 192, 87)), 2.5);
+        var s2Pen = new Pen(new SolidColorBrush(Color.FromArgb(210, 88, 130, 226)), 2.5);
+        var labelBr = new SolidColorBrush(Color.FromRgb(130, 130, 130));
+        var tf = new Typeface("Consolas");
 
         ctx.FillRectangle(bg, new Rect(0, 0, _canvasW, _canvasH));
 
@@ -1347,27 +1351,27 @@ internal sealed class HandRangeCanvas : Control
 
         // Per-measure hand range lines
         foreach (var part in _score.Parts)
-        foreach (var measure in part.Measures)
-        {
-            double x = YAxisW + (measure.Number - 1) * MeasureW + MeasureW / 2.0;
-
-            foreach (var staffGroup in measure.Notes.Where(n => !n.IsRest && n.MidiPitch >= MinMidi && n.MidiPitch <= MaxMidi)
-                                                    .GroupBy(n => n.Staff))
+            foreach (var measure in part.Measures)
             {
-                int minP = staffGroup.Min(n => n.MidiPitch);
-                int maxP = staffGroup.Max(n => n.MidiPitch);
-                var pen  = staffGroup.Key == 1 ? s1Pen : s2Pen;
-                double xOffset = staffGroup.Key == 1 ? -1.5 : 1.5;
-                ctx.DrawLine(pen,
-                    new Point(x + xOffset, PitchY(minP)),
-                    new Point(x + xOffset, PitchY(maxP)));
+                double x = YAxisW + (measure.Number - 1) * MeasureW + MeasureW / 2.0;
+
+                foreach (var staffGroup in measure.Notes.Where(n => !n.IsRest && n.MidiPitch >= MinMidi && n.MidiPitch <= MaxMidi)
+                                                        .GroupBy(n => n.Staff))
+                {
+                    int minP = staffGroup.Min(n => n.MidiPitch);
+                    int maxP = staffGroup.Max(n => n.MidiPitch);
+                    var pen = staffGroup.Key == 1 ? s1Pen : s2Pen;
+                    double xOffset = staffGroup.Key == 1 ? -1.5 : 1.5;
+                    ctx.DrawLine(pen,
+                        new Point(x + xOffset, PitchY(minP)),
+                        new Point(x + xOffset, PitchY(maxP)));
+                }
             }
-        }
 
         // Legend
         var s1Br = new SolidColorBrush(Color.FromArgb(210, 64, 192, 87));
         var s2Br = new SolidColorBrush(Color.FromArgb(210, 88, 130, 226));
-        var wBr  = new SolidColorBrush(Color.FromRgb(180, 180, 180));
+        var wBr = new SolidColorBrush(Color.FromRgb(180, 180, 180));
         ctx.FillRectangle(s1Br, new Rect(YAxisW, _canvasH - 16, 12, 8));
         ctx.DrawText(new FormattedText("Staff 1 (treble)", CultureInfo.InvariantCulture,
             FlowDirection.LeftToRight, tf, 9, wBr), new Point(YAxisW + 16, _canvasH - 16));
@@ -1384,11 +1388,11 @@ internal sealed class HandRangeCanvas : Control
 /// </summary>
 internal sealed class HarmonyTimelineCanvas : Control
 {
-    private const int CellW   = 12;   // px per beat
-    private const int CellH   = 18;   // px per pitch class row
-    private const int YAxisW  = 26;
-    private const int XAxisH  = 16;
-    private static readonly string[] PitchNames = { "C","C#","D","Eb","E","F","F#","G","Ab","A","Bb","B" };
+    private const int CellW = 12;   // px per beat
+    private const int CellH = 18;   // px per pitch class row
+    private const int YAxisW = 26;
+    private const int XAxisH = 16;
+    private static readonly string[] PitchNames = { "C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B" };
     // color wheel: each pitch class gets a distinct hue
     private static readonly Color[] PcColors =
     {
@@ -1418,7 +1422,7 @@ internal sealed class HarmonyTimelineCanvas : Control
         _score = score;
         BuildBeatMap();
         _totalBeats = _beatPcs.Count > 0 ? _beatPcs.Max(b => b.Beat) + 1 : 1;
-        _canvasW    = YAxisW + _totalBeats * CellW;
+        _canvasW = YAxisW + _totalBeats * CellW;
     }
 
     private void BuildBeatMap()
@@ -1456,10 +1460,10 @@ internal sealed class HarmonyTimelineCanvas : Control
 
     public override void Render(DrawingContext ctx)
     {
-        var bg      = new SolidColorBrush(Color.FromRgb(28, 28, 28));
+        var bg = new SolidColorBrush(Color.FromRgb(28, 28, 28));
         var labelBr = new SolidColorBrush(Color.FromRgb(160, 160, 160));
-        var emptyBr = new SolidColorBrush(Color.FromRgb(45,  45,  45));
-        var tf      = new Typeface("Consolas");
+        var emptyBr = new SolidColorBrush(Color.FromRgb(45, 45, 45));
+        var tf = new Typeface("Consolas");
 
         ctx.FillRectangle(bg, new Rect(0, 0, _canvasW, _canvasH));
 
@@ -1474,12 +1478,12 @@ internal sealed class HarmonyTimelineCanvas : Control
 
         // Empty grid
         for (int beat = 0; beat < _totalBeats; beat++)
-        for (int pc = 0; pc < 12; pc++)
-        {
-            double x = YAxisW + beat * CellW;
-            double y = pc * CellH;
-            ctx.FillRectangle(emptyBr, new Rect(x + 0.5, y + 0.5, CellW - 1, CellH - 1));
-        }
+            for (int pc = 0; pc < 12; pc++)
+            {
+                double x = YAxisW + beat * CellW;
+                double y = pc * CellH;
+                ctx.FillRectangle(emptyBr, new Rect(x + 0.5, y + 0.5, CellW - 1, CellH - 1));
+            }
 
         // Filled cells
         foreach (var (beat, pc) in _beatPcs)

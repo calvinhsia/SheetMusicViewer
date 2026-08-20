@@ -255,6 +255,8 @@ public sealed class MxlScore
                         Staff          = int.TryParse(child.Element(ns + "staff")?.Value, out var st) ? st : 1,
                         Voice          = int.TryParse(child.Element(ns + "voice")?.Value, out var v)  ? v  : 1,
                         Velocity       = noteVelocity,
+                        TieStart       = child.Elements(ns + "tie").Any(t => t.Attribute("type")?.Value == "start"),
+                        TieStop        = child.Elements(ns + "tie").Any(t => t.Attribute("type")?.Value == "stop"),
                     };
                     measure.Notes.Add(note);
 
@@ -300,6 +302,52 @@ public sealed class MxlScore
                 globalOnsetMs += Math.Min(actualMs, noteBasedMs > 0 ? noteBasedMs : actualMs);
                 part.Measures.Add(measure);
             }
+
+            // ── Tie-merge pass ────────────────────────────────────────────────────────
+            // Walk every note in chronological order.  When a TieStop note is found,
+            // locate the most recent unabsorbed TieStart note with the same MIDI pitch
+            // and extend its Duration to cover both notes.  The TieStop note is then
+            // marked IsAbsorbed so BuildBars and PlaySync skip it.
+            //
+            // Key: (midiPitch, voice) — voice disambiguates same-pitch ties on different
+            // voices (e.g. left-hand C held while right hand plays the same C).
+            var openTies = new Dictionary<(int midi, int voice), MxlNote>();
+            foreach (var measure in part.Measures)
+            {
+                foreach (var note in measure.Notes)
+                {
+                    if (note.IsRest) continue;
+                    int midi = note.MidiPitch;
+                    if (midi == 0) continue;
+                    var key = (midi, note.Voice);
+
+                    if (note.TieStop && openTies.TryGetValue(key, out var opener))
+                    {
+                        // Extend opener's duration by this note's duration.
+                        // The opener lives in a (possibly earlier) measure, so we need the
+                        // extra divisions relative to its own measure start.
+                        long openerGlobal = opener.IsAbsorbed ? 0   // defensive; should not occur
+                            : part.Measures.First(m => m.Notes.Contains(opener)).GlobalOnsetDivisions;
+                        long thisGlobal   = measure.GlobalOnsetDivisions;
+                        // Total span = distance from opener onset to this note's end.
+                        int newDuration = (int)(thisGlobal - openerGlobal
+                            - opener.OnsetDivisions + note.OnsetDivisions + note.Duration);
+                        opener.Duration = newDuration;
+                        note.IsAbsorbed = true;
+
+                        // If this tie-stop also starts a new tie, keep the opener in the map.
+                        if (!note.TieStart)
+                            openTies.Remove(key);
+                        // else: opener stays so the next TieStop extends it further.
+                    }
+
+                    // Register this note as the opener for a tie chain.
+                    if (note.TieStart && !note.IsAbsorbed)
+                        openTies[key] = note;
+                }
+            }
+            // ─────────────────────────────────────────────────────────────────────────
+
             score.Parts.Add(part);
         }
         return score;
@@ -360,6 +408,15 @@ public sealed class MxlNote
     public int    Voice           { get; set; }
     /// <summary>MIDI velocity 0–127 (parsed from MusicXML dynamics; default 64 = mf).</summary>
     public int    Velocity        { get; set; } = 64;
+    /// <summary>True when this note begins a tie (<tie type="start"/>).</summary>
+    public bool   TieStart        { get; set; }
+    /// <summary>True when this note continues a tie (<tie type="stop"/>).</summary>
+    public bool   TieStop         { get; set; }
+    /// <summary>
+    /// Set during the post-parse tie-merge pass when this note's duration has been
+    /// folded into its predecessor.  Absorbed notes are skipped by BuildBars and PlaySync.
+    /// </summary>
+    public bool   IsAbsorbed      { get; set; }
 
     /// <summary>MIDI pitch (21=A0 … 108=C8). Returns 0 for rests.</summary>
     public int MidiPitch
@@ -762,7 +819,7 @@ public sealed class MxlMidiPlayer : IDisposable
                 // Without this cap, multi-voice <backup> can push OnsetDivisions beyond the
                 // measure boundary, producing a globalDivs value that is one or more measures
                 // ahead of what the SyncAnchor predictor expects, causing visible jumps.
-                int    measureDurCap  = divs * measure.TimeSigBeats;
+                int    measureDurCap  = (int)(divs * measure.TimeSigBeats * (4.0 / Math.Max(1, measure.TimeSigBeatType)));
                 int    maxOnsetDivs   = measure.Notes
                     .Where(n => !n.IsChord)
                     .Select(n => n.OnsetDivisions + n.Duration)
@@ -782,7 +839,7 @@ public sealed class MxlMidiPlayer : IDisposable
 
                 foreach (var note in measure.Notes)
                 {
-                    if (note.IsRest || note.MidiPitch < 21 || note.MidiPitch > 108) continue;
+                    if (note.IsRest || note.IsAbsorbed || note.MidiPitch < 21 || note.MidiPitch > 108) continue;
                     int midi = note.MidiPitch;
                     int clampedOnset = Math.Min(note.OnsetDivisions, Math.Min(maxOnsetDivs, measureDurCap) - 1);
                     long globalDivs  = measure.GlobalOnsetDivisions + clampedOnset;
@@ -812,7 +869,7 @@ public sealed class MxlMidiPlayer : IDisposable
                 foreach (var m in _score.Parts[0].Measures)
                 {
                     int d = Math.Max(1, m.Divisions);
-                    int cap = d * m.TimeSigBeats;
+                    int cap = (int)(d * m.TimeSigBeats * (4.0 / Math.Max(1, m.TimeSigBeatType)));
                     // Compute the actual advance used for this measure (same logic as parser).
                     int raw = m.Notes.Where(n => !n.IsChord)
                         .Select(n => n.OnsetDivisions + n.Duration).DefaultIfEmpty(0).Max();
@@ -1102,7 +1159,7 @@ public sealed class VerticalPianoRollCanvas : Control
         foreach (var measure in part.Measures)
         foreach (var note in measure.Notes)
         {
-            if (note.IsRest || note.MidiPitch < MinMidi || note.MidiPitch > MaxMidi) continue;
+            if (note.IsRest || note.IsAbsorbed || note.MidiPitch < MinMidi || note.MidiPitch > MaxMidi) continue;
             long onset      = measure.GlobalOnsetDivisions + note.OnsetDivisions;
             long off        = onset + Math.Max(1, note.Duration);
             double x        = MidiToX(note.MidiPitch);
