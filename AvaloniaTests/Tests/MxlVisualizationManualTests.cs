@@ -42,7 +42,7 @@ public class MxlVisualizationManualTests : TestBase
     // - Edit this relative path to point at the .mxl you want to inspect -
     private string AdhocMxlPath =>
         Path.Combine(GetSheetMusicFolder(), @"Pop\SangahNoonaSingles\Tico-Tico no Fubá - A Minor - MN0227296 - Tico-Tico no Fubá - A Minor - MN0227296.mxl");
-
+    // "C:\Users\Calvi\OneDrive\SheetMusic\Pop\KristenMoscaSingles\Mary Poppins Rag - G Major - MN0189186 - Mary Poppins Rag - G Major - MN0189186.mxl"
     // -
 
     // -----------------------------------------------------------------------
@@ -212,7 +212,7 @@ public class MxlVisualizationManualTests : TestBase
         if (!OperatingSystem.IsWindows())
             Assert.Inconclusive("MIDI playback requires Windows (winmm.dll).");
         var score = ParseMxl(AdhocMxlPath);
-        await ShowVerticalPianoRollWindowAsync(AdhocMxlPath, score, syncDiagnostics: false);
+        await ShowVerticalPianoRollWindowAsync(AdhocMxlPath, score, startMeasure:45, syncDiagnostics: true);
     }
 
     /// <summary>

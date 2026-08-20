@@ -111,6 +111,7 @@ public sealed class MxlScore
             string currentTimeSig     = string.Empty;
             string currentKeySig      = string.Empty;
             int    divisions          = 1;
+            int    canonicalDivs      = 0;   // set from first <divisions> seen; all globalOnset values use this unit
             long   globalOnset        = 0;
             double globalOnsetMs      = 0.0;
             int    currentTSBeats     = 4;
@@ -123,7 +124,15 @@ public sealed class MxlScore
 
                 var divsEl = measureEl.Descendants(ns + "divisions").FirstOrDefault();
                 if (divsEl != null && int.TryParse(divsEl.Value, out var newDivs) && newDivs > 0)
+                {
                     divisions = newDivs;
+                    if (canonicalDivs == 0) canonicalDivs = newDivs;   // lock canonical unit to first value
+                }
+                // Normalise all tick values to the canonical unit (first <divisions> seen).
+                // Use rational multiply-then-divide so both increases (4→12) and
+                // decreases (24→2) are handled correctly without integer truncation to zero.
+                int scaleMul = canonicalDivs > 0 ? canonicalDivs : 1;
+                int scaleDiv = divisions > 0      ? divisions      : 1;
 
                 var timeEl = measureEl.Descendants(ns + "time").FirstOrDefault();
                 if (timeEl != null)
@@ -148,7 +157,7 @@ public sealed class MxlScore
                     Number               = measureNo,
                     TimeSig              = currentTimeSig,
                     KeySig               = currentKeySig,
-                    Divisions            = divisions,
+                    Divisions            = canonicalDivs > 0 ? canonicalDivs : divisions,
                     GlobalOnsetDivisions = globalOnset,
                     GlobalOnsetMs        = globalOnsetMs,
                     TimeSigBeats         = currentTSBeats,
@@ -239,8 +248,8 @@ public sealed class MxlScore
                         Octave         = octave,
                         Accidental     = accidental,
                         PitchAlter     = pitchAlter,
-                        Duration       = dur,
-                        OnsetDivisions = onset,
+                        Duration       = (int)((long)dur   * scaleMul / scaleDiv),
+                        OnsetDivisions = (int)((long)onset * scaleMul / scaleDiv),
                         NoteType       = child.Element(ns + "type")?.Value ?? string.Empty,
                         Dots           = child.Elements(ns + "dot").Count(),
                         Staff          = int.TryParse(child.Element(ns + "staff")?.Value, out var st) ? st : 1,
@@ -261,11 +270,31 @@ public sealed class MxlScore
                     .Select(n => n.OnsetDivisions + n.Duration)
                     .DefaultIfEmpty(0)
                     .Max();
-                globalOnset += rawMeasureDur;
 
-                double msPerDiv     = 60_000.0 / (120.0 * divisions);
+                int canonDivisions = canonicalDivs > 0 ? canonicalDivs : divisions;
+                double msPerDiv     = 60_000.0 / (120.0 * canonDivisions);
                 double quarterNotes = currentTSBeats * (4.0 / currentTSBeatType);
-                double expectedDivs = quarterNotes * divisions;
+                double expectedDivs = quarterNotes * canonDivisions;
+
+                if (MxlMidiPlayer.TimingDiagnostics)
+                {
+                    string tag = rawMeasureDur == (int)expectedDivs ? string.Empty
+                        : rawMeasureDur > (int)expectedDivs ? "  [OVERCOUNT]"
+                        : rawMeasureDur == 0                ? "  [EMPTY]"
+                        :                                     "  [SHORT]";
+                    Trace.WriteLine(
+                        $"PARSE m={measureNo,4}  ts={currentTimeSig,-5}  divs={canonDivisions,4}" +
+                        $"  globalOnset={globalOnset,8}  raw={rawMeasureDur,6}  expected={(int)expectedDivs,6}{tag}");
+                }
+
+                // Cap advancement at expectedDivs (same logic applied to globalOnsetMs).
+                // Overcounting happens when multi-voice backup/forward pushes the cursor beyond
+                // one measure; without capping every subsequent GlobalOnsetDivisions is wrong.
+                int advanceDivs = rawMeasureDur > 0
+                    ? Math.Min(rawMeasureDur, (int)expectedDivs)
+                    : (int)expectedDivs;
+                globalOnset += advanceDivs;
+
                 double actualMs     = expectedDivs * msPerDiv;
                 double noteBasedMs  = rawMeasureDur * msPerDiv;
                 globalOnsetMs += Math.Min(actualMs, noteBasedMs > 0 ? noteBasedMs : actualMs);
@@ -658,6 +687,12 @@ public sealed class MxlMidiPlayer : IDisposable
     /// <summary>WinMM output device index (-1 = MIDI Mapper). Ignored for FluidSynth.</summary>
     public int    WinmmDeviceId { get; set; } = -1;
     /// <summary>
+    /// When true, emits Trace lines for:
+    /// - per-measure GlobalOnsetDivisions / rawMeasureDur vs expectedDivs (parse-time)
+    /// - non-monotonic GlobalDivisions jumps in the sorted NoteOn event list
+    /// </summary>
+    public static bool TimingDiagnostics { get; set; } = false;
+    /// <summary>
     /// Staff numbers (1 = RH/green, 2 = LH/blue) whose NoteOn messages are suppressed.
     /// Checked dynamically at dispatch time — toggle at any point during playback.
     /// Mirrors <see cref="VerticalPianoRollCanvas.MutedStaves"/> so both canvas and audio
@@ -723,17 +758,33 @@ public sealed class MxlMidiPlayer : IDisposable
                 int    divs           = Math.Max(1, measure.Divisions);
                 double msPerDiv       = 60_000.0 / (Bpm * divs);
                 double measureStartMs = measure.GlobalOnsetMs * bpmScale;
+                // Cap note onsets at the measure's expected duration (timesig).
+                // Without this cap, multi-voice <backup> can push OnsetDivisions beyond the
+                // measure boundary, producing a globalDivs value that is one or more measures
+                // ahead of what the SyncAnchor predictor expects, causing visible jumps.
+                int    measureDurCap  = divs * measure.TimeSigBeats;
                 int    maxOnsetDivs   = measure.Notes
                     .Where(n => !n.IsChord)
                     .Select(n => n.OnsetDivisions + n.Duration)
-                    .DefaultIfEmpty(divs * measure.TimeSigBeats)
+                    .DefaultIfEmpty(measureDurCap)
                     .Max();
+
+                if (TimingDiagnostics && pi == 0)
+                {
+                    string tag = maxOnsetDivs > measureDurCap ? "  [OVERCOUNT]"
+                               : maxOnsetDivs == 0            ? "  [EMPTY]"
+                               :                                string.Empty;
+                    if (tag.Length > 0)
+                        Trace.WriteLine(
+                            $"MEASURE m={measure.Number,4}  ts={measure.TimeSig,-5}  divs={divs,4}" +
+                            $"  globalOnset={measure.GlobalOnsetDivisions,8}  raw={maxOnsetDivs,6}  cap={measureDurCap,6}{tag}");
+                }
 
                 foreach (var note in measure.Notes)
                 {
                     if (note.IsRest || note.MidiPitch < 21 || note.MidiPitch > 108) continue;
                     int midi = note.MidiPitch;
-                    int clampedOnset = Math.Min(note.OnsetDivisions, maxOnsetDivs - 1);
+                    int clampedOnset = Math.Min(note.OnsetDivisions, Math.Min(maxOnsetDivs, measureDurCap) - 1);
                     long globalDivs  = measure.GlobalOnsetDivisions + clampedOnset;
                     long onsetMs     = (long)(measureStartMs + clampedOnset * msPerDiv);
                     long offMs       = onsetMs + Math.Max(30, Math.Min(4_000, (long)(note.Duration * msPerDiv) - 15));
@@ -751,6 +802,45 @@ public sealed class MxlMidiPlayer : IDisposable
             .Select(g => g.First())
             .OrderBy(e => e.TimeMs)
             .ToList();
+
+        if (TimingDiagnostics)
+        {
+            // Dump every measure's globalOnset so we can spot gaps.
+            if (_score.Parts.Count > 0)
+            {
+                long prevOnset = -1; long prevActualAdvance = 0;
+                foreach (var m in _score.Parts[0].Measures)
+                {
+                    int d = Math.Max(1, m.Divisions);
+                    int cap = d * m.TimeSigBeats;
+                    // Compute the actual advance used for this measure (same logic as parser).
+                    int raw = m.Notes.Where(n => !n.IsChord)
+                        .Select(n => n.OnsetDivisions + n.Duration).DefaultIfEmpty(0).Max();
+                    int actualAdvance = raw > 0 ? Math.Min(raw, cap) : cap;
+                    long gap = prevOnset < 0 ? 0 : m.GlobalOnsetDivisions - (prevOnset + prevActualAdvance);
+                    // Only flag positive gaps (missing beats) — negative gaps are pickup bars, which are expected.
+                    string gapTag = gap > 0 ? $"  [GAP=+{gap}]" : string.Empty;
+                    Trace.WriteLine(
+                        $"MMAP m={m.Number,4}  globalOnset={m.GlobalOnsetDivisions,8}  cap={cap,6}" +
+                        $"  timeSig={m.TimeSig,-5}{gapTag}");
+                    prevOnset = m.GlobalOnsetDivisions;
+                    prevActualAdvance = actualAdvance;
+                }
+            }
+
+            // Detect any forward jump (gap) or backward jump in the sorted NoteOn event list.
+            long prevDivs = long.MinValue; long prevMs = 0;
+            foreach (var ev in events)
+            {
+                if (ev.GlobalDivisions <= 0) continue;  // NoteOff (-1) or ProgChg (0)
+                if (ev.GlobalDivisions < prevDivs)
+                    Trace.WriteLine(
+                        $"NON-MONOTONIC GlobalDivisions: m={ev.MeasureNo}  prev={prevDivs}  cur={ev.GlobalDivisions}" +
+                        $"  timeMs={ev.TimeMs}  drop={(ev.GlobalDivisions - prevDivs)}");
+                prevDivs = ev.GlobalDivisions;
+                prevMs = ev.TimeMs;
+            }
+        }
 
         long seekDivs = 0;
         long seekMs   = 0;
@@ -1692,6 +1782,7 @@ public static class VerticalPianoRollWindowFactory
         bool syncDiagnostics = false)
     {
         VerticalPianoRollCanvas.SyncDiagnostics = syncDiagnostics;
+        MxlMidiPlayer.TimingDiagnostics         = syncDiagnostics;
         var canvas      = new VerticalPianoRollCanvas(score);
         var staffCanvas = new StaffNotationCanvas(score);
         var statusBlock = new TextBlock
