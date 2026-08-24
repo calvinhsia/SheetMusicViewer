@@ -219,4 +219,42 @@ namespace SheetMusicLib
             return $"{Name} ({Entries.Count} songs)";
         }
     }
+
+    /// <summary>
+    /// A single entry in a piano-roll auto-play playlist.
+    /// Stores the path to the cached .mxl file and a display name shown in the UI.
+    /// </summary>
+    [Serializable]
+    public class PianoRollPlaylistEntry
+    {
+        /// <summary>Full path to the cached .mxl (or plain .xml / .musicxml) file.</summary>
+        public string MxlPath { get; set; } = string.Empty;
+
+        /// <summary>Human-readable song title shown in the playlist and the piano-roll overlay.</summary>
+        public string DisplayName { get; set; } = string.Empty;
+
+        public override string ToString() => DisplayName;
+    }
+
+    /// <summary>
+    /// A named ordered list of songs for the piano-roll "player piano" mode.
+    /// Songs are played sequentially; the piano roll auto-advances on completion.
+    /// </summary>
+    [Serializable]
+    public class PianoRollPlaylist
+    {
+        /// <summary>Name of this piano-roll playlist.</summary>
+        public string Name { get; set; } = "New PianoRoll Playlist";
+
+        /// <summary>When the playlist was created.</summary>
+        public DateTime CreatedDate { get; set; } = DateTime.Now;
+
+        /// <summary>When the playlist was last modified.</summary>
+        public DateTime ModifiedDate { get; set; } = DateTime.Now;
+
+        /// <summary>Ordered song entries.</summary>
+        public List<PianoRollPlaylistEntry> Entries { get; set; } = new();
+
+        public override string ToString() => $"{Name} ({Entries.Count} songs)";
+    }
 }

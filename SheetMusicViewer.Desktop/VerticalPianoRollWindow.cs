@@ -25,6 +25,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+using Avalonia.VisualTree;
 
 namespace SheetMusicViewer.Desktop;
 
@@ -1489,6 +1490,11 @@ public sealed class StaffNotationCanvas : Control
         };
     }
 
+    /// <summary>Large title painted at the top of the staff canvas (e.g. current song in playlist mode).</summary>
+    public string HeaderLine1 { get; set; } = string.Empty;
+    /// <summary>Smaller subtitle painted below <see cref="HeaderLine1"/> (e.g. "Next: …").</summary>
+    public string HeaderLine2 { get; set; } = string.Empty;
+
     public void RefreshNotes() => InvalidateVisual();
 
     protected override Size MeasureOverride(Size available) =>
@@ -1520,6 +1526,26 @@ public sealed class StaffNotationCanvas : Control
 
         // ── background ────────────────────────────────────────────────────
         ctx.FillRectangle(new SolidColorBrush(Color.FromRgb(250, 248, 240)), new Rect(0, 0, W, H));
+
+        // ── header overlay (playlist / pattern title) ─────────────────────
+        double headerY = 6.0;
+        if (!string.IsNullOrEmpty(HeaderLine1))
+        {
+            var ft1 = new FormattedText(HeaderLine1, CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight,
+                new Typeface("Arial", FontStyle.Normal, FontWeight.SemiBold), 16,
+                new SolidColorBrush(Color.FromRgb(40, 40, 120)));
+            ctx.DrawText(ft1, new Point(ClefAreaW + 8, headerY));
+            headerY += ft1.Height + 2;
+        }
+        if (!string.IsNullOrEmpty(HeaderLine2))
+        {
+            var ft2 = new FormattedText(HeaderLine2, CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight,
+                new Typeface("Arial", FontStyle.Normal, FontWeight.Normal), 12,
+                new SolidColorBrush(Color.FromRgb(100, 100, 180)));
+            ctx.DrawText(ft2, new Point(ClefAreaW + 8, headerY));
+        }
 
         // ── staff layout ──────────────────────────────────────────────────
         // Each staff section occupies half the height.
@@ -1783,9 +1809,545 @@ public sealed class StaffNotationCanvas : Control
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  VerticalPianoRollWindow  — static factory
+//  PianoRollPlayerControl
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// <summary>
+/// Configuration options for <see cref="PianoRollPlayerControl"/>.
+/// All properties have sensible defaults; only set what you need to change.
+/// </summary>
+public sealed class PianoRollOptions
+{
+    /// <summary>Initial measure to start playback from (1-based). Default 1.</summary>
+    public int    StartMeasure      { get; init; } = 1;
+    /// <summary>Auto-close the host window when playback ends naturally.</summary>
+    public bool   AutoCloseOnEnd    { get; init; } = false;
+    /// <summary>Show the measure-seek slider (appropriate for single-song mode).</summary>
+    public bool   ShowMeasureSlider { get; init; } = true;
+    /// <summary>Show the Log Notes checkbox.</summary>
+    public bool   ShowLogNotes      { get; init; } = false;
+    /// <summary>Show a ⏭ Skip button after the play/pause button.</summary>
+    public bool   ShowSkipButton    { get; init; } = false;
+    /// <summary>Optional control placed at the left of the toolbar (e.g. pattern ComboBox).</summary>
+    public Control? LeadingControl  { get; init; } = null;
+    /// <summary>Initial FluidSynth checkbox state. Null = read from AppSettings.</summary>
+    public bool?  LogNotesDefault   { get; init; } = false;
+}
+
+/// <summary>
+/// A self-contained Avalonia <see cref="UserControl"/> that embeds a
+/// <see cref="VerticalPianoRollCanvas"/>, a <see cref="StaffNotationCanvas"/>,
+/// and a full playback toolbar (BPM, measure, LH/RH mutes, FluidSynth/WinMM picker).
+/// <para>
+/// Call <see cref="LoadScore"/> to load (and optionally auto-play) a score.
+/// The host window only needs to call <see cref="StopAll"/> when it closes.
+/// </para>
+/// </summary>
+public sealed class PianoRollPlayerControl : UserControl
+{
+    // ── public surface ────────────────────────────────────────────────────────
+    /// <summary>Raised on the UI thread when playback ends naturally (not when stopped/paused).</summary>
+    public event EventHandler? PlaybackEnded;
+    /// <summary>Raised on the UI thread when the current measure number changes during playback.</summary>
+    public event EventHandler<int>? MeasureChanged;
+
+    /// <summary>The staff canvas — caller may set HeaderLine1/HeaderLine2 for overlay text.</summary>
+    public StaffNotationCanvas StaffCanvas { get; }
+
+    // ── private state ─────────────────────────────────────────────────────────
+    private readonly PianoRollOptions    _opts;
+    private readonly bool                _isWindows;
+    private readonly IReadOnlyList<(int Id, string Name)> _winmmDevices;
+
+    // toolbar refs needed outside ctor
+    private readonly Button   _playPauseBtn;
+    private readonly Slider   _bpmSlider;
+    private readonly TextBlock _bpmLabel;
+    private readonly Slider?  _measureSlider;
+    private readonly TextBlock? _measureLabel;
+    private readonly TextBlock  _statusBlock;
+    private readonly CheckBox   _fluidChk;
+    private readonly CheckBox   _midiDeviceLabel_asChk; // kept as Control in toolbar
+    private readonly ComboBox   _midiDeviceCombo;
+    private readonly CheckBox   _rhChk;
+    private readonly CheckBox   _lhChk;
+    private readonly CheckBox?  _logNotesChk;
+    private readonly Button?    _skipBtn;
+    private readonly Grid       _contentGrid;
+
+    // playback state
+    private VerticalPianoRollCanvas? _canvas;
+    private MxlScore?                _currentScore;
+    private MxlMidiPlayer?           _player;
+    private bool                     _suppressMeasureSync;
+    private List<(long Divs, int Number)> _measureDivMap = new();
+    private int                      _totalMeasures = 1;
+    private Window?                  _hostWindow;
+
+    // debounce tokens
+    private CancellationTokenSource? _bpmDebCts;
+    private CancellationTokenSource? _measureDebCts;
+
+    public PianoRollPlayerControl(PianoRollOptions? options = null)
+    {
+        _opts      = options ?? new PianoRollOptions();
+        _isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        _winmmDevices = _isWindows ? WinmmMidiBackend.EnumerateDevices()
+                                   : Array.Empty<(int, string)>();
+
+        // ── content grid (piano roll left | staff right) ──────────────────
+        _contentGrid = new Grid();
+        _contentGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+        _contentGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
+
+        StaffCanvas = new StaffNotationCanvas(new MxlScore());   // placeholder; replaced by LoadScore
+
+        // ── toolbar controls ──────────────────────────────────────────────
+        _playPauseBtn = new Button
+        {
+            Content = "▶  Play",
+            Margin  = new Thickness(4),
+            Padding = new Thickness(8, 2)
+        };
+        _playPauseBtn.Click += OnPlayPauseClick;
+
+        _skipBtn = _opts.ShowSkipButton ? new Button
+        {
+            Content = "⏭  Skip",
+            Margin  = new Thickness(4),
+            Padding = new Thickness(8, 2),
+            [ToolTip.TipProperty] = "Skip to next song"
+        } : null;
+
+        _bpmSlider = new Slider
+        {
+            Minimum = 40, Maximum = 300, Value = 120,
+            Width   = 180,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            [ToolTip.TipProperty] = "Tempo (BPM)"
+        };
+        _bpmLabel = new TextBlock
+        {
+            Text  = "120 BPM", Width = 60,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, FontSize = 12
+        };
+        _bpmSlider.PropertyChanged += (_, e) =>
+        {
+            if (e.Property != Slider.ValueProperty) return;
+            _bpmLabel.Text = $"{_bpmSlider.Value:F0} BPM";
+            if (_player == null) return;
+            _bpmDebCts?.Cancel();
+            _bpmDebCts = new CancellationTokenSource();
+            var ct = _bpmDebCts.Token;
+            Task.Delay(300, ct).ContinueWith(_ =>
+            {
+                if (!ct.IsCancellationRequested)
+                    Dispatcher.UIThread.Post(() => { if (_player != null) StartPlayer((int)(_measureSlider?.Value ?? 1), _bpmSlider.Value); });
+            }, TaskScheduler.Default);
+        };
+
+        if (_opts.ShowMeasureSlider)
+        {
+            _measureSlider = new Slider
+            {
+                Minimum = 1, Maximum = 1, Value = _opts.StartMeasure,
+                Width   = 260,
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                [ToolTip.TipProperty] = "Jump to measure (drag to seek)"
+            };
+            _measureLabel = new TextBlock
+            {
+                Text = "M 1/1", Width = 72,
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, FontSize = 12
+            };
+            _measureSlider.PropertyChanged += OnMeasureSliderChanged;
+        }
+
+        _rhChk = new CheckBox
+        {
+            Content = "RH", IsChecked = true,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin = new Thickness(6, 0, 2, 0),
+            Foreground = new SolidColorBrush(Color.FromRgb(64, 200, 90)),
+            [ToolTip.TipProperty] = "Enable right-hand / staff 1 (green)"
+        };
+        _lhChk = new CheckBox
+        {
+            Content = "LH", IsChecked = true,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin = new Thickness(2, 0, 6, 0),
+            Foreground = new SolidColorBrush(Color.FromRgb(80, 130, 230)),
+            [ToolTip.TipProperty] = "Enable left-hand / staff 2 (blue)"
+        };
+        _rhChk.IsCheckedChanged += (_, _) => ApplyMutes();
+        _lhChk.IsCheckedChanged += (_, _) => ApplyMutes();
+
+        _fluidChk = new CheckBox
+        {
+            Content   = "FluidSynth",
+            IsChecked = SheetMusicLib.AppSettings.Instance.PianoRollUseFluidSynth ?? true,
+            IsVisible = _isWindows,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin = new Thickness(4, 0),
+            [ToolTip.TipProperty] = "FluidSynth (better sound). Unchecked = WinMM."
+        };
+        _fluidChk.IsCheckedChanged += (_, _) =>
+        {
+            UpdateDevicePickerVisibility();
+            SheetMusicLib.AppSettings.Instance.PianoRollUseFluidSynth = _fluidChk.IsChecked == true;
+            SheetMusicLib.AppSettings.Instance.SaveLocal();
+        };
+
+        // WinMM device picker (label re-purposed as TextBlock via a plain TextBlock to save casts)
+        var midiLbl = new TextBlock
+        {
+            Text = "MIDI out:",
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin = new Thickness(6, 0, 2, 0),
+            IsVisible = false
+        };
+        _midiDeviceLabel_asChk = new CheckBox { IsVisible = false }; // unused; kept for field compat
+        _midiDeviceCombo = new ComboBox
+        {
+            MinWidth = 180,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 4, 0),
+            IsVisible = false,
+            [ToolTip.TipProperty] = "WinMM MIDI output device"
+        };
+        _midiDeviceCombo.ItemsSource = _winmmDevices.Select(d => d.Name).ToList();
+        if (_isWindows && _winmmDevices.Count > 0)
+        {
+            string saved = SheetMusicLib.AppSettings.Instance.PianoRollWinmmDeviceName;
+            int restoreIdx = string.IsNullOrEmpty(saved)
+                ? 0
+                : Math.Max(0, _winmmDevices.ToList().FindIndex(d => d.Name == saved));
+            _midiDeviceCombo.SelectedIndex = restoreIdx;
+        }
+        _midiDeviceCombo.SelectionChanged += (_, _) =>
+        {
+            int idx = _midiDeviceCombo.SelectedIndex;
+            string name = (idx >= 0 && idx < _winmmDevices.Count) ? _winmmDevices[idx].Name : string.Empty;
+            SheetMusicLib.AppSettings.Instance.PianoRollWinmmDeviceName = name;
+            SheetMusicLib.AppSettings.Instance.SaveLocal();
+        };
+        UpdateDevicePickerVisibility();
+
+        _logNotesChk = _opts.ShowLogNotes ? new CheckBox
+        {
+            Content = "Log notes",
+            IsChecked = _opts.LogNotesDefault == true,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin = new Thickness(4, 0),
+            [ToolTip.TipProperty] = "Write every NoteOn to Trace while playing"
+        } : null;
+
+        _statusBlock = new TextBlock
+        {
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            FontSize = 12, Margin = new Thickness(8, 0)
+        };
+
+        // ── assemble toolbar ──────────────────────────────────────────────
+        var toolbar = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Margin      = new Thickness(4)
+        };
+        if (_opts.LeadingControl != null) toolbar.Children.Add(_opts.LeadingControl);
+        toolbar.Children.Add(_playPauseBtn);
+        if (_skipBtn != null)    toolbar.Children.Add(_skipBtn);
+        toolbar.Children.Add(_bpmSlider);
+        toolbar.Children.Add(_bpmLabel);
+        if (_measureSlider != null) { toolbar.Children.Add(_measureSlider); toolbar.Children.Add(_measureLabel!); }
+        toolbar.Children.Add(_lhChk);
+        toolbar.Children.Add(_rhChk);
+        toolbar.Children.Add(_fluidChk);
+        toolbar.Children.Add(midiLbl);
+        toolbar.Children.Add(_midiDeviceCombo);
+        if (_logNotesChk != null) toolbar.Children.Add(_logNotesChk);
+        toolbar.Children.Add(_statusBlock);
+
+        // ── layout ────────────────────────────────────────────────────────
+        var layout = new DockPanel();
+        DockPanel.SetDock(toolbar, Dock.Top);
+        layout.Children.Add(toolbar);
+        layout.Children.Add(_contentGrid);
+        Content = layout;
+
+        // Wire up host-window lookup when we are attached
+        AttachedToVisualTree += (_, _) =>
+            _hostWindow = this.FindAncestorOfType<Window>();
+    }
+
+    // ── public methods ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Loads and optionally auto-plays a score.  Safe to call multiple times
+    /// (stops the current player first).
+    /// </summary>
+    public void LoadScore(MxlScore score, int startMeasure = 1, bool autoPlay = true)
+    {
+        StopAll();
+        _currentScore = score;
+
+        // Rebuild canvases
+        var canvas      = new VerticalPianoRollCanvas(score);
+        var staffCanvas = StaffCanvas;    // reuse the same StaffNotationCanvas instance's type but need a fresh one
+        // Replace the StaffNotationCanvas content by building a new one and swapping
+        // (the property is readonly so we swap via the content grid)
+        var newStaff = new StaffNotationCanvas(score)
+        {
+            HeaderLine1 = StaffCanvas.HeaderLine1,
+            HeaderLine2 = StaffCanvas.HeaderLine2
+        };
+        // Update the public property via reflection trick — actually just expose a method
+        ReplaceCanvases(canvas, newStaff);
+
+        _canvas = canvas;
+
+        // Rebuild measure map
+        _totalMeasures = score.Parts.Count > 0 ? score.Parts.Max(p => p.Measures.Count) : 1;
+        _measureDivMap = score.Parts.Count > 0
+            ? score.Parts[0].Measures
+                .Select(m => (Divs: m.GlobalOnsetDivisions, m.Number))
+                .OrderBy(x => x.Divs).ToList()
+            : new List<(long, int)>();
+
+        if (_measureSlider != null)
+        {
+            _suppressMeasureSync = true;
+            _measureSlider.Maximum = Math.Max(1, _totalMeasures);
+            _measureSlider.Value   = Math.Max(1, Math.Min(startMeasure, _totalMeasures));
+            _suppressMeasureSync = false;
+            _measureLabel!.Text  = $"M {(int)_measureSlider.Value}/{_totalMeasures}";
+        }
+
+        _bpmSlider.Value = score.DefaultBpm;
+        _statusBlock.Text = $"Stopped  |  {score.Title}";
+        _playPauseBtn.Content = "▶  Play";
+
+        if (autoPlay)
+            Dispatcher.UIThread.Post(() =>
+                _playPauseBtn.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)),
+                DispatcherPriority.Background);
+    }
+
+    /// <summary>Sets the now/next text drawn inside the staff canvas header area.</summary>
+    public void SetHeaderText(string line1, string line2 = "")
+    {
+        // Find the current StaffNotationCanvas in the grid
+        var sc = _contentGrid.Children.OfType<StaffNotationCanvas>().FirstOrDefault();
+        if (sc == null) return;
+        sc.HeaderLine1 = line1;
+        sc.HeaderLine2 = line2;
+        sc.RefreshNotes();
+    }
+
+    /// <summary>Registers a callback for the ⏭ Skip button. Only relevant when ShowSkipButton=true.</summary>
+    public void SetSkipAction(Action onSkip)
+    {
+        if (_skipBtn != null)
+            _skipBtn.Click += (_, _) => onSkip();
+    }
+
+    /// <summary>Stops playback and disposes the current player. Safe to call multiple times.</summary>
+    public void StopAll()
+    {
+        var p = _player;
+        _player = null;
+        if (_canvas != null) { _canvas.CurrentGlobalDivisions = -1; }
+        var sc = _contentGrid.Children.OfType<StaffNotationCanvas>().FirstOrDefault();
+        if (sc != null) sc.CurrentGlobalDivisions = -1;
+        if (_measureSlider != null) _measureSlider.Value = 1;
+        _playPauseBtn.Content = "▶  Play";
+        if (p != null) Task.Run(() => { try { p.Stop(); p.Dispose(); } catch { } });
+    }
+
+    // ── private helpers ───────────────────────────────────────────────────────
+
+    private void ReplaceCanvases(VerticalPianoRollCanvas canvas, StaffNotationCanvas staff)
+    {
+        _contentGrid.Children.Clear();
+        Grid.SetColumn(canvas, 0);
+        Grid.SetColumn(staff,  1);
+        _contentGrid.Children.Add(canvas);
+        _contentGrid.Children.Add(staff);
+        // Transfer mute state
+        ApplyMutesToCanvas(canvas);
+        ApplyMutesToStaff(staff);
+    }
+
+    private void ApplyMutes()
+    {
+        if (_canvas is { } cv) ApplyMutesToCanvas(cv);
+        var sc = _contentGrid.Children.OfType<StaffNotationCanvas>().FirstOrDefault();
+        if (sc != null) ApplyMutesToStaff(sc);
+        if (_player is { } pr)
+        {
+            if (_rhChk.IsChecked != true) pr.MutedStaves.Add(1); else pr.MutedStaves.Remove(1);
+            if (_lhChk.IsChecked != true) pr.MutedStaves.Add(2); else pr.MutedStaves.Remove(2);
+        }
+    }
+
+    private void ApplyMutesToCanvas(VerticalPianoRollCanvas cv)
+    {
+        if (_rhChk.IsChecked != true) cv.MutedStaves.Add(1); else cv.MutedStaves.Remove(1);
+        if (_lhChk.IsChecked != true) cv.MutedStaves.Add(2); else cv.MutedStaves.Remove(2);
+        cv.RefreshBars();
+    }
+
+    private void ApplyMutesToStaff(StaffNotationCanvas sc)
+    {
+        if (_rhChk.IsChecked != true) sc.MutedStaves.Add(1); else sc.MutedStaves.Remove(1);
+        if (_lhChk.IsChecked != true) sc.MutedStaves.Add(2); else sc.MutedStaves.Remove(2);
+        sc.RefreshNotes();
+    }
+
+    private void UpdateDevicePickerVisibility()
+    {
+        bool show = _isWindows && _fluidChk.IsChecked != true;
+        _midiDeviceCombo.IsVisible = show;
+    }
+
+    private int SelectedWinmmDeviceId()
+    {
+        int idx = _midiDeviceCombo.SelectedIndex;
+        return (idx >= 0 && idx < _winmmDevices.Count) ? _winmmDevices[idx].Id : -1;
+    }
+
+    private int DivsToMeasure(long divs)
+    {
+        int lo = 0, hi = _measureDivMap.Count - 1, result = 1;
+        while (lo <= hi)
+        {
+            int mid = (lo + hi) / 2;
+            if (_measureDivMap[mid].Divs <= divs) { result = _measureDivMap[mid].Number; lo = mid + 1; }
+            else hi = mid - 1;
+        }
+        return result;
+    }
+
+    private void SetPaused()
+    {
+        var p = _player;
+        _player = null;
+        _canvas?.FreezeAtCurrentPosition();
+        var sc = _contentGrid.Children.OfType<StaffNotationCanvas>().FirstOrDefault();
+        sc?.FreezeAtCurrentPosition();
+        int mno = (int)(_measureSlider?.Value ?? 1);
+        _statusBlock.Text = $"Paused  |  M {mno}/{_totalMeasures}  |  BPM: {_bpmSlider.Value:F0}";
+        _playPauseBtn.Content = "▶  Play";
+        if (p != null) Task.Run(() => { try { p.Stop(); p.Dispose(); } catch { } });
+    }
+
+    private void StartPlayer(int measure, double bpm)
+    {
+        if (_currentScore == null || _canvas == null) return;
+        var score = _currentScore;
+        var canvas = _canvas;
+        var sc = _contentGrid.Children.OfType<StaffNotationCanvas>().FirstOrDefault();
+
+        // Stop old player asynchronously
+        var old = _player;
+        _player = null;
+        if (old != null) Task.Run(() => { try { old.Stop(); old.Dispose(); } catch { } });
+
+        bool useFluid  = _fluidChk.IsChecked == true || !_isWindows;
+        string? sf     = useFluid ? VerticalPianoRollWindowFactory.FindSoundfont() : null;
+
+        var player = new MxlMidiPlayer(score)
+        {
+            Bpm           = bpm,
+            StartMeasure  = measure,
+            Backend       = (useFluid && sf != null) ? MidiBackendKind.FluidSynth : MidiBackendKind.Winmm,
+            SoundfontPath = sf ?? string.Empty,
+            LogNotes      = _logNotesChk?.IsChecked == true,
+            WinmmDeviceId = SelectedWinmmDeviceId(),
+        };
+        _player = player;
+        ApplyMutes();
+
+        long startDivs = measure <= 1
+            ? 0
+            : (_measureDivMap.FirstOrDefault(x => x.Number >= measure).Divs);
+        canvas.PlayBpm = bpm;
+        canvas.StartSmoothPlay(startDivs);
+        if (sc != null) { sc.PlayBpm = bpm; sc.StartSmoothPlay(startDivs); }
+
+        player.PositionChanged += (_, divs) =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                canvas.SyncAnchor(divs);
+                sc?.SyncAnchor(divs);
+            }, DispatcherPriority.Render);
+            Dispatcher.UIThread.Post(() =>
+            {
+                int mno = DivsToMeasure(divs);
+                if (_measureSlider != null)
+                {
+                    _suppressMeasureSync = true;
+                    if ((int)_measureSlider.Value != mno) _measureSlider.Value = mno;
+                    _suppressMeasureSync = false;
+                }
+                _statusBlock.Text = $"M {mno}/{_totalMeasures}  |  BPM: {bpm:F0}  |  {score.Title}";
+                MeasureChanged?.Invoke(this, mno);
+            }, DispatcherPriority.Normal);
+        };
+
+        player.PlaybackEnded += (_, _) =>
+            Dispatcher.UIThread.Post(() =>
+            {
+                _player = null;
+                canvas.CurrentGlobalDivisions = -1;
+                if (sc != null) sc.CurrentGlobalDivisions = -1;
+                if (_measureSlider != null) _measureSlider.Value = 1;
+                _statusBlock.Text = $"Stopped  |  {score.Title}";
+                _playPauseBtn.Content = "▶  Play";
+                PlaybackEnded?.Invoke(this, EventArgs.Empty);
+                if (_opts.AutoCloseOnEnd) _hostWindow?.Close();
+            }, DispatcherPriority.Normal);
+
+        _statusBlock.Text = $"Playing  |  BPM: {bpm:F0}  |  {score.Title}";
+        _playPauseBtn.Content = "⏸  Pause";
+        player.Start();
+    }
+
+    private void OnPlayPauseClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_player != null) { SetPaused(); return; }
+        StartPlayer((int)(_measureSlider?.Value ?? 1), _bpmSlider.Value);
+    }
+
+    private void OnMeasureSliderChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property != Slider.ValueProperty || _measureSlider == null) return;
+        int mno = (int)_measureSlider.Value;
+        if (_measureLabel != null) _measureLabel.Text = $"M {mno}/{_totalMeasures}";
+
+        if (_player == null && _canvas != null)
+        {
+            long previewDivs = mno <= 1 ? 0 : (_measureDivMap.FirstOrDefault(x => x.Number >= mno).Divs);
+            _canvas.CurrentGlobalDivisions = previewDivs;
+            var sc = _contentGrid.Children.OfType<StaffNotationCanvas>().FirstOrDefault();
+            if (sc != null) sc.CurrentGlobalDivisions = previewDivs;
+        }
+
+        if (_suppressMeasureSync || _player == null) return;
+        _measureDebCts?.Cancel();
+        _measureDebCts = new CancellationTokenSource();
+        var ct = _measureDebCts.Token;
+        Task.Delay(200, ct).ContinueWith(_ =>
+        {
+            if (!ct.IsCancellationRequested)
+                Dispatcher.UIThread.Post(() => { if (_player != null) StartPlayer((int)_measureSlider.Value, _bpmSlider.Value); });
+        }, TaskScheduler.Default);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  VerticalPianoRollWindowFactory  — static factory
 /// <summary>
 /// Static factory for building the vertical piano roll <see cref="Window"/>.
 /// Call <see cref="BuildWindow"/> to create a fully wired-up window that auto-starts
@@ -1840,399 +2402,35 @@ public static class VerticalPianoRollWindowFactory
     {
         VerticalPianoRollCanvas.SyncDiagnostics = syncDiagnostics;
         MxlMidiPlayer.TimingDiagnostics         = syncDiagnostics;
-        var canvas      = new VerticalPianoRollCanvas(score);
-        var staffCanvas = new StaffNotationCanvas(score);
-        var statusBlock = new TextBlock
+
+        var player = new PianoRollPlayerControl(new PianoRollOptions
         {
-            Text = $"Stopped  |  BPM: {score.DefaultBpm:F0}  |  {score.Title}",
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            FontSize = 12,
-            Margin = new Thickness(8, 0)
-        };
-
-        var bpmSlider = new Slider
-        {
-            Minimum = 40, Maximum = 300,
-            Value   = score.DefaultBpm,
-            Width   = 180,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            [ToolTip.TipProperty] = "Tempo (BPM)"
-        };
-        var bpmLabel = new TextBlock
-        {
-            Text = $"{score.DefaultBpm:F0} BPM",
-            Width = 60,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            FontSize = 12
-        };
-        bpmSlider.PropertyChanged += (_, e) =>
-        {
-            if (e.Property == Slider.ValueProperty)
-                bpmLabel.Text = $"{bpmSlider.Value:F0} BPM";
-        };
-
-        var playStopBtn = new Button { Content = "▶  Play", Margin = new Thickness(4), Padding = new Thickness(8, 2) };
-        // NOTE: live-playback BPM debounce and measure-seek handlers are wired below, after StartPlayer is defined.
-
-        int totalMeasures = score.Parts.Count > 0 ? score.Parts.Max(p => p.Measures.Count) : 1;
-        var measureSlider = new Slider
-        {
-            Minimum = 1, Maximum = Math.Max(1, totalMeasures),
-            Value   = Math.Max(1, startMeasure),
-            Width   = 260,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            [ToolTip.TipProperty] = "Jump to measure (drag to seek)"
-        };
-        var measureLabel = new TextBlock
-        {
-            Text = $"M 1/{totalMeasures}",
-            Width = 72,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            FontSize = 12
-        };
-        measureSlider.PropertyChanged += (_, e) =>
-        {
-            if (e.Property == Slider.ValueProperty)
-                measureLabel.Text = $"M {(int)measureSlider.Value}/{totalMeasures}";
-        };
-        // NOTE: live seek handler wired below, after StartPlayer is defined.
-
-        bool isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-        var fluidSynthChk = new CheckBox
-        {
-            Content = "FluidSynth",
-            IsChecked = SheetMusicLib.AppSettings.Instance.PianoRollUseFluidSynth ?? true,
-            IsVisible = isWindows,   // Non-Windows: always FluidSynth, checkbox not needed
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Margin = new Thickness(4, 0),
-            [ToolTip.TipProperty] = "FluidSynth (better sound). Unchecked = WinMM (Windows MIDI, no extra dependencies)."
-        };
-
-        // ── WinMM MIDI output device picker ────────────────────────────────────────────
-        // Only shown on Windows when FluidSynth is unchecked.
-        var midiDeviceLabel = new TextBlock
-        {
-            Text = "MIDI out:",
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Margin = new Thickness(6, 0, 2, 0),
-            IsVisible = false,
-        };
-        var midiDeviceCombo = new ComboBox
-        {
-            MinWidth = 180,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 4, 0),
-            IsVisible = false,
-            [ToolTip.TipProperty] = "WinMM MIDI output device",
-        };
-
-        // Populate the device list (Windows only).
-        var winmmDevices = isWindows ? WinmmMidiBackend.EnumerateDevices() : [];
-        midiDeviceCombo.ItemsSource = winmmDevices.Select(d => d.Name).ToList();
-
-        // Restore the previously saved device by name (name is stable; index can shift).
-        if (isWindows && winmmDevices.Count > 0)
-        {
-            string saved = SheetMusicLib.AppSettings.Instance.PianoRollWinmmDeviceName;
-            int restoreIdx = string.IsNullOrEmpty(saved)
-                ? 0
-                : Math.Max(0, winmmDevices.ToList().FindIndex(d => d.Name == saved));
-            midiDeviceCombo.SelectedIndex = restoreIdx;
-        }
-
-        // Persist device choice whenever the user changes the selection.
-        midiDeviceCombo.SelectionChanged += (_, _) =>
-        {
-            int idx = midiDeviceCombo.SelectedIndex;
-            string name = (idx >= 0 && idx < winmmDevices.Count) ? winmmDevices[idx].Name : string.Empty;
-            SheetMusicLib.AppSettings.Instance.PianoRollWinmmDeviceName = name;
-            SheetMusicLib.AppSettings.Instance.SaveLocal();
-        };
-
-        void UpdateDevicePickerVisibility()
-        {
-            bool showPicker = isWindows && fluidSynthChk.IsChecked != true;
-            midiDeviceLabel.IsVisible = showPicker;
-            midiDeviceCombo.IsVisible = showPicker;
-        }
-        fluidSynthChk.IsCheckedChanged += (_, _) =>
-        {
-            UpdateDevicePickerVisibility();
-            SheetMusicLib.AppSettings.Instance.PianoRollUseFluidSynth = fluidSynthChk.IsChecked == true;
-            SheetMusicLib.AppSettings.Instance.SaveLocal();
-        };
-        UpdateDevicePickerVisibility();
-
-        int SelectedWinmmDeviceId() =>
-            (midiDeviceCombo.SelectedIndex >= 0 && midiDeviceCombo.SelectedIndex < winmmDevices.Count)
-                ? winmmDevices[midiDeviceCombo.SelectedIndex].Id
-                : -1;
-
-        var logNotesChk = new CheckBox
-        {
-            Content = "Log notes",
-            IsChecked = logNotesDefault,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Margin = new Thickness(4, 0),
-            [ToolTip.TipProperty] = "Write every NoteOn to Trace while playing"
-        };
-
-        // Build a sorted lookup: global-division onset -> measure number (for live slider sync)
-        var measureDivMap = score.Parts.Count > 0
-            ? score.Parts[0].Measures
-                .Select(m => (Divs: m.GlobalOnsetDivisions, m.Number))
-                .OrderBy(x => x.Divs)
-                .ToList()
-            : new List<(long Divs, int Number)>();
-
-        int DivsToMeasure(long divs)
-        {
-            int lo = 0, hi = measureDivMap.Count - 1, result = 1;
-            while (lo <= hi)
-            {
-                int mid = (lo + hi) / 2;
-                if (measureDivMap[mid].Divs <= divs) { result = measureDivMap[mid].Number; lo = mid + 1; }
-                else hi = mid - 1;
-            }
-            return result;
-        }
-
-        MxlMidiPlayer? player = null;
-        Window?[] windowHolder = [null];
-
-        void SetStopped()
-        {
-            var playerToStop = player;
-            player = null;
-            canvas.CurrentGlobalDivisions      = -1;
-            staffCanvas.CurrentGlobalDivisions = -1;
-            measureSlider.Value = score.Parts.Count > 0 ? 1 : 0;
-            statusBlock.Text = $"Stopped  |  {score.Title}";
-            playStopBtn.Content = "▶  Play";
-            if (playerToStop != null)
-                Task.Run(() => { try { playerToStop.Stop(); playerToStop.Dispose(); } catch { } });
-        }
-
-        void SetPaused()
-        {
-            var playerToStop = player;
-            player = null;
-            // Freeze the visual exactly where it is — resume restarts from there.
-            canvas.FreezeAtCurrentPosition();
-            staffCanvas.FreezeAtCurrentPosition();
-            int mno = (int)measureSlider.Value;
-            statusBlock.Text = $"Paused  |  M {mno}/{totalMeasures}  |  BPM: {bpmSlider.Value:F0}  |  {score.Title}";
-            playStopBtn.Content = "▶  Play";
-            if (playerToStop != null)
-                Task.Run(() => { try { playerToStop.Stop(); playerToStop.Dispose(); } catch { } });
-        }
-
-        // True while PositionChanged is updating the slider to suppress the seek-on-change handler.
-        bool suppressMeasureSliderSync = false;
-
-        void StartPlayer(int measure, double bpm)
-        {
-            // Stop the currently running player asynchronously so the new one can start immediately.
-            var playerToStop = player;
-            player = null;
-            if (playerToStop != null)
-                Task.Run(() => { try { playerToStop.Stop(); playerToStop.Dispose(); } catch { } });
-
-            bool useFluid = fluidSynthChk.IsChecked == true || !isWindows;
-            string? sf = useFluid ? FindSoundfont() : null;
-            player = new MxlMidiPlayer(score)
-            {
-                Bpm           = bpm,
-                StartMeasure  = measure,
-                Backend       = (useFluid && sf != null) ? MidiBackendKind.FluidSynth : MidiBackendKind.Winmm,
-                SoundfontPath = sf ?? string.Empty,
-                LogNotes      = logNotesChk.IsChecked == true,
-                WinmmDeviceId = SelectedWinmmDeviceId(),
-            };
-            if (useFluid && sf == null)
-                Trace.WriteLine("VerticalPianoRoll: no soundfont found -- falling back to WinMM");
-
-            canvas.PlayBpm      = bpm;
-            staffCanvas.PlayBpm = bpm;
-
-            long startDivisions = measure <= 1
-                ? 0
-                : (measureDivMap.FirstOrDefault(x => x.Number >= measure).Divs);
-            canvas.StartSmoothPlay(startDivisions);
-            staffCanvas.StartSmoothPlay(startDivisions);
-
-            player.PositionChanged += (_, divs) =>
-            {
-                // High-priority post for the one-time clock sync; normal post for UI updates.
-                Dispatcher.UIThread.Post(() =>
-                {
-                    canvas.SyncAnchor(divs);
-                    staffCanvas.SyncAnchor(divs);
-                }, DispatcherPriority.Render);
-                Dispatcher.UIThread.Post(() =>
-                {
-                    int mno = DivsToMeasure(divs);
-                    suppressMeasureSliderSync = true;
-                    if ((int)measureSlider.Value != mno)
-                        measureSlider.Value = mno;
-                    suppressMeasureSliderSync = false;
-                    statusBlock.Text = $"M {mno}/{totalMeasures}  |  BPM: {bpm:F0}  |  {score.Title}";
-                }, DispatcherPriority.Normal);
-            };
-
-            player.PlaybackEnded += (_, _) =>
-                Dispatcher.UIThread.Post(() =>
-                {
-                    SetStopped();
-                    if (autoCloseOnEnd) windowHolder[0]?.Close();
-                }, DispatcherPriority.Normal);
-
-            statusBlock.Text = $"Playing  |  BPM: {bpm:F0}  |  {score.Title}";
-            playStopBtn.Content = "⏸  Pause";
-            player.Start();
-            foreach (var s in canvas.MutedStaves) player.MutedStaves.Add(s);
-        }
-
-        playStopBtn.Click += (_, _) =>
-        {
-            // If playing -> pause (preserves position; click again to resume)
-            if (player != null) { SetPaused(); return; }
-
-            // Stopped or paused -> start / resume from current measure
-            StartPlayer((int)measureSlider.Value, bpmSlider.Value);
-        };
-
-        // ── Live-playback slider wiring ────────────────────────────────────────────────
-        // Both handlers live here so StartPlayer, player, suppressMeasureSliderSync etc.
-        // are all already declared above.
-        CancellationTokenSource? bpmDebounceCts     = null;
-        CancellationTokenSource? measureDebounceCts = null;
-
-        bpmSlider.PropertyChanged += (_, e) =>
-        {
-            if (e.Property != Slider.ValueProperty) return;
-            bpmLabel.Text = $"{bpmSlider.Value:F0} BPM";
-            if (player == null) return;
-            // Debounce: restart audio only after the slider has been idle for 300 ms.
-            bpmDebounceCts?.Cancel();
-            bpmDebounceCts = new CancellationTokenSource();
-            var ct = bpmDebounceCts.Token;
-            Task.Delay(300, ct).ContinueWith(_ =>
-            {
-                if (!ct.IsCancellationRequested)
-                    Dispatcher.UIThread.Post(() => { if (player != null) StartPlayer((int)measureSlider.Value, bpmSlider.Value); });
-            }, TaskScheduler.Default);
-        };
-
-        measureSlider.PropertyChanged += (_, e) =>
-        {
-            if (e.Property != Slider.ValueProperty) return;
-            int mno = (int)measureSlider.Value;
-            measureLabel.Text = $"M {mno}/{totalMeasures}";
-
-            // When stopped or paused (player == null) the animation timer is idle, so we can
-            // drive the canvas directly from the slider for instant visual preview.
-            // Skip this when playing — the timer owns the position and will overwrite it anyway.
-            if (player == null)
-            {
-                long previewDivs = mno <= 1
-                    ? 0
-                    : (measureDivMap.FirstOrDefault(x => x.Number >= mno).Divs);
-                canvas.CurrentGlobalDivisions      = previewDivs;
-                staffCanvas.CurrentGlobalDivisions = previewDivs;
-            }
-
-            if (suppressMeasureSliderSync || player == null) return;
-            // Debounce: seek only after the slider has been idle for 200 ms.
-            measureDebounceCts?.Cancel();
-            measureDebounceCts = new CancellationTokenSource();
-            var ct = measureDebounceCts.Token;
-            Task.Delay(200, ct).ContinueWith(_ =>
-            {
-                if (!ct.IsCancellationRequested)
-                    Dispatcher.UIThread.Post(() => { if (player != null) StartPlayer((int)measureSlider.Value, bpmSlider.Value); });
-            }, TaskScheduler.Default);
-        };
-
-        // ── Part mute checkboxes
-        // Staff 1 = RH (green), staff 2 = LH (blue).  Wired to both canvas and player.
-        var rhChk = new CheckBox
-        {
-            Content           = "RH",
-            IsChecked         = true,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Margin            = new Thickness(6, 0, 2, 0),
-            Foreground        = new SolidColorBrush(Color.FromRgb(64, 200, 90)),
-            [ToolTip.TipProperty] = "Enable right-hand / staff 1 (green)"
-        };
-        var lhChk = new CheckBox
-        {
-            Content           = "LH",
-            IsChecked         = true,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Margin            = new Thickness(2, 0, 6, 0),
-            Foreground        = new SolidColorBrush(Color.FromRgb(80, 130, 230)),
-            [ToolTip.TipProperty] = "Enable left-hand / staff 2 (blue)"
-        };
-
-        void ApplyMutes()
-        {
-            bool rhOn = rhChk.IsChecked == true;
-            bool lhOn = lhChk.IsChecked == true;
-            if (!rhOn) canvas.MutedStaves.Add(1); else canvas.MutedStaves.Remove(1);
-            if (!lhOn) canvas.MutedStaves.Add(2); else canvas.MutedStaves.Remove(2);
-            canvas.RefreshBars();
-            if (!rhOn) staffCanvas.MutedStaves.Add(1); else staffCanvas.MutedStaves.Remove(1);
-            if (!lhOn) staffCanvas.MutedStaves.Add(2); else staffCanvas.MutedStaves.Remove(2);
-            staffCanvas.RefreshNotes();
-            if (player != null)
-            {
-                if (!rhOn) player.MutedStaves.Add(1); else player.MutedStaves.Remove(1);
-                if (!lhOn) player.MutedStaves.Add(2); else player.MutedStaves.Remove(2);
-            }
-        }
-        rhChk.IsCheckedChanged += (_, _) => ApplyMutes();
-        lhChk.IsCheckedChanged += (_, _) => ApplyMutes();
-
-        var toolbar = new StackPanel
-        {
-            Orientation = Avalonia.Layout.Orientation.Horizontal,
-            Margin      = new Thickness(4),
-            Children    = { playStopBtn, bpmSlider, bpmLabel, measureSlider, measureLabel, lhChk, rhChk, fluidSynthChk, midiDeviceLabel, midiDeviceCombo, logNotesChk, statusBlock }
-        };
-
-        var layout = new DockPanel();
-        DockPanel.SetDock(toolbar, Dock.Top);
-        layout.Children.Add(toolbar);
-
-        var contentGrid = new Grid();
-        contentGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
-        contentGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
-        Grid.SetColumn(canvas,      0);
-        Grid.SetColumn(staffCanvas, 1);
-        contentGrid.Children.Add(canvas);
-        contentGrid.Children.Add(staffCanvas);
-        layout.Children.Add(contentGrid);
+            StartMeasure      = startMeasure,
+            AutoCloseOnEnd    = autoCloseOnEnd,
+            ShowMeasureSlider = true,
+            ShowLogNotes      = true,
+            ShowSkipButton    = false,
+            LogNotesDefault   = logNotesDefault,
+        });
 
         var window = new Window
         {
-            Title  = $"Vertical Piano Roll — {Path.GetFileName(mxlPath)}",
-            Width  = 1400,
-            Height = 720,
-            WindowState = WindowState.Maximized,
+            Title                 = $"Vertical Piano Roll — {Path.GetFileName(mxlPath)}",
+            Width                 = 1400,
+            Height                = 720,
+            WindowState           = WindowState.Maximized,
             WindowStartupLocation = WindowStartupLocation.CenterScreen,
-            ShowInTaskbar = false,
-            Content = layout
+            ShowInTaskbar         = false,
+            Content               = player,
         };
-        windowHolder[0] = window;
-        window.Closed += (_, _) => SetStopped();
+        window.Closed += (_, _) => player.StopAll();
 
         bool autoPlayFired = false;
         window.Opened += (_, _) =>
         {
             if (autoPlayFired) return;
             autoPlayFired = true;
-            playStopBtn.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            player.LoadScore(score, startMeasure, autoPlay: true);
         };
         return window;
     }
@@ -2267,232 +2465,31 @@ public static class VerticalPianoRollWindowFactory
         string windowTitle,
         IReadOnlyList<MusicPatternInfo> patterns)
     {
-        // ── initial score (first entry) ───────────────────────────────────
-        var firstPattern = patterns[0];
-        var score        = firstPattern.Build();
-
-        // Canvas and player state
-        var canvasHolder = new Control?[1];
-        var staffHolder  = new StaffNotationCanvas?[1];
-        var playerHolder = new MxlMidiPlayer?[1];
-        var windowHolder = new Window?[1];
-
-        void StopPlayer()
-        {
-            playerHolder[0]?.Stop();
-            playerHolder[0] = null;
-        }
-
-        // ── toolbar controls ──────────────────────────────────────────────
         var patternCombo = new ComboBox
         {
-            Width                = 320,
-            VerticalAlignment    = Avalonia.Layout.VerticalAlignment.Center,
+            Width                 = 320,
+            VerticalAlignment     = Avalonia.Layout.VerticalAlignment.Center,
             [ToolTip.TipProperty] = "Select a pattern",
         };
-        patternCombo.ItemsSource    = patterns;
-        patternCombo.SelectedIndex  = 0;
-        patternCombo.ItemTemplate   = new Avalonia.Controls.Templates.FuncDataTemplate<MusicPatternInfo>(
+        patternCombo.ItemsSource   = patterns;
+        patternCombo.SelectedIndex = 0;
+        patternCombo.ItemTemplate  = new Avalonia.Controls.Templates.FuncDataTemplate<MusicPatternInfo>(
             (info, _) => new TextBlock { Text = info.Display });
 
-        var statusBlock = new TextBlock
+        var player = new PianoRollPlayerControl(new PianoRollOptions
         {
-            Text              = $"Stopped  |  BPM: {score.DefaultBpm:F0}  |  {score.Title}",
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            FontSize          = 12,
-            Margin            = new Thickness(8, 0)
-        };
+            ShowMeasureSlider = false,
+            ShowLogNotes      = false,
+            ShowSkipButton    = false,
+            LeadingControl    = patternCombo,
+        });
 
-        var bpmSlider = new Slider
-        {
-            Minimum = 40, Maximum = 300, Value = score.DefaultBpm,
-            Width   = 180,
-            VerticalAlignment    = Avalonia.Layout.VerticalAlignment.Center,
-            [ToolTip.TipProperty] = "Tempo (BPM)"
-        };
-        var bpmLabel = new TextBlock
-        {
-            Text = $"{score.DefaultBpm:F0} BPM", Width = 60,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, FontSize = 12
-        };
-        bpmSlider.PropertyChanged += (_, e) =>
-        {
-            if (e.Property == Slider.ValueProperty)
-                bpmLabel.Text = $"{bpmSlider.Value:F0} BPM";
-        };
-
-        var playStopBtn = new Button
-        {
-            Content = "▶  Play",
-            Margin  = new Thickness(4),
-            Padding = new Thickness(8, 2)
-        };
-
-        bool isWindows    = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-        var fluidSynthChk = new CheckBox
-        {
-            Content           = "FluidSynth",
-            IsChecked         = !isWindows,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Margin            = new Thickness(4, 0),
-            [ToolTip.TipProperty] = "Use FluidSynth (cross-platform); uncheck for WinMM (Windows only)"
-        };
-
-        // ── content grid: piano roll left, staff notation right ─────────
-        var contentGrid = new Grid();
-        contentGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
-        contentGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
-
-        // ── Part mute checkboxes (declared here so LoadPattern can call ApplyMutesP) ──
-        var rhChkP = new CheckBox
-        {
-            Content           = "RH",
-            IsChecked         = true,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Margin            = new Thickness(6, 0, 2, 0),
-            Foreground        = new SolidColorBrush(Color.FromRgb(64, 200, 90)),
-            [ToolTip.TipProperty] = "Enable right-hand / staff 1 (green)"
-        };
-        var lhChkP = new CheckBox
-        {
-            Content           = "LH",
-            IsChecked         = true,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Margin            = new Thickness(2, 0, 6, 0),
-            Foreground        = new SolidColorBrush(Color.FromRgb(80, 130, 230)),
-            [ToolTip.TipProperty] = "Enable left-hand / staff 2 (blue)"
-        };
-
-        void ApplyMutesP()
-        {
-            bool rhOn = rhChkP.IsChecked == true;
-            bool lhOn = lhChkP.IsChecked == true;
-            if (canvasHolder[0] is VerticalPianoRollCanvas cv)
-            {
-                if (!rhOn) cv.MutedStaves.Add(1); else cv.MutedStaves.Remove(1);
-                if (!lhOn) cv.MutedStaves.Add(2); else cv.MutedStaves.Remove(2);
-                cv.RefreshBars();
-            }
-            if (staffHolder[0] is StaffNotationCanvas sc)
-            {
-                if (!rhOn) sc.MutedStaves.Add(1); else sc.MutedStaves.Remove(1);
-                if (!lhOn) sc.MutedStaves.Add(2); else sc.MutedStaves.Remove(2);
-                sc.RefreshNotes();
-            }
-            if (playerHolder[0] is MxlMidiPlayer pr)
-            {
-                if (!rhOn) pr.MutedStaves.Add(1); else pr.MutedStaves.Remove(1);
-                if (!lhOn) pr.MutedStaves.Add(2); else pr.MutedStaves.Remove(2);
-            }
-        }
-        rhChkP.IsCheckedChanged += (_, _) => ApplyMutesP();
-        lhChkP.IsCheckedChanged += (_, _) => ApplyMutesP();
-
-        void LoadPattern(MusicPatternInfo info)
-        {
-            StopPlayer();
-            var s = info.Build();
-
-            // Rebuild both canvases with the new score
-            contentGrid.Children.Clear();
-            var newCanvas = new VerticalPianoRollCanvas(s);
-            var newStaff  = new StaffNotationCanvas(s);
-            Grid.SetColumn(newCanvas, 0);
-            Grid.SetColumn(newStaff,  1);
-            canvasHolder[0] = newCanvas;
-            staffHolder[0]  = newStaff;
-            contentGrid.Children.Add(newCanvas);
-            contentGrid.Children.Add(newStaff);
-
-            bpmSlider.Value = s.DefaultBpm;
-            patternCombo[ToolTip.TipProperty] = info.Tooltip;
-            statusBlock.Text     = $"Stopped  |  BPM: {s.DefaultBpm:F0}  |  {s.Title}";
-            playStopBtn.Content  = "▶  Play";
-
-            ApplyMutesP();
-
-            // Auto-play
-            Dispatcher.UIThread.Post(() =>
-                playStopBtn.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)),
-                DispatcherPriority.Background);
-        }
-
+        // Load new pattern whenever the combo selection changes.
         patternCombo.SelectionChanged += (_, _) =>
         {
             if (patternCombo.SelectedItem is MusicPatternInfo info)
-                LoadPattern(info);
+                player.LoadScore(info.Build(), autoPlay: true);
         };
-
-        // ── play/stop wiring ──────────────────────────────────────────────
-        playStopBtn.Click += (_, _) =>
-        {
-            if (playerHolder[0] != null) { StopPlayer(); playStopBtn.Content = "▶  Play"; return; }
-
-            if (patternCombo.SelectedItem is not MusicPatternInfo info) return;
-            var s = info.Build();
-
-            bool useFluid = fluidSynthChk.IsChecked == true || !isWindows;
-            string? sf    = useFluid ? FindSoundfont() : null;
-            var p = new MxlMidiPlayer(s)
-            {
-                Bpm           = bpmSlider.Value,
-                StartMeasure  = 1,
-                Backend       = (useFluid && sf != null) ? MidiBackendKind.FluidSynth : MidiBackendKind.Winmm,
-                SoundfontPath = sf ?? string.Empty,
-            };
-            playerHolder[0] = p;
-            // Apply current mute state before playback starts
-            ApplyMutesP();
-
-            p.PositionChanged += (_, divs) =>
-                Dispatcher.UIThread.Post(() =>
-                {
-                    if (canvasHolder[0] is VerticalPianoRollCanvas c)
-                        c.CurrentGlobalDivisions = divs;
-                    if (staffHolder[0] is StaffNotationCanvas sc)
-                        sc.CurrentGlobalDivisions = divs;
-                    statusBlock.Text = $"Playing  |  BPM: {bpmSlider.Value:F0}  |  {s.Title}";
-                }, DispatcherPriority.Render);
-
-            p.PlaybackEnded += (_, _) =>
-                Dispatcher.UIThread.Post(() =>
-                {
-                    var old = playerHolder[0];
-                    playerHolder[0] = null;
-                    if (canvasHolder[0] is VerticalPianoRollCanvas cv)
-                        cv.CurrentGlobalDivisions = -1;
-                    if (staffHolder[0] is StaffNotationCanvas sc)
-                        sc.CurrentGlobalDivisions = -1;
-                    playStopBtn.Content = "▶  Play";
-                    statusBlock.Text    = $"Stopped  |  BPM: {bpmSlider.Value:F0}  |  {s.Title}";
-                    if (old != null) Task.Run(() => { try { old.Stop(); } catch { } });
-                }, DispatcherPriority.Normal);
-
-            playStopBtn.Content = "■  Stop";
-            p.Start();
-        };
-
-        // ── initial canvas + staff ─────────────────────────────────────────
-        var initialCanvas = new VerticalPianoRollCanvas(score);
-        var initialStaff  = new StaffNotationCanvas(score);
-        Grid.SetColumn(initialCanvas, 0);
-        Grid.SetColumn(initialStaff,  1);
-        canvasHolder[0] = initialCanvas;
-        staffHolder[0]  = initialStaff;
-        contentGrid.Children.Add(initialCanvas);
-        contentGrid.Children.Add(initialStaff);
-
-        var toolbar = new StackPanel
-        {
-            Orientation = Avalonia.Layout.Orientation.Horizontal,
-            Margin      = new Thickness(4),
-            Children    = { patternCombo, playStopBtn, bpmSlider, bpmLabel, lhChkP, rhChkP, fluidSynthChk, statusBlock }
-        };
-
-        var layout = new DockPanel();
-        DockPanel.SetDock(toolbar, Dock.Top);
-        layout.Children.Add(toolbar);
-        layout.Children.Add(contentGrid);
 
         var window = new Window
         {
@@ -2502,18 +2499,142 @@ public static class VerticalPianoRollWindowFactory
             WindowState           = WindowState.Maximized,
             WindowStartupLocation = WindowStartupLocation.CenterScreen,
             ShowInTaskbar         = false,
-            Content               = layout,
+            Content               = player,
         };
-        windowHolder[0] = window;
-        window.Closed += (_, _) => StopPlayer();
+        window.Closed += (_, _) => player.StopAll();
 
-        // Auto-play first pattern on open
-        bool autoPlayFired2 = false;
+        bool autoPlayFired = false;
         window.Opened += (_, _) =>
         {
-            if (autoPlayFired2) return;
-            autoPlayFired2 = true;
-            playStopBtn.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            if (autoPlayFired) return;
+            autoPlayFired = true;
+            player.LoadScore(patterns[0].Build(), autoPlay: true);
+        };
+
+        return window;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    //  Player-piano playlist window
+    // ─────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Extracts the score XML from a .mxl ZIP to a temp file.
+    /// Returns the path unchanged if the file is already a plain .xml / .musicxml.
+    /// </summary>
+    public static string ResolveMxlToXml(string mxlPath)
+    {
+        if (!mxlPath.EndsWith(".mxl", StringComparison.OrdinalIgnoreCase))
+            return mxlPath;
+
+        using var zip = System.IO.Compression.ZipFile.OpenRead(mxlPath);
+        var scoreEntry = zip.Entries.FirstOrDefault(e =>
+            e.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) &&
+            !e.FullName.StartsWith("META-INF", StringComparison.OrdinalIgnoreCase));
+        if (scoreEntry == null)
+            throw new InvalidOperationException($"No score XML entry found inside {mxlPath}");
+
+        string tmpPath = Path.Combine(
+            Path.GetTempPath(),
+            Path.GetFileNameWithoutExtension(mxlPath) + "_score.xml");
+        using var stream = scoreEntry.Open();
+        using var fs     = File.Create(tmpPath);
+        stream.CopyTo(fs);
+        return tmpPath;
+    }
+
+    /// <summary>
+    /// Builds a "player piano" window that plays each song in <paramref name="songs"/>
+    /// sequentially.  When a song finishes, the next one loads and starts automatically.
+    /// A header bar shows the current song title and the next song up.
+    /// </summary>
+    /// <param name="songs">
+    /// Ordered list of <c>(mxlPath, title)</c> pairs.
+    /// <c>mxlPath</c> may be a .mxl ZIP or a plain .xml / .musicxml file.
+    /// </param>
+    public static Window BuildPlaylistWindow(IReadOnlyList<(string mxlPath, string title)> songs)
+    {
+        if (songs.Count == 0)
+            throw new ArgumentException("Song list must not be empty.", nameof(songs));
+
+        int currentIndex = 0;
+
+        var player = new PianoRollPlayerControl(new PianoRollOptions
+        {
+            ShowMeasureSlider = true,
+            ShowLogNotes      = false,
+            ShowSkipButton    = true,
+            AutoCloseOnEnd    = false,
+        });
+
+        void UpdateHeader()
+        {
+            string now  = songs[currentIndex].title;
+            string next = currentIndex + 1 < songs.Count
+                ? $"Next: {songs[currentIndex + 1].title}"
+                : "Last song";
+            player.SetHeaderText(now, next);
+        }
+
+        void LoadSong(int index)
+        {
+            if (index < 0 || index >= songs.Count) return;
+            currentIndex = index;
+
+            try
+            {
+                string xmlPath = ResolveMxlToXml(songs[index].mxlPath);
+                var score      = MxlScore.Parse(File.ReadAllText(xmlPath));
+                UpdateHeader();
+                player.LoadScore(score, autoPlay: true);
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"BuildPlaylistWindow: failed to load song {index}: {ex.Message}");
+                LoadSong(index + 1);
+            }
+        }
+
+        // Skip button advances to the next song (or closes when exhausted).
+        Window?[] windowRef = [null];
+        player.SetSkipAction(() =>
+        {
+            int next = currentIndex + 1;
+            if (next < songs.Count)
+                LoadSong(next);
+            else
+                windowRef[0]?.Close();
+        });
+
+        // Auto-advance when a song ends.
+        player.PlaybackEnded += (_, _) =>
+        {
+            int next = currentIndex + 1;
+            if (next < songs.Count)
+                Dispatcher.UIThread.Post(() => LoadSong(next), DispatcherPriority.Normal);
+            else
+                Dispatcher.UIThread.Post(() => windowRef[0]?.Close(), DispatcherPriority.Normal);
+        };
+
+        var window = new Window
+        {
+            Title                 = $"🎹 PianoRoll Playlist — {songs.Count} songs",
+            Width                 = 1400,
+            Height                = 720,
+            WindowState           = WindowState.Maximized,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            ShowInTaskbar         = false,
+            Content               = player,
+        };
+        windowRef[0] = window;
+        window.Closed += (_, _) => player.StopAll();
+
+        bool autoPlayFired = false;
+        window.Opened += (_, _) =>
+        {
+            if (autoPlayFired) return;
+            autoPlayFired = true;
+            LoadSong(0);
         };
 
         return window;

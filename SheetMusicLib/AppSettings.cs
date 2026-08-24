@@ -345,6 +345,18 @@ public class AppSettings
     /// </summary>
     public string? LastSelectedPlaylist { get; set; }
 
+    /// <summary>
+    /// User-created piano-roll auto-play playlists.
+    /// This data ROAMS with the music folder.
+    /// </summary>
+    public List<PianoRollPlaylist> PianoRollPlaylists { get; set; } = new();
+
+    /// <summary>
+    /// Name of the last selected piano-roll playlist.
+    /// This data ROAMS with the music folder.
+    /// </summary>
+    public string? LastSelectedPianoRollPlaylist { get; set; }
+
     #endregion
 
     #region Local Machine Settings (window state, MRU, etc.) - LOCAL ONLY
@@ -520,6 +532,8 @@ public class AppSettings
 
                     Playlists = roamingSettings.Playlists ?? new List<Playlist>();
                     LastSelectedPlaylist = roamingSettings.LastSelectedPlaylist;
+                    PianoRollPlaylists = roamingSettings.PianoRollPlaylists ?? new List<PianoRollPlaylist>();
+                    LastSelectedPianoRollPlaylist = roamingSettings.LastSelectedPianoRollPlaylist;
                     Logger.LogInfo($"LoadRoamingFromMusicFolder: Now have {Playlists.Count} playlists, LastSelected={LastSelectedPlaylist}");
                     if (roamingSettings.UserOptions != null)
                     {
@@ -534,6 +548,8 @@ public class AppSettings
                 Logger.LogWarning($"LoadRoamingFromMusicFolder: File does not exist: {roamingPath}");
                 Playlists = new List<Playlist>();
                 LastSelectedPlaylist = null;
+                PianoRollPlaylists = new List<PianoRollPlaylist>();
+                LastSelectedPianoRollPlaylist = null;
             }
         }
         catch (Exception ex)
@@ -645,7 +661,9 @@ public class AppSettings
             {
                 UserOptions = UserOptions,
                 Playlists = Playlists,
-                LastSelectedPlaylist = LastSelectedPlaylist
+                LastSelectedPlaylist = LastSelectedPlaylist,
+                PianoRollPlaylists = PianoRollPlaylists,
+                LastSelectedPianoRollPlaylist = LastSelectedPianoRollPlaylist
             };
 
             var json = JsonSerializer.Serialize(roamingSettings, JsonOptions);
@@ -739,6 +757,8 @@ public class AppSettings
         // Reset playlists
         Playlists.Clear();
         LastSelectedPlaylist = null;
+        PianoRollPlaylists.Clear();
+        LastSelectedPianoRollPlaylist = null;
     }
 
     /// <summary>
@@ -815,5 +835,7 @@ public class AppSettings
         public UserOptionsSettings UserOptions { get; set; } = new();
         public List<Playlist> Playlists { get; set; } = new();
         public string? LastSelectedPlaylist { get; set; }
+        public List<PianoRollPlaylist> PianoRollPlaylists { get; set; } = new();
+        public string? LastSelectedPianoRollPlaylist { get; set; }
     }
 }
