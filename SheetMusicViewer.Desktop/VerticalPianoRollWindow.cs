@@ -1661,7 +1661,7 @@ public sealed class StaffNotationCanvas : Control
         // ── barlines ──────────────────────────────────────────────────────
         foreach (var (bd, bn) in _barlines)
         {
-            double bx = DivsToX(bd);
+            double bx = DivsToX(bd) - 18;   // shift left so barline doesn't overlap note heads
             if (bx < ClefAreaW - 2 || bx > W) continue;
             // span each staff fully (top line to bottom line)
             ctx.DrawLine(barPen, new Point(bx, trebleTopY), new Point(bx, trebleTopY + 4 * LineSpacing));
@@ -1900,6 +1900,16 @@ public sealed class PianoRollPlayerControl : UserControl
     private List<(long Divs, int Number)> _measureDivMap = new();
     private int                      _totalMeasures = 1;
     private Window?                  _hostWindow;
+
+    // sleep prevention
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint SetThreadExecutionState(uint esFlags);
+    private const uint ES_CONTINUOUS       = 0x80000000u;
+    private const uint ES_SYSTEM_REQUIRED  = 0x00000001u;
+    private const uint ES_DISPLAY_REQUIRED = 0x00000002u;
+
+    private static void PreventSleep()  => SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED);
+    private static void AllowSleep()    => SetThreadExecutionState(ES_CONTINUOUS);
 
     // debounce tokens
     private CancellationTokenSource? _bpmDebCts;
@@ -2178,6 +2188,7 @@ public sealed class PianoRollPlayerControl : UserControl
         if (sc != null) sc.CurrentGlobalDivisions = -1;
         if (_measureSlider != null) _measureSlider.Value = 1;
         _playPauseBtn.Content = "▶  Play";
+        if (_isWindows) AllowSleep();
         // Stop on a background thread, holding _midiLock so a concurrent StartPlayer
         // cannot call midiOutOpen until this midiOutClose is fully complete.
         Interlocked.Increment(ref _startGen);  // invalidate any pending StartPlayer Task
@@ -2264,6 +2275,7 @@ public sealed class PianoRollPlayerControl : UserControl
         int mno = (int)(_measureSlider?.Value ?? 1);
         _statusBlock.Text = $"Paused  |  M {mno}/{_totalMeasures}  |  BPM: {_bpmSlider.Value:F0}";
         _playPauseBtn.Content = "▶  Play";
+        if (_isWindows) AllowSleep();
         if (p != null)
             Task.Run(async () =>
             {
@@ -2299,6 +2311,7 @@ public sealed class PianoRollPlayerControl : UserControl
         };
         _player = player;
         ApplyMutes();
+        if (_isWindows) PreventSleep();
 
         long startDivs = measure <= 1
             ? 0
@@ -2680,12 +2693,16 @@ public static class VerticalPianoRollWindowFactory
                 windowRef[0]?.Close();
         });
 
-        // Auto-advance when a song ends.
+        // Auto-advance when a song ends (2-second pause between songs).
         player.PlaybackEnded += (_, _) =>
         {
             int next = currentIndex + 1;
             if (next < songs.Count)
-                Dispatcher.UIThread.Post(() => LoadSong(next), DispatcherPriority.Normal);
+                Task.Run(async () =>
+                {
+                    await Task.Delay(2000).ConfigureAwait(false);
+                    Dispatcher.UIThread.Post(() => LoadSong(next), DispatcherPriority.Normal);
+                });
             else
                 Dispatcher.UIThread.Post(() => windowRef[0]?.Close(), DispatcherPriority.Normal);
         };
