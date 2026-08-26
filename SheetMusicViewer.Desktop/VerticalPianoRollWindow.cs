@@ -492,12 +492,14 @@ internal sealed class WinmmMidiBackend : IMidiBackend
 
     public void Open()
     {
-        // Retry with back-off: the OS can take a short time to release the device
-        // after a previous Close(), especially when patterns switch rapidly.
-        for (int attempt = 0; attempt < 6; attempt++)
+        // Small initial yield: midiOutClose() is asynchronous inside the driver;
+        // giving the OS a moment before the first Open() attempt avoids a spurious
+        // failure when a new player is started immediately after the previous one closed.
+        Thread.Sleep(20);
+        for (int attempt = 0; attempt < 8; attempt++)
         {
             if (midiOutOpen(out _h, DeviceId, IntPtr.Zero, IntPtr.Zero, 0) == 0) return;
-            Thread.Sleep(30 * (attempt + 1));  // 30 ms, 60 ms, 90 ms …
+            Thread.Sleep(50 * (attempt + 1));  // 50 ms, 100 ms, 150 ms … up to 400 ms
         }
         throw new InvalidOperationException("Could not open MIDI output device (winmm).");
     }
@@ -786,7 +788,9 @@ public sealed class MxlMidiPlayer : IDisposable
     {
         Trace.WriteLine($"{DateTime.Now:HH:mm:ss.fff} PLAYER STOP called");
         _cts?.Cancel();
-        try { _playTask.Wait(TimeSpan.FromSeconds(2)); } catch { }
+        try { _playTask.Wait(TimeSpan.FromSeconds(5)); } catch { }
+        // PlaySync may have already closed _backend on natural end; Close() is
+        // idempotent (guarded by _h == IntPtr.Zero) so calling it again is safe.
         _backend?.Close();
         _backend = null;
         _cts = null;
@@ -967,7 +971,18 @@ public sealed class MxlMidiPlayer : IDisposable
         {
             Trace.WriteLine($"{DateTime.Now:HH:mm:ss.fff} PLAYBACK END  cancelled={ct.IsCancellationRequested}");
             if (!ct.IsCancellationRequested)
-                PlaybackEnded?.Invoke(this, EventArgs.Empty);
+            {
+                // Close the device NOW, while we are still on the play thread.
+                // This releases the WinMM handle before the next song tries to open it.
+                _backend?.Close();
+                _backend = null;
+                // Fire PlaybackEnded via Task.Run so this play task exits first.
+                // If we invoked inline here, any handler that calls Stop()->Wait()
+                // would deadlock waiting for this very task to finish.
+                var ev = PlaybackEnded;
+                if (ev != null)
+                    Task.Run(() => ev.Invoke(this, EventArgs.Empty));
+            }
         }
     }
 
@@ -1879,6 +1894,8 @@ public sealed class PianoRollPlayerControl : UserControl
     private VerticalPianoRollCanvas? _canvas;
     private MxlScore?                _currentScore;
     private MxlMidiPlayer?           _player;
+    private readonly SemaphoreSlim   _midiLock = new(1, 1);  // serialises all stop/open ops
+    private int                      _startGen;              // incremented each StartPlayer call
     private bool                     _suppressMeasureSync;
     private List<(long Divs, int Number)> _measureDivMap = new();
     private int                      _totalMeasures = 1;
@@ -2161,7 +2178,16 @@ public sealed class PianoRollPlayerControl : UserControl
         if (sc != null) sc.CurrentGlobalDivisions = -1;
         if (_measureSlider != null) _measureSlider.Value = 1;
         _playPauseBtn.Content = "▶  Play";
-        if (p != null) Task.Run(() => { try { p.Stop(); p.Dispose(); } catch { } });
+        // Stop on a background thread, holding _midiLock so a concurrent StartPlayer
+        // cannot call midiOutOpen until this midiOutClose is fully complete.
+        Interlocked.Increment(ref _startGen);  // invalidate any pending StartPlayer Task
+        if (p != null)
+            Task.Run(async () =>
+            {
+                await _midiLock.WaitAsync().ConfigureAwait(false);
+                try   { p.Stop(); p.Dispose(); } catch { }
+                finally { _midiLock.Release(); }
+            });
     }
 
     // ── private helpers ───────────────────────────────────────────────────────
@@ -2238,7 +2264,13 @@ public sealed class PianoRollPlayerControl : UserControl
         int mno = (int)(_measureSlider?.Value ?? 1);
         _statusBlock.Text = $"Paused  |  M {mno}/{_totalMeasures}  |  BPM: {_bpmSlider.Value:F0}";
         _playPauseBtn.Content = "▶  Play";
-        if (p != null) Task.Run(() => { try { p.Stop(); p.Dispose(); } catch { } });
+        if (p != null)
+            Task.Run(async () =>
+            {
+                await _midiLock.WaitAsync().ConfigureAwait(false);
+                try   { p.Stop(); p.Dispose(); } catch { }
+                finally { _midiLock.Release(); }
+            });
     }
 
     private void StartPlayer(int measure, double bpm)
@@ -2248,10 +2280,10 @@ public sealed class PianoRollPlayerControl : UserControl
         var canvas = _canvas;
         var sc = _contentGrid.Children.OfType<StaffNotationCanvas>().FirstOrDefault();
 
-        // Stop old player asynchronously
+        // Capture and clear the old player immediately so PositionChanged/PlaybackEnded
+        // callbacks from it are ignored while we are switching.
         var old = _player;
         _player = null;
-        if (old != null) Task.Run(() => { try { old.Stop(); old.Dispose(); } catch { } });
 
         bool useFluid  = _fluidChk.IsChecked == true || !_isWindows;
         string? sf     = useFluid ? VerticalPianoRollWindowFactory.FindSoundfont() : null;
@@ -2311,7 +2343,49 @@ public sealed class PianoRollPlayerControl : UserControl
 
         _statusBlock.Text = $"Playing  |  BPM: {bpm:F0}  |  {score.Title}";
         _playPauseBtn.Content = "⏸  Pause";
-        player.Start();
+
+        // Use a semaphore so that every stop+open sequence is fully serialised.
+        // Multiple rapid calls (debounce, playlist advance, pause+play) each
+        // increment the generation; any Task that is no longer the latest simply
+        // disposes the player it built and exits without calling midiOutOpen.
+        var myGen = Interlocked.Increment(ref _startGen);
+        Task.Run(async () =>
+        {
+            await _midiLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                // Stop old device — blocks until midiOutClose completes.
+                if (old != null) { try { old.Stop(); old.Dispose(); } catch { } }
+
+                // If a newer StartPlayer was called while we were waiting or stopping,
+                // discard this player — it will be started by the newer Task.
+                if (myGen != _startGen)
+                {
+                    try { player.Dispose(); } catch { }
+                    return;
+                }
+
+                // Open + start new player.
+                try
+                {
+                    player.Start();
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"PianoRollPlayerControl.StartPlayer: {ex}");
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (ReferenceEquals(_player, player)) _player = null;
+                        _playPauseBtn.Content = "▶  Play";
+                        _statusBlock.Text = $"MIDI error: {ex.Message}";
+                    }, DispatcherPriority.Normal);
+                }
+            }
+            finally
+            {
+                _midiLock.Release();
+            }
+        });
     }
 
     private void OnPlayPauseClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -2585,8 +2659,8 @@ public static class VerticalPianoRollWindowFactory
             {
                 string xmlPath = ResolveMxlToXml(songs[index].mxlPath);
                 var score      = MxlScore.Parse(File.ReadAllText(xmlPath));
-                UpdateHeader();
                 player.LoadScore(score, autoPlay: true);
+                UpdateHeader();   // must be after LoadScore — it creates a fresh StaffNotationCanvas
             }
             catch (Exception ex)
             {
