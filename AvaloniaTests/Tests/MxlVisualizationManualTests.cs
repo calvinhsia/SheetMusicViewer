@@ -211,7 +211,7 @@ public class MxlVisualizationManualTests : TestBase
     {
         if (!OperatingSystem.IsWindows())
             Assert.Inconclusive("MIDI playback requires Windows (winmm.dll).");
-        var pathToMxl = Path.Combine(GetSheetMusicFolder(), @"Pop\SangahNoonaSingles\Happy Birthday to You! - F Major - MK0108772.mxl");
+        var pathToMxl = Path.Combine(GetSheetMusicFolder(), @"Pop\KristenMoscaSingles\Cantina Band - Cantina Band.mxl");
 
         var score = ParseMxl(pathToMxl);
         await ShowVerticalPianoRollWindowAsync(pathToMxl, score, startMeasure: 0, syncDiagnostics: true);

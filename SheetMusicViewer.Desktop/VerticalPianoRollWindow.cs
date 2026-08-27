@@ -2644,7 +2644,57 @@ public static class VerticalPianoRollWindowFactory
         if (songs.Count == 0)
             throw new ArgumentException("Song list must not be empty.", nameof(songs));
 
-        int currentIndex = 0;
+        // playOrder holds indices into songs[]; shuffle operates on this, not on songs[] directly.
+        var playOrder = Enumerable.Range(0, songs.Count).ToList();
+        int currentPos = 0;   // position within playOrder
+
+        // ── Repeat / Shuffle controls ─────────────────────────────────────────
+        var repeatChk = new CheckBox
+        {
+            Content = "🔁 Repeat",
+            IsChecked = false,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin = new Thickness(4, 0),
+            [ToolTip.TipProperty] = "Restart playlist from the beginning when the last song ends"
+        };
+        var shuffleChk = new CheckBox
+        {
+            Content = "🔀 Shuffle",
+            IsChecked = false,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin = new Thickness(4, 0),
+            [ToolTip.TipProperty] = "Play songs in random order"
+        };
+
+        // Re-shuffle everything after the current position when shuffle is toggled on.
+        shuffleChk.IsCheckedChanged += (_, _) =>
+        {
+            if (shuffleChk.IsChecked == true)
+            {
+                var rng = new Random();
+                for (int i = playOrder.Count - 1; i > currentPos; i--)
+                {
+                    int j = rng.Next(currentPos + 1, i + 1);
+                    (playOrder[i], playOrder[j]) = (playOrder[j], playOrder[i]);
+                }
+            }
+            else
+            {
+                // Restore sequential order, keeping current song in place.
+                int currentSong = playOrder[currentPos];
+                playOrder = Enumerable.Range(0, songs.Count).ToList();
+                // Move the current song to currentPos so the next song is the natural successor.
+                playOrder.Remove(currentSong);
+                playOrder.Insert(currentPos, currentSong);
+            }
+        };
+
+        var leadingPanel = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+        };
+        leadingPanel.Children.Add(repeatChk);
+        leadingPanel.Children.Add(shuffleChk);
 
         var player = new PianoRollPlayerControl(new PianoRollOptions
         {
@@ -2652,33 +2702,42 @@ public static class VerticalPianoRollWindowFactory
             ShowLogNotes      = false,
             ShowSkipButton    = true,
             AutoCloseOnEnd    = false,
+            LeadingControl    = leadingPanel,
         });
 
         void UpdateHeader()
         {
-            string now  = songs[currentIndex].title;
-            string next = currentIndex + 1 < songs.Count
-                ? $"Next: {songs[currentIndex + 1].title}"
-                : "Last song";
+            int songIdx  = playOrder[currentPos];
+            string progress = $"{currentPos + 1}/{songs.Count}";
+            string now  = $"[{progress}]  {songs[songIdx].title}";
+            int nextPos = currentPos + 1;
+            string next;
+            if (nextPos < playOrder.Count)
+                next = $"Next: {songs[playOrder[nextPos]].title}";
+            else if (repeatChk.IsChecked == true)
+                next = $"Next: {songs[playOrder[0]].title}  (repeating)";
+            else
+                next = "Last song";
             player.SetHeaderText(now, next);
         }
 
-        void LoadSong(int index)
+        void LoadSong(int pos)
         {
-            if (index < 0 || index >= songs.Count) return;
-            currentIndex = index;
+            if (pos < 0 || pos >= songs.Count) return;
+            currentPos = pos;
+            int songIdx = playOrder[pos];
 
             try
             {
-                string xmlPath = ResolveMxlToXml(songs[index].mxlPath);
+                string xmlPath = ResolveMxlToXml(songs[songIdx].mxlPath);
                 var score      = MxlScore.Parse(File.ReadAllText(xmlPath));
                 player.LoadScore(score, autoPlay: true);
                 UpdateHeader();   // must be after LoadScore — it creates a fresh StaffNotationCanvas
             }
             catch (Exception ex)
             {
-                Trace.WriteLine($"BuildPlaylistWindow: failed to load song {index}: {ex.Message}");
-                LoadSong(index + 1);
+                Trace.WriteLine($"BuildPlaylistWindow: failed to load song at pos {pos} (songIdx {songIdx}): {ex.Message}");
+                LoadSong(pos + 1);
             }
         }
 
@@ -2686,9 +2745,22 @@ public static class VerticalPianoRollWindowFactory
         Window?[] windowRef = [null];
         player.SetSkipAction(() =>
         {
-            int next = currentIndex + 1;
+            int next = currentPos + 1;
             if (next < songs.Count)
                 LoadSong(next);
+            else if (repeatChk.IsChecked == true)
+            {
+                if (shuffleChk.IsChecked == true)
+                {
+                    var rng = new Random();
+                    for (int i = playOrder.Count - 1; i > 0; i--)
+                    {
+                        int j = rng.Next(i + 1);
+                        (playOrder[i], playOrder[j]) = (playOrder[j], playOrder[i]);
+                    }
+                }
+                LoadSong(0);
+            }
             else
                 windowRef[0]?.Close();
         });
@@ -2696,12 +2768,30 @@ public static class VerticalPianoRollWindowFactory
         // Auto-advance when a song ends (2-second pause between songs).
         player.PlaybackEnded += (_, _) =>
         {
-            int next = currentIndex + 1;
+            int next = currentPos + 1;
             if (next < songs.Count)
                 Task.Run(async () =>
                 {
                     await Task.Delay(2000).ConfigureAwait(false);
                     Dispatcher.UIThread.Post(() => LoadSong(next), DispatcherPriority.Normal);
+                });
+            else if (repeatChk.IsChecked == true)
+                Task.Run(async () =>
+                {
+                    await Task.Delay(2000).ConfigureAwait(false);
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (shuffleChk.IsChecked == true)
+                        {
+                            var rng = new Random();
+                            for (int i = playOrder.Count - 1; i > 0; i--)
+                            {
+                                int j = rng.Next(i + 1);
+                                (playOrder[i], playOrder[j]) = (playOrder[j], playOrder[i]);
+                            }
+                        }
+                        LoadSong(0);
+                    }, DispatcherPriority.Normal);
                 });
             else
                 Dispatcher.UIThread.Post(() => windowRef[0]?.Close(), DispatcherPriority.Normal);
