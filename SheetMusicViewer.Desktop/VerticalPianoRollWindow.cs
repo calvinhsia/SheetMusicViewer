@@ -2649,27 +2649,44 @@ public static class VerticalPianoRollWindowFactory
         int currentPos = 0;   // position within playOrder
 
         // ── Repeat / Shuffle controls ─────────────────────────────────────────
-        var repeatChk = new CheckBox
+        bool repeatOn  = false;
+        bool shuffleOn = false;
+
+        var repeatBtn = new Button
         {
             Content = "🔁 Repeat",
-            IsChecked = false,
+            Margin  = new Thickness(4),
+            Padding = new Thickness(8, 2),
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Margin = new Thickness(4, 0),
             [ToolTip.TipProperty] = "Restart playlist from the beginning when the last song ends"
         };
-        var shuffleChk = new CheckBox
+        var shuffleBtn = new Button
         {
             Content = "🔀 Shuffle",
-            IsChecked = false,
+            Margin  = new Thickness(4),
+            Padding = new Thickness(8, 2),
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Margin = new Thickness(4, 0),
             [ToolTip.TipProperty] = "Play songs in random order"
         };
 
-        // Re-shuffle everything after the current position when shuffle is toggled on.
-        shuffleChk.IsCheckedChanged += (_, _) =>
+        void UpdateToggleButton(Button btn, bool on)
         {
-            if (shuffleChk.IsChecked == true)
+            btn.Background = on ? Brushes.SteelBlue : null;
+            btn.Foreground = on ? Brushes.White     : null;
+        }
+
+        repeatBtn.Click += (_, _) =>
+        {
+            repeatOn = !repeatOn;
+            UpdateToggleButton(repeatBtn, repeatOn);
+        };
+
+        // Re-shuffle everything after the current position when shuffle is toggled on.
+        shuffleBtn.Click += (_, _) =>
+        {
+            shuffleOn = !shuffleOn;
+            UpdateToggleButton(shuffleBtn, shuffleOn);
+            if (shuffleOn)
             {
                 var rng = new Random();
                 for (int i = playOrder.Count - 1; i > currentPos; i--)
@@ -2693,8 +2710,8 @@ public static class VerticalPianoRollWindowFactory
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
         };
-        leadingPanel.Children.Add(repeatChk);
-        leadingPanel.Children.Add(shuffleChk);
+        leadingPanel.Children.Add(repeatBtn);
+        leadingPanel.Children.Add(shuffleBtn);
 
         var player = new PianoRollPlayerControl(new PianoRollOptions
         {
@@ -2714,7 +2731,7 @@ public static class VerticalPianoRollWindowFactory
             string next;
             if (nextPos < playOrder.Count)
                 next = $"Next: {songs[playOrder[nextPos]].title}";
-            else if (repeatChk.IsChecked == true)
+            else if (repeatOn)
                 next = $"Next: {songs[playOrder[0]].title}  (repeating)";
             else
                 next = "Last song";
@@ -2748,9 +2765,9 @@ public static class VerticalPianoRollWindowFactory
             int next = currentPos + 1;
             if (next < songs.Count)
                 LoadSong(next);
-            else if (repeatChk.IsChecked == true)
+            else if (repeatOn)
             {
-                if (shuffleChk.IsChecked == true)
+                if (shuffleOn)
                 {
                     var rng = new Random();
                     for (int i = playOrder.Count - 1; i > 0; i--)
@@ -2775,13 +2792,13 @@ public static class VerticalPianoRollWindowFactory
                     await Task.Delay(2000).ConfigureAwait(false);
                     Dispatcher.UIThread.Post(() => LoadSong(next), DispatcherPriority.Normal);
                 });
-            else if (repeatChk.IsChecked == true)
+            else if (repeatOn)
                 Task.Run(async () =>
                 {
                     await Task.Delay(2000).ConfigureAwait(false);
                     Dispatcher.UIThread.Post(() =>
                     {
-                        if (shuffleChk.IsChecked == true)
+                        if (shuffleOn)
                         {
                             var rng = new Random();
                             for (int i = playOrder.Count - 1; i > 0; i--)
