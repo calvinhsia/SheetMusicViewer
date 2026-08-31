@@ -1569,6 +1569,65 @@ public class ChooseMusicWindow : Window
                     orderby s.DisplayName
                     select new
                     {
+                        Mxl = new BrowseControl.BrowseField<string>(
+                            s.MxlPath, (field) =>
+                            {
+                                var btn = new Button
+                                {
+                                    Content = "🎵",
+                                    Padding = new Avalonia.Thickness(2),
+                                    Background = Avalonia.Media.Brushes.Transparent,
+                                    BorderThickness = new Avalonia.Thickness(0),
+                                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                                    [ToolTip.TipProperty] = "Open in MuseScore"
+                                };
+                                btn.Click += (_, _) =>
+                                {
+                                    try
+                                    {
+                                        var museScorePath = AppSettings.Instance.MuseScorePath;
+                                        if (string.IsNullOrEmpty(museScorePath))
+                                            museScorePath = MuseScoreExportService.AutoDetectMuseScore();
+                                        if (!string.IsNullOrEmpty(museScorePath))
+                                            MuseScoreExportService.LaunchMuseScore(museScorePath, field.Data);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        System.Diagnostics.Debug.WriteLine($"Failed to launch MuseScore: {ex.Message}");
+                                    }
+                                };
+                                return btn;
+                            })
+                        { SortKey = "🎵" },
+                        Roll = new BrowseControl.BrowseField<string>(
+                            s.MxlPath, (field) =>
+                            {
+                                var btn = new Button
+                                {
+                                    Content = "🎹",
+                                    Padding = new Avalonia.Thickness(2),
+                                    Background = Avalonia.Media.Brushes.Transparent,
+                                    BorderThickness = new Avalonia.Thickness(0),
+                                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                                    [ToolTip.TipProperty] = "Open in vertical piano roll (autoplay)"
+                                };
+                                btn.Click += (_, _) =>
+                                {
+                                    try
+                                    {
+                                        string xmlPath = VerticalPianoRollWindowFactory.ResolveMxlToXml(field.Data);
+                                        var window = VerticalPianoRollWindowFactory.BuildWindow(xmlPath);
+                                        window.Show(this);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        System.Diagnostics.Debug.WriteLine($"Failed to open piano roll: {ex.Message}");
+                                    }
+                                };
+                                return btn;
+                            }) { SortKey = "🎹" },
                         s.DisplayName,
                         s.Composer,
                         s.BookName,
@@ -1576,7 +1635,7 @@ public class ChooseMusicWindow : Window
                     };
 
         _pianoRollSongsBrowseControl = new BrowseControl(query,
-            colWidths: new[] { 280, 160, 300, 0 },
+            colWidths: new[] { 45, 45, 280, 160, 300, 0 },
             rowHeight: BrowseControl.TouchRowHeight);
 
         _pianoRollSongsBrowseControl.ListView.DoubleTapped += (s, e) => OnAddToPianoRollPlaylistClick(s, e);
