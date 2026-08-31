@@ -51,6 +51,15 @@ public class ChooseMusicWindow : Window
     private Grid _playlistTabGrid;
     private Playlist? _currentPlaylist;
 
+    // PianoRoll playlist tab
+    private ComboBox _pianoRollPlaylistComboBox;
+    private BrowseControl? _pianoRollPlaylistEntriesBrowseControl;
+    private BrowseControl? _pianoRollSongsBrowseControl;
+    private TextBlock _pianoRollPlaylistStatus;
+    private Grid _pianoRollTabGrid;
+    private PianoRollPlaylist? _currentPianoRollPlaylist;
+    private bool _isRefreshingPianoRollCombo = false;
+
     private List<PdfMetaDataReadResult> _pdfMetadata;
     private string _rootFolder;
 
@@ -203,6 +212,10 @@ public class ChooseMusicWindow : Window
                     _tabControl.SelectedIndex = 3;
                     e.Handled = true;
                     break;
+                case Key.R: // Piano_Roll
+                    _tabControl.SelectedIndex = 4;
+                    e.Handled = true;
+                    break;
             }
         }
     }
@@ -330,6 +343,11 @@ public class ChooseMusicWindow : Window
         var playlistTab = new TabItem { Header = "_Playlists" };
         playlistTab.Content = BuildPlaylistTabContent();
         _tabControl.Items.Add(playlistTab);
+
+        // PianoRoll playlist tab
+        var pianoRollTab = new TabItem { Header = "Piano_Roll" };
+        pianoRollTab.Content = BuildPianoRollTabContent();
+        _tabControl.Items.Add(pianoRollTab);
 
         _tabControl.SelectionChanged += OnTabSelectionChanged;
 
@@ -839,6 +857,142 @@ public class ChooseMusicWindow : Window
         return _playlistTabGrid;
     }
 
+    private Control BuildPianoRollTabContent()
+    {
+        _pianoRollTabGrid = new Grid();
+        _pianoRollTabGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));  // Toolbar
+        _pianoRollTabGrid.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star))); // Content
+
+        // Toolbar: playlist selector, management buttons, and Play button
+        var toolbar = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(5),
+            Spacing = 10
+        };
+        Grid.SetRow(toolbar, 0);
+
+        toolbar.Children.Add(new Label { Content = "PianoRoll Playlist:", VerticalAlignment = VerticalAlignment.Center });
+
+        _pianoRollPlaylistComboBox = new ComboBox { Width = 200, VerticalAlignment = VerticalAlignment.Center };
+        _pianoRollPlaylistComboBox.SelectionChanged += OnPianoRollPlaylistSelectionChanged;
+        toolbar.Children.Add(_pianoRollPlaylistComboBox);
+
+        var btnNew = new Button { Content = "New", Margin = new Thickness(5, 0, 0, 0) };
+        btnNew.Click += OnNewPianoRollPlaylistClick;
+        toolbar.Children.Add(btnNew);
+
+        var btnRename = new Button { Content = "Rename", Margin = new Thickness(5, 0, 0, 0) };
+        btnRename.Click += OnRenamePianoRollPlaylistClick;
+        toolbar.Children.Add(btnRename);
+
+        var btnDelete = new Button { Content = "Delete", Margin = new Thickness(5, 0, 0, 0) };
+        btnDelete.Click += OnDeletePianoRollPlaylistClick;
+        toolbar.Children.Add(btnDelete);
+
+        var btnPlay = new Button
+        {
+            Content = "▶ Play PianoRoll",
+            Margin = new Thickness(20, 0, 0, 0),
+            [ToolTip.TipProperty] = "Open the piano roll and auto-play all songs in this playlist"
+        };
+        btnPlay.Click += OnPlayPianoRollClick;
+        toolbar.Children.Add(btnPlay);
+
+        _pianoRollPlaylistStatus = new TextBlock
+        {
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(20, 0, 0, 0)
+        };
+        toolbar.Children.Add(_pianoRollPlaylistStatus);
+
+        _pianoRollTabGrid.Children.Add(toolbar);
+
+        // Split view: MXL songs on left, playlist entries on right
+        var splitGrid = new Grid();
+        splitGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star))); // MXL songs browser
+        splitGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));                       // Buttons
+        splitGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star))); // Playlist entries
+        Grid.SetRow(splitGrid, 1);
+
+        var songsBrowserPlaceholder = new TextBlock
+        {
+            Text = "Loading songs with MXL...",
+            Margin = new Thickness(20),
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center
+        };
+        Grid.SetColumn(songsBrowserPlaceholder, 0);
+        splitGrid.Children.Add(songsBrowserPlaceholder);
+
+        // Middle: Add/Remove/Up/Down buttons
+        var buttonPanel = new StackPanel
+        {
+            Orientation = Orientation.Vertical,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(5)
+        };
+        Grid.SetColumn(buttonPanel, 1);
+
+        var btnAdd = new Button
+        {
+            Content = "Copy →",
+            Width = 80,
+            Margin = new Thickness(0, 5, 0, 5),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            [ToolTip.TipProperty] = "Add selected song(s) to piano-roll playlist"
+        };
+        btnAdd.Click += OnAddToPianoRollPlaylistClick;
+        buttonPanel.Children.Add(btnAdd);
+
+        var btnRemove = new Button
+        {
+            Content = "← Delete",
+            Width = 80,
+            Margin = new Thickness(0, 5, 0, 5),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            [ToolTip.TipProperty] = "Remove selected song(s) from piano-roll playlist"
+        };
+        btnRemove.Click += OnRemoveFromPianoRollPlaylistClick;
+        buttonPanel.Children.Add(btnRemove);
+
+        var btnMoveUp = new Button
+        {
+            Content = "↑ Up",
+            Width = 80,
+            Margin = new Thickness(0, 15, 0, 5),
+            HorizontalContentAlignment = HorizontalAlignment.Center
+        };
+        btnMoveUp.Click += OnPianoRollMoveUpClick;
+        buttonPanel.Children.Add(btnMoveUp);
+
+        var btnMoveDown = new Button
+        {
+            Content = "↓ Down",
+            Width = 80,
+            Margin = new Thickness(0, 5, 0, 5),
+            HorizontalContentAlignment = HorizontalAlignment.Center
+        };
+        btnMoveDown.Click += OnPianoRollMoveDownClick;
+        buttonPanel.Children.Add(btnMoveDown);
+
+        splitGrid.Children.Add(buttonPanel);
+
+        var entriesPlaceholder = new TextBlock
+        {
+            Text = "Select a piano-roll playlist...",
+            Margin = new Thickness(20),
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center
+        };
+        Grid.SetColumn(entriesPlaceholder, 2);
+        splitGrid.Children.Add(entriesPlaceholder);
+
+        _pianoRollTabGrid.Children.Add(splitGrid);
+
+        return _pianoRollTabGrid;
+    }
+
     private void OnTabSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         // Prevent re-entrancy - setting combo box selection can trigger this again
@@ -932,6 +1086,24 @@ public class ChooseMusicWindow : Window
 
                     // Focus the filter textbox when Playlist tab is activated
                     _playlistSongsBrowseControl?.FocusFilter();
+                }
+                else if (header == "Piano_Roll")
+                {
+                    if (_queryBrowseControl != null)
+                    {
+                        _queryFilterText = _queryBrowseControl.GetFilterText();
+                    }
+
+                    if (_pianoRollSongsBrowseControl == null)
+                    {
+                        FillPianoRollTab();
+                    }
+                    else
+                    {
+                        RefreshPianoRollPlaylistUIFromSettings();
+                    }
+
+                    _pianoRollSongsBrowseControl?.FocusFilter();
                 }
             }
         }
@@ -1348,6 +1520,238 @@ public class ChooseMusicWindow : Window
         _playlistStatus.Text = $"{_currentPlaylist.Entries.Count} song(s)";
     }
 
+    // ── PianoRoll playlist tab fill / refresh ──────────────────────────────────
+
+    private void FillPianoRollTab()
+    {
+        if (_pdfMetadata.Count == 0) return;
+
+        // Collect all TocEntry items that have a cached MXL file.
+        // We need the same CachedMxlPath resolution logic used in MetaDataFormWindow.
+        var mxlSongs = new List<(string MxlPath, string DisplayName, string BookName, string Composer)>();
+
+        foreach (var pdfItem in _pdfMetadata)
+        {
+            string? mxlPersistDir = null;
+            if (AppSettings.Instance.PersistMxlNextToPdf)
+            {
+                var pdfPath = pdfItem.GetFullPathFileFromVolno(0);
+                if (!string.IsNullOrEmpty(pdfPath))
+                    mxlPersistDir = Path.GetDirectoryName(pdfPath);
+            }
+            if (mxlPersistDir == null) continue;
+
+            var orderedToc = pdfItem.TocEntries.OrderBy(t => t.PageNo).ToList();
+            int tocOffset  = pdfItem.PageNumberOffset;
+            int totalPages = pdfItem.NumPagesInSet;
+
+            for (int i = 0; i < orderedToc.Count; i++)
+            {
+                var toc = orderedToc[i];
+                int startSheet = toc.PageNo - tocOffset + 1;
+                int endSheet   = (i + 1 < orderedToc.Count)
+                    ? orderedToc[i + 1].PageNo - tocOffset
+                    : totalPages;
+                endSheet = Math.Max(startSheet, endSheet);
+
+                string? songName = orderedToc.Count > 1 ? toc.SongName : null;
+                string? mxlPath =
+                    MuseScoreExportService.FindCachedMxlPath(pdfItem, startSheet, endSheet, false, mxlPersistDir, songName)
+                    ?? MuseScoreExportService.FindCachedMxlPath(pdfItem, startSheet, endSheet, true, mxlPersistDir, songName);
+
+                if (!string.IsNullOrEmpty(mxlPath))
+                    mxlSongs.Add((mxlPath, toc.SongName ?? string.Empty,
+                        pdfItem.GetBookName(_rootFolder), toc.Composer ?? string.Empty));
+            }
+        }
+
+        var query = from s in mxlSongs
+                    orderby s.DisplayName
+                    select new
+                    {
+                        Mxl = new BrowseControl.BrowseField<string>(
+                            s.MxlPath, (field) =>
+                            {
+                                var btn = new Button
+                                {
+                                    Content = "🎵",
+                                    Padding = new Avalonia.Thickness(2),
+                                    Background = Avalonia.Media.Brushes.Transparent,
+                                    BorderThickness = new Avalonia.Thickness(0),
+                                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                                    [ToolTip.TipProperty] = "Open in MuseScore"
+                                };
+                                btn.Click += (_, _) =>
+                                {
+                                    try
+                                    {
+                                        var museScorePath = AppSettings.Instance.MuseScorePath;
+                                        if (string.IsNullOrEmpty(museScorePath))
+                                            museScorePath = MuseScoreExportService.AutoDetectMuseScore();
+                                        if (!string.IsNullOrEmpty(museScorePath))
+                                            MuseScoreExportService.LaunchMuseScore(museScorePath, field.Data);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        System.Diagnostics.Debug.WriteLine($"Failed to launch MuseScore: {ex.Message}");
+                                    }
+                                };
+                                return btn;
+                            })
+                        { SortKey = "🎵" },
+                        Roll = new BrowseControl.BrowseField<string>(
+                            s.MxlPath, (field) =>
+                            {
+                                var btn = new Button
+                                {
+                                    Content = "🎹",
+                                    Padding = new Avalonia.Thickness(2),
+                                    Background = Avalonia.Media.Brushes.Transparent,
+                                    BorderThickness = new Avalonia.Thickness(0),
+                                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                                    [ToolTip.TipProperty] = "Open in vertical piano roll (autoplay)"
+                                };
+                                btn.Click += (_, _) =>
+                                {
+                                    try
+                                    {
+                                        string xmlPath = VerticalPianoRollWindowFactory.ResolveMxlToXml(field.Data);
+                                        var window = VerticalPianoRollWindowFactory.BuildWindow(xmlPath);
+                                        window.Show(this);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        System.Diagnostics.Debug.WriteLine($"Failed to open piano roll: {ex.Message}");
+                                    }
+                                };
+                                return btn;
+                            }) { SortKey = "🎹" },
+                        s.DisplayName,
+                        s.Composer,
+                        s.BookName,
+                        _MxlPath = s.MxlPath
+                    };
+
+        _pianoRollSongsBrowseControl = new BrowseControl(query,
+            colWidths: new[] { 45, 45, 280, 160, 300, 0 },
+            rowHeight: BrowseControl.TouchRowHeight);
+
+        _pianoRollSongsBrowseControl.ListView.DoubleTapped += (s, e) => OnAddToPianoRollPlaylistClick(s, e);
+
+        // Replace placeholder with the browse control
+        var splitGrid = (Grid)_pianoRollTabGrid.Children[1];
+        var placeholder = splitGrid.Children.FirstOrDefault(c => Grid.GetColumn(c) == 0);
+        if (placeholder != null) splitGrid.Children.Remove(placeholder);
+        Grid.SetColumn(_pianoRollSongsBrowseControl, 0);
+        splitGrid.Children.Add(_pianoRollSongsBrowseControl);
+
+        // Populate playlist combo
+        _isRefreshingPianoRollCombo = true;
+        try
+        {
+            _pianoRollPlaylistComboBox.Items.Clear();
+            foreach (var pl in AppSettings.Instance.PianoRollPlaylists)
+                _pianoRollPlaylistComboBox.Items.Add(new ComboBoxItem { Content = pl.Name, Tag = pl });
+
+            var lastName = AppSettings.Instance.LastSelectedPianoRollPlaylist;
+            if (!string.IsNullOrEmpty(lastName) && AppSettings.Instance.PianoRollPlaylists.Any(p => p.Name == lastName))
+            {
+                _currentPianoRollPlaylist = AppSettings.Instance.PianoRollPlaylists.First(p => p.Name == lastName);
+                _pianoRollPlaylistComboBox.SelectedItem = _pianoRollPlaylistComboBox.Items
+                    .OfType<ComboBoxItem>().FirstOrDefault(i => i.Content?.ToString() == lastName);
+            }
+            else if (AppSettings.Instance.PianoRollPlaylists.Count > 0)
+            {
+                _currentPianoRollPlaylist = AppSettings.Instance.PianoRollPlaylists[0];
+                _pianoRollPlaylistComboBox.SelectedIndex = 0;
+            }
+            else
+            {
+                _currentPianoRollPlaylist = null;
+            }
+        }
+        finally
+        {
+            _isRefreshingPianoRollCombo = false;
+        }
+
+        RefreshPianoRollEntries();
+    }
+
+    private void RefreshPianoRollPlaylistUIFromSettings()
+    {
+        var previousName = _currentPianoRollPlaylist?.Name;
+
+        _isRefreshingPianoRollCombo = true;
+        try
+        {
+            _pianoRollPlaylistComboBox.Items.Clear();
+            foreach (var pl in AppSettings.Instance.PianoRollPlaylists)
+                _pianoRollPlaylistComboBox.Items.Add(new ComboBoxItem { Content = pl.Name, Tag = pl });
+
+            // Try to keep the same playlist selected
+            if (!string.IsNullOrEmpty(previousName))
+            {
+                _currentPianoRollPlaylist = AppSettings.Instance.PianoRollPlaylists.FirstOrDefault(p => p.Name == previousName);
+                _pianoRollPlaylistComboBox.SelectedItem = _pianoRollPlaylistComboBox.Items
+                    .OfType<ComboBoxItem>().FirstOrDefault(i => i.Content?.ToString() == previousName);
+            }
+            if (_currentPianoRollPlaylist == null && AppSettings.Instance.PianoRollPlaylists.Count > 0)
+            {
+                _currentPianoRollPlaylist = AppSettings.Instance.PianoRollPlaylists[0];
+                _pianoRollPlaylistComboBox.SelectedIndex = 0;
+            }
+        }
+        finally
+        {
+            _isRefreshingPianoRollCombo = false;
+        }
+
+        RefreshPianoRollEntries();
+    }
+
+    private void RefreshPianoRollEntries()
+    {
+        var splitGrid = (Grid)_pianoRollTabGrid.Children[1];
+
+        if (_currentPianoRollPlaylist == null)
+        {
+            _pianoRollPlaylistStatus.Text = "No playlist selected";
+            var existing = splitGrid.Children.FirstOrDefault(c => Grid.GetColumn(c) == 2);
+            if (existing is BrowseControl) splitGrid.Children.Remove(existing);
+            var placeholder = new TextBlock
+            {
+                Text = "Select a piano-roll playlist...",
+                Margin = new Thickness(20),
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+            Grid.SetColumn(placeholder, 2);
+            splitGrid.Children.Add(placeholder);
+            return;
+        }
+
+        var query = _currentPianoRollPlaylist.Entries.Select((e, idx) => new
+        {
+            Order = idx + 1,
+            e.DisplayName,
+            e.MxlPath
+        });
+
+        _pianoRollPlaylistEntriesBrowseControl = new BrowseControl(query,
+            colWidths: new[] { 40, 280, 0 },
+            rowHeight: BrowseControl.TouchRowHeight);
+
+        var existing2 = splitGrid.Children.FirstOrDefault(c => Grid.GetColumn(c) == 2);
+        if (existing2 != null) splitGrid.Children.Remove(existing2);
+        Grid.SetColumn(_pianoRollPlaylistEntriesBrowseControl, 2);
+        splitGrid.Children.Add(_pianoRollPlaylistEntriesBrowseControl);
+
+        _pianoRollPlaylistStatus.Text = $"{_currentPianoRollPlaylist.Entries.Count} song(s)";
+    }
+
     private void OnPlaylistSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         // Ignore selection changes during refresh
@@ -1596,6 +2000,191 @@ public class ChooseMusicWindow : Window
 
         // Re-select the moved item at its new position
         _playlistEntriesBrowseControl.ListView.SetSelectedIndex(selectedIndex + 1);
+    }
+
+    // ── PianoRoll playlist management handlers ─────────────────────────────────
+
+    private void OnPianoRollPlaylistSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_isRefreshingPianoRollCombo) return;
+        if (e.AddedItems.Count == 0) return;
+
+        if (e.AddedItems[0] is ComboBoxItem item && item.Tag is PianoRollPlaylist selected)
+        {
+            _currentPianoRollPlaylist = selected;
+            AppSettings.Instance.LastSelectedPianoRollPlaylist = selected.Name;
+            AppSettings.Instance.Save();
+            RefreshPianoRollEntries();
+        }
+    }
+
+    private async void OnNewPianoRollPlaylistClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        var name = await ShowInputDialogAsync("New PianoRoll Playlist", "Enter playlist name:", "New PianoRoll Playlist");
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        var baseName = name;
+        var counter = 1;
+        while (AppSettings.Instance.PianoRollPlaylists.Any(p => p.Name == name))
+            name = $"{baseName} ({counter++})";
+
+        var newPlaylist = new PianoRollPlaylist { Name = name };
+        AppSettings.Instance.PianoRollPlaylists.Add(newPlaylist);
+        AppSettings.Instance.LastSelectedPianoRollPlaylist = name;
+        AppSettings.Instance.Save();
+
+        _currentPianoRollPlaylist = newPlaylist;
+        RefreshPianoRollPlaylistUIFromSettings();
+    }
+
+    private async void OnRenamePianoRollPlaylistClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_currentPianoRollPlaylist == null) return;
+
+        var newName = await ShowInputDialogAsync("Rename Playlist", "Enter new name:", _currentPianoRollPlaylist.Name);
+        if (string.IsNullOrWhiteSpace(newName) || newName == _currentPianoRollPlaylist.Name) return;
+
+        var baseName = newName;
+        var counter = 1;
+        while (AppSettings.Instance.PianoRollPlaylists.Any(p => p.Name == newName && p != _currentPianoRollPlaylist))
+            newName = $"{baseName} ({counter++})";
+
+        _currentPianoRollPlaylist.Name = newName;
+        _currentPianoRollPlaylist.ModifiedDate = DateTime.Now;
+        AppSettings.Instance.LastSelectedPianoRollPlaylist = newName;
+        AppSettings.Instance.Save();
+        RefreshPianoRollPlaylistUIFromSettings();
+    }
+
+    private async void OnDeletePianoRollPlaylistClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_currentPianoRollPlaylist == null) return;
+
+        var confirm = await ShowConfirmDialogAsync("Delete Playlist", $"Delete '{_currentPianoRollPlaylist.Name}'?");
+        if (!confirm) return;
+
+        AppSettings.Instance.PianoRollPlaylists.Remove(_currentPianoRollPlaylist);
+        AppSettings.Instance.Save();
+
+        _currentPianoRollPlaylist = AppSettings.Instance.PianoRollPlaylists.FirstOrDefault();
+        RefreshPianoRollPlaylistUIFromSettings();
+    }
+
+    private void OnAddToPianoRollPlaylistClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_currentPianoRollPlaylist == null || _pianoRollSongsBrowseControl == null) return;
+
+        var selectedItems = _pianoRollSongsBrowseControl.ListView.SelectedItems?.Cast<object>().ToList();
+        if (selectedItems == null || selectedItems.Count == 0) return;
+
+        foreach (var item in selectedItems)
+        {
+            var nameProp   = item.GetType().GetProperty("DisplayName");
+            var pathProp   = item.GetType().GetProperty("_MxlPath");
+            if (nameProp == null || pathProp == null) continue;
+
+            var displayName = nameProp.GetValue(item)?.ToString() ?? string.Empty;
+            var mxlPath     = pathProp.GetValue(item)?.ToString() ?? string.Empty;
+            if (string.IsNullOrEmpty(mxlPath)) continue;
+
+            _currentPianoRollPlaylist.Entries.Add(new PianoRollPlaylistEntry
+            {
+                DisplayName = displayName,
+                MxlPath     = mxlPath
+            });
+        }
+
+        _currentPianoRollPlaylist.ModifiedDate = DateTime.Now;
+        AppSettings.Instance.Save();
+        RefreshPianoRollEntries();
+    }
+
+    private void OnRemoveFromPianoRollPlaylistClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_currentPianoRollPlaylist == null || _pianoRollPlaylistEntriesBrowseControl == null) return;
+
+        var selectedItems = _pianoRollPlaylistEntriesBrowseControl.ListView.SelectedItems?.Cast<object>().ToList();
+        if (selectedItems == null || selectedItems.Count == 0) return;
+
+        // Collect 0-based indices from the Order column (Order = idx+1)
+        var indicesToRemove = new List<int>();
+        foreach (var item in selectedItems)
+        {
+            var orderProp = item.GetType().GetProperty("Order");
+            if (orderProp?.GetValue(item) is int order)
+                indicesToRemove.Add(order - 1);
+        }
+
+        // Remove in descending order to preserve earlier indices
+        foreach (var idx in indicesToRemove.OrderByDescending(i => i))
+        {
+            if (idx >= 0 && idx < _currentPianoRollPlaylist.Entries.Count)
+                _currentPianoRollPlaylist.Entries.RemoveAt(idx);
+        }
+
+        _currentPianoRollPlaylist.ModifiedDate = DateTime.Now;
+        AppSettings.Instance.Save();
+        RefreshPianoRollEntries();
+    }
+
+    private void OnPianoRollMoveUpClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_currentPianoRollPlaylist == null || _pianoRollPlaylistEntriesBrowseControl == null) return;
+
+        var selectedItem = _pianoRollPlaylistEntriesBrowseControl.ListView.SelectedItem;
+        if (selectedItem == null) return;
+
+        var orderProp = selectedItem.GetType().GetProperty("Order");
+        if (orderProp?.GetValue(selectedItem) is not int order || order <= 1) return;
+
+        int idx = order - 1;
+        var entry = _currentPianoRollPlaylist.Entries[idx];
+        _currentPianoRollPlaylist.Entries.RemoveAt(idx);
+        _currentPianoRollPlaylist.Entries.Insert(idx - 1, entry);
+
+        _currentPianoRollPlaylist.ModifiedDate = DateTime.Now;
+        AppSettings.Instance.Save();
+        RefreshPianoRollEntries();
+        _pianoRollPlaylistEntriesBrowseControl.ListView.SetSelectedIndex(idx - 1);
+    }
+
+    private void OnPianoRollMoveDownClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_currentPianoRollPlaylist == null || _pianoRollPlaylistEntriesBrowseControl == null) return;
+
+        var selectedItem = _pianoRollPlaylistEntriesBrowseControl.ListView.SelectedItem;
+        if (selectedItem == null) return;
+
+        var orderProp = selectedItem.GetType().GetProperty("Order");
+        if (orderProp?.GetValue(selectedItem) is not int order) return;
+
+        int idx = order - 1;
+        if (idx >= _currentPianoRollPlaylist.Entries.Count - 1) return;
+
+        var entry = _currentPianoRollPlaylist.Entries[idx];
+        _currentPianoRollPlaylist.Entries.RemoveAt(idx);
+        _currentPianoRollPlaylist.Entries.Insert(idx + 1, entry);
+
+        _currentPianoRollPlaylist.ModifiedDate = DateTime.Now;
+        AppSettings.Instance.Save();
+        RefreshPianoRollEntries();
+        _pianoRollPlaylistEntriesBrowseControl.ListView.SetSelectedIndex(idx + 1);
+    }
+
+    private void OnPlayPianoRollClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_currentPianoRollPlaylist == null || _currentPianoRollPlaylist.Entries.Count == 0)
+        {
+            _pianoRollPlaylistStatus.Text = "No songs in playlist.";
+            return;
+        }
+
+        var songs = _currentPianoRollPlaylist.Entries
+            .Select(entry => (entry.MxlPath, entry.DisplayName))
+            .ToList();
+
+        var window = VerticalPianoRollWindowFactory.BuildPlaylistWindow(songs);
+        window.Show(this);
     }
 
     /// <summary>
