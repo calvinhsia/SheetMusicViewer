@@ -1048,6 +1048,27 @@ public sealed class VerticalPianoRollCanvas : Control
     private readonly int _divsPerQuarter;
     private int    _syncCallCount;
 
+    // ── cached render resources (allocated once in ctor; reused every frame) ─────────
+    private readonly SolidColorBrush    _bgBrush;
+    private readonly SolidColorBrush    _labelBrush;
+    private readonly SolidColorBrush    _whiteKeyBrush;
+    private readonly SolidColorBrush    _blackKeyBrush;
+    private readonly SolidColorBrush    _keyLabelBrush;
+    private readonly SolidColorBrush    _edgeBrush;
+    private readonly SolidColorBrush    _activeS1;
+    private readonly SolidColorBrush    _activeS2;
+    private readonly Pen                _lanePen;
+    private readonly Pen                _cPen;
+    private readonly Pen                _whiteKeyPen;
+    private readonly Typeface           _consolasTf;
+    // Per-alpha note brushes: index = alpha byte (0–255); pre-built for all 256 values.
+    private readonly SolidColorBrush[]  _noteBrushS1 = new SolidColorBrush[256];
+    private readonly SolidColorBrush[]  _noteBrushS2 = new SolidColorBrush[256];
+    private readonly SolidColorBrush[]  _noteBrushOt = new SolidColorBrush[256];
+    // C-octave label FormattedText cache; index = octave number (0–9).
+    private readonly FormattedText?[]   _cLabelFtScroll = new FormattedText?[10];
+    private readonly FormattedText?[]   _cLabelFtKeys   = new FormattedText?[10];
+
     /// <summary>
     /// Set to true to emit Trace lines for every SyncAnchor call.
     /// Format:  SyncAnchor  #{n}  audio={divs}  predicted={p:F0}  err={errMs:+0.0;-0.0} ms  [{action}]
@@ -1143,6 +1164,39 @@ public sealed class VerticalPianoRollCanvas : Control
 
         BuildBars();
 
+        // Initialise cached render resources (avoids per-frame heap allocations)
+        const byte S1R = 64,  S1G = 200, S1B = 90;
+        const byte S2R = 80,  S2G = 130, S2B = 230;
+        const byte OtR = 200, OtG = 180, OtB = 80;
+        _bgBrush       = new SolidColorBrush(Color.FromRgb(20, 20, 20));
+        _labelBrush    = new SolidColorBrush(Color.FromArgb(120, 200, 200, 200));
+        _whiteKeyBrush = new SolidColorBrush(Color.FromRgb(240, 240, 240));
+        _blackKeyBrush = new SolidColorBrush(Color.FromRgb(30, 30, 30));
+        _keyLabelBrush = new SolidColorBrush(Color.FromRgb(100, 100, 100));
+        _edgeBrush     = new SolidColorBrush(Color.FromArgb(200, 255, 255, 255));
+        _activeS1      = new SolidColorBrush(Color.FromArgb(230, 64, 200, 90));
+        _activeS2      = new SolidColorBrush(Color.FromArgb(230, 80, 130, 230));
+        _lanePen       = new Pen(new SolidColorBrush(Color.FromArgb(30, 200, 200, 200)), 0.5);
+        _cPen          = new Pen(new SolidColorBrush(Color.FromArgb(60, 200, 200, 200)), 0.8);
+        _whiteKeyPen   = new Pen(new SolidColorBrush(Color.FromRgb(80, 80, 80)), 0.5);
+        _consolasTf    = new Typeface("Consolas");
+        for (int a = 0; a < 256; a++)
+        {
+            _noteBrushS1[a] = new SolidColorBrush(Color.FromArgb((byte)a, S1R, S1G, S1B));
+            _noteBrushS2[a] = new SolidColorBrush(Color.FromArgb((byte)a, S2R, S2G, S2B));
+            _noteBrushOt[a] = new SolidColorBrush(Color.FromArgb((byte)a, OtR, OtG, OtB));
+        }
+        for (int m = MinMidi; m <= MaxMidi; m++)
+        {
+            if (m % 12 != 0) continue;
+            int oct = m / 12 - 1;
+            if (oct < 0 || oct >= _cLabelFtScroll.Length) continue;
+            _cLabelFtScroll[oct] = new FormattedText($"C{oct}", CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight, _consolasTf, 7, _labelBrush);
+            _cLabelFtKeys[oct]   = new FormattedText($"C{oct}", CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight, _consolasTf, 7, _keyLabelBrush);
+        }
+
         _animTimer = new DispatcherTimer(DispatcherPriority.Render)
         {
             Interval = TimeSpan.FromMilliseconds(16)   // ~60 fps
@@ -1208,13 +1262,12 @@ public sealed class VerticalPianoRollCanvas : Control
             : (_currentGlobalDivisions >= 0 ? (double)_currentGlobalDivisions : 0.0))
             + latencyDiv;
 
-        ctx.FillRectangle(new SolidColorBrush(Color.FromRgb(20, 20, 20)),
-            new Rect(0, 0, _canvasW, scrollH));
+        ctx.FillRectangle(_bgBrush, new Rect(0, 0, _canvasW, scrollH));
 
-        var lanePen    = new Pen(new SolidColorBrush(Color.FromArgb(30, 200, 200, 200)), 0.5);
-        var cPen       = new Pen(new SolidColorBrush(Color.FromArgb(60, 200, 200, 200)), 0.8);
-        var labelBrush = new SolidColorBrush(Color.FromArgb(120, 200, 200, 200));
-        var tf         = new Typeface("Consolas");
+        var lanePen    = _lanePen;
+        var cPen       = _cPen;
+        var labelBrush = _labelBrush;
+        var tf         = _consolasTf;
 
         for (int m = MinMidi; m <= MaxMidi; m++)
         {
@@ -1224,16 +1277,11 @@ public sealed class VerticalPianoRollCanvas : Control
             ctx.DrawLine(pen, new Point(x, 0), new Point(x, scrollH));
             if (m % 12 == 0)
             {
-                var ft = new FormattedText($"C{m / 12 - 1}", CultureInfo.InvariantCulture,
-                    FlowDirection.LeftToRight, tf, 7, labelBrush);
-                ctx.DrawText(ft, new Point(x + 2, 2));
+                int oct = m / 12 - 1;
+                var ft = (oct >= 0 && oct < _cLabelFtScroll.Length) ? _cLabelFtScroll[oct] : null;
+                if (ft != null) ctx.DrawText(ft, new Point(x + 2, 2));
             }
         }
-
-        // Base RGB values for each staff; alpha is scaled by velocity below.
-        const byte S1R = 64,  S1G = 200, S1B = 90;   // green  – right hand
-        const byte S2R = 80,  S2G = 130, S2B = 230;  // blue   – left hand
-        const byte OtR = 200, OtG = 180, OtB = 80;   // yellow – other
 
         double divsPerSec    = bpm / 60.0 * _divsPerQuarter;
         double lookaheadDivs = divsPerSec * LookaheadSec;
@@ -1255,15 +1303,14 @@ public sealed class VerticalPianoRollCanvas : Control
             double halfW = bar.W / 2.0;
             double bx, bw;
             ISolidColorBrush brush;
-            if (bar.Staff == 1)      { bx = fullX;         bw = halfW; brush = new SolidColorBrush(Color.FromArgb(alpha, S1R, S1G, S1B)); }
-            else if (bar.Staff == 2) { bx = fullX + halfW; bw = halfW; brush = new SolidColorBrush(Color.FromArgb(alpha, S2R, S2G, S2B)); }
-            else                     { bx = fullX;         bw = bar.W; brush = new SolidColorBrush(Color.FromArgb(alpha, OtR, OtG, OtB)); }
+            if (bar.Staff == 1)      { bx = fullX;         bw = halfW; brush = _noteBrushS1[alpha]; }
+            else if (bar.Staff == 2) { bx = fullX + halfW; bw = halfW; brush = _noteBrushS2[alpha]; }
+            else                     { bx = fullX;         bw = bar.W; brush = _noteBrushOt[alpha]; }
 
             ctx.FillRectangle(brush, new Rect(bx, clippedTop, bw, clippedH), (float)Math.Min(3, bw / 2));
             double edgeY = Math.Min(yBottom, scrollH - 1);
             if (edgeY - clippedTop > 2)
-                ctx.FillRectangle(new SolidColorBrush(Color.FromArgb(200, 255, 255, 255)),
-                    new Rect(bx, edgeY - 2, bw, 2));
+                ctx.FillRectangle(_edgeBrush, new Rect(bx, edgeY - 2, bw, 2));
         }
 
         var activeKeys = new Dictionary<int, int>();
@@ -1281,11 +1328,11 @@ public sealed class VerticalPianoRollCanvas : Control
         }
 
         double kbY            = scrollH;
-        var whiteKeyBrush     = new SolidColorBrush(Color.FromRgb(240, 240, 240));
-        var blackKeyBrush     = new SolidColorBrush(Color.FromRgb(30, 30, 30));
-        var whiteKeyPen       = new Pen(new SolidColorBrush(Color.FromRgb(80, 80, 80)), 0.5);
-        var activeS1          = new SolidColorBrush(Color.FromArgb(230, 64, 200, 90));
-        var activeS2          = new SolidColorBrush(Color.FromArgb(230, 80, 130, 230));
+        var whiteKeyBrush     = _whiteKeyBrush;
+        var blackKeyBrush     = _blackKeyBrush;
+        var whiteKeyPen       = _whiteKeyPen;
+        var activeS1          = _activeS1;
+        var activeS2          = _activeS2;
 
         for (int m = MinMidi; m <= MaxMidi; m++)
         {
@@ -1304,10 +1351,9 @@ public sealed class VerticalPianoRollCanvas : Control
             ctx.DrawRectangle(null, whiteKeyPen, new Rect(kx, kbY, kw, KeyboardH));
             if (m % 12 == 0 && bits == 0)
             {
-                var ft = new FormattedText($"C{m / 12 - 1}", CultureInfo.InvariantCulture,
-                    FlowDirection.LeftToRight, tf, 7,
-                    new SolidColorBrush(Color.FromRgb(100, 100, 100)));
-                ctx.DrawText(ft, new Point(kx + 1, kbY + KeyboardH - 14));
+                int keyOct = m / 12 - 1;
+                var ft = (keyOct >= 0 && keyOct < _cLabelFtKeys.Length) ? _cLabelFtKeys[keyOct] : null;
+                if (ft != null) ctx.DrawText(ft, new Point(kx + 1, kbY + KeyboardH - 14));
             }
         }
 
@@ -1398,6 +1444,38 @@ public sealed class StaffNotationCanvas : Control
     private long   _anchorTimestamp;
     private double _playBpm = 120;
     private readonly DispatcherTimer _animTimer;
+
+    // ── cached render resources (allocated once in ctor; reused every frame) ─────
+    private readonly SolidColorBrush _bgBrush;
+    private readonly SolidColorBrush _inkBrush;
+    private readonly SolidColorBrush _staffClrBrush;
+    private readonly SolidColorBrush _barNumBrush;
+    private readonly SolidColorBrush _header1Brush;
+    private readonly SolidColorBrush _header2Brush;
+    private readonly SolidColorBrush _cursorBrush;
+    private readonly Pen             _inkPen;
+    private readonly Pen             _inkPen15;
+    private readonly Pen             _noteHeadPen;
+    private readonly Pen             _staffPen;
+    private readonly Pen             _barPen;
+    private readonly Pen             _cursorPen;
+    private readonly Typeface        _arialTf;
+    private readonly Typeface        _arialSemiBoldTf;
+    private readonly Typeface        _arialBoldTf;
+    private readonly Typeface        _clefTf;
+    private readonly Typeface        _sansItalicBoldTf;
+    private readonly FormattedText   _gClefFt;
+    private readonly FormattedText   _fClefFt;
+    private readonly FormattedText   _gFallbackFt;
+    private readonly FormattedText   _fFallbackFt;
+    private readonly FormattedText   _sharpFt;
+    private readonly FormattedText   _flatFt;
+    private readonly FormattedText   _naturalFt;
+    private readonly Dictionary<int, FormattedText> _measureNumFtCache = new();
+    private string?        _cachedHeader1;
+    private FormattedText? _cachedHeader1Ft;
+    private string?        _cachedHeader2;
+    private FormattedText? _cachedHeader2Ft;
 
     /// <summary>BPM used for between-event position interpolation. Set this before calling Play.</summary>
     public double PlayBpm
@@ -1491,6 +1569,33 @@ public sealed class StaffNotationCanvas : Control
         _notes.Sort((a, b) => a.GlobalOnset.CompareTo(b.GlobalOnset));
         _barlines.Sort((a, b) => a.Divs.CompareTo(b.Divs));
 
+        // Initialise cached render resources (avoids per-frame heap allocations)
+        _bgBrush          = new SolidColorBrush(Color.FromRgb(250, 248, 240));
+        _inkBrush         = new SolidColorBrush(Color.FromRgb(20, 20, 20));
+        _staffClrBrush    = new SolidColorBrush(Color.FromRgb(60, 60, 60));
+        _barNumBrush      = new SolidColorBrush(Color.FromRgb(80, 80, 80));
+        _header1Brush     = new SolidColorBrush(Color.FromRgb(40, 40, 120));
+        _header2Brush     = new SolidColorBrush(Color.FromRgb(100, 100, 180));
+        _cursorBrush      = new SolidColorBrush(Color.FromArgb(200, 220, 50, 50));
+        _inkPen           = new Pen(_inkBrush, 1.2);
+        _inkPen15         = new Pen(_inkBrush, 1.5);
+        _noteHeadPen      = new Pen(_inkBrush, 1.3);
+        _staffPen         = new Pen(_staffClrBrush, 0.9);
+        _barPen           = new Pen(_staffClrBrush, 1.4);
+        _cursorPen        = new Pen(_cursorBrush, 1.8);
+        _arialTf          = new Typeface("Arial");
+        _arialSemiBoldTf  = new Typeface("Arial", FontStyle.Normal, FontWeight.SemiBold);
+        _arialBoldTf      = new Typeface("Arial", FontStyle.Normal, FontWeight.Bold);
+        _clefTf           = new Typeface(new FontFamily("Segoe UI Symbol,Arial Unicode MS"), FontStyle.Normal, FontWeight.Regular);
+        _sansItalicBoldTf = new Typeface("sans-serif", FontStyle.Italic, FontWeight.Bold);
+        _gClefFt          = new FormattedText("\uD834\uDD1E", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _clefTf, 4 * LineSpacing * 1.6, _inkBrush);
+        _fClefFt          = new FormattedText("\uD834\uDD22", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _clefTf, 4 * LineSpacing * 0.9, _inkBrush);
+        _gFallbackFt      = new FormattedText("G", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _sansItalicBoldTf, 3 * LineSpacing, _inkBrush);
+        _fFallbackFt      = new FormattedText("F", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _sansItalicBoldTf, 2.5 * LineSpacing, _inkBrush);
+        _sharpFt          = new FormattedText("♯", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _arialBoldTf, 20, _inkBrush);
+        _flatFt           = new FormattedText("♭", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _arialBoldTf, 20, _inkBrush);
+        _naturalFt        = new FormattedText("♮", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _arialBoldTf, 20, _inkBrush);
+
         _animTimer = new DispatcherTimer(DispatcherPriority.Render)
         {
             Interval = TimeSpan.FromMilliseconds(16)   // ~60 fps
@@ -1540,26 +1645,30 @@ public sealed class StaffNotationCanvas : Control
         double DivsToX(double d) => nowX + (d - displayDivs) / lookaheadDiv * (W * (1 - CursorFrac));
 
         // ── background ────────────────────────────────────────────────────
-        ctx.FillRectangle(new SolidColorBrush(Color.FromRgb(250, 248, 240)), new Rect(0, 0, W, H));
+        ctx.FillRectangle(_bgBrush, new Rect(0, 0, W, H));
 
         // ── header overlay (playlist / pattern title) ─────────────────────
         double headerY = 6.0;
         if (!string.IsNullOrEmpty(HeaderLine1))
         {
-            var ft1 = new FormattedText(HeaderLine1, CultureInfo.InvariantCulture,
-                FlowDirection.LeftToRight,
-                new Typeface("Arial", FontStyle.Normal, FontWeight.SemiBold), 16,
-                new SolidColorBrush(Color.FromRgb(40, 40, 120)));
-            ctx.DrawText(ft1, new Point(ClefAreaW + 8, headerY));
-            headerY += ft1.Height + 2;
+            if (_cachedHeader1 != HeaderLine1 || _cachedHeader1Ft == null)
+            {
+                _cachedHeader1   = HeaderLine1;
+                _cachedHeader1Ft = new FormattedText(HeaderLine1, CultureInfo.InvariantCulture,
+                    FlowDirection.LeftToRight, _arialSemiBoldTf, 16, _header1Brush);
+            }
+            ctx.DrawText(_cachedHeader1Ft, new Point(ClefAreaW + 8, headerY));
+            headerY += _cachedHeader1Ft.Height + 2;
         }
         if (!string.IsNullOrEmpty(HeaderLine2))
         {
-            var ft2 = new FormattedText(HeaderLine2, CultureInfo.InvariantCulture,
-                FlowDirection.LeftToRight,
-                new Typeface("Arial", FontStyle.Normal, FontWeight.Normal), 12,
-                new SolidColorBrush(Color.FromRgb(100, 100, 180)));
-            ctx.DrawText(ft2, new Point(ClefAreaW + 8, headerY));
+            if (_cachedHeader2 != HeaderLine2 || _cachedHeader2Ft == null)
+            {
+                _cachedHeader2   = HeaderLine2;
+                _cachedHeader2Ft = new FormattedText(HeaderLine2, CultureInfo.InvariantCulture,
+                    FlowDirection.LeftToRight, _arialTf, 12, _header2Brush);
+            }
+            ctx.DrawText(_cachedHeader2Ft, new Point(ClefAreaW + 8, headerY));
         }
 
         // ── staff layout ──────────────────────────────────────────────────
@@ -1587,12 +1696,12 @@ public sealed class StaffNotationCanvas : Control
         int BassTopRow   = BassMiddleRow   + 4;
         int BassBotRow   = BassMiddleRow   - 4;
 
-        var inkBrush  = new SolidColorBrush(Color.FromRgb(20, 20, 20));
-        var inkPen    = new Pen(inkBrush, 1.2);
-        var staffPen  = new Pen(new SolidColorBrush(Color.FromRgb(60, 60, 60)), 0.9);
-        var barPen    = new Pen(new SolidColorBrush(Color.FromRgb(60, 60, 60)), 1.4);
-        var cursorPen = new Pen(new SolidColorBrush(Color.FromArgb(200, 220, 50, 50)), 1.8);
-        var tf        = new Typeface("Arial");
+        var inkBrush  = _inkBrush;
+        var inkPen    = _inkPen;
+        var staffPen  = _staffPen;
+        var barPen    = _barPen;
+        var cursorPen = _cursorPen;
+        var tf        = _arialTf;
 
         // ── draw five staff lines ──────────────────────────────────────────
         void DrawStaffLines(double topY)
@@ -1615,47 +1724,23 @@ public sealed class StaffNotationCanvas : Control
         bool useGlyphs = OperatingSystem.IsWindows();
         if (useGlyphs)
         {
-            // U+1D11E / U+1D122 are supplementary-plane chars (surrogate pairs in C#).
-            var clefTf = new Typeface(new FontFamily("Segoe UI Symbol,Arial Unicode MS"),
-                                      FontStyle.Normal, FontWeight.Regular);
-            // Treble
-            {
-                string gClef = "\uD834\uDD1E";   // U+1D11E MUSICAL SYMBOL G CLEF
-                var ft = new FormattedText(gClef, CultureInfo.InvariantCulture,
-                             FlowDirection.LeftToRight, clefTf, 4 * LineSpacing * 1.6, inkBrush);
-                ctx.DrawText(ft, new Point(2, g4Y - ft.Height * 0.72));
-            }
-            // Bass
-            {
-                string fClef = "\uD834\uDD22";   // U+1D122 MUSICAL SYMBOL F CLEF
-                var ft = new FormattedText(fClef, CultureInfo.InvariantCulture,
-                             FlowDirection.LeftToRight, clefTf, 4 * LineSpacing * 0.9, inkBrush);
-                ctx.DrawText(ft, new Point(2, f3Y - ft.Height * 0.38));
-            }
+            // Treble (U+1D11E) and Bass (U+1D122) — FormattedText cached in ctor.
+            ctx.DrawText(_gClefFt, new Point(2, g4Y - _gClefFt.Height * 0.72));
+            ctx.DrawText(_fClefFt, new Point(2, f3Y - _fClefFt.Height * 0.38));
         }
         else
         {
             // Primitive fallback (macOS / Linux): bold text labels "G" / "F" + dot pair.
-            var clefTf  = new Typeface("sans-serif", FontStyle.Italic, FontWeight.Bold);
-            var cp      = new Pen(inkBrush, 1.5);
             // Treble: italic bold "G" centred on g4Y
-            {
-                var ft = new FormattedText("G", CultureInfo.InvariantCulture,
-                             FlowDirection.LeftToRight, clefTf, 3 * LineSpacing, inkBrush);
-                ctx.DrawText(ft, new Point(2, g4Y - ft.Height * 0.55));
-                // small descending stem below
-                ctx.DrawLine(cp, new Point(ft.Width / 2 + 2, g4Y + LineSpacing * 0.5),
-                                 new Point(ft.Width / 2 + 2, g4Y + LineSpacing * 1.5));
-            }
+            ctx.DrawText(_gFallbackFt, new Point(2, g4Y - _gFallbackFt.Height * 0.55));
+            // small descending stem below
+            ctx.DrawLine(_inkPen15, new Point(_gFallbackFt.Width / 2 + 2, g4Y + LineSpacing * 0.5),
+                                    new Point(_gFallbackFt.Width / 2 + 2, g4Y + LineSpacing * 1.5));
             // Bass: italic bold "F" + two dots
-            {
-                var ft = new FormattedText("F", CultureInfo.InvariantCulture,
-                             FlowDirection.LeftToRight, clefTf, 2.5 * LineSpacing, inkBrush);
-                ctx.DrawText(ft, new Point(2, f3Y - ft.Height * 0.45));
-                double dotX = ft.Width + 6;
-                ctx.DrawEllipse(inkBrush, null, new Point(dotX, f3Y - LineSpacing * 0.55), 2.0, 2.0);
-                ctx.DrawEllipse(inkBrush, null, new Point(dotX, f3Y + LineSpacing * 0.25), 2.0, 2.0);
-            }
+            ctx.DrawText(_fFallbackFt, new Point(2, f3Y - _fFallbackFt.Height * 0.45));
+            double dotX = _fFallbackFt.Width + 6;
+            ctx.DrawEllipse(_inkBrush, null, new Point(dotX, f3Y - LineSpacing * 0.55), 2.0, 2.0);
+            ctx.DrawEllipse(_inkBrush, null, new Point(dotX, f3Y + LineSpacing * 0.25), 2.0, 2.0);
         }
 
         // ── barlines ──────────────────────────────────────────────────────
@@ -1669,9 +1754,9 @@ public sealed class StaffNotationCanvas : Control
             // measure number above treble staff
             if (bn >= 1)
             {
-                var ft = new FormattedText($"{bn}", CultureInfo.InvariantCulture,
-                    FlowDirection.LeftToRight, tf, 11,
-                    new SolidColorBrush(Color.FromRgb(80, 80, 80)));
+                if (!_measureNumFtCache.TryGetValue(bn, out var ft))
+                    _measureNumFtCache[bn] = ft = new FormattedText($"{bn}", CultureInfo.InvariantCulture,
+                        FlowDirection.LeftToRight, _arialTf, 11, _barNumBrush);
                 ctx.DrawText(ft, new Point(bx + 2, trebleTopY - LineSpacing - 2));
             }
         }
@@ -1695,8 +1780,8 @@ public sealed class StaffNotationCanvas : Control
 
             // Filled vs open head: whole/half = open; quarter/eighth/16th = filled
             bool isOpen = n.NoteType is "whole" or "half";
-            var noteBrush = isOpen ? (IBrush)new SolidColorBrush(Colors.Transparent) : inkBrush;
-            var noteHeadPen = new Pen(inkBrush, 1.3);
+            var noteBrush = isOpen ? (IBrush)Brushes.Transparent : _inkBrush;
+            var noteHeadPen = _noteHeadPen;
 
             ctx.DrawEllipse(noteBrush, noteHeadPen, new Point(x, y), NoteRadiusX, NoteRadiusY);
 
@@ -1715,10 +1800,10 @@ public sealed class StaffNotationCanvas : Control
                     double fx = stemX;
                     double fy = stemY1;
                     double flagDir = stemUp ? 1 : -1;
-                    ctx.DrawLine(new Pen(inkBrush, 1.5),
+                    ctx.DrawLine(_inkPen15,
                         new Point(fx, fy),
                         new Point(fx + 8,  fy + flagDir * 8));
-                    ctx.DrawLine(new Pen(inkBrush, 1.5),
+                    ctx.DrawLine(_inkPen15,
                         new Point(fx + 8,  fy + flagDir * 8),
                         new Point(fx + 2,  fy + flagDir * 14));
                 }
@@ -1731,10 +1816,10 @@ public sealed class StaffNotationCanvas : Control
                     for (int fi = 0; fi < 2; fi++)
                     {
                         double fyo = fy + flagDir * fi * 6;
-                        ctx.DrawLine(new Pen(inkBrush, 1.5),
+                        ctx.DrawLine(_inkPen15,
                             new Point(fx, fyo),
                             new Point(fx + 8, fyo + flagDir * 8));
-                        ctx.DrawLine(new Pen(inkBrush, 1.5),
+                        ctx.DrawLine(_inkPen15,
                             new Point(fx + 8, fyo + flagDir * 8),
                             new Point(fx + 2, fyo + flagDir * 14));
                     }
@@ -1770,9 +1855,7 @@ public sealed class StaffNotationCanvas : Control
                 };
                 if (sym.Length > 0)
                 {
-                    var accTf = new Typeface("Arial", FontStyle.Normal, FontWeight.Bold);
-                    var ft = new FormattedText(sym, CultureInfo.InvariantCulture,
-                        FlowDirection.LeftToRight, accTf, 20, inkBrush);
+                    var ft = sym == "♯" ? _sharpFt : sym == "♭" ? _flatFt : _naturalFt;
                     // Place the glyph immediately left of the notehead, vertically centred on y.
                     // ft.Height is the full bounding-box height; musical symbols have their
                     // visual centre at ~55 % from the top, so offset by 0.55 * ft.Height.
@@ -1804,7 +1887,7 @@ public sealed class StaffNotationCanvas : Control
                     break;
                 case "quarter":
                 {
-                    var rp = new Pen(inkBrush, 1.5);
+                    var rp = _inkPen15;
                     ctx.DrawLine(rp, new Point(rx + 2, rMidY - 7), new Point(rx + 6, rMidY - 2));
                     ctx.DrawLine(rp, new Point(rx + 6, rMidY - 2), new Point(rx - 2, rMidY + 3));
                     ctx.DrawLine(rp, new Point(rx - 2, rMidY + 3), new Point(rx + 3, rMidY + 9));
@@ -1813,7 +1896,7 @@ public sealed class StaffNotationCanvas : Control
                 }
                 default:
                 {
-                    var rp = new Pen(inkBrush, 1.5);
+                    var rp = _inkPen15;
                     ctx.DrawLine(rp, new Point(rx + 3, rMidY - 6), new Point(rx - 2, rMidY + 4));
                     ctx.DrawEllipse(inkBrush, null, new Point(rx + 3, rMidY - 6), 2.5, 2.5);
                     break;
