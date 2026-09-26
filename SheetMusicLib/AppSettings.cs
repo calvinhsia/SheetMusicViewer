@@ -433,6 +433,16 @@ public class AppSettings
     /// </summary>
     public bool? PianoRollUseFluidSynth { get; set; } = null;
 
+    /// <summary>
+    /// Last-used Repeat button state in the piano-roll playlist window.
+    /// </summary>
+    public bool PianoRollRepeat { get; set; } = false;
+
+    /// <summary>
+    /// Last-used Shuffle button state in the piano-roll playlist window.
+    /// </summary>
+    public bool PianoRollShuffle { get; set; } = false;
+
     #endregion
 
     /// <summary>
@@ -488,6 +498,8 @@ public class AppSettings
                         settings.PianoRollWinmmDeviceName = localSettings.PianoRollWinmmDeviceName;
                     if (localSettings.PianoRollUseFluidSynth.HasValue)
                         settings.PianoRollUseFluidSynth = localSettings.PianoRollUseFluidSynth;
+                    settings.PianoRollRepeat = localSettings.PianoRollRepeat;
+                    settings.PianoRollShuffle = localSettings.PianoRollShuffle;
                 }
             }
         }
@@ -621,7 +633,9 @@ public class AppSettings
                 UseGhostscript = UseGhostscript,
                 SpinePaddingPx = SpinePaddingPx,
                 PianoRollWinmmDeviceName = PianoRollWinmmDeviceName,
-                PianoRollUseFluidSynth = PianoRollUseFluidSynth
+                PianoRollUseFluidSynth = PianoRollUseFluidSynth,
+                PianoRollRepeat = PianoRollRepeat,
+                PianoRollShuffle = PianoRollShuffle
             };
 
             var json = JsonSerializer.Serialize(localSettings, JsonOptions);
@@ -825,6 +839,8 @@ public class AppSettings
         public int SpinePaddingPx { get; set; } = 0;
         public string PianoRollWinmmDeviceName { get; set; } = string.Empty;
         public bool? PianoRollUseFluidSynth { get; set; } = null;
+        public bool PianoRollRepeat { get; set; } = false;
+        public bool PianoRollShuffle { get; set; } = false;
     }
 
     /// <summary>
