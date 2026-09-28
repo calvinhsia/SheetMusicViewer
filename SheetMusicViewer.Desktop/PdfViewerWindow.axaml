@@ -47,8 +47,8 @@
             <StackPanel Name="inkToolbarRightPanel" Orientation="Vertical" Spacing="4"/>
         </Border>
         
-        <!-- UI Overlay -->
-        <Grid Background="Transparent" VerticalAlignment="Top">
+        <!-- UI Overlay: one continuous translucent bar across the full width -->
+        <Grid Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}" Opacity="0.5" VerticalAlignment="Top">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -60,7 +60,7 @@
             </Grid.ColumnDefinitions>
             
             <!-- Left side controls -->
-            <StackPanel Orientation="Vertical" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}" Opacity="0.5" Grid.RowSpan="2" VerticalAlignment="Top">
+            <StackPanel Orientation="Vertical" Grid.RowSpan="2" VerticalAlignment="Top">
                 <StackPanel Orientation="Horizontal" Spacing="3">
                     <CheckBox Name="chkFav0" Content="Fav" Foreground="Lime" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                     <Button Name="btnLink0" Content="🔗" FontSize="12" Padding="4,0" MinWidth="28"
@@ -84,7 +84,7 @@
             </StackPanel>
             
             <!-- Center slider controls -->
-            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Top">
+            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Top">
                 <Slider Name="slider" 
                         Value="{Binding CurrentPageNumber}" 
                         Maximum="{Binding MaxPageNumberMinus1}" 
@@ -106,7 +106,7 @@
             </StackPanel>
             
             <!-- Right side controls -->
-            <StackPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="2" Orientation="Vertical" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}" Opacity="0.5" VerticalAlignment="Top">
+            <StackPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="2" Orientation="Vertical" VerticalAlignment="Top">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="3">
                     <TextBlock Name="txtCacheStatus"
                                Text="{Binding CacheStatus}" 
