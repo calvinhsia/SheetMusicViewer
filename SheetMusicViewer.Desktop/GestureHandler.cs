@@ -349,20 +349,8 @@ public class GestureHandler
 
     private void HandleTapNavigation(Point pos, PointerReleasedEventArgs e)
     {
-        var isTouch = e.Pointer.Type == PointerType.Touch;
         var parent = _target.Parent as Control ?? _target;
-        var boundsHeight = parent.Bounds.Height;
         var boundsWidth = parent.Bounds.Width;
-        var isInNavigationZone = isTouch ? 
-            pos.Y > 0.25 * boundsHeight : true;
-        
-        Log($"  -> NavCheck: touch={isTouch} bounds=({boundsWidth:F0}x{boundsHeight:F0}) inZone={isInNavigationZone}");
-        
-        if (!isInNavigationZone)
-        {
-            Log("  -> In ZOOM zone - no nav");
-            return;
-        }
         
         var delta = NumPagesPerView;
         
