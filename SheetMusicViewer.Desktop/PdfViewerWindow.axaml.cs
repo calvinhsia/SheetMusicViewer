@@ -83,7 +83,10 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private readonly Dictionary<int, PageCacheEntry> _pageCache = new();
     private const int MaxCacheSize = 50;
     private int _currentCacheAge;
-    private int _lastNavigationDelta; // Track navigation direction for prefetch priority
+    private int _showPageSequence;
+    // Bitmaps attached to the visible page controls must not be disposed while shown
+    private readonly HashSet<Bitmap> _inUseBitmaps = new();
+    private readonly List<Bitmap> _deferredBitmapDisposals = new();
     private bool _isShowingMetaDataForm; // Prevent showing multiple MetaDataForm dialogs
 
     // Metronome
@@ -92,7 +95,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
 
     private class PageCacheEntry
     {
-        public CancellationTokenSource Cts { get; } = new();
+        public CancellationTokenSource Cts { get; init; } = new();
         public int PageNo { get; init; }
         public required Task<Bitmap> Task { get; init; }
         public int Age { get; set; }
@@ -841,7 +844,11 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         SaveInkFromCurrentCanvases();
         
         _dpPage?.Children.Clear();
+        _inUseBitmaps.Clear();
+        // Invalidate any render still running for the closing document
+        _showPageSequence++;
         ClearCache();
+        FlushDeferredBitmapDisposals();
         
         if (_currentPdfMetaData != null)
         {
@@ -871,8 +878,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             if (_currentPdfMetaData == null)
             {
                 _dpPage?.Children.Clear();
+                _inUseBitmaps.Clear();
+                FlushDeferredBitmapDisposals();
                 return;
             }
+            
+            var showSequence = ++_showPageSequence;
             
             // Save any unsaved ink strokes from the current page before navigating
             SaveInkFromCurrentCanvases();
@@ -894,6 +905,8 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 }
             }
             
+            var navigationDirection = Math.Sign(pageNo - CurrentPageNumber);
+            
             _disableSliderValueChanged = true;
             CurrentPageNumber = pageNo;
             _disableSliderValueChanged = false;
@@ -911,21 +924,37 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             var cacheDisabled = AppSettings.Instance.UserOptions.DisablePageCache;
             if (!cacheDisabled)
             {
-                // Start prefetch of adjacent pages (these run in background, in parallel)
+                // Prefetch mostly in the navigation direction so background renders
+                // don't compete with the visible page for CPU
                 if (NumPagesPerView == 1)
                 {
-                    TryAddCacheEntry(pageNo + 1);
-                    TryAddCacheEntry(pageNo + 2);
-                    TryAddCacheEntry(pageNo - 1);
+                    if (navigationDirection >= 0)
+                    {
+                        TryAddCacheEntry(pageNo + 1);
+                        TryAddCacheEntry(pageNo + 2);
+                        TryAddCacheEntry(pageNo - 1);
+                    }
+                    else
+                    {
+                        TryAddCacheEntry(pageNo - 1);
+                        TryAddCacheEntry(pageNo - 2);
+                        TryAddCacheEntry(pageNo + 1);
+                    }
                 }
                 else
                 {
-                    TryAddCacheEntry(pageNo + 2);
-                    TryAddCacheEntry(pageNo + 3);
-                    TryAddCacheEntry(pageNo + 4);
-                    TryAddCacheEntry(pageNo + 5);
-                    TryAddCacheEntry(pageNo - 1);
-                    TryAddCacheEntry(pageNo - 2);
+                    if (navigationDirection >= 0)
+                    {
+                        TryAddCacheEntry(pageNo + 2);
+                        TryAddCacheEntry(pageNo + 3);
+                        TryAddCacheEntry(pageNo - 1);
+                    }
+                    else
+                    {
+                        TryAddCacheEntry(pageNo - 1);
+                        TryAddCacheEntry(pageNo - 2);
+                        TryAddCacheEntry(pageNo + 2);
+                    }
                 }
             }
             
@@ -973,7 +1002,17 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
+                // A newer navigation replaced this one; its bitmaps may already be disposed
+                if (showSequence != _showPageSequence)
+                {
+                    return;
+                }
+
                 _dpPage?.Children.Clear();
+                // The old page controls are detached now, so bitmaps set aside while
+                // they were visible can be disposed
+                _inUseBitmaps.Clear();
+                FlushDeferredBitmapDisposals();
                 if (_dpPage != null)
                 {
                     _dpPage.Background = Brushes.LightGray;
@@ -1037,6 +1076,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                     _inkCanvas0.UndoRedoStateChanged += OnInkCanvasUndoRedoStateChanged;
                     grid.Children.Add(_inkCanvas0);
                     _inkCanvas1 = null;
+                }
+
+                _inUseBitmaps.Add(page0Image);
+                if (page1Image != null)
+                {
+                    _inUseBitmaps.Add(page1Image);
                 }
 
                 _dpPage?.Children.Add(grid);
@@ -1123,6 +1168,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         if (cacheDisabled && existing != null && existing.Task.IsCompleted)
         {
             _pageCache.Remove(pageNo);
+            DisposeEntryBitmap(existing);
         }
         
         // If cache is enabled and we have a completed valid entry, reuse it
@@ -1135,28 +1181,19 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
         
         // Create new entry with tracking wrapper
+        var cts = new CancellationTokenSource();
         var entry = new PageCacheEntry
         {
             PageNo = pageNo,
             Age = _currentCacheAge++,
-            Task = RenderPageWithTrackingAsync(pageNo)
+            Cts = cts,
+            Task = RenderPageWithTrackingAsync(pageNo, cts.Token)
         };
         
-        // Evict old entries if cache is full (only if caching enabled)
+        // Evict old entries if the cache is full or over its memory budget (only if caching enabled)
         if (!cacheDisabled)
         {
-            var maxCacheSize = AppSettings.Instance.UserOptions.PageCacheMaxSize;
-            if (_pageCache.Count >= maxCacheSize)
-            {
-                var toRemove = _pageCache.Values
-                    .OrderBy(e => e.Age)
-                    .Take(_pageCache.Count - maxCacheSize + 1)
-                    .ToList();
-                foreach (var old in toRemove)
-                {
-                    _pageCache.Remove(old.PageNo);
-                }
-            }
+            EvictCacheEntriesIfNeeded();
         }
         
         _pageCache[pageNo] = entry;
@@ -1164,34 +1201,120 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         return entry;
     }
     
+    private void EvictCacheEntriesIfNeeded()
+    {
+        var options = AppSettings.Instance.UserOptions;
+        var maxCacheSize = Math.Max(1, options.PageCacheMaxSize);
+        var maxCacheBytes = Math.Max(0, options.PageCacheMaxBytes);
+        var entriesToRemove = Math.Max(0, _pageCache.Count - maxCacheSize + 1);
+        var bytesToFree = GetPageCacheBytes() - maxCacheBytes;
+        if (entriesToRemove == 0 && bytesToFree <= 0)
+        {
+            return;
+        }
+        
+        // Only completed entries can free memory; never evict a render in flight
+        foreach (var old in _pageCache.Values.Where(e => e.Task.IsCompleted).OrderBy(e => e.Age).ToList())
+        {
+            if (entriesToRemove <= 0 && bytesToFree <= 0)
+            {
+                break;
+            }
+            _pageCache.Remove(old.PageNo);
+            bytesToFree -= GetEntryBytes(old);
+            entriesToRemove--;
+            DisposeEntryBitmap(old);
+        }
+    }
+    
+    private long GetPageCacheBytes()
+    {
+        long total = 0;
+        foreach (var entry in _pageCache.Values)
+        {
+            total += GetEntryBytes(entry);
+        }
+        return total;
+    }
+    
+    private static long GetEntryBytes(PageCacheEntry entry)
+    {
+        if (!entry.Task.IsCompletedSuccessfully)
+        {
+            return 0;
+        }
+        var size = entry.Task.Result.PixelSize;
+        return (long)size.Width * size.Height * 4;
+    }
+    
+    private void DisposeEntryBitmap(PageCacheEntry entry)
+    {
+        if (entry.Task.IsCompletedSuccessfully)
+        {
+            DisposeBitmapIfNotInUse(entry.Task.Result);
+            return;
+        }
+        
+        // Render still in flight: dispose its bitmap once it finishes
+        _ = entry.Task.ContinueWith(task =>
+        {
+            if (task.IsCompletedSuccessfully)
+            {
+                Dispatcher.UIThread.Post(() => DisposeBitmapIfNotInUse(task.Result));
+            }
+        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+    }
+    
+    private void DisposeBitmapIfNotInUse(Bitmap bitmap)
+    {
+        if (_inUseBitmaps.Contains(bitmap))
+        {
+            _deferredBitmapDisposals.Add(bitmap);
+        }
+        else
+        {
+            bitmap.Dispose();
+        }
+    }
+    
+    private void FlushDeferredBitmapDisposals()
+    {
+        foreach (var bitmap in _deferredBitmapDisposals)
+        {
+            bitmap.Dispose();
+        }
+        _deferredBitmapDisposals.Clear();
+    }
+    
     private void PurgeIfNecessary(int currentPageNo)
     {
         // Cancel tasks for pages that are far from current page (user typed ahead)
-        var toDelete = new List<int>();
+        var toDelete = new List<PageCacheEntry>();
         foreach (var entry in _pageCache.Values.Where(v => !v.Task.IsCompleted))
         {
             if (entry.PageNo != currentPageNo && 
                 entry.PageNo != currentPageNo + 1 &&
                 _currentCacheAge - entry.Age > 5)
             {
-                toDelete.Add(entry.PageNo);
+                toDelete.Add(entry);
                 entry.Cts.Cancel();
             }
         }
-        foreach (var pageNo in toDelete)
+        foreach (var entry in toDelete)
         {
-            _pageCache.Remove(pageNo);
+            _pageCache.Remove(entry.PageNo);
+            DisposeEntryBitmap(entry);
         }
         UpdateCacheStatus();
     }
     
-    private async Task<Bitmap> RenderPageWithTrackingAsync(int pageNo)
+    private async Task<Bitmap> RenderPageWithTrackingAsync(int pageNo, CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref _cacheLoadingCount);
         UpdateCacheStatus();
         try
         {
-            return await RenderPageInternalAsync(pageNo);
+            return await RenderPageInternalAsync(pageNo, cancellationToken);
         }
         finally
         {
@@ -1200,21 +1323,25 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
     }
     
-    private async Task<Bitmap> RenderPageInternalAsync(int pageNo)
+    private async Task<Bitmap> RenderPageInternalAsync(int pageNo, CancellationToken cancellationToken)
     {
-        if (_currentPdfMetaData == null)
+        // Capture the document now: a switch while the render is queued must not
+        // make it render from the next document
+        var metaData = _currentPdfMetaData;
+        if (metaData == null)
         {
             throw new InvalidOperationException("No PDF loaded");
         }
         
         return await Task.Run(() =>
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var sw = Stopwatch.StartNew();
             
             // Get the PDF file path for this page
-            var volNo = _currentPdfMetaData.GetVolNumFromPageNum(pageNo);
-            var pdfPath = _currentPdfMetaData.GetFullPathFileFromVolno(volNo);
-            var bookName = _currentPdfMetaData.GetBookName(_rootMusicFolder);
+            var volNo = metaData.GetVolNumFromPageNum(pageNo);
+            var pdfPath = metaData.GetFullPathFileFromVolno(volNo);
+            var bookName = metaData.GetBookName(_rootMusicFolder);
             
             if (string.IsNullOrEmpty(pdfPath))
             {
@@ -1232,13 +1359,13 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             }
             
             // Calculate the page index within this volume
-            var pagesInPreviousVolumes = _currentPdfMetaData.VolumeInfoList
+            var pagesInPreviousVolumes = metaData.VolumeInfoList
                 .Take(volNo)
                 .Sum(v => v.NPagesInThisVolume);
-            var pageIndexInVolume = pageNo - _currentPdfMetaData.PageNumberOffset - pagesInPreviousVolumes;
+            var pageIndexInVolume = pageNo - metaData.PageNumberOffset - pagesInPreviousVolumes;
             
             // Get rotation
-            var rotation = _currentPdfMetaData.VolumeInfoList[volNo].Rotation;
+            var rotation = metaData.VolumeInfoList[volNo].Rotation;
             var pdfRotation = rotation switch
             {
                 1 => PdfRotation.Rotate90,
@@ -1248,7 +1375,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             };
             
             // Get PDF bytes from metadata cache (loads from disk if not cached)
-            var pdfBytes = _currentPdfMetaData.GetOrLoadVolumeBytes(volNo);
+            var pdfBytes = metaData.GetOrLoadVolumeBytes(volNo);
             var getBytesTime = sw.ElapsedMilliseconds;
             
             if (pdfBytes == null)
@@ -1266,7 +1393,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             
             if (pageIndexInVolume < 0 || pageIndexInVolume >= actualPageCount)
             {
-                var metadataPageCount = _currentPdfMetaData.VolumeInfoList[volNo].NPagesInThisVolume;
+                var metadataPageCount = metaData.VolumeInfoList[volNo].NPagesInThisVolume;
                 throw new ArgumentOutOfRangeException(nameof(pageIndexInVolume),
                     $"Page index {pageIndexInVolume} is invalid for PDF '{Path.GetFileName(pdfPath)}' " +
                     $"which has {actualPageCount} pages (metadata claims {metadataPageCount}). " +
@@ -1276,6 +1403,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             // Get render DPI from settings (user-configurable)
             var renderDpi = AppSettings.Instance.UserOptions.RenderDpi;
             
+            cancellationToken.ThrowIfCancellationRequested();
             using var skBitmap = Conversion.ToImage(pdfBytes, page: (Index)pageIndexInVolume, 
                 options: new PDFtoImage.RenderOptions(Dpi: renderDpi, Rotation: pdfRotation));
             var renderTime = sw.ElapsedMilliseconds;
@@ -1283,12 +1411,18 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             // Convert SKBitmap directly to Avalonia Bitmap without PNG encoding
             // This is significantly faster than encoding to PNG and decoding
             var result = ConvertSkBitmapToAvaloniaBitmap(skBitmap);
+            if (cancellationToken.IsCancellationRequested)
+            {
+                // The entry was evicted while rendering; do not hand out a bitmap
+                result.Dispose();
+                cancellationToken.ThrowIfCancellationRequested();
+            }
             var convertTime = sw.ElapsedMilliseconds;
             
             Trace.WriteLine($"  RenderPage {pageNo}: DPI={renderDpi}, GetBytes={getBytesTime}ms, Render={renderTime - getBytesTime}ms, Convert={convertTime - renderTime}ms");
             
             return result;
-        });
+        }, cancellationToken);
     }
 
     /// <summary>
@@ -1369,6 +1503,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         foreach (var entry in _pageCache.Values)
         {
             entry.Cts.Cancel();
+            DisposeEntryBitmap(entry);
         }
         _pageCache.Clear();
         _currentCacheAge = 0;
@@ -1612,7 +1747,6 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     
     private void NavigateAsync(int delta)
     {
-        _lastNavigationDelta = delta; // Track navigation direction
         var newPage = CurrentPageNumber + delta;
         
         if (_currentPdfMetaData != null)
@@ -1624,7 +1758,8 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         
         if (newPage != CurrentPageNumber)
         {
-            CurrentPageNumber = newPage;
+            // ShowPageAsync updates CurrentPageNumber itself with the slider
+            // notification suppressed, so the page is not shown twice
             _ = ShowPageAsync(newPage);
         }
     }
@@ -2039,16 +2174,14 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 case Key.Home:
                     if (_currentPdfMetaData != null)
                     {
-                        CurrentPageNumber = _currentPdfMetaData.PageNumberOffset;
-                        _ = ShowPageAsync(CurrentPageNumber);
+                        _ = ShowPageAsync(_currentPdfMetaData.PageNumberOffset);
                     }
                     e.Handled = true;
                     break;
                 case Key.End:
                     if (_currentPdfMetaData != null)
                     {
-                        CurrentPageNumber = _currentPdfMetaData.MaxPageNum - 1;
-                        _ = ShowPageAsync(CurrentPageNumber);
+                        _ = ShowPageAsync(_currentPdfMetaData.MaxPageNum - 1);
                     }
                     e.Handled = true;
                     break;
