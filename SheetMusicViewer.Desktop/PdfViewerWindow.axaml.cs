@@ -46,6 +46,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private bool _isThumbnailLoadingInProgress;
     private int _cacheLoadingCount;
     private string _cacheStatus = string.Empty;
+    private string _cachePendingStatus = string.Empty;
 
     // PDF metadata
     private string _rootMusicFolder = string.Empty;
@@ -68,6 +69,8 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private CheckBox? _chkFav1;
     private Image? _imgThumb;
     private Menu? _mainMenu;
+    private TextBlock? _txtBoxTitle;
+    private bool _isCompactLayout;
     
     // Window-level ink toolbars (docked at window edges)
     private Border? _inkToolbarLeft;
@@ -147,6 +150,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 WindowState = WindowState.Maximized;
                 Trace.WriteLine($"PdfViewerWindow Opened: Set WindowState to Maximized");
             }
+            UpdateResponsiveLayout(Bounds.Width);
         };
         
         // Save settings and cleanup on close
@@ -165,6 +169,10 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         _chkFav1 = this.GetControl<CheckBox>("chkFav1");
         _imgThumb = this.GetControl<Image>("ImgThumb");
         _mainMenu = this.GetControl<Menu>("mainMenu");
+
+        // Responsive top-bar controls (shrunk/hidden on narrow screens so Chooser/Menu stay visible)
+        _txtBoxTitle = this.GetControl<TextBlock>("txtBoxTitle");
+        SizeChanged += (s, e) => UpdateResponsiveLayout(e.NewSize.Width);
         
         // Get window-level ink toolbars and populate them
         _inkToolbarLeft = this.GetControl<Border>("inkToolbarLeft");
@@ -1390,26 +1398,13 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             if (cacheDisabled)
             {
                 // Show that cache is disabled
-                if (pendingCount > 0)
-                {
-                    CacheStatus = $"⚠ No cache ⏳{pendingCount}";
-                }
-                else
-                {
-                    CacheStatus = "⚠ No cache";
-                }
-            }
-            else if (pendingCount > 0)
-            {
-                CacheStatus = $"C:{cachedCount} ⏳{pendingCount}";
-            }
-            else if (cachedCount > 0)
-            {
-                CacheStatus = $"C:{cachedCount}";
+                CacheStatus = "⚠ No cache";
+                CachePendingStatus = pendingCount > 0 ? $"⏳{pendingCount}" : string.Empty;
             }
             else
             {
-                CacheStatus = string.Empty;
+                CacheStatus = cachedCount > 0 || pendingCount > 0 ? $"C:{cachedCount}" : string.Empty;
+                CachePendingStatus = pendingCount > 0 ? $"⏳{pendingCount}" : string.Empty;
             }
         });
     }
@@ -1803,6 +1798,47 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             }
         }
     }
+
+    // Below this width the descriptions and then the slider collapse
+    private const double CompactLayoutWidth = 900;
+    private const double HideSliderWidth = 760;
+
+    private void UpdateResponsiveLayout(double width)
+    {
+        if (width <= 0) return;
+
+        if (_slider != null)
+        {
+            // Hide only the slider (the thumbnail/metadata button stays available)
+            _slider.IsVisible = width >= HideSliderWidth;
+        }
+
+        IsCompactLayout = width < CompactLayoutWidth;
+
+        if (_txtBoxTitle != null)
+        {
+            // Cap the title width on very wide windows
+            _txtBoxTitle.MaxWidth = Math.Clamp(width * 0.28, 120, 420);
+        }
+    }
+
+    /// <summary>True when the window is too narrow for the full top toolbar.</summary>
+    public bool IsCompactLayout
+    {
+        get => _isCompactLayout;
+        private set
+        {
+            if (_isCompactLayout == value) return;
+            _isCompactLayout = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(Description0Visible));
+            OnPropertyChanged(nameof(Description1Visible));
+        }
+    }
+
+    public bool Description0Visible => !IsCompactLayout;
+
+    public bool Description1Visible => !IsCompactLayout && Show2Pages;
     
     private void BtnAbout_Click(object? sender, RoutedEventArgs e)
     {
@@ -2107,6 +2143,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             _show2Pages = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(NumPagesPerView));
+            OnPropertyChanged(nameof(Description1Visible));
             
             if (_gestureHandler != null)
             {
@@ -2214,6 +2251,17 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         set
         {
             _cacheStatus = value;
+            OnPropertyChanged();
+        }
+    }
+
+    // Separate so the fixed-width toolbar slot does not change size while pages render
+    public string CachePendingStatus
+    {
+        get => _cachePendingStatus;
+        set
+        {
+            _cachePendingStatus = value;
             OnPropertyChanged();
         }
     }

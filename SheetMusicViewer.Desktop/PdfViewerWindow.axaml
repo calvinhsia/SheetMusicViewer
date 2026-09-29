@@ -54,13 +54,14 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
+                <!-- Left cluster shrinks so Chooser/Menu can never be pushed off-screen -->
+                <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             
             <!-- Left side controls -->
-            <StackPanel Orientation="Vertical" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}" Opacity="0.5" Grid.RowSpan="2" VerticalAlignment="Top">
+            <StackPanel Orientation="Vertical" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}" Opacity="0.5" Grid.RowSpan="2" VerticalAlignment="Top" ClipToBounds="True">
                 <StackPanel Orientation="Horizontal" Spacing="3">
                     <CheckBox Name="chkFav0" Content="Fav" Foreground="Lime" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                     <Button Name="btnLink0" Content="🔗" FontSize="12" Padding="4,0" MinWidth="28"
@@ -70,7 +71,6 @@
                     <CheckBox Name="chkInk0" Content="Ink" ToolTip.Tip="Turn on/off inking with mouse or pen" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                     <Button Name="btnRotate" Content="_Rotate" Margin="3,0,0,0" ToolTip.Tip="Rotate the document 90 degrees right" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center"/>
                     <CheckBox Name="chkFullScreen" Content="_Full Screen" IsVisible="False" ToolTip.Tip="Full Screen" Margin="3,0,0,0" VerticalAlignment="Center"/>
-                    <TextBlock Name="txtBoxTitle" Text="{Binding PdfTitle}" Foreground="{DynamicResource SystemControlForegroundAccentBrush}" FontSize="14" VerticalAlignment="Center" Margin="5,0,0,0"/>
 
                     <Button Name="btnPrev" Content="&lt;" Width="25" Margin="8,0,0,0" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center"
                             ToolTip.Tip="If there are any favorites, goes back to prior favorite. Else go back 1 screenful"/>
@@ -79,8 +79,12 @@
                             ToolTip.Tip="If there are any favorites, goes forward to next favorite. Else go forward 1 screenful"/>
                     <TextBlock Text="of" Margin="2,0,2,0" VerticalAlignment="Center" IsEnabled="{Binding PdfUIEnabled}"/>
                     <TextBox Margin="0,0,3,0" MinWidth="28" Height="18" Text="{Binding MaxPageNumberMinus1, Mode=OneWay}" IsReadOnly="True" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center" FontSize="12" Padding="2,0" BorderThickness="1" VerticalContentAlignment="Center"/>
+                    <!-- Title is last so it is the first thing clipped/ellipsized on narrow windows -->
+                    <TextBlock Name="txtBoxTitle" Text="{Binding PdfTitle}" ToolTip.Tip="{Binding PdfTitle}"
+                               MaxWidth="320" TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource SystemControlForegroundAccentBrush}" FontSize="14" VerticalAlignment="Center" Margin="5,0,0,0"/>
                 </StackPanel>
-                <TextBlock Name="txtDesc0" Text="{Binding Description0}" MaxWidth="500" HorizontalAlignment="Left"/>
+                <TextBlock Name="txtDesc0" Text="{Binding Description0}" MaxWidth="500" TextTrimming="CharacterEllipsis" HorizontalAlignment="Left" IsVisible="{Binding Description0Visible}"/>
             </StackPanel>
             
             <!-- Center slider controls -->
@@ -108,19 +112,33 @@
             <!-- Right side controls -->
             <StackPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="2" Orientation="Vertical" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}" Opacity="0.5" VerticalAlignment="Top">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="3">
+                    <!-- Fixed widths so the status text cannot resize the toolbar -->
                     <TextBlock Name="txtCacheStatus"
                                Text="{Binding CacheStatus}" 
                                FontSize="10" 
                                Foreground="Orange" 
+                               Width="80"
+                               TextAlignment="Right"
+                               TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center" 
                                Margin="0,0,3,0"/>
-                    <TextBlock Text="Loading..." 
-                               FontSize="10" 
-                               Foreground="{DynamicResource SystemControlForegroundAccentBrush}" 
-                               VerticalAlignment="Center" 
-                               Margin="0,0,3,0"
-                               IsVisible="{Binding IsThumbnailLoadingInProgress}"
-                               ToolTip.Tip="Loading thumbnails in background for faster browsing"/>
+                    <Panel Width="26" VerticalAlignment="Center" Margin="0,0,3,0" ClipToBounds="True">
+                        <TextBlock Text="{Binding CachePendingStatus}" 
+                                   FontSize="10" 
+                                   Foreground="Orange" 
+                                   HorizontalAlignment="Left"
+                                   VerticalAlignment="Center"
+                                   ToolTip.Tip="Pages still rendering"/>
+                    </Panel>
+                    <Panel Width="52" VerticalAlignment="Center" Margin="0,0,3,0" ClipToBounds="True">
+                        <TextBlock Text="Loading..." 
+                                   FontSize="10" 
+                                   Foreground="{DynamicResource SystemControlForegroundAccentBrush}" 
+                                   HorizontalAlignment="Left"
+                                   VerticalAlignment="Center"
+                                   IsVisible="{Binding IsThumbnailLoadingInProgress}"
+                                   ToolTip.Tip="Loading thumbnails in background for faster browsing"/>
+                    </Panel>
                     <Button Name="btnChooser" Content="_Chooser" ToolTip.Tip="Open another document, query songs, etc (Alt+C)" VerticalAlignment="Center" Margin="0,0,3,0"/>
                     <Menu Name="mainMenu" Background="Transparent" VerticalAlignment="Center">
                         <MenuItem Header="_Menu">
@@ -157,7 +175,7 @@
                     <CheckBox Name="chkInk1" Content="Ink" IsEnabled="{Binding PdfUIEnabled}" ToolTip.Tip="Turn on/off inking with mouse or pen" IsVisible="{Binding Show2Pages}" Margin="0,0,4,0"/>
                     <CheckBox Name="chkFav1" Content="Fav" Foreground="Lime" IsEnabled="{Binding PdfUIEnabled}" Margin="0,0,3,0" IsVisible="{Binding Show2Pages}"/>
                 </StackPanel>
-                <TextBlock Name="txtDesc1" Text="{Binding Description1}" HorizontalAlignment="Right" Margin="0,0,3,0" IsVisible="{Binding Show2Pages}"/>
+                <TextBlock Name="txtDesc1" Text="{Binding Description1}" MaxWidth="400" TextTrimming="CharacterEllipsis" HorizontalAlignment="Right" Margin="0,0,3,0" IsVisible="{Binding Description1Visible}"/>
             </StackPanel>
         </Grid>
     </Grid>
