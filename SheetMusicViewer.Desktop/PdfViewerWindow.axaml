@@ -67,7 +67,7 @@
                             ToolTip.Tip="{Binding Link0Tooltip}" 
                             ToolTip.ShowOnDisabled="True"
                             IsEnabled="{Binding HasLink0}" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                    <CheckBox Name="chkInk0" Content="Ink" ToolTip.Tip="Turn on/off inking with mouse or pen" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <CheckBox Name="chkInk0" Content="Ink" ToolTip.Tip="Allow mouse and touch inking (the pen always draws)" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                     <Button Name="btnRotate" Content="_Rotate" Margin="3,0,0,0" ToolTip.Tip="Rotate the document 90 degrees right" IsEnabled="{Binding PdfUIEnabled}" VerticalAlignment="Center"/>
                     <CheckBox Name="chkFullScreen" Content="_Full Screen" IsVisible="False" ToolTip.Tip="Full Screen" Margin="3,0,0,0" VerticalAlignment="Center"/>
                     <TextBlock Name="txtBoxTitle" Text="{Binding PdfTitle}" Foreground="{DynamicResource SystemControlForegroundAccentBrush}" FontSize="14" VerticalAlignment="Center" Margin="5,0,0,0"/>
@@ -154,7 +154,7 @@
                             ToolTip.ShowOnDisabled="True"
                             IsEnabled="{Binding HasLink1}" VerticalAlignment="Center" 
                             IsVisible="{Binding Show2Pages}" Margin="0,0,4,0"/>
-                    <CheckBox Name="chkInk1" Content="Ink" IsEnabled="{Binding PdfUIEnabled}" ToolTip.Tip="Turn on/off inking with mouse or pen" IsVisible="{Binding Show2Pages}" Margin="0,0,4,0"/>
+                    <CheckBox Name="chkInk1" Content="Ink" IsEnabled="{Binding PdfUIEnabled}" ToolTip.Tip="Allow mouse and touch inking (the pen always draws)" IsVisible="{Binding Show2Pages}" Margin="0,0,4,0"/>
                     <CheckBox Name="chkFav1" Content="Fav" Foreground="Lime" IsEnabled="{Binding PdfUIEnabled}" Margin="0,0,3,0" IsVisible="{Binding Show2Pages}"/>
                 </StackPanel>
                 <TextBlock Name="txtDesc1" Text="{Binding Description1}" HorizontalAlignment="Right" Margin="0,0,3,0" IsVisible="{Binding Show2Pages}"/>
