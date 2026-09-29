@@ -18,6 +18,7 @@ using System.Threading.Tasks;
 using PDFtoImage;
 using SheetMusicLib;
 using SkiaSharp;
+using System.Text.Json;
 using System.Threading;
 
 namespace SheetMusicViewer.Desktop;
@@ -1563,6 +1564,54 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             _currentPdfMetaData.InkStrokes.Add(inkData);
         }
     }
+
+    private static readonly JsonSerializerOptions JsonReadOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    /// <summary>
+    /// Rotates stored ink data 90 degrees clockwise and swaps the canvas dimensions.
+    /// </summary>
+    private static void RotateInkStrokeData90Clockwise(InkStrokeClass ink)
+    {
+        // ISF binary data (written on Windows) can't be parsed; leave it untouched.
+        if (ink.StrokeData == null || ink.StrokeData.Length < 2 || ink.StrokeData[0] != (byte)'{')
+            return;
+
+        PortableInkStrokeCollection? strokes;
+        try
+        {
+            strokes = JsonSerializer.Deserialize<PortableInkStrokeCollection>(ink.StrokeData, JsonReadOptions);
+        }
+        catch (JsonException)
+        {
+            return;
+        }
+
+        if (strokes == null)
+            return;
+
+        var oldWidth = strokes.CanvasWidth;
+        var oldHeight = strokes.CanvasHeight;
+
+        foreach (var stroke in strokes.Strokes)
+        {
+            foreach (var point in stroke.Points)
+            {
+                var x = point.X;
+                point.X = oldHeight - point.Y;
+                point.Y = x;
+            }
+        }
+
+        strokes.CanvasWidth = oldHeight;
+        strokes.CanvasHeight = oldWidth;
+        ink.StrokeData = JsonSerializer.SerializeToUtf8Bytes(strokes);
+
+        var dimension = ink.InkStrokeDimension;
+        ink.InkStrokeDimension = new PortablePoint(dimension.Y, dimension.X);
+    }
     
     /// <summary>
     /// Handle save request from ink canvas context menu
@@ -1827,7 +1876,21 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         }
 
         var volume = _currentPdfMetaData.VolumeInfoList[volNo];
+
+        // Persist what is currently on screen in the old orientation first
+        SaveInkFromCurrentCanvases();
+
         volume.Rotation = (volume.Rotation + 1) % 4;
+
+        // Ink stored for this volume rotates with the page
+        foreach (var ink in _currentPdfMetaData.InkStrokes)
+        {
+            if (_currentPdfMetaData.GetVolNumFromPageNum(ink.Pageno) == volNo)
+            {
+                RotateInkStrokeData90Clockwise(ink);
+            }
+        }
+
         _currentPdfMetaData.IsDirty = true;
 
         if (!PdfMetaDataCore.SaveToJson(_currentPdfMetaData))
