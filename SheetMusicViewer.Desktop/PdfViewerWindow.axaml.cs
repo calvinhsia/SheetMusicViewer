@@ -43,7 +43,6 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private int _maxPageNumberMinus1;
     private bool _disableSliderValueChanged;
     private bool _chkFavoriteEnabled;
-    private bool _isThumbnailLoadingInProgress;
     private int _cacheLoadingCount;
     private string _cacheStatus = string.Empty;
 
@@ -372,9 +371,6 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 if (lastPdfMetaData != null)
                 {
                     await LoadPdfFileAndShowAsync(lastPdfMetaData, lastPdfMetaData.LastPageNo);
-                    
-                    // Load all thumbnails in the background while showing the doc
-                    _ = LoadAllThumbnailsAsync();
                 }
                 else
                 {
@@ -389,82 +385,27 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     }
     
     /// <summary>
-    /// Load all PDF thumbnails in the background for faster ChooseMusic display later
-    /// </summary>
-    private async Task LoadAllThumbnailsAsync()
-    {
-        IsThumbnailLoadingInProgress = true;
-        try
-        {
-            await Parallel.ForEachAsync(
-                _lstPdfMetaFileData,
-                new ParallelOptions { MaxDegreeOfParallelism = 4 },
-                async (pdfMetaData, cancellationToken) =>
-                {
-                    try
-                    {
-                        await pdfMetaData.GetOrCreateThumbnailAsync(async () =>
-                        {
-                            return await GetThumbnailForMetadataAsync(pdfMetaData);
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        // Log thumbnail errors but don't show to user - this is background work
-                        Logger.LogWarning($"Thumbnail load failed for {pdfMetaData.GetBookName(_rootMusicFolder)}: {ex.Message}");
-                    }
-                });
-        }
-        finally
-        {
-            IsThumbnailLoadingInProgress = false;
-        }
-    }
-    
-    /// <summary>
     /// Generate a thumbnail for a PDF metadata item
     /// </summary>
     private async Task<Bitmap> GetThumbnailForMetadataAsync(PdfMetaDataReadResult pdfMetaData)
     {
-        return await Task.Run(() =>
+        if (pdfMetaData.VolumeInfoList.Count == 0)
         {
-            if (pdfMetaData.VolumeInfoList.Count == 0)
-            {
-                throw new InvalidOperationException("No volumes in metadata");
-            }
-            
-            var pdfPath = pdfMetaData.GetFullPathFileFromVolno(0);
-            
-            if (string.IsNullOrEmpty(pdfPath) || !File.Exists(pdfPath))
-            {
-                throw new FileNotFoundException($"PDF file not found: {pdfPath}");
-            }
-            
-            // Note: Cloud-only files (OneDrive, etc.) will be downloaded automatically when accessed
-            // Future: Could add a config setting to skip cloud-only files if desired
-            
-            var rotation = pdfMetaData.VolumeInfoList[0].Rotation;
-            var pdfRotation = rotation switch
-            {
-                1 => PdfRotation.Rotate90,
-                2 => PdfRotation.Rotate180,
-                3 => PdfRotation.Rotate270,
-                _ => PdfRotation.Rotate0
-            };
-            
-            using var pdfStream = File.OpenRead(pdfPath);
-            using var skBitmap = Conversion.ToImage(pdfStream, page: (Index)0, options: new PDFtoImage.RenderOptions(
-                Width: 150,
-                Height: 225,
-                Rotation: pdfRotation));
-            
-            using var data = skBitmap.Encode(SKEncodedImageFormat.Png, 100);
-            using var stream = new MemoryStream();
-            data.SaveTo(stream);
-            stream.Seek(0, SeekOrigin.Begin);
-            
-            return new Bitmap(stream);
-        });
+            throw new InvalidOperationException("No volumes in metadata");
+        }
+        
+        var pdfPath = pdfMetaData.GetFullPathFileFromVolno(0);
+        
+        if (string.IsNullOrEmpty(pdfPath) || !File.Exists(pdfPath))
+        {
+            throw new FileNotFoundException($"PDF file not found: {pdfPath}");
+        }
+        
+        // Note: Cloud-only files (OneDrive, etc.) will be downloaded automatically when accessed
+        // Future: Could add a config setting to skip cloud-only files if desired
+        
+        return await PdfThumbnailLoader.GetOrCreateAsync(
+            pdfPath, 150, 225, pdfMetaData.VolumeInfoList[0].Rotation, skipCloudOnlyFiles: false);
     }
     
     private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
@@ -2194,16 +2135,6 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         set
         {
             _link1Tooltip = value;
-            OnPropertyChanged();
-        }
-    }
-
-    public bool IsThumbnailLoadingInProgress
-    {
-        get => _isThumbnailLoadingInProgress;
-        set
-        {
-            _isThumbnailLoadingInProgress = value;
             OnPropertyChanged();
         }
     }
