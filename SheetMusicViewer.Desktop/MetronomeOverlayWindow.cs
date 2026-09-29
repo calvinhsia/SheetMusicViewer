@@ -162,7 +162,7 @@ public class MetronomeOverlayWindow : Window, INotifyPropertyChanged
         CanResize             = true;
         ShowInTaskbar         = false;
         Topmost               = true;
-        SystemDecorations     = SystemDecorations.None;
+        WindowDecorations     = Avalonia.Controls.WindowDecorations.None;
         TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
         Background            = Brushes.Transparent;
 
