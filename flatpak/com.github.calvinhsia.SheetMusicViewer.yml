@@ -1,0 +1,85 @@
+app-id: com.github.calvinhsia.SheetMusicViewer
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+command: SheetMusicViewer
+
+finish-args:
+  # X11 + XShm access (Avalonia renders through XWayland on the test tablet)
+  - --share=ipc
+  - --socket=x11
+  # OpenGL acceleration
+  - --device=dri
+  # Audio output for the FluidSynth MIDI backend
+  - --socket=pulseaudio
+  # Sheet music library access; annotations are saved as .json next to each PDF
+  - --filesystem=xdg-music
+  - --filesystem=xdg-documents
+
+# Build-only files
+cleanup:
+  - /include
+  - /lib/cmake
+  - /lib/pkgconfig
+  - /share/man
+  - /bin/fluidsynth
+  - /bin/SDL3.dll
+  - /bin/fluidsynth.dll
+  - /bin/libfluidsynth-3.dll
+  - /bin/sndfile.dll
+  - /bin/x64
+  - /bin/x86
+  - '*.pdb'
+
+modules:
+  # FluidSynth is not part of the freedesktop runtime. NFluidSynth resolves the
+  # unversioned libfluidsynth.so, which the CMake install creates in /app/lib.
+  - name: fluidsynth
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -Denable-alsa=yes
+      - -Denable-pulseaudio=yes
+      - -Denable-libsndfile=yes
+      - -Denable-pipewire=no
+      - -Denable-jack=no
+      - -Denable-sdl3=no
+      - -Denable-oss=no
+      - -Denable-dbus=no
+      - -Denable-ladspa=no
+      - -Denable-readline=no
+      - -Denable-network=no
+      - -Denable-signalsmith=no
+      - -Denable-openmp=no
+    sources:
+      # The gcem submodule is required; archives do not carry submodules
+      - type: git
+        url: https://github.com/FluidSynth/fluidsynth.git
+        tag: v2.6.1
+        commit: 71e85b2ca6bf48641ba7e2261d8f2640ae473773
+
+  - name: sheetmusicviewer
+    buildsystem: simple
+    build-commands:
+      # The publish folder carries the app, Assets, Soundfonts and tessdata
+      - cp -a app/. /app/bin/
+      - install -Dm644 com.github.calvinhsia.SheetMusicViewer.desktop /app/share/applications/com.github.calvinhsia.SheetMusicViewer.desktop
+      - install -Dm644 com.github.calvinhsia.SheetMusicViewer.metainfo.xml /app/share/metainfo/com.github.calvinhsia.SheetMusicViewer.metainfo.xml
+      - install -Dm644 icons/256x256/sheetmusicviewer.png /app/share/icons/hicolor/256x256/apps/com.github.calvinhsia.SheetMusicViewer.png
+      - install -Dm644 icons/128x128/sheetmusicviewer.png /app/share/icons/hicolor/128x128/apps/com.github.calvinhsia.SheetMusicViewer.png
+      - install -Dm644 icons/64x64/sheetmusicviewer.png /app/share/icons/hicolor/64x64/apps/com.github.calvinhsia.SheetMusicViewer.png
+      - install -Dm644 LICENSE /app/share/licenses/com.github.calvinhsia.SheetMusicViewer/LICENSE
+    sources:
+      - type: file
+        path: ../LICENSE
+      - type: dir
+        path: publish
+        dest: app
+      - type: file
+        path: com.github.calvinhsia.SheetMusicViewer.desktop
+      - type: file
+        path: com.github.calvinhsia.SheetMusicViewer.metainfo.xml
+      # Generated once from Assets/Music.ico
+      - type: dir
+        path: icons
+        dest: icons
