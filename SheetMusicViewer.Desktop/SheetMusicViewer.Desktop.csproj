@@ -256,22 +256,23 @@
     <TessdataDir Condition="'$(TessdataDir)' == ''">$(MSBuildProjectDirectory)\..\tessdata\</TessdataDir>
   </PropertyGroup>
 
-  <ItemGroup>
-    <Content Include="$(TessdataDir)eng.traineddata"
-             CopyToOutputDirectory="PreserveNewest"
-             CopyToPublishDirectory="PreserveNewest"
-             Link="tessdata\eng.traineddata"
-             Condition="Exists('$(TessdataDir)eng.traineddata')" />
-  </ItemGroup>
-
-  <Target Name="DownloadTessdata" BeforeTargets="BeforeBuild"
-          Condition="!Exists('$(TessdataDir)eng.traineddata')">
-    <Message Text="[Tesseract] Downloading eng.traineddata from tessdata_fast (~4 MB)…" Importance="High" />
-    <MakeDir Directories="$(TessdataDir)" />
+  <Target Name="DownloadTessdata" BeforeTargets="BeforeBuild">
+    <Message Text="[Tesseract] Downloading eng.traineddata from tessdata_fast (~4 MB)…" Importance="High"
+             Condition="!Exists('$(TessdataDir)eng.traineddata')" />
+    <MakeDir Directories="$(TessdataDir)"
+             Condition="!Exists('$(TessdataDir)eng.traineddata')" />
     <DownloadFile
         SourceUrl="https://github.com/tesseract-ocr/tessdata_fast/raw/main/eng.traineddata"
         DestinationFolder="$(TessdataDir)"
-        SkipUnchangedFiles="true" />
+        SkipUnchangedFiles="true"
+        Condition="!Exists('$(TessdataDir)eng.traineddata')" />
+    <!-- Added here so a fresh checkout includes it in the first publish -->
+    <ItemGroup Condition="Exists('$(TessdataDir)eng.traineddata')">
+      <Content Include="$(TessdataDir)eng.traineddata"
+               CopyToOutputDirectory="PreserveNewest"
+               CopyToPublishDirectory="PreserveNewest"
+               Link="tessdata\eng.traineddata" />
+    </ItemGroup>
   </Target>
 
 </Project>
