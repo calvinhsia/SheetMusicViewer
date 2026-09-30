@@ -147,6 +147,15 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 WindowState = WindowState.Maximized;
                 Trace.WriteLine($"PdfViewerWindow Opened: Set WindowState to Maximized");
             }
+
+            // X11 window managers can drop the state request made during Opened
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (AppSettings.Instance.WindowMaximized && WindowState == WindowState.Normal)
+                {
+                    WindowState = WindowState.Maximized;
+                }
+            }, DispatcherPriority.Background);
         };
         
         // Save settings and cleanup on close
