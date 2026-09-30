@@ -171,9 +171,9 @@
                             ToolTip.Tip="{Binding Link1Tooltip}" 
                             ToolTip.ShowOnDisabled="True"
                             IsEnabled="{Binding HasLink1}" VerticalAlignment="Center" 
-                            IsVisible="{Binding Show2Pages}" Margin="0,0,4,0"/>
-                    <CheckBox Name="chkInk1" Content="Ink" IsEnabled="{Binding PdfUIEnabled}" ToolTip.Tip="Turn on/off inking with mouse or pen" IsVisible="{Binding Show2Pages}" Margin="0,0,4,0"/>
-                    <CheckBox Name="chkFav1" Content="Fav" Foreground="Lime" IsEnabled="{Binding PdfUIEnabled}" Margin="0,0,3,0" IsVisible="{Binding Show2Pages}"/>
+                            IsVisible="{Binding ShowSecondPageControls}" Margin="0,0,4,0"/>
+                    <CheckBox Name="chkInk1" Content="Ink" IsEnabled="{Binding PdfUIEnabled}" ToolTip.Tip="Turn on/off inking with mouse or pen" IsVisible="{Binding ShowSecondPageControls}" Margin="0,0,4,0"/>
+                    <CheckBox Name="chkFav1" Content="Fav" Foreground="Lime" IsEnabled="{Binding PdfUIEnabled}" Margin="0,0,3,0" IsVisible="{Binding ShowSecondPageControls}"/>
                 </StackPanel>
                 <TextBlock Name="txtDesc1" Text="{Binding Description1}" MaxWidth="400" TextTrimming="CharacterEllipsis" HorizontalAlignment="Right" Margin="0,0,3,0" IsVisible="{Binding Description1Visible}"/>
             </StackPanel>
