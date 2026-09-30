@@ -1048,7 +1048,8 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 HasLink0 = hasLink0;
                 Link0Tooltip = hasLink0 ? $"Open: {link0}" : "No link for this song";
 
-                if (NumPagesPerView > 1)
+                // page1Image is only set when the second page exists
+                if (page1Image != null)
                 {
                     Description1 = GetDescription(pageNo + 1);
                     var (hasLink1, link1) = GetLinkInfoForPage(pageNo + 1);
@@ -1057,6 +1058,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 }
                 else
                 {
+                    Description1 = string.Empty;
                     HasLink1 = false;
                     Link1Tooltip = "No link for this song";
                 }
@@ -1077,9 +1079,9 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
                 {
                     _chkFav0.IsChecked = _currentPdfMetaData.IsFavorite(pageNo);
                 }
-                if (_chkFav1 != null && NumPagesPerView > 1)
+                if (_chkFav1 != null)
                 {
-                    _chkFav1.IsChecked = _currentPdfMetaData.IsFavorite(pageNo + 1);
+                    _chkFav1.IsChecked = page1Image != null && _currentPdfMetaData.IsFavorite(pageNo + 1);
                 }
                 _chkFavoriteEnabled = true;
             });
@@ -1766,6 +1768,12 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             var pageNo = CurrentPageNumber + (isPage0 ? 0 : 1);
             var isFavorite = chk.IsChecked == true;
             
+            // Ignore pages outside the document (e.g. right Fav on the last spread)
+            if (pageNo < _currentPdfMetaData.PageNumberOffset || pageNo >= _currentPdfMetaData.MaxPageNum)
+            {
+                return;
+            }
+            
             // Toggle favorite in metadata and save
             _currentPdfMetaData.ToggleFavorite(pageNo, isFavorite);
             PdfMetaDataCore.SaveToJson(_currentPdfMetaData);
@@ -2084,6 +2092,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         {
             _currentPageNumber = value;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(ShowSecondPageControls));
         }
     }
 
@@ -2094,10 +2103,14 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         {
             _maxPageNumberMinus1 = value;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(ShowSecondPageControls));
         }
     }
 
     public int NumPagesPerView => _show2Pages ? 2 : 1;
+
+    // True when two-page mode actually shows a second page (right page cluster)
+    public bool ShowSecondPageControls => Show2Pages && CurrentPageNumber < MaxPageNumberMinus1;
 
     public bool Show2Pages
     {
@@ -2107,6 +2120,7 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             _show2Pages = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(NumPagesPerView));
+            OnPropertyChanged(nameof(ShowSecondPageControls));
             
             if (_gestureHandler != null)
             {
