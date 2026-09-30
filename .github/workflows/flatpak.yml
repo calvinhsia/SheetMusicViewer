@@ -1,0 +1,46 @@
+name: Flatpak
+
+on:
+  push:
+    branches: [ master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ master ]
+    paths:
+      - 'flatpak/**'
+      - '.github/workflows/flatpak.yml'
+  workflow_dispatch:
+
+jobs:
+  flatpak:
+    name: Build Flatpak
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-25.08
+      options: --privileged
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish for Linux x64
+        run: |
+          dotnet publish SheetMusicViewer.Desktop/SheetMusicViewer.Desktop.csproj \
+            -c Release -r linux-x64 --self-contained true \
+            -p:PublishSingleFile=false \
+            -p:EnableCompressionInSingleFile=false \
+            -p:PublishReadyToRun=true \
+            -o flatpak/publish
+
+      - name: Build Flatpak
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: SheetMusicViewer.flatpak
+          manifest-path: flatpak/com.github.calvinhsia.SheetMusicViewer.yml
+          artifact-name: SheetMusicViewer-flatpak

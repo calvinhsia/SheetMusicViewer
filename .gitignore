@@ -261,3 +261,13 @@ __pycache__/
 *.pyc
 # Tesseract language data - downloaded automatically by MSBuild (see Desktop csproj)
 tessdata/
+
+# Flatpak build artifacts
+.flatpak-builder/
+flatpak/build/
+flatpak/repo/
+*.flatpak
+
+# flatpak-builder action output
+/repo/
+flatpak/flatpak-github-action-modified-*.yml
