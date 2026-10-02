@@ -227,8 +227,10 @@ public class GestureHandler
         
         Log($"RELEASED: id={pointerId} pos=({pos.X:F0},{pos.Y:F0}) count={_activePointers.Count} wasGest={wasGesturing} moved={_hasMoved} handled={e.Handled}");
         
-        // Skip tap/navigation processing if the event was already handled (e.g., by InkCanvas eraser)
-        if (_activePointers.Count == 1 && !wasGesturing && !IsDisabled && !_hasMoved && !e.Handled)
+        // Skip tap/navigation processing if the event was already handled (e.g., by InkCanvas eraser).
+        // At fit a one finger drag has no other meaning, so movement only disqualifies a tap while zoomed.
+        if (_activePointers.Count == 1 && !wasGesturing && !IsDisabled && !e.Handled &&
+            (!IsTransformed || !_hasMoved))
         {
             if (IsTransformed)
             {
