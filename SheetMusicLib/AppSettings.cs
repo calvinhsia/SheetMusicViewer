@@ -296,6 +296,12 @@ public class AppSettings
         public int PageCacheMaxSize { get; set; } = 50;
 
         /// <summary>
+        /// Maximum total memory for cached page bitmaps, in bytes.
+        /// When exceeded, the oldest pages are released first.
+        /// </summary>
+        public long PageCacheMaxBytes { get; set; } = 256L * 1024 * 1024;
+
+        /// <summary>
         /// If true, disables the page cache entirely. Useful for performance testing.
         /// Each page navigation will re-render the page from the PDF.
         /// </summary>
