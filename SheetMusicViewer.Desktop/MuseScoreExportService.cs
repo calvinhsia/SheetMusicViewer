@@ -498,7 +498,7 @@ public static class MuseScoreExportService
             {
                 var stem = Path.GetFileNameWithoutExtension(f);
                 // Must start with the PDF basename (case-insensitive) to belong to this PDF.
-                return stem.StartsWith(pdfBaseName, StringComparison.OrdinalIgnoreCase);
+                return stem.StartsWith(pdfBaseName, StringComparison.OrdinalIgnoreCase) && (songName == null || stem.Contains(songName, StringComparison.OrdinalIgnoreCase));
             })
             .OrderByDescending(File.GetLastWriteTime)
             .FirstOrDefault();

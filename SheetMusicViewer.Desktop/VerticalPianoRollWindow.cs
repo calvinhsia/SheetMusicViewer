@@ -23,6 +23,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+using SheetMusicLib;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using Avalonia.VisualTree;
@@ -2541,6 +2542,26 @@ public static class VerticalPianoRollWindowFactory
     }
 
     /// <summary>
+    /// Sets a toggle-button's visual state. When <paramref name="on"/> is true the
+    /// button is highlighted (SteelBlue / white). When false the explicit local
+    /// Background and Foreground values are cleared so the theme's defaults apply,
+    /// making the button always visible regardless of whether it is toggled on or off.
+    /// </summary>
+    private static void ApplyToggleButton(Button btn, bool on)
+    {
+        if (on)
+        {
+            btn.Background = Brushes.SteelBlue;
+            btn.Foreground = Brushes.White;
+        }
+        else
+        {
+            btn.ClearValue(TemplatedControl.BackgroundProperty);
+            btn.ClearValue(TemplatedControl.ForegroundProperty);
+        }
+    }
+
+    /// <summary>
     /// Parses the MusicXML at <paramref name="mxlPath"/> and builds the vertical piano roll window.
     /// Autoplay starts when the window is opened.
     /// </summary>
@@ -2573,6 +2594,20 @@ public static class VerticalPianoRollWindowFactory
         VerticalPianoRollCanvas.SyncDiagnostics = syncDiagnostics;
         MxlMidiPlayer.TimingDiagnostics         = syncDiagnostics;
 
+        // Repeat button — created before the player so it can be passed as LeadingControl.
+        // The PlaybackEnded wiring happens inside CreateRepeatButton after player is ready,
+        // so we use a captured reference and finish wiring below.
+        bool repeatOn = AppSettings.Instance.PianoRollRepeat;
+        var repeatBtn = new Button
+        {
+            Content = "🔁 Repeat",
+            Margin  = new Thickness(4),
+            Padding = new Thickness(8, 2),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            [ToolTip.TipProperty] = "Replay the song from the beginning when it ends"
+        };
+        ApplyToggleButton(repeatBtn, repeatOn);
+
         var player = new PianoRollPlayerControl(new PianoRollOptions
         {
             StartMeasure      = startMeasure,
@@ -2581,7 +2616,22 @@ public static class VerticalPianoRollWindowFactory
             ShowLogNotes      = true,
             ShowSkipButton    = false,
             LogNotesDefault   = logNotesDefault,
+            LeadingControl    = repeatBtn,
         });
+
+        repeatBtn.Click += (_, _) =>
+        {
+            repeatOn = !repeatOn;
+            ApplyToggleButton(repeatBtn, repeatOn);
+            AppSettings.Instance.PianoRollRepeat = repeatOn;
+            AppSettings.Instance.SaveLocal();
+        };
+
+        player.PlaybackEnded += (_, _) =>
+        {
+            if (repeatOn)
+                player.LoadScore(score, startMeasure, autoPlay: true);
+        };
 
         var window = new Window
         {
@@ -2646,18 +2696,47 @@ public static class VerticalPianoRollWindowFactory
         patternCombo.ItemTemplate  = new Avalonia.Controls.Templates.FuncDataTemplate<MusicPatternInfo>(
             (info, _) => new TextBlock { Text = info.Display });
 
+        bool repeatOn = AppSettings.Instance.PianoRollRepeat;
+        var repeatBtn = new Button
+        {
+            Content = "🔁 Repeat",
+            Margin  = new Thickness(4),
+            Padding = new Thickness(8, 2),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            [ToolTip.TipProperty] = "Replay the current pattern from the beginning when it ends"
+        };
+        ApplyToggleButton(repeatBtn, repeatOn);
+
+        var leadingPanel = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal };
+        leadingPanel.Children.Add(repeatBtn);
+        leadingPanel.Children.Add(patternCombo);
+
         var player = new PianoRollPlayerControl(new PianoRollOptions
         {
             ShowMeasureSlider = false,
             ShowLogNotes      = false,
             ShowSkipButton    = false,
-            LeadingControl    = patternCombo,
+            LeadingControl    = leadingPanel,
         });
+
+        repeatBtn.Click += (_, _) =>
+        {
+            repeatOn = !repeatOn;
+            ApplyToggleButton(repeatBtn, repeatOn);
+            AppSettings.Instance.PianoRollRepeat = repeatOn;
+            AppSettings.Instance.SaveLocal();
+        };
 
         // Load new pattern whenever the combo selection changes.
         patternCombo.SelectionChanged += (_, _) =>
         {
             if (patternCombo.SelectedItem is MusicPatternInfo info)
+                player.LoadScore(info.Build(), autoPlay: true);
+        };
+
+        player.PlaybackEnded += (_, _) =>
+        {
+            if (repeatOn && patternCombo.SelectedItem is MusicPatternInfo info)
                 player.LoadScore(info.Build(), autoPlay: true);
         };
 
@@ -2732,8 +2811,8 @@ public static class VerticalPianoRollWindowFactory
         int currentPos = 0;   // position within playOrder
 
         // ── Repeat / Shuffle controls ─────────────────────────────────────────
-        bool repeatOn  = false;
-        bool shuffleOn = false;
+        bool repeatOn  = AppSettings.Instance.PianoRollRepeat;
+        bool shuffleOn = AppSettings.Instance.PianoRollShuffle;
 
         var repeatBtn = new Button
         {
@@ -2741,7 +2820,7 @@ public static class VerticalPianoRollWindowFactory
             Margin  = new Thickness(4),
             Padding = new Thickness(8, 2),
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            [ToolTip.TipProperty] = "Restart playlist from the beginning when the last song ends"
+            [ToolTip.TipProperty] = "Replay the playlist (or single song) from the beginning when it ends"
         };
         var shuffleBtn = new Button
         {
@@ -2752,16 +2831,29 @@ public static class VerticalPianoRollWindowFactory
             [ToolTip.TipProperty] = "Play songs in random order"
         };
 
-        void UpdateToggleButton(Button btn, bool on)
+        void UpdateToggleButton(Button btn, bool on) => ApplyToggleButton(btn, on);
+
+        // Apply persisted state to buttons immediately.
+        UpdateToggleButton(repeatBtn,  repeatOn);
+        UpdateToggleButton(shuffleBtn, shuffleOn);
+
+        // If shuffle was persisted as on, randomise the initial play order.
+        if (shuffleOn)
         {
-            btn.Background = on ? Brushes.SteelBlue : null;
-            btn.Foreground = on ? Brushes.White     : null;
+            var rng = new Random();
+            for (int i = playOrder.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                (playOrder[i], playOrder[j]) = (playOrder[j], playOrder[i]);
+            }
         }
 
         repeatBtn.Click += (_, _) =>
         {
             repeatOn = !repeatOn;
             UpdateToggleButton(repeatBtn, repeatOn);
+            AppSettings.Instance.PianoRollRepeat = repeatOn;
+            AppSettings.Instance.SaveLocal();
         };
 
         // Re-shuffle everything after the current position when shuffle is toggled on.
@@ -2769,6 +2861,8 @@ public static class VerticalPianoRollWindowFactory
         {
             shuffleOn = !shuffleOn;
             UpdateToggleButton(shuffleBtn, shuffleOn);
+            AppSettings.Instance.PianoRollShuffle = shuffleOn;
+            AppSettings.Instance.SaveLocal();
             if (shuffleOn)
             {
                 var rng = new Random();
