@@ -12,9 +12,11 @@ using SheetMusicLib;
 using SkiaSharp;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SheetMusicViewer.Desktop;
@@ -65,6 +67,9 @@ public class ChooseMusicWindow : Window
 
     // Cache for book items (bitmap + metadata)
     private List<BookItemCache> _bookItemCache = new();
+    // ListBox binds to these realized controls so items can be appended without a rebuild
+    private readonly ObservableCollection<Control> _bookControls = new();
+    private Avalonia.Threading.DispatcherTimer? _filterDebounceTimer;
     private bool _isLoading = false;
 
     // Favorites data source
@@ -85,6 +90,9 @@ public class ChooseMusicWindow : Window
     private const int ThumbnailWidth = 150;
     private const int ThumbnailHeight = 225;
     private const string NewFolderDialogString = "New...";
+
+    // Bounds how many covers are rendered at the same time
+    private SemaphoreSlim? _thumbnailLoadGate;
 
     /// <summary>
     /// If true, skip cloud-only files instead of triggering download.
@@ -118,6 +126,7 @@ public class ChooseMusicWindow : Window
         public int NumSongs { get; set; }
         public int NumPages { get; set; }
         public int NumFavs { get; set; }
+        public Image? ImageControl { get; set; }
         public Bitmap? Bitmap => Metadata?.GetCachedThumbnail<Bitmap>();
     }
 
@@ -607,7 +616,7 @@ public class ChooseMusicWindow : Window
         _favoritesBrowseControl = null;
         _queryBrowseControl = null;
         _playlistSongsBrowseControl = null;
-        _lbBooks.ItemsSource = null;
+        _bookControls.Clear();
 
         _tbxTotals.Text = "Loading...";
 
@@ -678,6 +687,7 @@ public class ChooseMusicWindow : Window
             Background = Brushes.Transparent // Let theme background show through
         });
         _lbBooks.ItemsPanel = wrapPanelFactory;
+        _lbBooks.ItemsSource = _bookControls;
         // Note: DoubleTapped is now handled on individual items in CreateBookItemControl
         // to ensure selection is set before processing
 
@@ -2419,10 +2429,25 @@ public class ChooseMusicWindow : Window
 
     private void OnFilterChanged(object? sender, TextChangedEventArgs e)
     {
-        if (!_isLoading && _bookItemCache.Count > 0)
+        if (_isLoading || _bookItemCache.Count == 0)
         {
-            RefreshBooksDisplay();
+            return;
         }
+
+        _filterDebounceTimer ??= new Avalonia.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(250)
+        };
+        _filterDebounceTimer.Stop();
+        _filterDebounceTimer.Tick -= FilterDebounceTimer_Tick;
+        _filterDebounceTimer.Tick += FilterDebounceTimer_Tick;
+        _filterDebounceTimer.Start();
+    }
+
+    private void FilterDebounceTimer_Tick(object? sender, EventArgs e)
+    {
+        _filterDebounceTimer?.Stop();
+        RefreshBooksDisplay();
     }
 
     private IEnumerable<PdfMetaDataReadResult> GetSortedMetadata()
@@ -2445,8 +2470,8 @@ public class ChooseMusicWindow : Window
     {
         _isLoading = true;
         _bookItemCache.Clear();
+        _bookControls.Clear();
 
-        var random = new Random(42);
         int index = 0;
         int totalSongs = 0;
         int totalPages = 0;
@@ -2465,37 +2490,17 @@ public class ChooseMusicWindow : Window
             totalPages += numPages;
             totalFavs += numFavs;
 
-            var localIndex = index;
-            var localBookName = bookName;
-            try
-            {
-                await pdfMetaData.GetOrCreateThumbnailAsync(async () =>
-                {
-                    try
-                    {
-                        return await GetPdfThumbnailAsync(pdfMetaData);
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.LogWarning($"Failed to get PDF thumbnail for {localBookName}: {ex.Message}");
-                        return GenerateBookCoverBitmap(ThumbnailWidth, ThumbnailHeight, random, localBookName, localIndex);
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                Logger.LogWarning($"Failed to get PDF thumbnail for {bookName}: {ex.Message}");
-                pdfMetaData.ThumbnailCache = GenerateBookCoverBitmap(ThumbnailWidth, ThumbnailHeight, random, bookName, index);
-            }
-
-            _bookItemCache.Add(new BookItemCache
+            var cacheItem = new BookItemCache
             {
                 Metadata = pdfMetaData,
                 BookName = bookName,
                 NumSongs = numSongs,
                 NumPages = numPages,
                 NumFavs = numFavs
-            });
+            };
+            _bookItemCache.Add(cacheItem);
+
+            StartThumbnailLoad(pdfMetaData, cacheItem, index, bookName);
 
             if (index % 10 == 9)
             {
@@ -2507,27 +2512,80 @@ public class ChooseMusicWindow : Window
         }
 
         _isLoading = false;
-        RefreshBooksDisplay();
+        // The incremental updates already rendered everything unless a filter was typed
+        if (!string.IsNullOrEmpty(_tbxFilter?.Text?.Trim()) || _bookControls.Count == 0)
+        {
+            RefreshBooksDisplay();
+        }
+    }
+
+    private SemaphoreSlim ThumbnailLoadGate =>
+        _thumbnailLoadGate ??= new SemaphoreSlim(Math.Clamp(AppSettings.Instance.UserOptions.ThumbnailLoadingParallelism, 1, 8));
+
+    /// <summary>
+    /// Loads a book cover in the background and assigns it to the item control once ready.
+    /// </summary>
+    private void StartThumbnailLoad(PdfMetaDataReadResult pdfMetaData, BookItemCache cacheItem, int index, string bookName)
+    {
+        _ = Task.Run(async () =>
+        {
+            await ThumbnailLoadGate.WaitAsync();
+            try
+            {
+                var bitmap = await pdfMetaData.GetOrCreateThumbnailAsync(async () =>
+                {
+                    try
+                    {
+                        return await GetPdfThumbnailAsync(pdfMetaData);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning($"Failed to get PDF thumbnail for {bookName}: {ex.Message}");
+                        return GenerateBookCoverBitmap(ThumbnailWidth, ThumbnailHeight, new Random(42 + index), bookName, index);
+                    }
+                });
+
+                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (cacheItem.ImageControl != null)
+                    {
+                        cacheItem.ImageControl.Source = bitmap;
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning($"Failed to get PDF thumbnail for {bookName}: {ex.Message}");
+            }
+            finally
+            {
+                ThumbnailLoadGate.Release();
+            }
+        });
     }
 
     private void UpdateBooksDisplayDuringLoad(int totalSongs, int totalPages, int totalFavs)
     {
         var filterText = _tbxFilter?.Text?.Trim() ?? string.Empty;
 
-        IEnumerable<BookItemCache> displayItems = _bookItemCache;
         if (!string.IsNullOrEmpty(filterText))
         {
-            displayItems = displayItems.Where(item =>
-                item.BookName.Contains(filterText, StringComparison.OrdinalIgnoreCase));
+            _bookControls.Clear();
+            foreach (var cacheItem in _bookItemCache.Where(item =>
+                         item.BookName.Contains(filterText, StringComparison.OrdinalIgnoreCase)))
+            {
+                _bookControls.Add(CreateBookItemControl(cacheItem));
+            }
         }
-
-        var items = new List<Control>();
-        foreach (var cacheItem in displayItems)
+        else
         {
-            items.Add(CreateBookItemControl(cacheItem));
+            // The sort order is fixed while loading, so append what is new instead of rebuilding
+            for (int i = _bookControls.Count; i < _bookItemCache.Count; i++)
+            {
+                _bookControls.Add(CreateBookItemControl(_bookItemCache[i]));
+            }
         }
 
-        _lbBooks.ItemsSource = items;
         _tbxTotals.Text = $"#Books = {_bookItemCache.Count} #Songs = {totalSongs:n0} #Pages = {totalPages:n0} #Fav={totalFavs:n0}";
     }
 
@@ -2542,6 +2600,7 @@ public class ChooseMusicWindow : Window
             Height = ThumbnailHeight,
             Stretch = Stretch.UniformToFill
         };
+        cacheItem.ImageControl = img;
         sp.Children.Add(img);
 
         sp.Children.Add(new TextBlock
@@ -2603,7 +2662,7 @@ public class ChooseMusicWindow : Window
             sortedItems = filteredItems.OrderByDescending(item => item.Metadata.LastWriteTime);
         }
 
-        var items = new List<Control>();
+        _bookControls.Clear();
         int totalSongs = 0;
         int totalPages = 0;
         int totalFavs = 0;
@@ -2614,11 +2673,10 @@ public class ChooseMusicWindow : Window
             totalPages += cacheItem.NumPages;
             totalFavs += cacheItem.NumFavs;
 
-            items.Add(CreateBookItemControl(cacheItem));
+            _bookControls.Add(CreateBookItemControl(cacheItem));
         }
 
-        _lbBooks.ItemsSource = items;
-        _tbxTotals.Text = $"#Books = {items.Count} #Songs = {totalSongs:n0} #Pages = {totalPages:n0} #Fav={totalFavs:n0}";
+        _tbxTotals.Text = $"#Books = {_bookControls.Count} #Songs = {totalSongs:n0} #Pages = {totalPages:n0} #Fav={totalFavs:n0}";
     }
 
     /// <summary>
@@ -2628,63 +2686,24 @@ public class ChooseMusicWindow : Window
     /// </summary>
     private async Task<Bitmap> GetPdfThumbnailAsync(PdfMetaDataReadResult pdfMetaData)
     {
-        return await Task.Run(() =>
+        if (pdfMetaData.VolumeInfoList.Count == 0)
         {
-            if (pdfMetaData.VolumeInfoList.Count == 0)
-            {
-                throw new InvalidOperationException($"No volumes in metadata");
-            }
+            throw new InvalidOperationException("No volumes in metadata");
+        }
 
-            // For singles folders, VolumeInfoList is sorted alphabetically by filename.
-            // The first volume (index 0) determines the thumbnail image.
-            // Users can control which PDF is used as the cover by renaming it to sort first.
-            var firstVolume = pdfMetaData.VolumeInfoList[0];
-            var pdfPath = pdfMetaData.GetFullPathFileFromVolno(0);
+        // For singles folders, VolumeInfoList is sorted alphabetically by filename.
+        // The first volume (index 0) determines the thumbnail image.
+        // Users can control which PDF is used as the cover by renaming it to sort first.
+        var firstVolume = pdfMetaData.VolumeInfoList[0];
+        var pdfPath = pdfMetaData.GetFullPathFileFromVolno(0);
 
-            if (string.IsNullOrEmpty(pdfPath) || !File.Exists(pdfPath))
-            {
-                throw new FileNotFoundException($"PDF file not found: {pdfPath}");
-            }
+        if (string.IsNullOrEmpty(pdfPath) || !File.Exists(pdfPath))
+        {
+            throw new FileNotFoundException($"PDF file not found: {pdfPath}");
+        }
 
-            if (SkipCloudOnlyFiles)
-            {
-                var fileInfo = new FileInfo(pdfPath);
-                const FileAttributes RecallOnDataAccess = (FileAttributes)0x00400000;
-                const FileAttributes RecallOnOpen = (FileAttributes)0x00040000;
-
-                var attrs = fileInfo.Attributes;
-                bool isCloudOnly = (attrs & RecallOnDataAccess) == RecallOnDataAccess ||
-                                   (attrs & RecallOnOpen) == RecallOnOpen ||
-                                   (attrs & FileAttributes.Offline) == FileAttributes.Offline;
-
-                if (isCloudOnly)
-                {
-                    throw new IOException($"Cloud-only file, skipping: {pdfPath}");
-                }
-            }
-
-            var rotation = firstVolume.Rotation;
-            var pdfRotation = rotation switch
-            {
-                1 => PdfRotation.Rotate90,
-                2 => PdfRotation.Rotate180,
-                3 => PdfRotation.Rotate270,
-                _ => PdfRotation.Rotate0
-            };
-
-            using var pdfStream = File.OpenRead(pdfPath);
-            using var skBitmap = Conversion.ToImage(pdfStream, page: (Index)0, options: new PDFtoImage.RenderOptions(
-                Width: ThumbnailWidth,
-                Height: ThumbnailHeight,
-                Rotation: pdfRotation));
-
-            using var data = skBitmap.Encode(SKEncodedImageFormat.Png, 100);
-            using var stream = new MemoryStream();
-            data.SaveTo(stream);
-            stream.Seek(0, SeekOrigin.Begin);
-
-            return new Bitmap(stream);
-        });
+        return await PdfThumbnailLoader.GetOrCreateAsync(
+            pdfPath, ThumbnailWidth, ThumbnailHeight, firstVolume.Rotation, SkipCloudOnlyFiles);
     }
 
     private async Task FillBooksTabAsync()
@@ -2713,7 +2732,11 @@ public class ChooseMusicWindow : Window
             items.Add(sp);
         }
 
-        _lbBooks.ItemsSource = items;
+        _bookControls.Clear();
+        foreach (var item in items)
+        {
+            _bookControls.Add(item);
+        }
         _tbxTotals.Text = $"#Books = {items.Count} (demo mode)";
     }
 

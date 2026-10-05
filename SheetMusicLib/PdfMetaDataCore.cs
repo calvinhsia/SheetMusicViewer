@@ -85,6 +85,9 @@ namespace SheetMusicLib
         /// </summary>
         public object ThumbnailCache { get; set; }
 
+        private readonly object _thumbnailLock = new();
+        private Task? _pendingThumbnail;
+
         /// <summary>
         /// Gets the cached thumbnail or creates it using the provided factory function.
         /// Thread-safe - only one factory call will execute even if called concurrently.
@@ -94,19 +97,45 @@ namespace SheetMusicLib
         /// <returns>The cached or newly created thumbnail</returns>
         public async Task<T> GetOrCreateThumbnailAsync<T>(Func<Task<T>> thumbnailFactory) where T : class
         {
-            // Fast path: already cached
-            if (ThumbnailCache is T cached)
+            Task<T> thumbnailTask;
+            lock (_thumbnailLock)
             {
-                return cached;
+                // Fast path: already cached
+                if (ThumbnailCache is T cached)
+                {
+                    return cached;
+                }
+
+                // Reuse an in-flight render instead of starting a second one
+                if (_pendingThumbnail is Task<T> pending)
+                {
+                    thumbnailTask = pending;
+                }
+                else
+                {
+                    thumbnailTask = thumbnailFactory();
+                    _pendingThumbnail = thumbnailTask;
+                }
             }
 
-            // Create the thumbnail
-            var thumbnail = await thumbnailFactory();
-            
-            // Cache it (simple assignment - last writer wins if concurrent)
-            ThumbnailCache = thumbnail;
-            
-            return thumbnail;
+            try
+            {
+                var thumbnail = await thumbnailTask;
+                lock (_thumbnailLock)
+                {
+                    _pendingThumbnail = null;
+                    ThumbnailCache = thumbnail;
+                }
+                return thumbnail;
+            }
+            catch
+            {
+                lock (_thumbnailLock)
+                {
+                    _pendingThumbnail = null;
+                }
+                throw;
+            }
         }
 
         /// <summary>
