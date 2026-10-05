@@ -3,8 +3,7 @@
         xmlns:local="clr-namespace:SheetMusicViewer.Desktop"
         x:Class="SheetMusicViewer.Desktop.PdfViewerWindow"
         x:DataType="local:PdfViewerWindow"
-        Title="Sheet Music Viewer"
-        WindowState="Maximized">
+        Title="Sheet Music Viewer">
     
     <Window.Styles>
         <!-- Reduce gap between checkbox box and label -->
@@ -149,7 +148,7 @@
                             </MenuItem>
                             <MenuItem Name="mnuFullScreen" Header="_Full Screen" InputGesture="Alt+F" ToolTip.Tip="Toggle Full Screen mode">
                                 <MenuItem.Icon>
-                                    <CheckBox IsChecked="{Binding #chkFullScreen.IsChecked}" BorderThickness="0"/>
+                                    <CheckBox IsChecked="{Binding #chkFullScreen.IsChecked}" BorderThickness="0" IsHitTestVisible="False"/>
                                 </MenuItem.Icon>
                             </MenuItem>
                             <MenuItem Name="mnuOptions" Header="_Options..." InputGesture="Alt+O" ToolTip.Tip="Configure application settings"/>

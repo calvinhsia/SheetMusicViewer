@@ -78,6 +78,8 @@ namespace SheetMusicLib
         private readonly Dictionary<int, byte[]> _pdfBytesCache = new();
         private readonly Dictionary<int, object> _volumeLoadLocks = new();
         private readonly object _pdfBytesCacheLock = new();
+        private readonly object _thumbnailLock = new();
+        private int _thumbnailGeneration;
 
         /// <summary>
         /// Cached thumbnail bitmap (platform-specific type stored as object).
@@ -87,25 +89,37 @@ namespace SheetMusicLib
 
         /// <summary>
         /// Gets the cached thumbnail or creates it using the provided factory function.
-        /// Thread-safe - only one factory call will execute even if called concurrently.
+        /// Results produced before a <see cref="ClearThumbnailCache"/> call are discarded,
+        /// so an in-flight render cannot overwrite a newer thumbnail.
         /// </summary>
         /// <typeparam name="T">The platform-specific bitmap type (e.g., Avalonia.Media.Imaging.Bitmap or System.Windows.Media.Imaging.BitmapImage)</typeparam>
         /// <param name="thumbnailFactory">Async function to create the thumbnail if not cached</param>
         /// <returns>The cached or newly created thumbnail</returns>
         public async Task<T> GetOrCreateThumbnailAsync<T>(Func<Task<T>> thumbnailFactory) where T : class
         {
-            // Fast path: already cached
-            if (ThumbnailCache is T cached)
+            int generation;
+            lock (_thumbnailLock)
             {
-                return cached;
+                // Fast path: already cached
+                if (ThumbnailCache is T cached)
+                {
+                    return cached;
+                }
+                generation = _thumbnailGeneration;
             }
 
-            // Create the thumbnail
+            // Create the thumbnail outside the lock
             var thumbnail = await thumbnailFactory();
-            
-            // Cache it (simple assignment - last writer wins if concurrent)
-            ThumbnailCache = thumbnail;
-            
+
+            lock (_thumbnailLock)
+            {
+                // Discard results started before the cache was invalidated
+                if (generation == _thumbnailGeneration)
+                {
+                    ThumbnailCache = thumbnail;
+                }
+            }
+
             return thumbnail;
         }
 
@@ -226,11 +240,28 @@ namespace SheetMusicLib
         }
 
         /// <summary>
+        /// Stores a thumbnail rendered outside GetOrCreateThumbnailAsync and
+        /// invalidates in-flight renders so they cannot overwrite it.
+        /// </summary>
+        public void SetCachedThumbnail(object thumbnail)
+        {
+            lock (_thumbnailLock)
+            {
+                ThumbnailCache = thumbnail;
+                _thumbnailGeneration++;
+            }
+        }
+
+        /// <summary>
         /// Clears the cached thumbnail to free memory.
         /// </summary>
         public void ClearThumbnailCache()
         {
-            ThumbnailCache = null;
+            lock (_thumbnailLock)
+            {
+                ThumbnailCache = null;
+                _thumbnailGeneration++;
+            }
         }
 
         /// <summary>

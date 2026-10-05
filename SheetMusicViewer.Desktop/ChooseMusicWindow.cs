@@ -2485,7 +2485,7 @@ public class ChooseMusicWindow : Window
             catch (Exception ex)
             {
                 Logger.LogWarning($"Failed to get PDF thumbnail for {bookName}: {ex.Message}");
-                pdfMetaData.ThumbnailCache = GenerateBookCoverBitmap(ThumbnailWidth, ThumbnailHeight, random, bookName, index);
+                pdfMetaData.SetCachedThumbnail(GenerateBookCoverBitmap(ThumbnailWidth, ThumbnailHeight, random, bookName, index));
             }
 
             _bookItemCache.Add(new BookItemCache
