@@ -1,6 +1,7 @@
 ﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -231,7 +232,7 @@ internal class ListBoxListFilter : DockPanel
             [ToolTip.TipProperty] = "Case insensitive search (ListBox with virtualization)"
         });
         // Filter starts empty for each BrowseControl instance
-        _txtFilter.Watermark = "Enter filter text...";
+        _txtFilter.PlaceholderText = "Enter filter text...";
         _txtFilter.VerticalAlignment = VerticalAlignment.Center;
         _txtFilter.VerticalContentAlignment = VerticalAlignment.Center;
         spFilter.Children.Add(_txtFilter);

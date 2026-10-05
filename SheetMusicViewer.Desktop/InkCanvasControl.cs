@@ -30,8 +30,9 @@ public class InkCanvasControl : Panel
 
     private readonly List<List<Point>> _normalizedStrokes = new();
     private List<Point>? _currentNormalizedStroke;
-    private readonly List<Polyline> _renderedPolylines = new();
-    private Polyline? _currentPolyline;
+    private readonly List<Shape> _renderedPolylines = new();
+    private Path? _currentPolyline;
+    private Points? _currentPolylinePoints;
     private bool _isDrawing;
     private IPointer? _drawingPointer; // Track which pointer is drawing
     private IBrush _currentBrush = Brushes.Black;
@@ -464,12 +465,17 @@ public class InkCanvasControl : Panel
         _currentNormalizedStroke = new List<Point> { normalizedPoint };
         _currentStrokeMetadata = (_currentBrush, _strokeThickness);
         
-        _currentPolyline = new Polyline
+        // The in-progress stroke must repaint as points arrive. A Polyline's Points
+        // list is copied into its geometry since Avalonia 11.3.10 (FillRule support),
+        // so appending to it no longer invalidates the shape. A PolylineGeometry
+        // assigned through the property observes the live list instead.
+        _currentPolylinePoints = new Points { drawPoint };
+        _currentPolyline = new Path
         {
             Stroke = _currentBrush,
             StrokeThickness = _strokeThickness,
             StrokeLineCap = PenLineCap.Round,
-            Points = new Points { drawPoint }
+            Data = new PolylineGeometry { Points = _currentPolylinePoints }
         };
         
         // Log the brush being used
@@ -543,7 +549,7 @@ public class InkCanvasControl : Panel
         var normalizedPoint = ScreenToNormalized(drawPoint);
         
         _currentNormalizedStroke.Add(normalizedPoint);
-        _currentPolyline.Points.Add(drawPoint);
+        _currentPolylinePoints?.Add(drawPoint);
     }
 
     private void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
@@ -648,6 +654,7 @@ public class InkCanvasControl : Panel
         _currentNormalizedStroke = null;
         _currentStrokeMetadata = null;
         _currentPolyline = null;
+        _currentPolylinePoints = null;
         _isDrawing = false;
         _drawingPointer = null;
     }
@@ -972,6 +979,7 @@ public class InkCanvasControl : Panel
         _normalizedStrokes.Clear();
         _strokeMetadata.Clear();
         _currentPolyline = null;
+        _currentPolylinePoints = null;
         _currentNormalizedStroke = null;
         _currentStrokeMetadata = null;
         _hasUnsavedStrokes = true;

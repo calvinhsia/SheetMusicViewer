@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -1785,11 +1786,11 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
         if (isChecked)
         {
             this.WindowState = WindowState.Maximized;
-            this.SystemDecorations = SystemDecorations.None;
+            this.WindowDecorations = Avalonia.Controls.WindowDecorations.None;
         }
         else
         {
-            this.SystemDecorations = SystemDecorations.Full;
+            this.WindowDecorations = Avalonia.Controls.WindowDecorations.Full;
             // Only reset to Normal if we're coming_FROM_ full screen, not on startup
             // Check if we should restore maximized state from settings
             if (!AppSettings.Instance.WindowMaximized)
