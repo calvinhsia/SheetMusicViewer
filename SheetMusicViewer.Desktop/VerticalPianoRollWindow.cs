@@ -552,6 +552,10 @@ internal sealed class FluidSynthMidiBackend : IMidiBackend
 
     public void Open()
     {
+        // Missing "libfluidsynth.so" crashes later in a Settings finalizer, so probe before use
+        if (OperatingSystem.IsLinux() && !NativeLibrary.TryLoad("libfluidsynth.so", out _))
+            throw new InvalidOperationException("FluidSynth native library (libfluidsynth.so) was not found.");
+
         _settings = new NFluidsynth.Settings();
         _settings[NFluidsynth.ConfigurationKeys.AudioDriver].StringValue = "wasapi";
         _settings[NFluidsynth.ConfigurationKeys.AudioPeriodSize].IntValue = 256;
