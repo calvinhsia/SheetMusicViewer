@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -5,6 +6,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.Controls.Primitives;
+using Avalonia.VisualTree;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -1570,24 +1572,37 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
     private void SetupGestureHandler()
     {
         if (_dpPage == null) return;
-        
-        _gestureHandler?.Detach();
-        
-        _gestureHandler = new GestureHandler(_dpPage, enableLogging: false)
+
+        if (_gestureHandler == null)
         {
-            NumPagesPerView = NumPagesPerView
-        };
-        
-        _gestureHandler.NavigationRequested += (s, e) =>
+            var userOptions = AppSettings.Instance.UserOptions;
+            _gestureHandler = new GestureHandler(_dpPage, enableLogging: false)
+            {
+                NumPagesPerView = NumPagesPerView,
+                DoubleTapTimeMs = userOptions.DoubleTapTimeThresholdMs,
+                DoubleTapDistancePx = userOptions.DoubleTapDistanceThreshold,
+                ContentBoundsProvider = GetPageContentBounds
+            };
+            
+            _gestureHandler.NavigationRequested += (s, e) =>
+            {
+                NavigateAsync(e.Delta);
+            };
+            
+            _gestureHandler.DoubleTapped += (s, e) =>
+            {
+                _gestureHandler.ResetTransform();
+            };
+        }
+        else
         {
-            NavigateAsync(e.Delta);
-        };
-        
-        _gestureHandler.DoubleTapped += (s, e) =>
-        {
-            _gestureHandler.ResetTransform();
-        };
-        
+            // Keep the same handler (and its tap state) across page turns
+            _gestureHandler.NumPagesPerView = NumPagesPerView;
+        }
+
+        // The page content changed; drop the cached clamp rectangle
+        _gestureHandler.InvalidateContentBounds();
+
         UpdateGestureHandlerState();
     }
 
@@ -1603,6 +1618,45 @@ public partial class PdfViewerWindow : Window, INotifyPropertyChanged
             // will bubble up to the gesture handler.
             _gestureHandler.IsDisabled = false;
         }
+    }
+
+    // Visible page content rect (union of the page canvases) in _dpPage coordinates.
+    // Smaller than the viewport because pages are letterboxed.
+    private Rect GetPageContentBounds()
+    {
+        if (_dpPage == null) return default;
+
+        Rect? union = null;
+        foreach (var canvas in _dpPage.GetVisualDescendants().OfType<InkCanvasControl>())
+        {
+            // Use the rendered page rect (not the control's layout bounds) so
+            // letterbox strips inside the control are not treated as content.
+            var canvasRect = GetBoundsRelativeTo(canvas, _dpPage);
+            var pageRect = canvas.PageContentBounds;
+            var rect = new Rect(
+                canvasRect.X + pageRect.X,
+                canvasRect.Y + pageRect.Y,
+                pageRect.Width,
+                pageRect.Height);
+
+            if (rect.Width <= 0 || rect.Height <= 0) continue;
+            union = union is null ? rect : union.Value.Union(rect);
+        }
+
+        return union ?? default;
+    }
+
+    // Bounds of a visual expressed in ancestor coordinates (layout bounds only)
+    private static Rect GetBoundsRelativeTo(Visual visual, Visual ancestor)
+    {
+        var rect = visual.Bounds;
+        var current = visual.GetVisualParent();
+        while (current != null && current != ancestor)
+        {
+            rect = new Rect(rect.X + current.Bounds.X, rect.Y + current.Bounds.Y, rect.Width, rect.Height);
+            current = current.GetVisualParent();
+        }
+        return rect;
     }
     
     private void NavigateAsync(int delta)

@@ -104,6 +104,31 @@ public class InkCanvasControl : Panel
     /// </summary>
     public bool CanRedo => _redoStack.Count > 0;
 
+    /// <summary>Page bitmap rect in this control's coordinates (Uniform fit).</summary>
+    public Rect PageContentBounds
+    {
+        get
+        {
+            var bounds = Bounds;
+            var bitmap = _backgroundImage;
+            if (bitmap == null || bounds.Width <= 0 || bounds.Height <= 0)
+                return bounds;
+
+            var pixelSize = bitmap.PixelSize;
+            if (pixelSize.Width <= 0 || pixelSize.Height <= 0)
+                return bounds;
+
+            var scale = Math.Min(bounds.Width / pixelSize.Width, bounds.Height / pixelSize.Height);
+            var width  = pixelSize.Width  * scale;
+            var height = pixelSize.Height * scale;
+
+            return new Rect(
+                (bounds.Width  - width)  / 2.0,
+                (bounds.Height - height) / 2.0,
+                width, height);
+        }
+    }
+
     public InkCanvasControl(Bitmap backgroundImage, int pageNo = 0, InkStrokeClass? inkStrokeClass = null)
     {
         _backgroundImage = backgroundImage;
