@@ -836,14 +836,14 @@ public sealed class MxlMidiPlayer : IDisposable
                     .DefaultIfEmpty(measureDurCap)
                     .Max();
 
-                if (TimingDiagnostics && pi == 0)
+                if (TimingDiagnostics)
                 {
                     string tag = maxOnsetDivs > measureDurCap ? "  [OVERCOUNT]"
                                : maxOnsetDivs == 0            ? "  [EMPTY]"
                                :                                string.Empty;
                     if (tag.Length > 0)
                         Trace.WriteLine(
-                            $"MEASURE m={measure.Number,4}  ts={measure.TimeSig,-5}  divs={divs,4}" +
+                            $"MEASURE pi={pi}  m={measure.Number,4}  ts={measure.TimeSig,-5}  divs={divs,4}" +
                             $"  globalOnset={measure.GlobalOnsetDivisions,8}  raw={maxOnsetDivs,6}  cap={measureDurCap,6}{tag}");
                 }
 
@@ -851,13 +851,17 @@ public sealed class MxlMidiPlayer : IDisposable
                 {
                     if (note.IsRest || note.IsAbsorbed || note.MidiPitch < 21 || note.MidiPitch > 108) continue;
                     int midi = note.MidiPitch;
-                    int clampedOnset = Math.Min(note.OnsetDivisions, Math.Min(maxOnsetDivs, measureDurCap) - 1);
+                    // Guard against maxOnsetDivs==0 (e.g. all notes are chords with zero duration)
+                    // which would produce -1 and make onsetMs negative, silently dropping the event.
+                    int clampedOnset = Math.Max(0, Math.Min(note.OnsetDivisions, Math.Min(maxOnsetDivs, measureDurCap) - 1));
                     long globalDivs  = measure.GlobalOnsetDivisions + clampedOnset;
                     long onsetMs     = (long)(measureStartMs + clampedOnset * msPerDiv);
                     long offMs       = onsetMs + Math.Max(30, Math.Min(4_000, (long)(note.Duration * msPerDiv) - 15));
                     // NoteOn carries Staff so the dispatch loop can check MutedStaves dynamically.
+                    // Use VisualStaff() so two-part scores map part 0→staff 1 (RH) and part 1→staff 2 (LH),
+                    // matching the RH/LH checkbox toggles (which add/remove 1 and 2 from MutedStaves).
                     events.Add(new MidiEvent(onsetMs, NoteOn(ch, midi, note.Velocity), globalDivs,
-                        MeasureNo: measure.Number, Staff: note.Staff, Voice: note.Voice, PartIndex: pi));
+                        MeasureNo: measure.Number, Staff: _score.VisualStaff(_score.Parts[pi], note), Voice: note.Voice, PartIndex: pi));
                     events.Add(new MidiEvent(offMs, NoteOff(ch, midi), -1));  // -1: NoteOff never fires PositionChanged
                 }
             }
